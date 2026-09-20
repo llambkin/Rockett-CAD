@@ -13,6 +13,7 @@ type Migration = (doc: any) => any;
 const MIGRATIONS: Record<number, Migration> = {
   1: (doc) => ({ ...doc, schemaVersion: 2 }),
   2: (doc) => ({ ...doc, schemaVersion: 3 }),
+  3: (doc) => ({ ...doc, schemaVersion: 4 }),
   // 1 → 2 example:
   // 1: (doc) => ({ ...doc, schemaVersion: 2, somethingNew: [] }),
 };

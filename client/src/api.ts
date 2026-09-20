@@ -54,7 +54,7 @@ export const api = {
   renameProject: (id: string, name: string) =>
     req<{ document: CadDocument }>("POST", `/projects/${id}/rename`, { name }),
 
-  evaluate: (id: string) => req<EvaluateResult>("GET", `/projects/${id}/evaluate`),
+  evaluate: (id: string, position?: number) => req<EvaluateResult>("GET", `/projects/${id}/evaluate${position === undefined ? "" : `?position=${position}`}`),
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
     req<{ edges: EdgeRef[] }>("POST", `/projects/${id}/tangent-edges`, { edge, beforeFeatureId }),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
@@ -62,14 +62,14 @@ export const api = {
 
   addFeature: (id: string, feature: Feature) =>
     req<MutationResponse>("POST", `/projects/${id}/features`, { feature }),
-  updateFeature: (id: string, fid: string, feature: Partial<Feature>) =>
-    req<MutationResponse>("PUT", `/projects/${id}/features/${fid}`, { feature }),
+  updateFeature: (id: string, fid: string, feature: Partial<Feature>, position?: number) =>
+    req<MutationResponse>("PUT", `/projects/${id}/features/${fid}${position === undefined ? "" : `?position=${position}`}`, { feature }),
   deleteFeature: (id: string, fid: string) =>
     req<MutationResponse>("DELETE", `/projects/${id}/features/${fid}`),
   setTimeline: (id: string, position: number) =>
     req<MutationResponse>("POST", `/projects/${id}/timeline`, { position }),
-  replaceDocument: (id: string, document: CadDocument) =>
-    req<MutationResponse>("PUT", `/projects/${id}/document`, { document }),
+  replaceDocument: (id: string, document: CadDocument, position?: number) =>
+    req<MutationResponse>("PUT", `/projects/${id}/document${position === undefined ? "" : `?position=${position}`}`, { document }),
   updateBody: (id: string, bodyId: string, patch: { name?: string; visible?: boolean }) =>
     req<MutationResponse>(
       "PUT",

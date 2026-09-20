@@ -52,6 +52,30 @@ async function api(method: string, url: string, body?: unknown): Promise<any> {
 }
 
 describe("REST API MVP workflow", () => {
+  it("evaluates and edits at a temporary sketch position without changing the timeline marker", async () => {
+    const { document } = await api("POST", "/projects", { name: "Temporary rollback" });
+    const prefix = `/projects/${document.id}`;
+    await api("POST", `${prefix}/features`, { feature: {
+      id: "sk", type: "sketch", name: "Sketch", suppressed: false, plane: { kind: "origin", plane: "XY" },
+      entities: [{ id: "p", kind: "point", x: 0, y: 0 }, { id: "c", kind: "circle", center: "p", radius: 10 }], constraints: [],
+    } });
+    const before = await api("GET", `${prefix}/evaluate`);
+    await api("POST", `${prefix}/features`, { feature: {
+      id: "ext", type: "extrude", name: "Extrude", suppressed: false,
+      profiles: [{ sketchId: "sk", profileId: before.sketches[0].profiles[0].id }],
+      distance: 5, direction: "normal", operation: "newBody",
+    } });
+    const preview = await api("GET", `${prefix}/evaluate?position=1`);
+    expect(preview.bodies).toHaveLength(0);
+    expect(preview.featureStatuses[1].status).toBe("rolledBack");
+    expect((await api("GET", prefix)).document.timelinePosition).toBe(2);
+    const edited = await api("PUT", `${prefix}/features/sk?position=1`, { feature: { name: "Edited sketch" } });
+    expect(edited.document.timelinePosition).toBe(2);
+    expect(edited.evaluation.bodies).toHaveLength(0);
+    expect((await api("GET", `${prefix}/evaluate`)).bodies).toHaveLength(1);
+    await expect(api("GET", `${prefix}/evaluate?position=100`)).rejects.toThrow(/400/);
+  });
+
   it("starts a project from STEP and imports into an existing project with undoable history", async () => {
     const upload = async (url: string, contents: string) => {
       const form = new FormData(); form.append("file", new Blob([contents]), "Fixture.stp");

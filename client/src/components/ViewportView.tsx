@@ -29,6 +29,7 @@ import * as tools from "../sketchTools";
 
 import { DIALOG_PICKS } from "../dialogPicks";
 import { dimensionLayout } from "../dimensionLayout";
+import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 
 interface DimLabel {
   id: string;
@@ -2222,8 +2223,7 @@ export function ViewportView() {
       const vp = viewportRef.current!;
       const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
       if (r && (r.selection.kind === "sketchEntity" || r.selection.kind === "sketchPoint")) {
-        s.editSketch((r.selection as any).sketchId);
-        alignCameraToActiveSketch();
+        void s.editSketch((r.selection as any).sketchId).then(alignCameraToActiveSketch);
       }
     } else if (s.mode.name === "sketch") {
       // double-click a curve → edit its size
@@ -2534,6 +2534,7 @@ export function ViewportView() {
           </div>
         ))}
       </div>
+      <SketchOffsetIndicators />
       {dimEdit && (
         <div className="dim-edit" style={{ left: dimEdit.x, top: dimEdit.y }}>
           <input
@@ -2694,8 +2695,7 @@ function ViewportContextMenu({
       items.push({
         label: "Edit sketch",
         action: () => {
-          s.editSketch(sel.sketchId);
-          alignToSketch();
+          void s.editSketch(sel.sketchId).then(alignToSketch);
           onClose();
         },
       });

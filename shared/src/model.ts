@@ -9,7 +9,7 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export type Units = "mm" | "cm" | "m" | "in";
 
@@ -183,8 +183,18 @@ export interface SketchFeature extends FeatureBase {
   plane: PlaneRef;
   entities: SketchEntity[];
   constraints: SketchConstraint[];
+  /** Editable offset operations, in creation order. */
+  offsets?: SketchOffset[];
   /** false hides the sketch in the viewport (regions not shaded or pickable). */
   visible?: boolean;
+}
+
+export interface SketchOffset {
+  id: string;
+  distance: number;
+  sourceIds: string[];
+  entityIds: string[];
+  joinTolerance: number;
 }
 
 /** A closed region of a sketch, identified stably by its bounding entity ids. */

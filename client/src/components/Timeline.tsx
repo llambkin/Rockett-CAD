@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import type { Feature } from "@rockett/shared";
-import { useStore, type DialogType, type Selection } from "../store";
+import { useStore, sketchEditingPosition, type DialogType, type Selection } from "../store";
 import { alignCameraToActiveSketch } from "../viewportRef";
 
 const TYPE_ICONS: Record<string, string> = {
@@ -32,6 +32,8 @@ const TYPE_ICONS: Record<string, string> = {
 export function Timeline() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
+  const mode = useStore(s => s.mode);
+  const busy = useStore(s => s.busy);
   const rollTimeline = useStore((s) => s.rollTimeline);
   const [menu, setMenu] = useState<{ x: number; y: number; feature: Feature } | null>(
     null
@@ -39,7 +41,7 @@ export function Timeline() {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
 
   if (!document_) return null;
-  const pos = document_.timelinePosition;
+  const pos = sketchEditingPosition(document_, mode) ?? document_.timelinePosition;
   const statuses = new Map(
     (evaluation?.featureStatuses ?? []).map((s) => [s.featureId, s])
   );
@@ -50,7 +52,7 @@ export function Timeline() {
 
   return (
     <div className="timeline" onClick={() => setMenu(null)}>
-      <div className="tl-controls">
+      <fieldset className="tl-controls" disabled={busy || mode.name === "sketch"} style={{ border: 0, margin: 0, padding: 0 }}>
         <button title="Roll to start" onClick={() => void rollTimeline(0)}>
           ⏮
         </button>
@@ -72,7 +74,7 @@ export function Timeline() {
         >
           ⏭
         </button>
-      </div>
+      </fieldset>
       <div className="tl-strip">
         <div
           className={`tl-marker ${pos === 0 ? "current" : ""}`}
@@ -182,12 +184,16 @@ export function Timeline() {
 }
 
 /** Open the right editor for a feature: sketch mode, or a prefilled dialog. */
-export function openFeatureEditor(f: Feature): void {
+export async function openFeatureEditor(f: Feature): Promise<void> {
+  if (useStore.getState().busy) return;
+  if (f.type !== "sketch" && useStore.getState().mode.name === "sketch") {
+    await useStore.getState().finishSketch();
+    if (useStore.getState().mode.name === "sketch") return;
+  }
   const s = useStore.getState();
   if (f.type === "sketch") {
     // rolling target: ensure the sketch is inside the active timeline range
-    s.editSketch(f.id);
-    alignCameraToActiveSketch();
+    void s.editSketch(f.id).then(alignCameraToActiveSketch);
     return;
   }
   const anyF = f as any;

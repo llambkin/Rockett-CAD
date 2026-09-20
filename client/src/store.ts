@@ -18,7 +18,7 @@ import type {
   SketchEntity,
   SketchFeature,
 } from "@rockett/shared";
-import { newId, solveSketch } from "@rockett/shared";
+import { newId, solveSketch, createSketchOffset, editSketchOffset } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 
 // ---------------------------------------------------------------------------
@@ -121,6 +121,12 @@ function historyEditingState(mode: Mode, m: MutationResponse): Pick<State, "mode
   return { mode: { name: "idle" }, draftSketch: null, selection: [] };
 }
 
+export function sketchEditingPosition(document: CadDocument, mode: Mode): number | undefined {
+  if (mode.name !== "sketch") return undefined;
+  const index = document.features.findIndex(f => f.id === mode.sketchId && f.type === "sketch");
+  return index < 0 ? undefined : index + 1;
+}
+
 interface State {
   projectId: string | null;
   document: CadDocument | null;
@@ -164,7 +170,9 @@ interface State {
   setDialogParams: (p: Record<string, any>) => void;
 
   startSketchOnPlane: (ref: PlaneRef) => Promise<void>;
-  editSketch: (sketchId: string) => void;
+  editSketch: (sketchId: string) => Promise<void>;
+  createOffset: (ids: string[], distance: number, autoChain: boolean, joinTolerance: number) => Promise<void>;
+  editOffset: (id: string, distance: number) => Promise<void>;
   setSketchTool: (tool: SketchTool) => void;
   updateDraftSketch: (
     entities: SketchEntity[],
@@ -225,6 +233,8 @@ export const useStore = create<State>((set, get) => ({
         redoStack: [],
         selection: [],
         mode: { name: "idle" },
+        draftSketch: null,
+        dialogParams: {},
         busy: false,
       });
     } catch (e: any) {
@@ -241,6 +251,9 @@ export const useStore = create<State>((set, get) => ({
       mode: { name: "idle" },
       undoStack: [],
       redoStack: [],
+      draftSketch: null,
+      dialogParams: {},
+      busy: false,
     });
   },
 
@@ -311,7 +324,7 @@ export const useStore = create<State>((set, get) => ({
     const prev = undoStack[undoStack.length - 1];
     set({ busy: true });
     try {
-      const m = await api.replaceDocument(projectId, prev);
+      const m = await api.replaceDocument(projectId, prev, sketchEditingPosition(prev, mode));
       set((s) => ({
         document: m.document,
         evaluation: m.evaluation,
@@ -331,7 +344,7 @@ export const useStore = create<State>((set, get) => ({
     const next = redoStack[redoStack.length - 1];
     set({ busy: true });
     try {
-      const m = await api.replaceDocument(projectId, next);
+      const m = await api.replaceDocument(projectId, next, sketchEditingPosition(next, mode));
       set((s) => ({
         document: m.document,
         evaluation: m.evaluation,
@@ -390,25 +403,64 @@ export const useStore = create<State>((set, get) => ({
     });
   },
 
-  editSketch(sketchId) {
+  async editSketch(sketchId) {
+    if (get().busy) return;
+    if (get().mode.name === "sketch") {
+      if ((get().mode as { sketchId: string }).sketchId === sketchId) return;
+      await get().finishSketch();
+      if (get().mode.name === "sketch") return;
+    }
     const { document } = get();
     const feature = document?.features.find(
       (f) => f.id === sketchId && f.type === "sketch"
     ) as SketchFeature | undefined;
-    if (!feature) return;
-    set({
-      mode: { name: "sketch", sketchId, tool: "select", constructionMode: false },
-      draftSketch: { ...JSON.parse(JSON.stringify(feature)), entities: JSON.parse(JSON.stringify(
-        get().evaluation?.sketches.find(sk => sk.featureId === sketchId)?.entities ?? feature.entities)) },
-      selection: [],
-    });
+    if (!feature || !document || feature.suppressed) return;
+    set({ busy: true, error: null });
+    try {
+      const evaluation = await api.evaluate(document.id, document.features.indexOf(feature) + 1);
+      if (get().projectId !== document.id) return;
+      const solved = evaluation.sketches.find(sk => sk.featureId === sketchId);
+      if (!solved) throw new Error(evaluation.featureStatuses.find(f => f.featureId === sketchId)?.error ?? "Sketch could not be evaluated.");
+      set({
+        evaluation, busy: false, dialogParams: {},
+        mode: { name: "sketch", sketchId, tool: "select", constructionMode: false },
+        draftSketch: { ...JSON.parse(JSON.stringify(feature)), entities: JSON.parse(JSON.stringify(solved.entities)) },
+        selection: [],
+      });
+    } catch (e: any) {
+      if (get().projectId === document.id) set({ busy: false, error: e.message });
+    }
+  },
+
+  async createOffset(ids, distance, autoChain, joinTolerance) {
+    const { draftSketch, busy } = get();
+    if (!draftSketch || busy) return;
+    const next = createSketchOffset(draftSketch, ids, distance, autoChain, joinTolerance);
+    set({ draftSketch: next });
+    try { await get().commitDraftSketch(); }
+    catch (e) { set({ draftSketch }); throw e; }
+  },
+
+  async editOffset(id, distance) {
+    const { draftSketch, busy } = get();
+    if (!draftSketch || busy) return;
+    const next = editSketchOffset(draftSketch, id, distance);
+    const solved = solveSketch({ entities: next.entities, constraints: next.constraints });
+    const owned = new Set((next.offsets ?? []).flatMap(o => o.entityIds));
+    if (!solved.converged || solved.entities.some((e, i) => owned.has(e.id) && (
+      e.kind === "point" && next.entities[i].kind === "point" && Math.hypot(e.x - next.entities[i].x, e.y - next.entities[i].y) > 1e-5 ||
+      e.kind === "circle" && next.entities[i].kind === "circle" && Math.abs(e.radius - next.entities[i].radius) > 1e-5
+    ))) throw new Error("Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.");
+    set({ draftSketch: { ...next, entities: solved.entities } });
+    try { await get().commitDraftSketch(); }
+    catch (e) { set({ draftSketch }); throw e; }
   },
 
   setSketchTool(tool) {
     const { mode } = get();
     if (mode.name !== "sketch") return;
     set({ mode: { ...mode, tool }, selection: [],
-      ...(tool === "offset" ? { dialogParams: { ...get().dialogParams, offsetManualSelection: false } } : {}) });
+      ...(tool === "offset" ? { dialogParams: { ...get().dialogParams, offsetManualSelection: false, editOffsetId: undefined } } : {}) });
   },
 
   updateDraftSketch(entities, constraints) {
@@ -436,11 +488,15 @@ export const useStore = create<State>((set, get) => ({
   async commitDraftSketch() {
     const { draftSketch, document } = get();
     if (!draftSketch || !document) return;
+    const saved = document.features.find(f => f.id === draftSketch.id);
+    if (saved?.type === "sketch" && JSON.stringify([saved.entities, saved.constraints, saved.offsets ?? []]) ===
+      JSON.stringify([draftSketch.entities, draftSketch.constraints, draftSketch.offsets ?? []])) return;
     await get().mutate(() =>
       api.updateFeature(document.id, draftSketch.id, {
         entities: draftSketch.entities,
         constraints: draftSketch.constraints,
-      } as Partial<Feature>)
+        offsets: draftSketch.offsets,
+      } as Partial<Feature>, sketchEditingPosition(document, get().mode))
     );
     // refresh draft from authoritative solve
     const evaluation = get().evaluation;
@@ -457,8 +513,16 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async finishSketch() {
-    await get().commitDraftSketch();
-    set({ mode: { name: "idle" }, draftSketch: null, selection: [] });
+    if (get().busy || get().mode.name !== "sketch") return;
+    try {
+      await get().commitDraftSketch();
+      const doc = get().document;
+      if (!doc) return;
+      set({ busy: true });
+      const evaluation = await api.evaluate(doc.id);
+      if (get().projectId !== doc.id) return;
+      set({ evaluation, busy: false, mode: { name: "idle" }, draftSketch: null, selection: [], dialogParams: {} });
+    } catch (e: any) { set({ busy: false, error: e.message }); }
   },
 
   async deleteSketchEntities(entityIds) {
@@ -565,7 +629,7 @@ export const useStore = create<State>((set, get) => ({
   async updateFeature(fid, patch) {
     const { document } = get();
     if (!document) return;
-    await get().mutate(() => api.updateFeature(document.id, fid, patch));
+    await get().mutate(() => api.updateFeature(document.id, fid, patch, sketchEditingPosition(document, get().mode)));
   },
 
   async deleteFeature(fid) {
@@ -600,6 +664,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async rollTimeline(position) {
+    if (get().mode.name === "sketch" || get().busy) return;
     const { document } = get();
     if (!document) return;
     await get().mutate(() => api.setTimeline(document.id, position));

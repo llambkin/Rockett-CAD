@@ -84,6 +84,18 @@ See [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Viewport controls
 
+While editing a sketch, click its **↔ Offset … mm** badge to change a saved
+offset distance. New offsets retain their source curves and generated entity
+IDs, so distance edits preserve downstream profile references. Offsets created
+before this feature were stored as plain geometry and need to be recreated once
+to get an editable badge. Offset geometry is driven by its distance; edit the
+badge instead of dragging its points.
+
+Editing an existing sketch temporarily rolls the viewport and timeline marker
+back to that sketch. **Finish Sketch** regenerates the model at the previously
+saved timeline position. Entering edit mode does not change the saved marker or
+create an undo step.
+
 | Action | Input |
 | --- | --- |
 | Select | Left click (Ctrl adds; Alt+click cycles overlapping picks) |

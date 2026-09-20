@@ -164,8 +164,7 @@ export function ModelTree() {
               className="tree-item"
               onClick={() => selectSketchRegions(f.id)}
               onDoubleClick={() => {
-                useStore.getState().editSketch(f.id);
-                alignToSketch();
+                void useStore.getState().editSketch(f.id).then(alignToSketch);
               }}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -357,8 +356,7 @@ export function ModelTree() {
               <>
                 <button
                   onClick={() => {
-                    useStore.getState().editSketch(treeMenu.id);
-                    alignToSketch();
+                    void useStore.getState().editSketch(treeMenu.id).then(alignToSketch);
                     setTreeMenu(null);
                   }}
                 >

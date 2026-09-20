@@ -180,6 +180,14 @@ export function offsetSketchSelection(entities: SketchEntity[], constraints: Ske
     ...(gaps.count ? { joinedGaps: gaps } : {}) };
 }
 
+/** Resolve auto-chaining once, so later edits cannot pick up unrelated curves. */
+export function offsetSourceIds(entities: SketchEntity[], ids: string[], autoChain: boolean): string[] {
+  const seed = entities.find(e => e.id === ids[0]);
+  if (ids.length !== 1 || !autoChain || !seed || seed.kind === "point" || seed.kind === "circle") return [...ids];
+  // Keep the selected seed first: it defines the sign of the distance.
+  return [seed.id, ...connectedChain(seed, entities).map(s => s.g.e.id).filter(id => id !== seed.id)];
+}
+
 /** Suggest only a unique existing connector; never invent a missing side. */
 export function findOffsetConnector(entities: SketchEntity[], selectedIds: string[], ends: [XY, XY], tolerance = 0.01): string | null {
   const chosen = new Set(selectedIds), matches: string[] = [];

@@ -1046,3 +1046,11 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 .icon-btn.danger:hover {
   color: var(--err);
 }
+.dim-label.offset-label {
+  border: 1px solid #d6a74d;
+  color: #ffcc66;
+  background: #282b30;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 3px 7px;
+}

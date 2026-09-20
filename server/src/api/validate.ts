@@ -45,6 +45,29 @@ export function validateFeature(f: Feature): void {
       if (!Array.isArray(f.constraints) || f.constraints.length > 5000) {
         throw new ValidationError("sketch constraints invalid");
       }
+      if (f.offsets !== undefined) {
+        if (!Array.isArray(f.offsets) || f.offsets.length > 1000) throw new ValidationError("sketch offsets invalid");
+        const ids = new Set<string>();
+        const outputs = new Set<string>();
+        for (const offset of f.offsets) {
+          if (!offset) throw new ValidationError("sketch offset invalid");
+          str(offset.id, "offset id", 100);
+          if (ids.has(offset.id)) throw new ValidationError("duplicate offset id");
+          ids.add(offset.id);
+          num(offset.distance, "offset distance", -MAX_DIM, MAX_DIM);
+          if (Math.abs(offset.distance) < 1e-7) throw new ValidationError("offset distance must be non-zero");
+          num(offset.joinTolerance, "offset join tolerance", 0, 1);
+          for (const refs of [offset.sourceIds, offset.entityIds]) {
+            if (!Array.isArray(refs) || !refs.length || refs.length > 5000 || new Set(refs).size !== refs.length)
+              throw new ValidationError("offset entity references invalid");
+            for (const id of refs) str(id, "offset entity id", 100);
+          }
+          for (const id of offset.entityIds) {
+            if (outputs.has(id) || offset.sourceIds.includes(id)) throw new ValidationError("offset outputs must be distinct from sources and other offsets");
+            outputs.add(id);
+          }
+        }
+      }
       if (f.visible !== undefined && typeof f.visible !== "boolean") {
         throw new ValidationError("sketch visible must be a boolean");
       }

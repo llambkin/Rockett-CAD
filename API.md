@@ -9,6 +9,11 @@ plus a fresh incremental evaluation (bodies with tagged tessellation, feature
 statuses, solved sketches with profiles, construction-plane frames). The
 server persists on every mutation (autosave).
 
+`GET /projects/:id/evaluate`, `PUT /projects/:id/features/:fid`, and
+`PUT /projects/:id/document` accept an optional `?position=N` for the returned
+evaluation. This temporarily evaluates the first N features without moving the
+document's saved timeline marker, for sketch editing and undo/redo in a sketch.
+
 Requests targeting the same project run sequentially within one API server,
 including evaluation (which can save body metadata). This prevents overlapping
 feature edits from overwriting each other. Separate projects have independent

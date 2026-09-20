@@ -75,10 +75,19 @@ export function createApiRouter(store: ProjectStore): Router {
       });
     };
 
+  /** Temporary evaluation range; does not move the persisted timeline marker. */
+  function evaluationPosition(req: any, doc: CadDocument): number | undefined {
+    if (req.query.position === undefined) return undefined;
+    const position = Number(req.query.position);
+    if (!Number.isInteger(position) || position < 0 || position > doc.features.length)
+      throw new ValidationError("invalid evaluation position");
+    return position;
+  }
+
   /** Evaluate + make sure every body has display metadata. */
-  async function evaluateAndSync(doc: CadDocument) {
+  async function evaluateAndSync(doc: CadDocument, position?: number) {
     const engine = engineFor(doc.id);
-    const evaluation = engine.evaluate(doc);
+    const evaluation = engine.evaluate(doc, position);
     let metaChanged = false;
     for (const body of evaluation.bodies) {
       if (!doc.bodyMeta[body.bodyId]) {
@@ -165,7 +174,7 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/evaluate",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const evaluation = await evaluateAndSync(doc);
+      const evaluation = await evaluateAndSync(doc, evaluationPosition(req, doc));
       res.json(evaluation);
     })
   );
@@ -180,10 +189,11 @@ export function createApiRouter(store: ProjectStore): Router {
         throw new ValidationError("document id mismatch");
       }
       validateDocument(incoming);
+      const position = evaluationPosition(req, incoming);
       // Replacement is an edit, not creation (e.g. a delayed undo after delete).
       await store.load(req.params.id);
       await store.save(incoming);
-      const evaluation = await evaluateAndSync(incoming);
+      const evaluation = await evaluateAndSync(incoming, position);
       res.json({ document: incoming, evaluation });
     })
   );
@@ -251,6 +261,7 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/features/:fid",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
+      const position = evaluationPosition(req, doc);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
       if (idx < 0) throw new StoreError("feature not found", 404);
       const patch = req.body?.feature as Partial<Feature>;
@@ -259,7 +270,7 @@ export function createApiRouter(store: ProjectStore): Router {
       validateFeature(updated as Feature);
       doc.features[idx] = updated as Feature;
       await store.save(doc);
-      const evaluation = await evaluateAndSync(doc);
+      const evaluation = await evaluateAndSync(doc, position);
       res.json({ document: doc, evaluation });
     })
   );
