@@ -1,0 +1,15 @@
+node_modules/
+dist/
+data/
+*.log
+.DS_Store
+coverage/
+.vite/
+.claude/
+.codex/
+diagnostics/
+.env
+.env.*
+!.env.example
+*.pem
+*.key

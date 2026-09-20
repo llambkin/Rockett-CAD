@@ -1,0 +1,418 @@
+/**
+ * Main toolbar. Two states: modelling toolbar (Sketch/Create/Modify/…) and the
+ * sketch toolbar (drawing tools, constraints, finish sketch).
+ */
+
+import { useStore, type DialogType, type SketchTool } from "../store";
+import { newId, type SketchConstraint } from "@rockett/shared";
+import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { filterSelectionFor } from "../dialogPicks";
+import { StepImportButton } from "./StepImportButton";
+
+const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
+  { id: "extrude", label: "Extrude", title: "Extrude profiles (E)" },
+  { id: "revolve", label: "Revolve", title: "Revolve profiles around an axis" },
+  { id: "sweep", label: "Sweep", title: "Sweep a profile along a path" },
+  { id: "loft", label: "Loft", title: "Loft between profiles" },
+  { id: "emboss", label: "Emboss", title: "Emboss/deboss sketch onto a face" },
+];
+
+const MODIFY: Array<{ id: DialogType; label: string; title: string }> = [
+  { id: "fillet", label: "Fillet", title: "Fillet edges (F)" },
+  { id: "chamfer", label: "Chamfer", title: "Chamfer edges" },
+  { id: "shell", label: "Shell", title: "Hollow the body" },
+  { id: "combine", label: "Combine", title: "Boolean join/cut/intersect bodies" },
+  { id: "splitBody", label: "Split", title: "Split a body with a plane" },
+  { id: "offsetFace", label: "Press/Pull", title: "Offset a planar face" },
+  { id: "move", label: "Move", title: "Move bodies (M)" },
+];
+
+const PATTERN: Array<{ id: DialogType; label: string; title: string }> = [
+  { id: "mirror", label: "Mirror", title: "Mirror bodies across a plane" },
+  { id: "linearPattern", label: "Rect Pattern", title: "Rectangular pattern" },
+  { id: "circularPattern", label: "Circ Pattern", title: "Circular pattern" },
+];
+
+const SKETCH_TOOLS: Array<{ id: SketchTool; label: string; key?: string }> = [
+  { id: "select", label: "Select", key: "V" },
+  { id: "line", label: "Line", key: "L" },
+  { id: "rect", label: "Rect", key: "R" },
+  { id: "centerRect", label: "C-Rect" },
+  { id: "circle", label: "Circle", key: "C" },
+  { id: "arc3", label: "Arc" },
+  { id: "polygon", label: "Polygon" },
+  { id: "slot", label: "Slot" },
+  { id: "point", label: "Point" },
+  { id: "dimension", label: "Dimension", key: "D" },
+  { id: "project", label: "Project" },
+  { id: "trim", label: "Trim" },
+  { id: "extend", label: "Extend" },
+  { id: "offset", label: "Offset" },
+];
+
+const CONSTRAINTS: Array<{
+  type: string;
+  label: string;
+  title: string;
+}> = [
+  { type: "horizontal", label: "―", title: "Horizontal" },
+  { type: "vertical", label: "|", title: "Vertical" },
+  { type: "coincident", label: "⊙", title: "Coincident (2 points)" },
+  { type: "parallel", label: "∥", title: "Parallel (2 lines)" },
+  { type: "perpendicular", label: "⊥", title: "Perpendicular (2 lines)" },
+  { type: "tangent", label: "⌒", title: "Tangent (line + circle)" },
+  { type: "equal", label: "=", title: "Equal (2 lines / 2 circles)" },
+  { type: "concentric", label: "◎", title: "Concentric (2 circles/arcs)" },
+  { type: "midpoint", label: "⋈", title: "Midpoint (point + line)" },
+  { type: "collinear", label: "≡", title: "Collinear (2 lines)" },
+  { type: "fix", label: "🔒", title: "Fix point" },
+];
+
+export function Toolbar() {
+  const mode = useStore((s) => s.mode);
+  const setMode = useStore((s) => s.setMode);
+  const busy = useStore((s) => s.busy);
+
+  if (mode.name === "sketch") return <SketchToolbar />;
+
+  const openDialog = (dialog: DialogType) => {
+    // Keep any pre-selected geometry the dialog can use (select-then-command).
+    const s = useStore.getState();
+    const kept = filterSelectionFor(dialog, s.selection);
+    setMode({ name: "dialog", dialog });
+    s.setSelection(kept);
+  };
+
+  // A pre-selected plane or planar face starts the sketch there directly;
+  // otherwise fall back to pick-a-plane mode.
+  const createSketch = async () => {
+    const s = useStore.getState();
+    const plane = s.selection.find((x) => x.kind === "plane") as any;
+    if (plane) {
+      await s.startSketchOnPlane(plane.ref);
+      alignCameraToActiveSketch();
+      return;
+    }
+    const face = s.selection.find((x) => x.kind === "face") as any;
+    if (face) {
+      const body = s.evaluation?.bodies.find((b) => b.bodyId === face.bodyId);
+      const surf = body?.faces.find((f) => f.name === face.faceName)?.surface;
+      if (surf?.type === "plane") {
+        await s.startSketchOnPlane({
+          kind: "face",
+          face: { kind: "face", bodyId: face.bodyId, faceName: face.faceName },
+        });
+        alignCameraToActiveSketch();
+        return;
+      }
+    }
+    setMode({ name: "pickPlane", purpose: "sketch" });
+  };
+
+  return (
+    <div className="toolbar">
+      <div className="tb-group">
+        <span className="tb-title">SKETCH</span>
+        <button
+          className="tb-btn primary"
+          disabled={busy}
+          onClick={() => void createSketch()}
+          title="Create a sketch on a plane or planar face (S)"
+        >
+          Create Sketch
+        </button>
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">CREATE</span>
+        {CREATE.map((b) => (
+          <button
+            key={b.id}
+            className="tb-btn"
+            title={b.title}
+            disabled={busy}
+            onClick={() => openDialog(b.id)}
+          >
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">MODIFY</span>
+        {MODIFY.map((b) => (
+          <button
+            key={b.id}
+            className="tb-btn"
+            title={b.title}
+            disabled={busy}
+            onClick={() => openDialog(b.id)}
+          >
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">CONSTRUCT</span>
+        <button
+          className="tb-btn"
+          title="Construction plane (offset / midplane)"
+          disabled={busy}
+          onClick={() => openDialog("constructionPlane")}
+        >
+          Plane
+        </button>
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">PATTERN</span>
+        {PATTERN.map((b) => (
+          <button
+            key={b.id}
+            className="tb-btn"
+            title={b.title}
+            disabled={busy}
+            onClick={() => openDialog(b.id)}
+          >
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">INSPECT</span>
+        <button
+          className={`tb-btn ${mode.name === "measure" ? "active" : ""}`}
+          title="Measure (M)"
+          onClick={() =>
+            mode.name === "measure"
+              ? setMode({ name: "idle" })
+              : setMode({ name: "measure" })
+          }
+        >
+          Measure
+        </button>
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">INSERT</span>
+        <StepImportButton />
+        <button
+          className="tb-btn"
+          title="Insert reference image"
+          disabled={busy}
+          onClick={() => openDialog("referenceImage")}
+        >
+          Canvas
+        </button>
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">EXPORT</span>
+        <button className="tb-btn" disabled={busy} onClick={() => openDialog("export")}>
+          STL / 3MF
+        </button>
+      </div>
+      <div className="tb-spacer" />
+      <ViewButtons />
+    </div>
+  );
+}
+
+function ViewButtons() {
+  const views: Array<{ label: string; dir: [number, number, number]; up: [number, number, number] }> = [
+    { label: "Front", dir: [0, -1, 0], up: [0, 0, 1] },
+    { label: "Back", dir: [0, 1, 0], up: [0, 0, 1] },
+    { label: "Left", dir: [-1, 0, 0], up: [0, 0, 1] },
+    { label: "Right", dir: [1, 0, 0], up: [0, 0, 1] },
+    { label: "Top", dir: [0, 0, 1], up: [0, 1, 0] },
+    { label: "Bottom", dir: [0, 0, -1], up: [0, -1, 0] },
+    { label: "Iso", dir: [1, -1, 0.8], up: [0, 0, 1] },
+  ];
+  return (
+    <div className="tb-group views">
+      <select
+        className="tb-select"
+        title="Named views"
+        value=""
+        onChange={(e) => {
+          const v = views.find((x) => x.label === e.target.value);
+          if (v) viewportHandle.current?.setView(v.dir, v.up);
+        }}
+      >
+        <option value="" disabled>
+          View
+        </option>
+        {views.map((v) => (
+          <option key={v.label}>{v.label}</option>
+        ))}
+      </select>
+      <button
+        className="tb-btn"
+        title="Zoom to fit (Shift+F)"
+        onClick={() => viewportHandle.current?.zoomToFit()}
+      >
+        Fit
+      </button>
+      <button
+        className="tb-btn"
+        title="Toggle orthographic / perspective"
+        onClick={() => {
+          const vp = viewportHandle.current;
+          if (!vp) return;
+          vp.setProjection(
+            vp.projection === "orthographic" ? "perspective" : "orthographic"
+          );
+        }}
+      >
+        Ortho/Persp
+      </button>
+    </div>
+  );
+}
+
+function SketchToolbar() {
+  const mode = useStore((s) => s.mode);
+  const setSketchTool = useStore((s) => s.setSketchTool);
+  const finishSketch = useStore((s) => s.finishSketch);
+  const setMode = useStore((s) => s.setMode);
+  const selection = useStore((s) => s.selection);
+  const draft = useStore((s) => s.draftSketch);
+  const updateDraft = useStore((s) => s.updateDraftSketch);
+  const commit = useStore((s) => s.commitDraftSketch);
+  const setError = useStore((s) => s.setError);
+  const dialogParams = useStore((s) => s.dialogParams);
+  const setDialogParams = useStore((s) => s.setDialogParams);
+
+  if (mode.name !== "sketch") return null;
+  const tool = mode.tool;
+
+  const applyConstraint = async (type: string) => {
+    if (!draft) return;
+    const entityIds = selection
+      .filter((s) => s.kind === "sketchEntity" || s.kind === "sketchPoint")
+      .map((s: any) => s.entityId);
+    const find = (id: string) => draft.entities.find((e) => e.id === id);
+    const points = entityIds.filter((id) => find(id)?.kind === "point");
+    const lines = entityIds.filter((id) => find(id)?.kind === "line");
+    const circleLikes = entityIds.filter((id) => {
+      const k = find(id)?.kind;
+      return k === "circle" || k === "arc";
+    });
+
+    let c: SketchConstraint | null = null;
+    const id = newId("c");
+    switch (type) {
+      case "horizontal":
+        if (lines.length >= 1) c = { id, type: "horizontal", line: lines[0] };
+        break;
+      case "vertical":
+        if (lines.length >= 1) c = { id, type: "vertical", line: lines[0] };
+        break;
+      case "coincident":
+        if (points.length >= 2)
+          c = { id, type: "coincident", a: points[0], b: points[1] };
+        break;
+      case "parallel":
+        if (lines.length >= 2) c = { id, type: "parallel", a: lines[0], b: lines[1] };
+        break;
+      case "perpendicular":
+        if (lines.length >= 2)
+          c = { id, type: "perpendicular", a: lines[0], b: lines[1] };
+        break;
+      case "tangent":
+        if (lines.length >= 1 && circleLikes.length >= 1)
+          c = { id, type: "tangent", a: lines[0], b: circleLikes[0] };
+        else if (circleLikes.length >= 2)
+          c = { id, type: "tangent", a: circleLikes[0], b: circleLikes[1] };
+        break;
+      case "equal":
+        if (lines.length >= 2) c = { id, type: "equal", a: lines[0], b: lines[1] };
+        else if (circleLikes.length >= 2)
+          c = { id, type: "equal", a: circleLikes[0], b: circleLikes[1] };
+        break;
+      case "concentric":
+        if (circleLikes.length >= 2)
+          c = { id, type: "concentric", a: circleLikes[0], b: circleLikes[1] };
+        break;
+      case "midpoint":
+        if (points.length >= 1 && lines.length >= 1)
+          c = { id, type: "midpoint", point: points[0], line: lines[0] };
+        break;
+      case "collinear":
+        if (lines.length >= 2) c = { id, type: "collinear", a: lines[0], b: lines[1] };
+        break;
+      case "fix":
+        if (points.length >= 1) c = { id, type: "fix", point: points[0] };
+        break;
+    }
+    if (!c) {
+      setError(`Selection doesn't match the ${type} constraint — check the tooltip`);
+      return;
+    }
+    updateDraft(draft.entities, [...draft.constraints, c]);
+    await commit();
+    useStore.getState().setSelection([]);
+  };
+
+  const deleteSelected = async () => {
+    const ids = selection
+      .filter((s) => s.kind === "sketchEntity" || s.kind === "sketchPoint")
+      .map((s: any) => s.entityId);
+    await useStore.getState().deleteSketchEntities(ids);
+  };
+
+  return (
+    <div className="toolbar sketch">
+      <div className="tb-group">
+        <span className="tb-title">SKETCH</span>
+        {SKETCH_TOOLS.map((t) => (
+          <button
+            key={t.id}
+            className={`tb-btn ${tool === t.id ? "active" : ""}`}
+            title={t.key ? `${t.label} (${t.key})` : t.label}
+            onClick={() => setSketchTool(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+        {tool === "polygon" && (
+          <input
+            className="tb-input"
+            type="number"
+            min={3}
+            max={24}
+            value={dialogParams.polygonSides ?? 6}
+            onChange={(e) => setDialogParams({ polygonSides: Number(e.target.value) })}
+            title="Polygon sides"
+          />
+        )}
+        <button
+          className={`tb-btn ${mode.constructionMode ? "active" : ""}`}
+          title="Toggle construction geometry (X)"
+          onClick={() =>
+            setMode({ ...mode, constructionMode: !mode.constructionMode })
+          }
+        >
+          Construction
+        </button>
+      </div>
+      <div className="tb-group">
+        <span className="tb-title">CONSTRAIN</span>
+        {CONSTRAINTS.map((c) => (
+          <button
+            key={c.type}
+            className="tb-btn icon"
+            title={c.title}
+            onClick={() => void applyConstraint(c.type)}
+          >
+            {c.label}
+          </button>
+        ))}
+        <button className="tb-btn" title="Delete selected (Del)" onClick={() => void deleteSelected()}>
+          Delete
+        </button>
+      </div>
+      <div className="tb-spacer" />
+      <div className="tb-group">
+        <button className="tb-btn primary" onClick={() => void finishSketch()}>
+          Finish Sketch
+        </button>
+      </div>
+    </div>
+  );
+}

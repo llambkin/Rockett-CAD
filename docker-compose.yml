@@ -1,0 +1,14 @@
+services:
+  rockett-cad:
+    build: .
+    image: rockett-cad:latest
+    container_name: rockett-cad
+    restart: unless-stopped
+    ports:
+      - "8788:8788"
+    environment:
+      - DATA_DIR=/data
+      - ROCKETT_PORT=8788
+    volumes:
+      # All persistent state: project documents, reference images, exports.
+      - ./data:/data

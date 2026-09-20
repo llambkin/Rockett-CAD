@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>rockett-cad</Name>
+  <Repository>rockett-cad:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>
+    Rockett CAD — self-hosted, browser-based parametric CAD for designing 3D-printable
+    parts. Feature-history solid modelling on a real B-Rep kernel (OpenCascade),
+    with STL and 3MF export.
+
+    Build the image locally first (docker build -t rockett-cad:latest .) or point
+    Repository at your own registry.
+  </Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8788]/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>
+    Self-hosted parametric CAD (Fusion-style sketch → constrain → extrude → timeline
+    workflow) for 3D printing. All projects, reference images and exports live in the
+    /data volume and survive container recreation.
+  </Description>
+  <Config Name="WebUI Port" Target="8788" Default="8788" Mode="tcp"
+    Description="Port for the web interface" Type="Port" Display="always"
+    Required="true" Mask="false">8788</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/rockett-cad"
+    Mode="rw"
+    Description="Persistent storage: project documents, uploaded reference images, exports"
+    Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/rockett-cad</Config>
+</Container>

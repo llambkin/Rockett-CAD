@@ -1,0 +1,28 @@
+{
+  "name": "@rockett/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:opencascade.js --external:express --external:multer --external:fflate --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "start": "node dist/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@rockett/shared": "*",
+    "express": "^4.21.0",
+    "fflate": "^0.8.2",
+    "multer": "^1.4.5-lts.1",
+    "opencascade.js": "2.0.0-beta.b5ff984"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
