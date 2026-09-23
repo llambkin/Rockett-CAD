@@ -17,6 +17,7 @@
     "lint": "oxlint",
     "lint:comments": "sh scripts/check-comments.sh",
     "lint:writing": "node ~/masterrulez/scripts/lint-writing",
+    "prepare": "husky",
     "start": "npm run start --workspace server",
     "test": "npm run typecheck && vitest run",
     "test:client": "vitest run client/test",
@@ -24,6 +25,8 @@
   },
   "devDependencies": {
     "happy-dom": "20.14.5",
+    "husky": "9.1.7",
+    "lint-staged": "17.3.0",
     "npm-run-all2": "9.0.3",
     "oxlint": "1.79.0",
     "prettier": "3.9.6",

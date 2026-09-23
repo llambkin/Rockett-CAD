@@ -1,0 +1,5 @@
+{
+  "*.{ts,tsx,js,mjs}": ["prettier --write", "oxlint --fix --deny-warnings"],
+  "*.{json,css,html,yml}": "prettier --write",
+  "*.md": ["prettier --write", "npm run lint:writing --"]
+}

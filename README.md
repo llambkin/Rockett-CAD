@@ -86,6 +86,7 @@ A plain `docker compose up` records neither, so the label reads
 
 ```bash
 npm ci                 # .npmrc: install scripts off, exact pins on save
+npm run prepare        # once per clone: husky sets core.hooksPath to .husky/_
 npm run dev            # server on :8788 + Vite client on :5173
 npm test               # typecheck, then shared, server and client tests
 npm run lint           # oxlint
