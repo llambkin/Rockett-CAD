@@ -155,10 +155,9 @@ function run(features: Feature[]) {
   });
   const result = engine.evaluate(doc, undefined, stepSources);
   const volumes = new Map(
-    [...engine.stateAt(doc, undefined, stepSources).bodies].map(([bodyId, b]) => [
-      bodyId,
-      volumeOf(b.shape),
-    ]),
+    [...engine.stateAt(doc, undefined, stepSources).bodies].map(
+      ([bodyId, b]) => [bodyId, volumeOf(b.shape)],
+    ),
   );
   dropEngine(id);
   return {
