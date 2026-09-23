@@ -1,4 +1,4 @@
-# Rockett CAD - Tean Rockett!
+# Rockett CAD - Team Rockett!
 
 Prepare for trouble!
 And make it double!
