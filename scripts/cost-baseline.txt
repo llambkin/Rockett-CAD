@@ -15,7 +15,7 @@ client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 98
 client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3153
+client/src/components/ViewportView.tsx 3154
 client/src/components/ViewportView.tsx ViewportView 2917
 client/src/components/ViewportView.tsx computeGizmoSource 100
 client/src/components/ViewportView.tsx handleHover 135
@@ -40,7 +40,7 @@ client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 706
 server/src/api/routes.ts createApiRouter 520
 server/src/geometry/engine.ts evaluate 108
-server/src/geometry/features.ts 1974
+server/src/geometry/features.ts 1975
 server/src/geometry/features.ts applyToolOperation 89
 server/src/geometry/features.ts buildPrism 81
 server/src/geometry/features.ts chamferByEnvelope 272
@@ -51,8 +51,7 @@ server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 105
 shared/src/model.ts 521
-shared/src/profiles.ts 633
-shared/src/profiles.ts detectProfiles 405
+shared/src/profiles.ts 574
 shared/src/sketchModify.ts 806
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts modifySketch 144
