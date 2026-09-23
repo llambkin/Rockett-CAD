@@ -6,14 +6,13 @@
  * - Serves the built client (client/dist) in production
  */
 
-import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import type { AddressInfo } from "node:net";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
-import { createApiRouter } from "./api/routes.js";
+import { createApp } from "./app.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,13 +29,6 @@ async function main() {
   await store.init();
   console.log(`[rockett] data dir: ${DATA_DIR}`);
 
-  const app = express();
-  app.disable("x-powered-by");
-  app.use("/api", createApiRouter(store));
-  app.use("/api", (_req, res) => {
-    res.status(404).json({ error: "Not found" });
-  });
-
   // static client (production build)
   const candidates = [
     path.resolve(__dirname, "../../client/dist"), // repo layout (dev/prod)
@@ -46,11 +38,8 @@ async function main() {
   const clientDir = candidates.find((c) =>
     fs.existsSync(path.join(c, "index.html")),
   );
+  const app = createApp({ store, clientDir });
   if (clientDir) {
-    app.use(express.static(clientDir));
-    app.get("/{*splat}", (_req, res) => {
-      res.sendFile(path.join(clientDir, "index.html"));
-    });
     console.log(`[rockett] serving client from ${clientDir}`);
   } else {
     console.log(
