@@ -11,7 +11,7 @@ import { LocalStorage } from "../src/store/storage.js";
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 
 describe("schema fixtures", () => {
-  it.each([1, 2, 3, 4, 5, 6, 7])(
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
     "loads v%i at the current schema with features unchanged apart from STEP sources",
     async (version) => {
       const raw = await fs.readFile(

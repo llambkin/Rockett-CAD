@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
@@ -49,6 +50,20 @@ async function download(id: string): Promise<any> {
 
 async function projectDirs(): Promise<Set<string>> {
   return new Set(await fs.readdir(path.join(app.dataDir, "projects")));
+}
+
+function withImage(f: any, bytes: Buffer) {
+  const hash = crypto.createHash("sha256").update(bytes).digest("hex");
+  return {
+    ...f,
+    document: {
+      ...f.document,
+      features: f.document.features.map((x: any) =>
+        x.type === "referenceImage" ? { ...x, assetId: hash } : x,
+      ),
+    },
+    assets: { [hash]: bytes.toString("base64") },
+  };
 }
 
 function referenceImage(id: string, asset: string) {
@@ -197,21 +212,18 @@ describe("project file", () => {
     ],
     [
       "a bad image",
-      (f) => ({
-        ...f,
-        assets: { [assetId]: Buffer.from("not an image").toString("base64") },
-      }),
+      (f) => withImage(f, Buffer.from("not an image")),
       /unsupported image type/,
     ],
     [
-      "an image under the wrong extension",
+      "asset bytes that do not match their id",
       (f) => ({
         ...f,
         assets: {
           [assetId]: Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString("base64"),
         },
       }),
-      /extension/,
+      /does not match its id/,
     ],
     [
       "asset bytes that are not base64",

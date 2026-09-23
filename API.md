@@ -71,9 +71,9 @@ migration; an invalid one is 422 naming the first failure.
 
 A project travels as one `.rockett` file, JSON of shape
 `{ format: "rockett-project", version: 1, document, assets }`. `assets` maps
-each asset id the document's reference images use, and each sha256 an
-`importStep` feature names in `blob`, to its bytes in base64, so a file holds
-only the files the document references.
+each sha256 a reference image names in `assetId` or an `importStep` feature
+names in `blob` to its bytes in base64, so a file holds only the files the
+document references.
 
 `GET /projects/:id/file` returns the file as an attachment named after the
 project: an ASCII `filename` plus a UTF-8 `filename*`.
@@ -82,10 +82,11 @@ project: an ASCII `filename` plus a UTF-8 `filename*`.
 `{ document }` for a new project with a new id. An older document schema is
 migrated as a saved project is on load, then the document is validated as
 `PUT /projects/:id/document` validates it. Every asset must be referenced by
-the document and decode from base64. An image asset carries a valid asset id
-and passes the image upload rules; a STEP source must hash to its key. Every
-referenced asset must be present, except the STEP sources an older document
-still holds inline, which migration moves out. A file with a newer
+the document and decode from base64, and its bytes must hash to its key. An
+image asset also passes the image upload rules. Every referenced asset must be
+present. A file from before schema 9 may key its images by their old
+`<16hex>.<ext>` ids and may hold STEP sources inline; migration hashes both
+and rekeys them. A file with a newer
 `version` or `schemaVersion` gets 400 naming both versions. Any failure
 returns 400 and creates nothing: a project half made when an asset fails is
 removed.
@@ -179,7 +180,11 @@ default 0.05, clamped to 0.001 to 1.
 | Method & path                       | Body              | Notes                                                 |
 | ----------------------------------- | ----------------- | ----------------------------------------------------- |
 | `POST /projects/:id/assets`         | multipart `image` | PNG/JPEG/WebP by magic bytes, ≤ 25 MB → `{ assetId }` |
-| `GET /projects/:id/assets/:assetId` | none              | Serves the image                                      |
+| `GET /projects/:id/assets/:assetId` | none              | Serves the image with its sniffed type                |
+
+`assetId` is the sha256 of the image bytes, and the image lives in the
+project's blob store. An id that is not a sha256, or names a blob that is not
+an image, is 404.
 
 ## Validation
 

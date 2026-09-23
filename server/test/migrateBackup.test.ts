@@ -26,14 +26,13 @@ const original = new Map([
   ["assets/0123456789abcdef.png", png],
   ["exports/part.stl", Buffer.from("solid part\nendsolid part\n")],
 ]);
-const pending = new PendingBlobs();
+const pending = new PendingBlobs(new Map([["0123456789abcdef.png", png]]));
 const migratedDoc = migrate(documentMigrations, fixture, pending);
 const backedUp = new Map<string, Buffer>(original);
 for (const [hash, bytes] of pending.blobs) backedUp.set(`blobs/${hash}`, bytes);
-const migrated = new Map(backedUp).set(
-  "document.json",
-  Buffer.from(JSON.stringify(migratedDoc, null, 1)),
-);
+const migrated = new Map(
+  [...backedUp].filter(([name]) => !name.startsWith("assets/")),
+).set("document.json", Buffer.from(JSON.stringify(migratedDoc, null, 1)));
 
 type When = "before" | "after";
 type Files = Map<string, Buffer>;
@@ -154,11 +153,15 @@ function same(a: Files, b: Files, except?: string): boolean {
 }
 
 function generation(live: Files): string {
-  if (same(live, original) || same(live, backedUp)) return "old";
+  if (
+    [...original].every(([k, v]) => live.get(k)?.equals(v) === true) &&
+    [...live].every(([k, v]) => backedUp.get(k)?.equals(v) === true)
+  )
+    return "old";
   if (same(live, migrated)) return "migrated";
   const doc = JSON.parse(live.get("document.json")?.toString() ?? "{}");
   if (
-    same(live, backedUp, "document.json") &&
+    same(live, migrated, "document.json") &&
     doc.name === "Edited" &&
     doc.schemaVersion === SCHEMA_VERSION
   )
@@ -206,7 +209,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
     const loaded = await reopened.load(id);
     expect(loaded.features).toEqual(migratedDoc.features);
     expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
-    expect(await reopened.readAsset(id, "0123456789abcdef.png")).toEqual(png);
+    expect((await reopened.readAsset(id, sha(png))).data).toEqual(png);
 
     await store.save(await edit(store));
     expect(await backups(storage)).toEqual([backup]);

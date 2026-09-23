@@ -629,8 +629,8 @@ export function createApiRouter(
   on(
     ROUTES.asset,
     wrap(async (req, res) => {
-      const { id, assetId } = req.params;
-      res.type(assetId).send(await store.readAsset(id, assetId));
+      const asset = await store.readAsset(req.params.id, req.params.assetId);
+      res.type(asset.mime).send(asset.data);
     }),
   );
 

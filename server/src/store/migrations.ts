@@ -4,6 +4,7 @@ type Value = Record<string, unknown>;
 
 export interface MigrationContext {
   put(bytes: Uint8Array): string;
+  asset(name: string): Uint8Array | undefined;
 }
 
 export interface Migrations<T> {
@@ -15,6 +16,9 @@ export interface Migrations<T> {
 
 export const NO_BLOBS: MigrationContext = {
   put() {
+    throw new Error("this migration needs a blob store");
+  },
+  asset() {
     throw new Error("this migration needs a blob store");
   },
 };
@@ -69,6 +73,14 @@ function stepBlob(feature: Value, context: MigrationContext): Value {
   return { ...rest, blob: context.put(Buffer.from(data, "utf8")) };
 }
 
+function imageBlob(feature: Value, context: MigrationContext): Value {
+  const bytes =
+    typeof feature.assetId === "string"
+      ? context.asset(feature.assetId)
+      : undefined;
+  return bytes ? { ...feature, assetId: context.put(bytes) } : feature;
+}
+
 export const documentMigrations: Migrations<CadDocument> = {
   namespace: "document",
   current: SCHEMA_VERSION,
@@ -84,6 +96,14 @@ export const documentMigrations: Migrations<CadDocument> = {
       ...doc,
       features: (doc.features as Value[]).map((feature) =>
         feature.type === "importStep" ? stepBlob(feature, context) : feature,
+      ),
+    }),
+    8: (doc, context) => ({
+      ...doc,
+      features: (doc.features as Value[]).map((feature) =>
+        feature.type === "referenceImage"
+          ? imageBlob(feature, context)
+          : feature,
       ),
     }),
   },

@@ -22,6 +22,7 @@ export class StoreError extends Error {
 export interface MigrationEffects<C extends MigrationContext> {
   context(key: string, stored: unknown): Promise<C>;
   commit(key: string, context: C): Promise<void>;
+  retire(key: string, context: C): Promise<void>;
 }
 
 export interface JsonStoreOptions<T, C extends MigrationContext> {
@@ -157,9 +158,11 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
       this.options.migrations.field
     ];
     const backup = await this.backup(key, `v${String(from)}`);
+    await this.eachBackupFile(key, backup, async () => {});
     const { storage } = this.options;
     await storage.writeAtomic(this.record(key), JSON.stringify({ backup }));
     await storage.writeAtomic(this.file(key), staged);
+    await this.options.effects?.retire(key, context);
     await storage.remove(this.record(key));
   }
 
@@ -205,6 +208,19 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     const { backup } = JSON.parse(record.toString("utf8")) as {
       backup: string;
     };
+    await this.eachBackupFile(key, backup, (name, data) =>
+      storage.writeAtomic(path.posix.join(this.dir(key), name), data),
+    );
+    await storage.remove(this.record(key));
+    return true;
+  }
+
+  private async eachBackupFile(
+    key: string,
+    backup: string,
+    visit: (name: string, data: Buffer) => Promise<void>,
+  ): Promise<void> {
+    const { storage } = this.options;
     const source = path.posix.join(this.backups(key), backup);
     const manifest = (
       await storage.read(path.posix.join(source, "SHA256SUMS"))
@@ -218,10 +234,8 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
           `${this.options.name} ${key} backup ${backup} is damaged`,
           "internal",
         );
-      await storage.writeAtomic(path.posix.join(this.dir(key), name), data);
+      await visit(name, data);
     }
-    await storage.remove(this.record(key));
-    return true;
   }
 
   async inventory(): Promise<Inventory> {

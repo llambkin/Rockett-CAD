@@ -101,8 +101,7 @@ docker run -d --name rockett-cad \
     └── {projectId}/
         ├── document.json   # the parametric document (full history)
         ├── temporary.json  # present only on a temporary copy of a browser project
-        ├── assets/         # uploaded reference images
-        ├── blobs/          # STEP, IGES and BREP sources, each named by its sha256
+        ├── blobs/          # reference images and STEP, IGES and BREP sources, each named by its sha256
         └── exports/        # server-retained exports (opt-in per export)
 ```
 
@@ -112,7 +111,10 @@ by the old schema and a hash of its contents, so a second migration of
 different contents never overwrites the first backup. A migration that moves
 data out of `document.json` into `blobs/` writes those blobs before the backup,
 so the backup also holds them; the old document never reads them, and a retry
-finds the same files and reuses the same backup. While the migration runs,
+finds the same files and reuses the same backup. A project from before schema
+9 keeps its reference images in `assets/`; the migration copies them into
+`blobs/`, and `assets/` is removed only after the backup reads back intact
+and the migrated document is written. While the migration runs,
 `backups/projects/{projectId}/migrating.json` records it; at startup, and before
 the next save, a project with that record is restored from its backup. Startup
 also logs how many projects still predate the current schema. A temporary
@@ -126,7 +128,7 @@ Every project is validated when it is opened. One that fails, or one saved by
 a newer schema, stays in the project list with its reason and is never
 rewritten; opening an invalid one is refused with its first failure.
 
-Documents, assets and retained exports are written atomically (temp file,
+Documents, blobs and retained exports are written atomically (temp file,
 fsync, rename, directory fsync), so a crash or container kill never corrupts a
 project. **The container is
 stateless outside `/data`**. Recreating it (upgrades, host moves) loses

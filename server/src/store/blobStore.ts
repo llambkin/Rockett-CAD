@@ -6,11 +6,22 @@ export const HASH_RE = /^[0-9a-f]{64}$/;
 
 export class PendingBlobs {
   readonly blobs = new Map<string, Buffer>();
+  readonly used = new Set<string>();
+
+  constructor(readonly assets: ReadonlyMap<string, Buffer> = new Map()) {
+    for (const bytes of assets.values()) this.put(bytes);
+  }
 
   put(bytes: Uint8Array): string {
     const hash = sha256(bytes);
     this.blobs.set(hash, Buffer.from(bytes));
     return hash;
+  }
+
+  asset(name: string): Buffer | undefined {
+    const bytes = this.assets.get(name);
+    if (bytes) this.used.add(name);
+    return bytes;
   }
 }
 

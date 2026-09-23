@@ -80,8 +80,8 @@ selected when the dialog opens, so typing replaces it.
   command execution surface.
 - All modelling parameters are validated (`server/src/api/validate.ts`)
   before reaching the kernel; document/feature ids are pattern-checked.
-- Project ids and asset ids are server-generated and regex-validated on every
-  path access (no path traversal).
+- Project ids are server-generated, asset ids are the sha256 of their bytes,
+  and both are regex-validated on every path access (no path traversal).
 - Uploaded images are validated by magic bytes (PNG/JPEG/WebP only) and size
   capped.
 - The container runs as a non-root user; the only writable path is `/data`.

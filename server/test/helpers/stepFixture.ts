@@ -8,7 +8,7 @@ export const stepSources = new Map<string, Buffer>();
 
 export function withStepBlobs(features: Array<Record<string, unknown>>) {
   return features.map(({ data, ...feature }) =>
-    feature.type === "importStep"
+    feature.type === "importStep" && data !== undefined
       ? {
           ...feature,
           blob: sha256(Buffer.from(String(data), "utf8")),

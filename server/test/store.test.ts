@@ -128,7 +128,7 @@ describe("project store", () => {
     const copy = await store.duplicate(a.id, "A2");
     expect(copy.id).not.toBe(a.id);
     expect(copy.name).toBe("A2");
-    expect(await store.readAsset(copy.id, assetId)).toEqual(png);
+    expect((await store.readAsset(copy.id, assetId)).data).toEqual(png);
     expect(await store.list()).toHaveLength(3);
   });
 
@@ -146,7 +146,7 @@ describe("project store", () => {
         const handle = await fs.open(file, flags);
         return Object.assign(Object.create(handle), {
           writeFile: async (data: Uint8Array) => {
-            if (!file.includes(`${path.sep}assets${path.sep}`))
+            if (!file.includes(`${path.sep}blobs${path.sep}`))
               return handle.writeFile(data);
             await handle.writeFile(data.subarray(0, 8));
             throw new Error("disk full");
@@ -162,8 +162,8 @@ describe("project store", () => {
     );
     const doc = await store.create("Assets");
     await expect(store.saveAsset(doc.id, png)).rejects.toThrow("disk full");
-    const assets = path.join(dir, "projects", doc.id, "assets");
-    expect(await fs.readdir(assets).catch(() => [])).toEqual([]);
+    const blobs = path.join(dir, "projects", doc.id, "blobs");
+    expect(await fs.readdir(blobs).catch(() => [])).toEqual([]);
   });
 
   it("removes projects", async () => {

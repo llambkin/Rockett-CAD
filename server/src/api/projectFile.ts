@@ -56,11 +56,7 @@ export const downloadProjectFile =
     const document = await store.load(String(req.params.id));
     const assets: Record<string, string> = {};
     for (const name of referencedAssets(document))
-      assets[name] = (
-        HASH_RE.test(name)
-          ? await store.blob(document.id, name)
-          : await store.readAsset(document.id, name)
-      ).toString("base64");
+      assets[name] = (await store.blob(document.id, name)).toString("base64");
     const file: ProjectFile = {
       format: PROJECT_FILE_FORMAT,
       version: PROJECT_FILE_VERSION,
@@ -98,12 +94,18 @@ export const uploadProjectFile =
       throw new ValidationError(
         `project schema ${file.document.schemaVersion} is newer than this server's schema ${SCHEMA_VERSION}`,
       );
-    const pending = new PendingBlobs();
+    const pending = new PendingBlobs(
+      new Map(
+        Object.entries(file.assets)
+          .filter(([name]) => !HASH_RE.test(name))
+          .map(([name, base64]) => [name, decodeAsset(name, base64)]),
+      ),
+    );
     const document = migrate(documentMigrations, file.document, pending);
     validateDocument(document);
     const referenced = referencedAssets(document);
     for (const name of Object.keys(file.assets))
-      if (!referenced.has(name))
+      if (!referenced.has(name) && !pending.used.has(name))
         throw new ValidationError(
           `asset ${name} is not referenced by the document`,
         );

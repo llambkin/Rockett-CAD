@@ -14,7 +14,6 @@ import type { Storage } from "./storage.js";
 export { StoreError };
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const ASSET_ID_RE = /^[a-f0-9]{16}\.(png|jpg|webp)$/;
 const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
 const MINUTE = 60 * 1000;
@@ -22,18 +21,18 @@ const DAY = 24 * 60 * MINUTE;
 
 export const IMAGE_LIMIT_MB = 25;
 
-const IMAGE_TYPES: Array<{ ext: string; test: (b: Buffer) => boolean }> = [
+const IMAGE_TYPES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
   {
-    ext: "png",
+    mime: "image/png",
     test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
   },
   {
-    ext: "jpg",
+    mime: "image/jpeg",
     test: (b) =>
       b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
   },
   {
-    ext: "webp",
+    mime: "image/webp",
     test: (b) =>
       b.length > 12 &&
       b.toString("ascii", 0, 4) === "RIFF" &&
@@ -46,7 +45,7 @@ const newId = () => crypto.randomBytes(6).toString("hex");
 const text = (v: unknown, fallback: string) =>
   typeof v === "string" ? v : fallback;
 
-function imageExt(data: Buffer, label: string): string {
+function imageMime(data: Buffer, label: string): string {
   if (data.length > IMAGE_LIMIT_MB * 1024 * 1024)
     throw new StoreError(`${label}image is over ${IMAGE_LIMIT_MB} MB`);
   const type = IMAGE_TYPES.find((t) => t.test(data));
@@ -54,11 +53,17 @@ function imageExt(data: Buffer, label: string): string {
     throw new StoreError(
       `${label}unsupported image type (PNG, JPEG, WebP only)`,
     );
-  return type.ext;
+  return type.mime;
 }
 
 function stepBlobs(doc: CadDocument): string[] {
   return doc.features.flatMap((f) => (f.type === "importStep" ? [f.blob] : []));
+}
+
+function imageBlobs(doc: CadDocument): string[] {
+  return doc.features.flatMap((f) =>
+    f.type === "referenceImage" && HASH_RE.test(f.assetId) ? [f.assetId] : [],
+  );
 }
 
 export class ProjectStore {
@@ -79,11 +84,13 @@ export class ProjectStore {
       unbacked: (id) => this.isTemporary(id),
       validate,
       effects: {
-        context: async () => new PendingBlobs(),
+        context: async (id, stored) =>
+          new PendingBlobs(await this.legacyAssets(id, stored)),
         commit: async (id, pending) => {
           for (const bytes of pending.blobs.values())
             await this.blobs(id).put(bytes);
         },
+        retire: (id) => storage.remove(this.assetDir(id)),
       },
     });
   }
@@ -166,17 +173,16 @@ export class ProjectStore {
     copy.id = newId();
     copy.name = newName || `${src.name} (copy)`;
     copy.createdAt = new Date().toISOString();
-    for (const dir of ["assets", "blobs"]) {
-      const from = path.posix.join(this.documents.dir(id), dir);
-      const to = path.posix.join(this.documents.dir(copy.id), dir);
-      for (const f of await this.storage.list(from))
-        await this.storage.writeAtomic(
-          path.posix.join(to, f),
-          await this.storage.read(path.posix.join(from, f)),
-        );
+    const from = path.posix.join(this.documents.dir(id), "blobs");
+    for (const f of await this.storage.list(from))
+      await this.storage.writeAtomic(
+        path.posix.join(this.documents.dir(copy.id), "blobs", f),
+        await this.storage.read(path.posix.join(from, f)),
+      );
+    for (const hash of [...stepBlobs(src), ...imageBlobs(src)]) {
+      const bytes = await this.blob(id, hash).catch(() => undefined);
+      if (bytes) await this.blobs(copy.id).put(bytes);
     }
-    for (const bytes of (await this.sources(src)).values())
-      await this.blobs(copy.id).put(bytes);
     await this.save(copy);
     return copy;
   }
@@ -241,9 +247,8 @@ export class ProjectStore {
     projectId: string,
     data: Buffer,
   ): Promise<{ assetId: string }> {
-    const assetId = `${crypto.randomBytes(8).toString("hex")}.${imageExt(data, "")}`;
-    await this.writeAsset(projectId, assetId, data, "");
-    return { assetId };
+    imageMime(data, "");
+    return { assetId: await this.blobs(projectId).put(data) };
   }
 
   async importProject(
@@ -252,14 +257,18 @@ export class ProjectStore {
     temporary = false,
   ): Promise<CadDocument> {
     const id = newId();
+    const images = new Set(imageBlobs(doc));
     try {
       if (temporary) await this.writeMarker(id);
-      for (const [assetId, data] of assets)
-        if (HASH_RE.test(assetId)) {
-          if (sha256(data) !== assetId)
-            throw new StoreError(`asset ${assetId}: content does not match`);
-          await this.blobs(id).put(data);
-        } else await this.writeAsset(id, assetId, data, `asset ${assetId}: `);
+      for (const [assetId, data] of assets) {
+        const label = `asset ${assetId}: `;
+        if (!HASH_RE.test(assetId))
+          throw new StoreError(`${label}invalid asset id`);
+        if (sha256(data) !== assetId)
+          throw new StoreError(`${label}content does not match its id`);
+        if (images.has(assetId)) imageMime(data, label);
+        await this.blobs(id).put(data);
+      }
       const imported = { ...doc, id };
       await this.save(imported);
       return imported;
@@ -267,18 +276,6 @@ export class ProjectStore {
       await this.remove(id);
       throw error;
     }
-  }
-
-  private async writeAsset(
-    projectId: string,
-    assetId: string,
-    data: Buffer,
-    label: string,
-  ): Promise<void> {
-    const file = this.assetFile(projectId, assetId, label);
-    if (path.extname(assetId) !== `.${imageExt(data, label)}`)
-      throw new StoreError(`${label}extension does not match the image type`);
-    await this.storage.writeAtomic(file, data);
   }
 
   blobs(projectId: string): BlobStore {
@@ -314,19 +311,29 @@ export class ProjectStore {
     return path.posix.join(this.documents.dir(projectId), "assets");
   }
 
-  private assetFile(projectId: string, assetId: string, label = ""): string {
-    if (!ASSET_ID_RE.test(assetId))
-      throw new StoreError(`${label}invalid asset id`);
-    return path.posix.join(this.assetDir(projectId), assetId);
+  private async legacyAssets(
+    projectId: string,
+    stored: unknown,
+  ): Promise<Map<string, Buffer>> {
+    const out = new Map<string, Buffer>();
+    const version = (stored as Partial<CadDocument> | null)?.schemaVersion;
+    if (typeof version !== "number" || version > 8) return out;
+    const dir = this.assetDir(projectId);
+    for (const name of await this.storage.list(dir))
+      out.set(name, await this.storage.read(path.posix.join(dir, name)));
+    return out;
   }
 
-  async readAsset(projectId: string, assetId: string): Promise<Buffer> {
-    const file = this.assetFile(projectId, assetId);
-    try {
-      return await this.storage.read(file);
-    } catch {
-      throw new StoreError("asset not found", "not_found");
-    }
+  async readAsset(
+    projectId: string,
+    assetId: string,
+  ): Promise<{ data: Buffer; mime: string }> {
+    const missing = new StoreError("asset not found", "not_found");
+    if (!HASH_RE.test(assetId)) throw missing;
+    const data = await this.blob(projectId, assetId);
+    const type = IMAGE_TYPES.find((t) => t.test(data));
+    if (!type) throw missing;
+    return { data, mime: type.mime };
   }
 
   async saveExport(
