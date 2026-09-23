@@ -10,9 +10,9 @@ import { initKernel } from "../../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../../src/geometry/engine.js";
 import { stepFixture } from "./stepFixture.js";
 
-const meta = (id: string) => ({ id, name: id, suppressed: false });
+export const meta = (id: string) => ({ id, name: id, suppressed: false });
 
-function rect(
+export function rect(
   id: string,
   x0: number,
   y0: number,
@@ -47,7 +47,7 @@ function rect(
   };
 }
 
-function box(
+export function box(
   id: string,
   x0: number,
   y0: number,
