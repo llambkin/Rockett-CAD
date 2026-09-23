@@ -8,6 +8,7 @@ import { FeatureDialog } from "./components/FeatureDialog";
 import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { DraggablePanel } from "./components/DraggablePanel";
+import { DialogFooter } from "./components/form/DialogFooter";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
@@ -307,11 +308,10 @@ function Workspace() {
                 <kbd>Y</kbd> Redo
               </p>
             </div>
-            <div className="dialog-actions">
-              <button className="btn" onClick={() => setShowHelp(false)}>
-                Close controls
-              </button>
-            </div>
+            <DialogFooter
+              onCancel={() => setShowHelp(false)}
+              cancelLabel="Close controls"
+            />
           </DraggablePanel>
         )}
       </div>

@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import type { FolderTree } from "@rockett/shared";
 import { canMoveTo, parentOf, subfolders, type Item } from "../projectTree";
 import { DraggablePanel } from "./DraggablePanel";
+import { DialogFooter } from "./form/DialogFooter";
 
 export function MoveDialog({
   tree,
@@ -46,18 +47,12 @@ export function MoveDialog({
           <div className="tree-children">{branch(null)}</div>
         </div>
       </div>
-      <div className="dialog-actions">
-        <button
-          className="btn primary"
-          disabled={target === undefined}
-          onClick={() => target !== undefined && onMove(target)}
-        >
-          Move
-        </button>
-        <button className="btn" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
+      <DialogFooter
+        onOk={() => target !== undefined && onMove(target)}
+        onCancel={onClose}
+        okLabel="Move"
+        okDisabled={target === undefined}
+      />
     </DraggablePanel>
   );
 }

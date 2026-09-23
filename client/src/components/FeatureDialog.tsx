@@ -25,6 +25,7 @@ import {
   SelInfo,
   SelectField,
 } from "./form/fields";
+import { DialogFooter } from "./form/DialogFooter";
 
 export function FeatureDialog() {
   const mode = useStore((s) => s.mode);
@@ -148,14 +149,6 @@ function DialogBody({
     close();
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") cancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   const commit = async (feature: Feature) => {
     setPending(true);
     try {
@@ -243,11 +236,7 @@ function DialogBody({
                 : "The originating CAD program’s sketches and feature history are not included in STEP files."}
             </p>
           </div>
-          <div className="dialog-actions">
-            <button className="btn" onClick={close}>
-              Close
-            </button>
-          </div>
+          <DialogFooter onCancel={cancel} cancelLabel="Close" escapeAnywhere />
         </DraggablePanel>
       );
     }
@@ -1009,18 +998,12 @@ function DialogBody({
   return (
     <DraggablePanel title={title}>
       <div className="dialog-body">{body}</div>
-      <div className="dialog-actions">
-        <button
-          className="btn primary"
-          disabled={pending}
-          onClick={() => onOk && void onOk()}
-        >
-          OK
-        </button>
-        <button className="btn" disabled={pending} onClick={cancel}>
-          Cancel
-        </button>
-      </div>
+      <DialogFooter
+        onOk={() => void onOk?.()}
+        onCancel={cancel}
+        pending={pending}
+        escapeAnywhere
+      />
     </DraggablePanel>
   );
 }
@@ -1247,25 +1230,15 @@ function ReferenceImagePanel({
           </button>
         )}
       </div>
-      <div className="dialog-actions">
-        <button
-          className="btn primary"
-          disabled={pending}
-          onClick={() => void onOk()}
-        >
-          OK
-        </button>
-        <button
-          className="btn"
-          disabled={pending}
-          onClick={() => {
-            void useStore.getState().cancelPreview();
-            onClose();
-          }}
-        >
-          Cancel
-        </button>
-      </div>
+      <DialogFooter
+        onOk={() => void onOk()}
+        onCancel={() => {
+          void useStore.getState().cancelPreview();
+          onClose();
+        }}
+        pending={pending}
+        escapeAnywhere
+      />
     </DraggablePanel>
   );
 }
@@ -1340,18 +1313,13 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
           </select>
         </label>
       </div>
-      <div className="dialog-actions">
-        <button
-          className="btn primary"
-          disabled={pending}
-          onClick={() => void doExport()}
-        >
-          {pending ? "Exporting…" : "Download"}
-        </button>
-        <button className="btn" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
+      <DialogFooter
+        onOk={() => void doExport()}
+        onCancel={onClose}
+        pending={pending}
+        okLabel={pending ? "Exporting…" : "Download"}
+        escapeAnywhere
+      />
     </DraggablePanel>
   );
 }

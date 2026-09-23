@@ -17,6 +17,7 @@ import { useStore } from "../src/store";
 import { filterSelectionFor } from "../src/dialogPicks";
 import { openFeatureEditor } from "../src/components/Timeline";
 import { FeatureDialog } from "../src/components/FeatureDialog";
+import { DialogFooter } from "../src/components/form/DialogFooter";
 
 vi.mock("../src/api", () => ({ api: {} }));
 const panels: { children: ReactNode }[] = [];
@@ -249,12 +250,12 @@ async function pressOk(): Promise<void> {
   const find = (n: any): any => {
     if (Array.isArray(n)) return n.map(find).find(Boolean);
     if (!n?.props) return undefined;
-    if (n.type === "button" && n.props.className === "btn primary") return n;
+    if (n.type === DialogFooter) return n;
     return find(n.props.children);
   };
   const ok = panels.map((p) => find(p.children)).find(Boolean);
   expect(ok, "OK button").toBeTruthy();
-  ok.props.onClick();
+  ok.props.onOk();
   await new Promise((r) => setTimeout(r, 0));
 }
 

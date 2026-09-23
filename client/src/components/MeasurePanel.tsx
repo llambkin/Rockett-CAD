@@ -3,6 +3,7 @@
 import { formatAngle, formatLength } from "@rockett/shared";
 import { useStore } from "../store";
 import { DraggablePanel } from "./DraggablePanel";
+import { DialogFooter } from "./form/DialogFooter";
 
 function fmt(v: number | undefined): string {
   return v === undefined ? "—" : formatLength(v, "mm", 4);
@@ -63,14 +64,10 @@ export function MeasurePanel() {
           </div>
         )}
       </div>
-      <div className="dialog-actions">
-        <button
-          className="btn"
-          onClick={() => useStore.getState().setMode({ name: "idle" })}
-        >
-          Done
-        </button>
-      </div>
+      <DialogFooter
+        onCancel={() => useStore.getState().setMode({ name: "idle" })}
+        cancelLabel="Done"
+      />
     </DraggablePanel>
   );
 }

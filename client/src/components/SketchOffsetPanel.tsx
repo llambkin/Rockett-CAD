@@ -11,6 +11,7 @@ import { viewportHandle } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
 import { disposeGroup } from "../three/dispose";
 import { DraggablePanel } from "./DraggablePanel";
+import { DialogFooter } from "./form/DialogFooter";
 
 export function SketchOffsetPanel() {
   const mode = useStore((s) => s.mode);
@@ -256,18 +257,13 @@ function OffsetBody() {
         </p>
         {preview.error && <p className="field-hint">{preview.error}</p>}
       </div>
-      <div className="dialog-actions">
-        <button className="btn" onClick={close} disabled={busy}>
-          Cancel
-        </button>
-        <button
-          className="btn primary"
-          onClick={() => void apply()}
-          disabled={busy || !preview.result}
-        >
-          {editing ? "Save offset" : "Create offset"}
-        </button>
-      </div>
+      <DialogFooter
+        onOk={() => void apply()}
+        onCancel={close}
+        pending={busy}
+        okLabel={editing ? "Save offset" : "Create offset"}
+        okDisabled={!preview.result}
+      />
     </DraggablePanel>
   );
 }

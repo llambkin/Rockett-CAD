@@ -69,7 +69,7 @@ everything downstream against persistent topology references.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control.
 - **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
-- **Tool panels**: panels stay inside the window; Escape cancels a feature dialog and reverts its preview.
+- **Tool panels**: stay inside the window; Enter in a field confirms, Escape cancels, and a feature dialog reverts its preview.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions; right-drag still orbits.
 - **Projects**: sort projects into folders; create, rename, move or delete them by button, right-click or drag.
 - **Project files**: download a project as one `.rockett` file, or open one as a new project.

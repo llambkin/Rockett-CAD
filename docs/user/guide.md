@@ -136,17 +136,18 @@ Every change saves automatically, and projects survive container recreation.
 
 ### Shortcuts
 
-| Keys            | Action                                               |
-| --------------- | ---------------------------------------------------- |
-| S, E, F, M      | Sketch, extrude, fillet, move                        |
-| I               | Measure (inspect)                                    |
-| Shift+F         | Fit the model in view                                |
-| ?               | Controls list, also on the Controls button           |
-| Ctrl+Z / Ctrl+Y | Undo / redo                                          |
-| V/L/R/C/D/P     | Sketch tools, in a sketch                            |
-| X               | Toggle construction, in a sketch                     |
-| Delete          | Remove the selection, in a sketch                    |
-| Escape          | Cancel an open feature dialog and revert its preview |
+| Keys            | Action                                                    |
+| --------------- | --------------------------------------------------------- |
+| S, E, F, M      | Sketch, extrude, fillet, move                             |
+| I               | Measure (inspect)                                         |
+| Shift+F         | Fit the model in view                                     |
+| ?               | Controls list, also on the Controls button                |
+| Ctrl+Z / Ctrl+Y | Undo / redo                                               |
+| V/L/R/C/D/P     | Sketch tools, in a sketch                                 |
+| X               | Toggle construction, in a sketch                          |
+| Delete          | Remove the selection, in a sketch                         |
+| Enter           | Confirm a tool panel from one of its fields               |
+| Escape          | Cancel a tool panel; a feature dialog reverts its preview |
 
 ### Undo and redo
 
@@ -155,8 +156,9 @@ Undo/redo is application-level and separate from the CAD timeline.
 ### Panels and errors
 
 Tool panels keep their action buttons within the window; the arrow in the title
-bar restores their docked position. Escape cancels an open feature dialog,
-reverts its live preview and clears the selection.
+bar restores their docked position. Enter in a panel field presses its confirm
+button and Escape inside a panel presses Cancel. Escape from anywhere cancels an
+open feature dialog, reverts its live preview and clears the selection.
 
 Errors remain visible until dismissed or the next operation starts, and their
 text can be selected and copied.
