@@ -64,7 +64,7 @@ function ProjectList() {
         <h1>
           <span className="logo">⬢</span> Rockett CAD
         </h1>
-        <p className="tagline">Self-hosted parametric CAD for 3D printing</p>
+        <p className="tagline">Your CAD. Your server. Your plugins.</p>
         {error && <div className="error-banner">{error}</div>}
         <div className="new-project">
           <input
