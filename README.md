@@ -51,7 +51,7 @@ everything downstream against persistent topology references.
 - **Replicate**: mirror, rectangular pattern and circular pattern.
 - **Construction**: offset planes and midplanes; sketch on any planar face.
 - **Reference images**: place PNG, JPEG or WebP images on planes and calibrate them to real size.
-- **Feature timeline**: rename, edit, quick edit, suppress, delete, roll back and insert features; broken references are flagged, never dropped.
+- **Feature timeline**: rename, edit, quick edit, hover preview, suppress, delete, roll back and insert features; broken references are flagged, never dropped.
 
 ### Inspect
 

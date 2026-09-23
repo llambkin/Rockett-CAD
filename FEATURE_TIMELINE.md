@@ -19,7 +19,7 @@ editable.
 
 | Action                | Mechanics                                                                                                                                      |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Select / hover        | Chip click; tooltip shows type + any error                                                                                                     |
+| Select / hover        | Chip click; tooltip shows type + any error; resting 0.3 s on a chip shows the model after it without changing the document                     |
 | Rename                | Context menu → inline edit (stored on the feature)                                                                                             |
 | Edit                  | Double-click or context menu; sketches open the sketch editor, other features open their parameter dialog pre-filled (same dialog as creation) |
 | Suppress / unsuppress | Context menu; suppressed features are skipped during evaluation but keep their place in history                                                |

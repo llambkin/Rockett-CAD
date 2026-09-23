@@ -6,6 +6,7 @@ import {
   type DialogType,
   type Selection,
 } from "../store";
+import { useTimelinePeek } from "../timelinePeek";
 import { alignCameraToActiveSketch } from "../viewportRef";
 import { ContextMenu } from "./ContextMenu";
 import { QuickEdit, quickValues } from "./QuickEdit";
@@ -53,6 +54,7 @@ export function Timeline() {
     id: string;
     value: string;
   } | null>(null);
+  const peek = useTimelinePeek(quick !== null);
 
   if (!document_) return null;
   const pos =
@@ -118,6 +120,8 @@ export function Timeline() {
                 className={cls}
                 title={`${f.name} (${f.type})${st?.error || st?.warning ? `\n⚠ ${st.error ?? st.warning}` : ""}${f.suppressed ? "\n(suppressed)" : ""}`}
                 onDoubleClick={() => openEditor(f)}
+                onMouseEnter={() => peek.enter(f.id)}
+                onMouseLeave={peek.leave}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   const { left, top } = e.currentTarget.getBoundingClientRect();
