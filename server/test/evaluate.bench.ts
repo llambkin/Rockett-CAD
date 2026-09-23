@@ -35,7 +35,7 @@ const topFace = {
 };
 
 function rect(id: string, w: number, h: number): SketchFeature {
-  const corners = [
+  const corners: [number, number][] = [
     [0, 0],
     [w, 0],
     [w, h],

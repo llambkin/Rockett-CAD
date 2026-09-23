@@ -23,7 +23,7 @@ it("rejects a completed but invalid rim fillet and preserves the previous solid"
   ).toBe(true);
   const previous = [
     ...engine.stateAt(doc, doc.features.length - 1).bodies.values(),
-  ][0];
+  ][0]!;
   const volume = volumeOf(previous.shape);
   const fillet = doc.features.at(-1) as FilletFeature;
   for (const radius of [2, 0.5]) {
@@ -35,7 +35,7 @@ it("rejects a completed but invalid rim fillet and preserves the previous solid"
       error: expect.stringContaining("invalid geometry"),
     });
     expect(result.bodies).toEqual(before.bodies);
-    const retained = [...engine.stateAt(doc).bodies.values()][0];
+    const retained = [...engine.stateAt(doc).bodies.values()][0]!;
     expect(volumeOf(retained.shape)).toBeCloseTo(volume, 6);
     const check = new (getKernel().BRepCheck_Analyzer)(
       retained.shape,

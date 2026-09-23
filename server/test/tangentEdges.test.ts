@@ -17,7 +17,7 @@ it.each([0.001079261604345, 0.1])(
     const id = `step-chain-${step}`,
       doc = createEmptyDocument(id, id),
       engine = engineFor(id);
-    const points = [
+    const points: [number, number][] = [
       [0, 0],
       [10, 0],
       [10, step],
@@ -49,7 +49,7 @@ it.each([0.001079261604345, 0.1])(
     };
     doc.features = [sketch];
     doc.timelinePosition = 1;
-    const profile = engine.evaluate(doc).sketches[0].profiles[0];
+    const profile = engine.evaluate(doc).sketches[0]!.profiles[0]!;
     doc.features.push({
       id: "ext",
       name: "Extrude",
@@ -61,7 +61,7 @@ it.each([0.001079261604345, 0.1])(
       direction: "normal",
     });
     doc.timelinePosition = 2;
-    const payload = engine.evaluate(doc).bodies[0];
+    const payload = engine.evaluate(doc).bodies[0]!;
     const seed: EdgeRef = {
       kind: "edge",
       bodyId: payload.bodyId,
@@ -111,7 +111,7 @@ it.each(["fillet", "chamfer"] as const)(
     const sketch = slotSketch();
     doc.features = [sketch];
     doc.timelinePosition = 1;
-    const profile = engine.evaluate(doc).sketches[0].profiles[0];
+    const profile = engine.evaluate(doc).sketches[0]!.profiles[0]!;
     const extrude: ExtrudeFeature = {
       id: "solid",
       name: "Solid",
@@ -124,7 +124,7 @@ it.each(["fillet", "chamfer"] as const)(
     };
     doc.features.push(extrude);
     doc.timelinePosition = 2;
-    const payload = engine.evaluate(doc).bodies[0];
+    const payload = engine.evaluate(doc).bodies[0]!;
     const seed: EdgeRef = {
       kind: "edge",
       bodyId: payload.bodyId,

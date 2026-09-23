@@ -103,9 +103,9 @@ describe("geometry pipeline", () => {
       };
       const doc = docWith([sketch, extrude]),
         engine = engineFor("modified-profile");
-      const profiles = engine.evaluate(doc, 1).sketches[0].profiles;
+      const profiles = engine.evaluate(doc, 1).sketches[0]!.profiles;
       expect(profiles).toHaveLength(1);
-      extrude.profiles = [{ sketchId: "profile", profileId: profiles[0].id }];
+      extrude.profiles = [{ sketchId: "profile", profileId: profiles[0]!.id }];
       expect(engine.evaluate(doc).featureStatuses).toEqual([
         { featureId: "profile", status: "ok" },
         { featureId: "solid", status: "ok" },
@@ -133,11 +133,11 @@ describe("geometry pipeline", () => {
     extrude.profiles = [
       {
         sketchId: sketch.id,
-        profileId: engine.evaluate(doc, 1).sketches[0].profiles[0].id,
+        profileId: engine.evaluate(doc, 1).sketches[0]!.profiles[0]!.id,
       },
     ];
     let result = engine.evaluate(doc);
-    const edge = result.bodies[0].edges.find(
+    const edge = result.bodies[0]!.edges.find(
       (e) => e.name.includes("cap:end") && e.name.includes("source-l1"),
     )!;
     expect(edge).toBeTruthy();
@@ -214,14 +214,14 @@ describe("geometry pipeline", () => {
     const engine = engineFor("t1");
     // resolve the actual profile id from sketch evaluation
     let result = engine.evaluate(doc, 1);
-    const profile = result.sketches[0].profiles[0];
+    const profile = result.sketches[0]!.profiles[0]!;
     expect(profile).toBeTruthy();
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId = profile.id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId = profile.id;
     result = engine.evaluate(doc);
 
     expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok"]);
     expect(result.bodies).toHaveLength(1);
-    const body = result.bodies[0];
+    const body = result.bodies[0]!;
     expect(body.bbox.min.map((v) => Math.round(v) || 0)).toEqual([0, 0, 0]);
     expect(body.bbox.max.map((v) => Math.round(v) || 0)).toEqual([100, 50, 20]);
     // 6 faces with persistent names
@@ -295,13 +295,13 @@ describe("geometry pipeline", () => {
 
     // Resolve profile ids progressively
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     result = engine.evaluate(doc, 3);
     const sk2 = result.sketches.find((s) => s.featureId === "sk2")!;
     expect(sk2.profiles.length).toBeGreaterThan(0);
-    (doc.features[3] as ExtrudeFeature).profiles[0].profileId =
-      sk2.profiles[0].id;
+    (doc.features[3] as ExtrudeFeature).profiles[0]!.profileId =
+      sk2.profiles[0]!.id;
 
     // Evaluate through the cut
     result = engine.evaluate(doc, 4);
@@ -312,7 +312,7 @@ describe("geometry pipeline", () => {
     expect(cutVol).toBeCloseTo(100 * 50 * 20 - Math.PI * 25 * 20, 1);
 
     // Find a vertical corner edge at (0,0): line from (0,0,0)->(0,0,20)
-    const bodyPayload = result.bodies[0];
+    const bodyPayload = result.bodies[0]!;
     const cornerEdge = bodyPayload.edges.find((e) => {
       if (e.curve.type !== "line") return false;
       const { a, b } = e.curve;
@@ -353,7 +353,7 @@ describe("geometry pipeline", () => {
       "ok",
       "ok",
     ]);
-    const body = result.bodies[0];
+    const body = result.bodies[0]!;
     expect(Math.round(body.bbox.max[0])).toBe(120);
     const newVol = volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape);
     expect(newVol).toBeCloseTo(
@@ -386,10 +386,10 @@ describe("geometry pipeline", () => {
     const doc = docWith([sketch, extrude, chamfer]);
     const engine = engineFor("t3");
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     result = engine.evaluate(doc, 2);
-    const edge = result.bodies[0].edges.find((e) => e.curve.type === "line")!;
+    const edge = result.bodies[0]!.edges.find((e) => e.curve.type === "line")!;
     chamfer.edges = [{ kind: "edge", bodyId: "b:ext1", edgeName: edge.name }];
 
     // full evaluation
@@ -400,7 +400,7 @@ describe("geometry pipeline", () => {
     // roll back before the chamfer
     doc.timelinePosition = 2;
     result = engine.evaluate(doc);
-    expect(result.featureStatuses[2].status).toBe("rolledBack");
+    expect(result.featureStatuses[2]!.status).toBe("rolledBack");
     const rolledVol = volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape);
     expect(rolledVol).toBeCloseTo(40 * 40 * 10, 3);
   });
@@ -429,11 +429,11 @@ describe("geometry pipeline", () => {
     const doc = docWith([sketch, extrude, fillet]);
     const engine = engineFor("t4");
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     result = engine.evaluate(doc);
-    expect(result.featureStatuses[2].status).toBe("error");
-    expect(result.featureStatuses[2].error).toMatch(/no longer exists/);
+    expect(result.featureStatuses[2]!.status).toBe("error");
+    expect(result.featureStatuses[2]!.error).toMatch(/no longer exists/);
     // body remains intact from before the failed feature
     expect(result.bodies).toHaveLength(1);
     expect(

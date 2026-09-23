@@ -26,16 +26,16 @@ it("imports multiple B-Rep bodies, persists them, and supports downstream fillet
     status: "ok",
   });
   expect(result.bodies).toHaveLength(2);
-  expect(result.bodies[0].bbox.max).toEqual(
+  expect(result.bodies[0]!.bbox.max).toEqual(
     [20, 30, 10].map((x) => expect.closeTo(x, 4)),
   );
   const state = engine.stateAt(doc);
   expect(volumeOf(state.bodies.get("b:step")!.shape)).toBeCloseTo(6000, 3);
-  const names = result.bodies[0].faces.map((f) => f.name);
+  const names = result.bodies[0]!.faces.map((f) => f.name);
   dropEngine(doc.id);
   engine = engineFor(doc.id);
   result = engine.evaluate(JSON.parse(JSON.stringify(doc)));
-  expect(result.bodies[0].faces.map((f) => f.name)).toEqual(names);
+  expect(result.bodies[0]!.faces.map((f) => f.name)).toEqual(names);
   doc.features.push({
     id: "fillet",
     type: "fillet",
@@ -45,7 +45,7 @@ it("imports multiple B-Rep bodies, persists them, and supports downstream fillet
       {
         kind: "edge",
         bodyId: "b:step",
-        edgeName: result.bodies[0].edges[0].name,
+        edgeName: result.bodies[0]!.edges[0]!.name,
       },
     ],
     radius: 1,

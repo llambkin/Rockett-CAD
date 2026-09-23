@@ -11,7 +11,7 @@ import { engineFor, dropEngine } from "../src/geometry/engine.js";
 
 beforeAll(() => initKernel(), 120000);
 it("extrudes a rounded offset as an exact closed solid", () => {
-  const coords = [
+  const coords: [number, number][] = [
     [2, 0],
     [18, 0],
     [20, 2],
@@ -61,14 +61,14 @@ it("extrudes a rounded offset as an exact closed solid", () => {
   const engine = engineFor(doc.id);
   try {
     const initial = engine.evaluate(doc);
-    expect(initial.sketches[0].profiles).toHaveLength(1);
+    expect(initial.sketches[0]!.profiles).toHaveLength(1);
     const extrude: ExtrudeFeature = {
       id: "ex",
       type: "extrude",
       name: "Extrude",
       suppressed: false,
       profiles: [
-        { sketchId: "sk", profileId: initial.sketches[0].profiles[0].id },
+        { sketchId: "sk", profileId: initial.sketches[0]!.profiles[0]!.id },
       ],
       operation: "newBody",
       distance: 2,

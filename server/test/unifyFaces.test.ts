@@ -62,12 +62,12 @@ function extrudeAllRegions(
   doc.timelinePosition = 2;
   const engine = engineFor(projectId);
   const first = engine.evaluate(doc, 1);
-  extrude.profiles = first.sketches[0].profiles.map((p) => ({
+  extrude.profiles = first.sketches[0]!.profiles.map((p) => ({
     sketchId: "sk1",
     profileId: p.id,
   }));
   const result = engine.evaluate(doc);
-  return { result, regions: first.sketches[0].profiles.length, engine, doc };
+  return { result, regions: first.sketches[0]!.profiles.length, engine, doc };
 }
 
 const twoRects = () => [
@@ -91,22 +91,22 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     const { engine, doc } = extrudeAllRegions("uni-sequential", twoRects(), 5);
     const first = doc.features[1] as ExtrudeFeature;
     const [left, right] = first.profiles;
-    first.profiles = [left];
+    first.profiles = [left!];
     first.operation = "newBody";
     doc.features.push({
       ...first,
       id: "ext2",
       name: "Extrude2",
-      profiles: [right],
+      profiles: [right!],
       operation: "join",
     });
     doc.timelinePosition = 3;
     const result = engine.evaluate(doc);
     expect(result.featureStatuses.every((s) => s.status === "ok")).toBe(true);
     expect(result.bodies).toHaveLength(1);
-    expect(result.bodies[0].bodyId).toBe("b:ext1");
-    expect(result.bodies[0].faces).toHaveLength(6);
-    expect(result.bodies[0].edges).toHaveLength(12);
+    expect(result.bodies[0]!.bodyId).toBe("b:ext1");
+    expect(result.bodies[0]!.faces).toHaveLength(6);
+    expect(result.bodies[0]!.edges).toHaveLength(12);
     const body = engine.stateAt(doc).bodies.get("b:ext1")!;
     expect(solids(body.shape)).toHaveLength(1);
     expect(volumeOf(body.shape)).toBeCloseTo(1000, 6);
@@ -148,7 +148,7 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     expect(regions).toBe(2);
     expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok"]);
     expect(result.bodies).toHaveLength(1);
-    const names = result.bodies[0].faces.map((f) => f.name).sort();
+    const names = result.bodies[0]!.faces.map((f) => f.name).sort();
     expect(names).toHaveLength(6);
     expect(names).toContain("f:ext1:cap:start");
     expect(names).toContain("f:ext1:cap:end");
@@ -196,7 +196,7 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok"]);
     expect(result.bodies).toHaveLength(1);
     // 8 outline walls + 2 caps; the radials and square edges leave no trace
-    expect(result.bodies[0].faces).toHaveLength(10);
+    expect(result.bodies[0]!.faces).toHaveLength(10);
     expect(
       volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape),
     ).toBeCloseTo(7500 * 4, 1);
@@ -243,7 +243,7 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     doc.timelinePosition = 2;
     const engine = engineFor("uni4");
     const first = engine.evaluate(doc, 1);
-    const halves = first.sketches[0].profiles.filter((p) => p.area < 100);
+    const halves = first.sketches[0]!.profiles.filter((p) => p.area < 100);
     expect(halves).toHaveLength(2);
     extrude.profiles = halves.map((p) => ({
       sketchId: "sk1",
@@ -273,7 +273,7 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
       L("l4", "d", "a"),
     ];
     const { result } = extrudeAllRegions("uni3", entities, 10);
-    const names = result.bodies[0].faces.map((f) => f.name).sort();
+    const names = result.bodies[0]!.faces.map((f) => f.name).sort();
     expect(names).toEqual(
       [
         "f:ext1:cap:end",

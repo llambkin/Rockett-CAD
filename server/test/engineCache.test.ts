@@ -23,7 +23,7 @@ beforeEach(() => {
 const evaluatedIds = () => evaluated.mock.calls.map(([, f]) => f.id);
 
 function square(id: string, size: number): SketchFeature {
-  const pts = [
+  const pts: [number, number][] = [
     [0, 0],
     [size, 0],
     [size, size],

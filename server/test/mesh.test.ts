@@ -1,4 +1,5 @@
 import { beforeAll, expect, it } from "vitest";
+import type { Vec3 } from "@rockett/shared";
 import { getKernel, initKernel } from "../src/geometry/kernel.js";
 import { meshShape } from "../src/geometry/mesh.js";
 import { tessellateBody } from "../src/geometry/tessellate.js";
@@ -28,17 +29,25 @@ it("meshes a box once for the viewport and STL at equal deflection", () => {
 
   for (const { positions: P, normals: N, indices: I } of faces) {
     for (let t = 0; t < I.length; t += 3) {
-      const [a, b, c] = [I[t] * 3, I[t + 1] * 3, I[t + 2] * 3];
-      const u = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]];
-      const v = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]];
-      const n = [
+      const [a, b, c] = [I[t]! * 3, I[t + 1]! * 3, I[t + 2]! * 3];
+      const u: Vec3 = [
+        P[b]! - P[a]!,
+        P[b + 1]! - P[a + 1]!,
+        P[b + 2]! - P[a + 2]!,
+      ];
+      const v: Vec3 = [
+        P[c]! - P[a]!,
+        P[c + 1]! - P[a + 1]!,
+        P[c + 2]! - P[a + 2]!,
+      ];
+      const n: Vec3 = [
         u[1] * v[2] - u[2] * v[1],
         u[2] * v[0] - u[0] * v[2],
         u[0] * v[1] - u[1] * v[0],
       ];
-      expect(n[0] * N[a] + n[1] * N[a + 1] + n[2] * N[a + 2]).toBeGreaterThan(
-        0,
-      );
+      expect(
+        n[0] * N[a]! + n[1] * N[a + 1]! + n[2] * N[a + 2]!,
+      ).toBeGreaterThan(0);
     }
   }
   box.delete();

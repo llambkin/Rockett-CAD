@@ -189,10 +189,10 @@ function expectVolume(actual: number, expected: number, rel = 1e-6) {
 function expectBox(r: Run, bodyId: string, min: Vec3, max: Vec3, digits = 3) {
   const { bbox } = r.body(bodyId);
   bbox.min.forEach((v, i) =>
-    expect(v, `min[${i}]`).toBeCloseTo(min[i], digits),
+    expect(v, `min[${i}]`).toBeCloseTo(min[i]!, digits),
   );
   bbox.max.forEach((v, i) =>
-    expect(v, `max[${i}]`).toBeCloseTo(max[i], digits),
+    expect(v, `max[${i}]`).toBeCloseTo(max[i]!, digits),
   );
 }
 

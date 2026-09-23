@@ -81,12 +81,12 @@ function starPlate(id: string) {
   doc.timelinePosition = 2;
   const engine = engineFor(id);
   const first = engine.evaluate(doc, 1);
-  ex.profiles = first.sketches[0].profiles.map((p) => ({
+  ex.profiles = first.sketches[0]!.profiles.map((p) => ({
     sketchId: "sk1",
     profileId: p.id,
   }));
   const r = engine.evaluate(doc);
-  const body = r.bodies[0];
+  const body = r.bodies[0]!;
   const loop = (cap: string): EdgeRef[] =>
     body.edges
       .filter((e) => e.name.includes(cap))
@@ -123,13 +123,13 @@ describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
     expect(r.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok", "ok"]);
     expect(r.bodies).toHaveLength(1);
     // 8 top chamfer faces + 8 bottom chamfer faces + 2 caps; the walls are gone
-    expect(r.bodies[0].faces).toHaveLength(18);
+    expect(r.bodies[0]!.faces).toHaveLength(18);
     const vol = volumeOf(
-      engine.stateAt(doc).bodies.get(r.bodies[0].bodyId)!.shape,
+      engine.stateAt(doc).bodies.get(r.bodies[0]!.bodyId)!.shape,
     );
     expect(vol).toBeLessThan(prismVolume);
     expect(vol).toBeGreaterThan(prismVolume * 0.5);
-    expect(r.bodies[0].bbox.max[2]).toBeCloseTo(7, 6);
+    expect(r.bodies[0]!.bbox.max[2]).toBeCloseTo(7, 6);
   });
 
   it("top then bottom as two features also succeeds at exactly half the height", () => {
@@ -143,10 +143,10 @@ describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
       "ok",
       "ok",
     ]);
-    expect(r.bodies[0].faces).toHaveLength(18);
+    expect(r.bodies[0]!.faces).toHaveLength(18);
     // chamfer faces keep the per-edge naming scheme of the normal path
     expect(
-      r.bodies[0].faces.filter((f) => f.name.startsWith("f:c2:fe:")),
+      r.bodies[0]!.faces.filter((f) => f.name.startsWith("f:c2:fe:")),
     ).toHaveLength(8);
   });
 
@@ -186,16 +186,16 @@ describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
     const engine = engineFor("che5");
     const first = engine.evaluate(doc, 1);
     // 4 points + square-with-hole + the disc: extrude everything but the disc
-    const regions = first.sketches[0].profiles;
+    const regions = first.sketches[0]!.profiles;
     expect(regions).toHaveLength(6);
     const disc = regions.find(
-      (p) => p.outer.length === 1 && p.outer[0].entityId === "ci",
+      (p) => p.outer.length === 1 && p.outer[0]!.entityId === "ci",
     )!;
     ex.profiles = regions
       .filter((p) => p !== disc)
       .map((p) => ({ sketchId: "sk1", profileId: p.id }));
     let r = engine.evaluate(doc);
-    const body = r.bodies[0];
+    const body = r.bodies[0]!;
     // 8 walls + 2 caps + the hole wall
     expect(body.faces).toHaveLength(11);
     const loop = (cap: string): EdgeRef[] =>
@@ -215,9 +215,9 @@ describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
       "ok",
     ]);
     // 8 + 8 chamfers + 2 caps + the untouched hole wall
-    expect(r.bodies[0].faces).toHaveLength(19);
+    expect(r.bodies[0]!.faces).toHaveLength(19);
     expect(
-      r.bodies[0].faces.filter((f) => f.name.startsWith("f:c2:fe:")),
+      r.bodies[0]!.faces.filter((f) => f.name.startsWith("f:c2:fe:")),
     ).toHaveLength(8);
   });
 
@@ -226,11 +226,11 @@ describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
     doc.features.push(chamfer("c1", top, 2));
     doc.timelinePosition = 3;
     const r = engine.evaluate(doc);
-    expect(r.featureStatuses[2].status).toBe("ok");
+    expect(r.featureStatuses[2]!.status).toBe("ok");
     // 8 chamfer + 8 walls + 2 caps
-    expect(r.bodies[0].faces).toHaveLength(18);
+    expect(r.bodies[0]!.faces).toHaveLength(18);
     expect(
-      r.bodies[0].faces.filter((f) => f.name.startsWith("f:c1:fe:")),
+      r.bodies[0]!.faces.filter((f) => f.name.startsWith("f:c1:fe:")),
     ).toHaveLength(8);
   });
 
@@ -239,6 +239,6 @@ describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
     doc.features.push(chamfer("c1", top, 10)); // deeper than the plate
     doc.timelinePosition = 3;
     const r = engine.evaluate(doc);
-    expect(r.featureStatuses[2].status).toBe("error");
+    expect(r.featureStatuses[2]!.status).toBe("error");
   });
 });

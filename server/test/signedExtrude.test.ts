@@ -70,7 +70,7 @@ function build(
   const engine = engineFor(id);
   const first = engine.evaluate(doc, 1);
   ex.profiles = [
-    { sketchId: "sk", profileId: first.sketches[0].profiles[0].id },
+    { sketchId: "sk", profileId: first.sketches[0]!.profiles[0]!.id },
   ];
   return { engine, doc, result: engine.evaluate(doc) };
 }
@@ -79,16 +79,16 @@ describe("signed extrude distance", () => {
   it("a negative distance extrudes to the other side of the sketch plane", () => {
     const { result } = build("se1", -7, "normal");
     expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok"]);
-    const b = result.bodies[0];
+    const b = result.bodies[0]!;
     expect(b.bbox.min[2]).toBeCloseTo(-7, 6);
     expect(b.bbox.max[2]).toBeCloseTo(0, 6);
   });
 
   it("negative + Reversed comes back to the front side; symmetric ignores the sign", () => {
-    const back = build("se2", -7, "reverse").result.bodies[0];
+    const back = build("se2", -7, "reverse").result.bodies[0]!;
     expect(back.bbox.min[2]).toBeCloseTo(0, 6);
     expect(back.bbox.max[2]).toBeCloseTo(7, 6);
-    const sym = build("se3", -8, "symmetric").result.bodies[0];
+    const sym = build("se3", -8, "symmetric").result.bodies[0]!;
     expect(sym.bbox.min[2]).toBeCloseTo(-4, 6);
     expect(sym.bbox.max[2]).toBeCloseTo(4, 6);
   });
@@ -148,13 +148,14 @@ describe("signed extrude distance", () => {
     const engine = engineFor("se4");
     let r = engine.evaluate(doc, 1);
     plate.profiles = [
-      { sketchId: "sk0", profileId: r.sketches[0].profiles[0].id },
+      { sketchId: "sk0", profileId: r.sketches[0]!.profiles[0]!.id },
     ];
     r = engine.evaluate(doc, 3);
     cut.profiles = [
       {
         sketchId: "sk",
-        profileId: r.sketches.find((s) => s.featureId === "sk")!.profiles[0].id,
+        profileId: r.sketches.find((s) => s.featureId === "sk")!.profiles[0]!
+          .id,
       },
     ];
     r = engine.evaluate(doc);
@@ -170,17 +171,17 @@ describe("signed extrude distance", () => {
 
   it("a start offset moves the whole prism along the profile normal", () => {
     const { result } = build("se5", 7, "normal", "newBody", 3);
-    const b = result.bodies[0];
+    const b = result.bodies[0]!;
     expect(b.bbox.min[2]).toBeCloseTo(3, 6);
     expect(b.bbox.max[2]).toBeCloseTo(10, 6);
     // the offset is along the profile normal regardless of direction / sign
-    const rev = build("se6", 7, "reverse", "newBody", 3).result.bodies[0];
+    const rev = build("se6", 7, "reverse", "newBody", 3).result.bodies[0]!;
     expect(rev.bbox.min[2]).toBeCloseTo(-4, 6);
     expect(rev.bbox.max[2]).toBeCloseTo(3, 6);
-    const neg = build("se7", -7, "normal", "newBody", -2).result.bodies[0];
+    const neg = build("se7", -7, "normal", "newBody", -2).result.bodies[0]!;
     expect(neg.bbox.min[2]).toBeCloseTo(-9, 6);
     expect(neg.bbox.max[2]).toBeCloseTo(-2, 6);
-    const sym = build("se8", 8, "symmetric", "newBody", 10).result.bodies[0];
+    const sym = build("se8", 8, "symmetric", "newBody", 10).result.bodies[0]!;
     expect(sym.bbox.min[2]).toBeCloseTo(6, 6);
     expect(sym.bbox.max[2]).toBeCloseTo(14, 6);
   });

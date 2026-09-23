@@ -58,10 +58,10 @@ describe("project store", () => {
     const loaded = await store.load(doc.id);
     expect(loaded.name).toBe("My Part");
     expect(loaded.features).toHaveLength(1);
-    expect(loaded.features[0].type).toBe("sketch");
+    expect(loaded.features[0]!.type).toBe("sketch");
     expect((loaded.features[0] as any).constraints[0].type).toBe("fix");
-    expect(loaded.bodyMeta["b:x"].name).toBe("Housing");
-    expect(loaded.bodyMeta["b:x"].visible).toBe(false);
+    expect(loaded.bodyMeta["b:x"]!.name).toBe("Housing");
+    expect(loaded.bodyMeta["b:x"]!.visible).toBe(false);
     expect(loaded.timelinePosition).toBe(1);
   });
 

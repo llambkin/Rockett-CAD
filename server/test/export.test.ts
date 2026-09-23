@@ -78,8 +78,8 @@ describe("exporters", () => {
     const doc = boxDoc("e1");
     const engine = engineFor("e1");
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     engine.evaluate(doc);
     const state = engine.stateAt(doc);
     const stl = writeStl([...state.bodies.values()], 0.1);
@@ -115,8 +115,8 @@ describe("exporters", () => {
     const doc = boxDoc("e2");
     const engine = engineFor("e2");
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     engine.evaluate(doc);
     const state = engine.stateAt(doc);
     const bodies = [...state.bodies.values()].map((b) => ({
@@ -130,7 +130,7 @@ describe("exporters", () => {
     expect(Object.keys(files)).toContain("_rels/.rels");
     expect(Object.keys(files)).toContain("3D/3dmodel.model");
 
-    const model = strFromU8(files["3D/3dmodel.model"]);
+    const model = strFromU8(files["3D/3dmodel.model"]!);
     expect(model).toContain('unit="millimeter"');
     expect(model).toContain('name="MainBody"');
     expect(model).toContain("<vertex ");
@@ -142,8 +142,8 @@ describe("exporters", () => {
     const { id } = await store.create("Box");
     const doc = boxDoc(id);
     const result = engineFor(id).evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     await store.save(doc);
     const post = (body: unknown) =>
       fetch(`${apiUrl}/projects/${id}/export`, {

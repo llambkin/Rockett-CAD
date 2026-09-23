@@ -50,7 +50,7 @@ async function api(method: string, url: string, body?: unknown): Promise<any> {
   const res = await fetch(`${base}${url}`, {
     method,
     headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const type = res.headers.get("content-type") ?? "";
   if (!res.ok) {
@@ -328,7 +328,7 @@ describe("REST API MVP workflow", () => {
       "GET",
       `/projects/${id}/evaluate`,
     );
-    const profileId = evaluation.sketches[0].profiles[0].id;
+    const profileId = evaluation.sketches[0]!.profiles[0]!.id;
 
     // extrude 20mm
     let r = await api("POST", `/projects/${id}/features`, {
