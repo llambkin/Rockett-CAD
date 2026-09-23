@@ -7,14 +7,15 @@ import {
   snapStep,
   type ManipulatorHost,
 } from "../src/three/Manipulator";
+import { MoveGizmo } from "../src/three/MoveGizmo";
 import { RevolveGizmo } from "../src/three/RevolveGizmo";
 import { worldToClient } from "../src/three/screen";
 
 const rect = { left: 20, top: 40, width: 800, height: 600 };
 
-function stubHost(): ManipulatorHost {
+function stubHost(eye = new THREE.Vector3(0, 0, 100)): ManipulatorHost {
   const camera = new THREE.OrthographicCamera(-40, 40, 30, -30, -1000, 1000);
-  camera.position.set(0, 0, 100);
+  camera.position.copy(eye);
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld();
   return {
@@ -190,6 +191,102 @@ describe("extrude manipulator", () => {
   it("does not dispose again after the host scene was cleared", () => {
     const host = stubHost();
     const gizmo = new ExtrudeGizmo(host, extrudeSource, 5);
+    const spies = geometries(host.scene);
+    clearGroup(host.scene);
+    gizmo.dispose();
+    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+const moveOrigin = new THREE.Vector3(2, -1, 0.5);
+const axes = [
+  new THREE.Vector3(1, 0, 0),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, 0, 1),
+];
+
+function move(host: ManipulatorHost, initial: [number, number, number]) {
+  return new MoveGizmo(host, moveOrigin, initial, [
+    { positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1, 2] },
+  ]);
+}
+
+describe("move manipulator", () => {
+  const tilted = () => stubHost(new THREE.Vector3(100, 60, 80));
+
+  it("is a Manipulator", () => {
+    expect(move(tilted(), [0, 0, 0])).toBeInstanceOf(Manipulator);
+  });
+
+  it("picks the nearest of three axes", () => {
+    const host = tilted();
+    const gizmo = move(host, [1, 0, 0]);
+    const base = moveOrigin.clone().add(new THREE.Vector3(1, 0, 0));
+    const at = (axis: number, along: number) =>
+      worldToClient(
+        rect,
+        host.camera,
+        base.clone().addScaledVector(axes[axis]!, along),
+      );
+    for (const axis of [0, 1, 2]) {
+      for (const along of [0.3, 4]) {
+        const p = at(axis, along);
+        expect(gizmo.hitTest(p.x, p.y)).toBe(axis);
+      }
+    }
+    const far = at(0, 0);
+    expect(gizmo.hitTest(far.x + 200, far.y + 200)).toBe(-1);
+  });
+
+  it("drags a snapped offset along the grabbed axis", () => {
+    const host = tilted();
+    const gizmo = move(host, [1, 0, 0]);
+    const base = moveOrigin.clone().add(new THREE.Vector3(1, 0, 0));
+    const at = (along: number) =>
+      worldToClient(
+        rect,
+        host.camera,
+        base.clone().addScaledVector(axes[0]!, along),
+      );
+    const start = at(2);
+    gizmo.beginDrag(0, start.x, start.y);
+    expect(gizmo.isDragging).toBe(true);
+    expect(gizmo.draggingAxis).toBe(0);
+    const step = snapStep(host.worldPerPixel());
+    const p = at(5.3);
+    const offset = gizmo.dragOffset(p.x, p.y);
+    expect(offset[0]).toBeCloseTo(Math.round((1 + 5.3 - 2) / step) * step, 9);
+    expect(offset[1]).toBe(0);
+    expect(offset[2]).toBe(0);
+    gizmo.update(offset);
+    const tip = base
+      .clone()
+      .add(new THREE.Vector3(offset[0] - 1, 0, 0))
+      .addScaledVector(axes[0]!, host.worldPerPixel() * 60);
+    const expected = worldToClient(rect, host.camera, tip);
+    const label = gizmo.tipScreenPosition()!;
+    expect(label.x).toBeCloseTo(expected.x, 9);
+    expect(label.y).toBeCloseTo(expected.y, 9);
+    gizmo.endDrag();
+    expect(gizmo.isDragging).toBe(false);
+    expect(gizmo.draggingAxis).toBe(-1);
+    expect(gizmo.tipScreenPosition()).toBeNull();
+  });
+
+  it("leaves the scene with every geometry disposed once", () => {
+    const host = tilted();
+    const gizmo = move(host, [0, 0, 0]);
+    const spies = geometries(host.scene);
+    expect(spies.length).toBe(7);
+    gizmo.dispose();
+    gizmo.dispose();
+    expect(host.scene.children).toHaveLength(0);
+    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not dispose again after the host scene was cleared", () => {
+    const host = tilted();
+    const gizmo = move(host, [0, 0, 0]);
     const spies = geometries(host.scene);
     clearGroup(host.scene);
     gizmo.dispose();

@@ -45,15 +45,9 @@ describe("dispose helpers", () => {
 
   it("client/src disposes geometry and material only through dispose.ts", () => {
     const src = fileURLToPath(new URL("../src", import.meta.url));
-    const allowed = new Set([
-      "three/dispose.ts",
-      "three/ExtrudeGizmo.ts",
-      "three/MoveGizmo.ts",
-      "three/RevolveGizmo.ts",
-    ]);
     const offenders = readdirSync(src, { recursive: true })
       .map(String)
-      .filter((f) => /\.tsx?$/.test(f) && !allowed.has(f))
+      .filter((f) => /\.tsx?$/.test(f) && f !== "three/dispose.ts")
       .filter((f) =>
         /\b(geometry|material)\??\.dispose\b/.test(
           readFileSync(join(src, f), "utf8"),
