@@ -1,0 +1,62 @@
+client/src/App.tsx 503
+client/src/App.tsx ProjectList 120
+client/src/App.tsx Workspace 240
+client/src/components/DraggablePanel.tsx DraggablePanel 125
+client/src/components/FeatureDialog.tsx 1485
+client/src/components/FeatureDialog.tsx DialogBody 1008
+client/src/components/FeatureDialog.tsx ExportPanel 84
+client/src/components/FeatureDialog.tsx ReferenceImagePanel 240
+client/src/components/ModelTree.tsx ModelTree 454
+client/src/components/SketchOffsetPanel.tsx OffsetBody 252
+client/src/components/Timeline.tsx Timeline 167
+client/src/components/Timeline.tsx openFeatureEditor 175
+client/src/components/Toolbar.tsx SketchToolbar 162
+client/src/components/Toolbar.tsx Toolbar 140
+client/src/components/ViewportView.tsx 3180
+client/src/components/ViewportView.tsx ViewportContextMenu 191
+client/src/components/ViewportView.tsx ViewportView 2773
+client/src/components/ViewportView.tsx computeGizmoSource 102
+client/src/components/ViewportView.tsx handleHover 130
+client/src/components/ViewportView.tsx handlePrimaryUp 186
+client/src/components/ViewportView.tsx handleSketchClick 223
+client/src/components/ViewportView.tsx onPointerMove 114
+client/src/components/ViewportView.tsx pointerToSketchUV 224
+client/src/components/ViewportView.tsx useEffect() 106
+client/src/components/ViewportView.tsx useEffect()#2 275
+client/src/sketchTools.ts 718
+client/src/store.ts 898
+client/src/store.ts deleteSketchEntities 94
+client/src/store.ts useStore 631
+client/src/three/CadViewport.ts 984
+client/src/three/CadViewport.ts addHighlight 103
+client/src/three/CadViewport.ts buildBody 85
+client/src/three/CadViewport.ts pick 183
+client/src/three/ViewCube.ts constructor 102
+client/src/three/revolveGhost.ts buildRevolveGhost 99
+client/src/three/sketchRender.ts renderSketches 168
+client/src/three/toolPreview.ts updateToolPreview 158
+server/src/api/routes.ts 614
+server/src/api/routes.ts createApiRouter 484
+server/src/api/validate.ts 507
+server/src/api/validate.ts validateFeature 217
+server/src/geometry/engine.ts evaluate 110
+server/src/geometry/features.ts 1905
+server/src/geometry/features.ts applyToolOperation 89
+server/src/geometry/features.ts buildPrism 81
+server/src/geometry/features.ts chamferByEnvelope 266
+server/src/geometry/features.ts evalExtrude 110
+server/src/geometry/features.ts evalRevolve 95
+server/src/geometry/sketchGeom.ts buildWire 81
+server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
+server/src/geometry/tangentEdges.ts tangentEdges 110
+server/src/geometry/tessellate.ts tessellateBody 88
+shared/src/model.ts 503
+shared/src/profiles.ts 633
+shared/src/profiles.ts detectProfiles 405
+shared/src/sketchModify.ts 806
+shared/src/sketchModify.ts joinOffsetEndpoints 110
+shared/src/sketchModify.ts modifySketch 144
+shared/src/sketchModify.ts offsetRoundedChain 124
+shared/src/sketchModify.ts offsetSketch 159
+shared/src/solver.ts 616
+shared/src/solver.ts buildProblem 348

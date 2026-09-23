@@ -64,3 +64,30 @@ Ranges span seven runs of `npm run bench -w server -- evaluate` on 2026-09-23.
 
 The last test in `evaluate.bench.ts` fails when a row of this table misses a
 column or leaves a cell empty. It runs with the benches, not with `npm test`.
+
+## Cost table
+
+`npm run cost` prints what each large file and plugin costs, so tidy-up
+candidates show without reading the code. It lists every tracked source file
+over 500 lines, every package under `modules/`, and any file holding a function
+over 80 lines or a benched function. Tests and benches are not source. Under
+each entry it lists every function over 40 lines, and every benched one, with
+its line count and bench median, else `no bench`.
+
+- Limits: a file over 500 lines or a function over 80 lines is marked `tidy`.
+  Function rows show from 40 lines.
+- Sizes come from oxlint's `max-lines` and `max-lines-per-function`, counting
+  every line. A function oxlint does not name takes the name before it on its
+  first line: the variable it is assigned to, or its call such as
+  `useEffect()` or `kernelCall("extrude")`.
+- Medians are the p50 of each `*/dist/bench.json` and
+  `modules/*/dist/bench.json` that exists. A bench task names its function as
+  its first word, such as `solveSketch rectangle`, and matches functions in the
+  workspace that wrote the file. The table never runs benches; run
+  `npm run bench -w server` first.
+- `scripts/cost-baseline.txt` holds every `tidy` file and function with its
+  line count; a repeated name in one file takes `#2`, `#3` in file order.
+  `npm run lint:cost`, part of `npm run check`, fails when one grows, a new
+  one crosses a limit, or one shrinks without the baseline.
+  `npm run cost -- --update` rewrites the baseline; a commit that grows an
+  entry says why.
