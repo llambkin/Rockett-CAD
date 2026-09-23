@@ -45,9 +45,10 @@ export function tessellateBody(
   const normals: number[] = [];
   const indices: number[] = [];
   const faceInfos: FaceInfo[] = [];
+  const bbox = bboxOf(body.shape);
 
   for (const m of meshShape(body.shape, {
-    linear: opts.linear ?? 0.08,
+    linear: opts.linear ?? viewportDeflection(bbox),
     angular: opts.angular ?? 0.35,
   })) {
     const start = indices.length;
@@ -87,7 +88,6 @@ export function tessellateBody(
     });
   }
 
-  // --- edges ---
   const edgeNames = computeEdgeNames(body);
   const edgeInfos: EdgeInfo[] = [];
   for (const [name, edge] of edgeNames.byName) {
@@ -101,7 +101,6 @@ export function tessellateBody(
     });
   }
 
-  // --- vertices ---
   const vertexNames = computeVertexNames(body);
   const vertexInfos: VertexInfo[] = [];
   for (const [name, vertex] of vertexNames.byName) {
@@ -120,8 +119,17 @@ export function tessellateBody(
     faces: faceInfos,
     edges: edgeInfos,
     vertices: vertexInfos,
-    bbox: bboxOf(body.shape),
+    bbox,
   };
+}
+
+function viewportDeflection({ min, max }: ReturnType<typeof bboxOf>): number {
+  const diagonal = Math.hypot(
+    max[0] - min[0],
+    max[1] - min[1],
+    max[2] - min[2],
+  );
+  return Math.min(0.5, Math.max(0.005, 0.0005 * diagonal));
 }
 
 function surfaceInfo(face: Shape): FaceInfo["surface"] {

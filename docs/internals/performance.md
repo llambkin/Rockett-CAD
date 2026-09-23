@@ -112,6 +112,13 @@ agents. EXCH-019 ranges span two runs of `-- importMesh` on 2026-09-23 with a
 load average of 8 to 18. Run the files one at a time when recording a baseline, because
 `npm run bench -w server` runs every file at once.
 
+PERF-025 made the viewport deflection scale with the body. Its rows span two
+runs of `-- payload` on 2026-09-23 with a load average of 13 to 24, alternated
+with two runs of the previous code, which gave cold many-body medians of 9.34
+and 10.02 s and p95 of 18.0 and 19.5 s. The 10 x 10 x 5 mm bodies now mesh at
+0.0075 mm instead of 0.08 mm, so the payload grew 7.1 percent, past its
+25,000,000 byte budget.
+
 | metric                     | fixture              | hardware class | runtime      | warm-up | repetitions | median                         | p95                            | budget                    | row      |
 | -------------------------- | -------------------- | -------------- | ------------ | ------- | ----------- | ------------------------------ | ------------------------------ | ------------------------- | -------- |
 | evaluate cold golden       | golden               | class-a        | Node 24.12.0 | 2       | 10          | 95 to 172 ms                   | 100 to 204 ms                  | median 250 ms, p95 400 ms | PERF-001 |
@@ -124,6 +131,8 @@ load average of 8 to 18. Run the files one at a time when recording a baseline, 
 | payload bytes many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 23,674,467 to 23,674,468 bytes | 23,674,467 to 23,674,468 bytes | at most 25,000,000 bytes  | PERF-002 |
 | import mesh 10k            | mesh-10k             | class-a        | Node 24.12.0 | 2       | 10          | 6.90 to 7.19 s                 | 13.6 to 14.7 s                 | median 10 s, p95 20 s     | EXCH-019 |
 | import mesh 100k           | mesh-100k            | class-a        | Node 24.12.0 | 0       | 2           | 59.2 to 65.4 s                 | 61.0 to 73.0 s                 | median 90 s, p95 120 s    | EXCH-019 |
+| evaluate cold many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 9.19 to 9.77 s                 | 9.35 to 19.1 s                 | median 15 s, p95 30 s     | PERF-025 |
+| payload bytes many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 25,356,592 to 25,356,593 bytes | 25,356,592 to 25,356,593 bytes | at most 25,000,000 bytes  | PERF-025 |
 
 The last test in `evaluate.bench.ts` fails when a row of this table misses a
 column or leaves a cell empty. It runs with the benches, not with `npm test`.

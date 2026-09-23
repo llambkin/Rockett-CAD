@@ -253,14 +253,16 @@ yet; it gets its own constant when it does.
 
 ## Tessellation
 
-`BRepMesh_IncrementalMesh` (0.08 mm / 0.35 rad for the viewport) produces per
-face triangulations. The payload keeps the CAD structure: each face's triangle
-range is tagged with its persistent name, each edge is a sampled polyline
-tagged with its name, each vertex a named point. The client raycasts
-triangles/segments/points and resolves hits to persistent CAD references, so
-selection is CAD topology, never "triangle 512". Face normals come from the
-kernel (`ComputeNormals`), respecting face orientation. Tessellations are
-cached per body-shape hash; export re-tessellates at user-selected quality.
+`BRepMesh_IncrementalMesh` produces per face triangulations. The viewport uses
+0.35 rad and a linear deflection of 0.0005 times the body's bounding-box
+diagonal, clamped to 0.005 to 0.5 mm. The payload keeps the CAD structure:
+each face's triangle range is tagged with its persistent name, each edge is a
+sampled polyline tagged with its name, each vertex a named point. The client
+raycasts triangles/segments/points and resolves hits to persistent CAD
+references, so selection is CAD topology, never "triangle 512". Face normals
+come from the kernel (`ComputeNormals`), respecting face orientation.
+Tessellations are cached per body-shape hash; export meshes a copy of each
+body at user-selected quality, so neither mesh reuses the other.
 
 ## Measurement
 

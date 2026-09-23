@@ -2,13 +2,14 @@
  * Mesh exporters: binary STL and 3MF.
  *
  * Both operate on fresh tessellations of the B-Rep bodies at export quality
- * (independent of the coarser viewport tessellation).
+ * (independent of the viewport tessellation).
  *
  * 3MF is written directly (OPC zip + 3D/3dmodel.model XML); each body is a
  * separate <object> so multi-body models survive into slicers.
  */
 
 import { zipSync, strToU8 } from "fflate";
+import { getKernel } from "./kernel.js";
 import { meshShape } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
 
@@ -21,10 +22,22 @@ interface Mesh {
 export function exportMesh(body: NamedBody, quality = 0.05): Mesh {
   const positions: number[] = [];
   const indices: number[] = [];
-  for (const m of meshShape(body.shape, { linear: quality, angular: 0.3 })) {
-    const offset = positions.length / 3;
-    for (const p of m.positions) positions.push(p);
-    for (const i of m.indices) indices.push(offset + i);
+  const copy = new (getKernel().BRepBuilderAPI_Copy_2)(
+    body.shape,
+    false,
+    false,
+  );
+  try {
+    for (const m of meshShape(copy.Shape(), {
+      linear: quality,
+      angular: 0.3,
+    })) {
+      const offset = positions.length / 3;
+      for (const p of m.positions) positions.push(p);
+      for (const i of m.indices) indices.push(offset + i);
+    }
+  } finally {
+    copy.delete();
   }
   return { positions, indices };
 }
