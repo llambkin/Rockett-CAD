@@ -4,6 +4,7 @@
  */
 
 import { useState } from "react";
+import type { Feature } from "@rockett/shared";
 import { useStore, selectionKey, type Selection } from "../store";
 import {
   viewportHandle,
@@ -11,6 +12,7 @@ import {
 } from "../viewportRef";
 import { openFeatureEditor } from "./Timeline";
 import { freeProfileIds, sketchUsage } from "../sketchUsage";
+import { ContextMenu, type MenuItem } from "./ContextMenu";
 
 export function ModelTree() {
   const document_ = useStore((s) => s.document);
@@ -27,12 +29,14 @@ export function ModelTree() {
   const [treeMenu, setTreeMenu] = useState<{
     x: number;
     y: number;
-    kind: "body" | "sketch";
-    id: string;
-    name: string;
+    items: MenuItem[];
   } | null>(null);
 
   if (!document_) return null;
+  const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault();
+    setTreeMenu({ x: e.clientX, y: e.clientY, items });
+  };
   const selKeys = new Set(selection.map(selectionKey));
 
   const section = (key: string, label: string, children: React.ReactNode) => (
@@ -91,6 +95,73 @@ export function ModelTree() {
     (f) => f.type === "referenceImage",
   );
   const bodies = evaluation?.bodies ?? [];
+
+  const sketchMenu = (f: Feature): MenuItem[] => [
+    {
+      label: "Edit sketch",
+      action: () =>
+        void useStore.getState().editSketch(f.id).then(alignToSketch),
+    },
+    {
+      label: "Extrude regions…",
+      action: () => {
+        selectSketchRegions(f.id);
+        useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
+      },
+    },
+    {
+      label: "Revolve regions…",
+      action: () => {
+        selectSketchRegions(f.id);
+        useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
+      },
+    },
+    {
+      label: "Rename",
+      action: () => setRenaming({ id: f.id, value: f.name }),
+    },
+    {
+      label: "Delete",
+      danger: true,
+      action: () => void useStore.getState().deleteFeature(f.id),
+    },
+  ];
+
+  const bodyMenu = (b: (typeof bodies)[number]): MenuItem[] => [
+    {
+      label: "Move…",
+      action: () => {
+        const s = useStore.getState();
+        s.setMode({ name: "dialog", dialog: "move" });
+        s.setSelection([{ kind: "body", bodyId: b.bodyId }]);
+        s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
+      },
+    },
+    {
+      label: "Rename",
+      action: () => setRenaming({ id: b.bodyId, value: b.name }),
+    },
+    {
+      label: "Show / Hide",
+      action: () => void setBodyMeta(b.bodyId, { visible: !b.visible }),
+    },
+    {
+      label: "Isolate",
+      action: () => {
+        for (const other of bodies)
+          void setBodyMeta(other.bodyId, {
+            visible: other.bodyId === b.bodyId,
+          });
+      },
+    },
+    {
+      label: "Show all bodies",
+      action: () => {
+        for (const other of bodies)
+          void setBodyMeta(other.bodyId, { visible: true });
+      },
+    },
+  ];
 
   return (
     <div className="model-tree">
@@ -203,16 +274,7 @@ export function ModelTree() {
               onDoubleClick={() => {
                 void useStore.getState().editSketch(f.id).then(alignToSketch);
               }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setTreeMenu({
-                  x: e.clientX,
-                  y: e.clientY,
-                  kind: "sketch",
-                  id: f.id,
-                  name: f.name,
-                });
-              }}
+              onContextMenu={(e) => openMenu(e, sketchMenu(f))}
               title="Click to select regions · double-click to edit"
             >
               <span
@@ -278,16 +340,7 @@ export function ModelTree() {
                 onDoubleClick={() =>
                   setRenaming({ id: b.bodyId, value: b.name })
                 }
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setTreeMenu({
-                    x: e.clientX,
-                    y: e.clientY,
-                    kind: "body",
-                    id: b.bodyId,
-                    name: b.name,
-                  });
-                }}
+                onContextMenu={(e) => openMenu(e, bodyMenu(b))}
                 title="Click to select · right-click for actions"
               >
                 <span
@@ -329,139 +382,12 @@ export function ModelTree() {
       )}
 
       {treeMenu && (
-        <>
-          <div
-            className="ctx-backdrop"
-            onPointerDown={() => setTreeMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setTreeMenu(null);
-            }}
-          />
-          <div
-            className="context-menu"
-            style={{ left: treeMenu.x, top: treeMenu.y, bottom: "auto" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {treeMenu.kind === "body" && (
-              <>
-                <button
-                  onClick={() => {
-                    const s = useStore.getState();
-                    s.setMode({ name: "dialog", dialog: "move" });
-                    s.setSelection([{ kind: "body", bodyId: treeMenu.id }]);
-                    s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
-                    setTreeMenu(null);
-                  }}
-                >
-                  Move…
-                </button>
-                <button
-                  onClick={() => {
-                    setRenaming({ id: treeMenu.id, value: treeMenu.name });
-                    setTreeMenu(null);
-                  }}
-                >
-                  Rename
-                </button>
-                <button
-                  onClick={() => {
-                    const b = useStore
-                      .getState()
-                      .evaluation?.bodies.find((x) => x.bodyId === treeMenu.id);
-                    void setBodyMeta(treeMenu.id, {
-                      visible: !(b?.visible ?? true),
-                    });
-                    setTreeMenu(null);
-                  }}
-                >
-                  Show / Hide
-                </button>
-                <button
-                  onClick={() => {
-                    const evalBodies =
-                      useStore.getState().evaluation?.bodies ?? [];
-                    for (const other of evalBodies) {
-                      void setBodyMeta(other.bodyId, {
-                        visible: other.bodyId === treeMenu.id,
-                      });
-                    }
-                    setTreeMenu(null);
-                  }}
-                >
-                  Isolate
-                </button>
-                <button
-                  onClick={() => {
-                    const evalBodies =
-                      useStore.getState().evaluation?.bodies ?? [];
-                    for (const other of evalBodies) {
-                      void setBodyMeta(other.bodyId, { visible: true });
-                    }
-                    setTreeMenu(null);
-                  }}
-                >
-                  Show all bodies
-                </button>
-              </>
-            )}
-            {treeMenu.kind === "sketch" && (
-              <>
-                <button
-                  onClick={() => {
-                    void useStore
-                      .getState()
-                      .editSketch(treeMenu.id)
-                      .then(alignToSketch);
-                    setTreeMenu(null);
-                  }}
-                >
-                  Edit sketch
-                </button>
-                <button
-                  onClick={() => {
-                    selectSketchRegions(treeMenu.id);
-                    useStore
-                      .getState()
-                      .setMode({ name: "dialog", dialog: "extrude" });
-                    setTreeMenu(null);
-                  }}
-                >
-                  Extrude regions…
-                </button>
-                <button
-                  onClick={() => {
-                    selectSketchRegions(treeMenu.id);
-                    useStore
-                      .getState()
-                      .setMode({ name: "dialog", dialog: "revolve" });
-                    setTreeMenu(null);
-                  }}
-                >
-                  Revolve regions…
-                </button>
-                <button
-                  onClick={() => {
-                    setRenaming({ id: treeMenu.id, value: treeMenu.name });
-                    setTreeMenu(null);
-                  }}
-                >
-                  Rename
-                </button>
-                <button
-                  className="danger"
-                  onClick={() => {
-                    // no confirm — Ctrl+Z restores deleted features
-                    void useStore.getState().deleteFeature(treeMenu.id);
-                    setTreeMenu(null);
-                  }}
-                >
-                  Delete
-                </button>
-              </>
-            )}
-          </div>
-        </>
+        <ContextMenu
+          x={treeMenu.x}
+          y={treeMenu.y}
+          items={treeMenu.items}
+          onClose={() => setTreeMenu(null)}
+        />
       )}
     </div>
   );

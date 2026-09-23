@@ -12,6 +12,7 @@ import {
   type Selection,
 } from "../store";
 import { alignCameraToActiveSketch } from "../viewportRef";
+import { ContextMenu } from "./ContextMenu";
 
 const TYPE_ICONS: Record<string, string> = {
   importStep: "⇩",
@@ -63,7 +64,7 @@ export function Timeline() {
   };
 
   return (
-    <div className="timeline" onClick={() => setMenu(null)}>
+    <div className="timeline">
       <fieldset
         className="tl-controls"
         disabled={busy || mode.name === "sketch"}
@@ -156,48 +157,33 @@ export function Timeline() {
         })}
       </div>
       {menu && (
-        <div
-          className="context-menu"
-          style={{ left: menu.x, bottom: window.innerHeight - menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => {
-              openEditor(menu.feature);
-              setMenu(null);
-            }}
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => {
-              setRenaming({ id: menu.feature.id, value: menu.feature.name });
-              setMenu(null);
-            }}
-          >
-            Rename
-          </button>
-          <button
-            onClick={() => {
-              void useStore
-                .getState()
-                .suppressFeature(menu.feature.id, !menu.feature.suppressed);
-              setMenu(null);
-            }}
-          >
-            {menu.feature.suppressed ? "Unsuppress" : "Suppress"}
-          </button>
-          <button
-            className="danger"
-            onClick={() => {
-              // no confirm — Ctrl+Z restores deleted features
-              void useStore.getState().deleteFeature(menu.feature.id);
-              setMenu(null);
-            }}
-          >
-            Delete
-          </button>
-        </div>
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          up
+          onClose={() => setMenu(null)}
+          items={[
+            { label: "Edit", action: () => openEditor(menu.feature) },
+            {
+              label: "Rename",
+              action: () =>
+                setRenaming({ id: menu.feature.id, value: menu.feature.name }),
+            },
+            {
+              label: menu.feature.suppressed ? "Unsuppress" : "Suppress",
+              action: () =>
+                void useStore
+                  .getState()
+                  .suppressFeature(menu.feature.id, !menu.feature.suppressed),
+            },
+            {
+              label: "Delete",
+              danger: true,
+              action: () =>
+                void useStore.getState().deleteFeature(menu.feature.id),
+            },
+          ]}
+        />
       )}
     </div>
   );
