@@ -345,6 +345,18 @@ function buildProblem(input: SolveInput): Problem {
         );
         break;
       }
+      case "lineAngle": {
+        const l = lineEnds(c.line);
+        const v = (c.value * Math.PI) / 180;
+        const ux = Math.cos(v),
+          uy = Math.sin(v);
+        residuals.push((x) => {
+          const dx = l.x2(x) - l.x1(x),
+            dy = l.y2(x) - l.y1(x);
+          return Math.atan2(ux * dy - uy * dx, ux * dx + uy * dy);
+        });
+        break;
+      }
       case "radius": {
         const r = radius(c.entity);
         const v = c.value;

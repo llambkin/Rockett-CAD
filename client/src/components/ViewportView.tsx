@@ -4,7 +4,7 @@
  * sketch tool interaction (with live constraint solving), and dimensions.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type {
   PlaneFrame,
@@ -36,12 +36,20 @@ import { dimensionLayout } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { createLivePreview } from "../livePreview";
 
+interface DimEditField {
+  constraintId: string;
+  value: string;
+  label?: string;
+  unit?: string;
+}
+
 interface DimLabel {
   id: string;
   text: string;
   world: THREE.Vector3;
   /** Attachment on the measured geometry, independent of label placement. */
   anchorWorld: THREE.Vector3;
+  reference?: [THREE.Vector3, THREE.Vector3];
 }
 
 const livePreview = createLivePreview({
@@ -67,8 +75,7 @@ export function ViewportView() {
   const dialogParams = useStore((s) => s.dialogParams);
 
   const [dimEdit, setDimEdit] = useState<{
-    constraintId: string;
-    value: string;
+    fields: DimEditField[];
     x: number;
     y: number;
   } | null>(null);
@@ -115,7 +122,7 @@ export function ViewportView() {
     liveDimValues,
     lockedValue,
     resolveDimCursor,
-    dimConstraintsFor,
+    pinTypedDims,
   } = tools;
   const dimRef = useRef<{
     tool: string;
@@ -192,13 +199,8 @@ export function ViewportView() {
     const g = leaderGroupRef.current;
     clearGroup(g);
     const wpp = vp.worldPerPixel();
-    for (const l of dimLabelsRef.current) {
-      // only when the label sits away from its geometry (dragged, or far zoom)
-      if (l.world.distanceTo(l.anchorWorld) < wpp * 14) continue;
-      const geom = new THREE.BufferGeometry().setFromPoints([
-        l.anchorWorld,
-        l.world,
-      ]);
+    const dashed = (from: THREE.Vector3, to: THREE.Vector3) => {
+      const geom = new THREE.BufferGeometry().setFromPoints([from, to]);
       const line = new THREE.Line(
         geom,
         new THREE.LineDashedMaterial({
@@ -213,6 +215,12 @@ export function ViewportView() {
       line.computeLineDistances();
       line.renderOrder = 7;
       g.add(line);
+    };
+    for (const l of dimLabelsRef.current) {
+      if (l.reference) dashed(...l.reference);
+      // only when the label sits away from its geometry (dragged, or far zoom)
+      if (l.world.distanceTo(l.anchorWorld) < wpp * 14) continue;
+      dashed(l.anchorWorld, l.world);
     }
   }
 
@@ -371,6 +379,12 @@ export function ViewportView() {
                 layout.attachment.x,
                 layout.attachment.y,
               ),
+              ...(layout.reference && {
+                reference: [
+                  uv3(sk.frame, layout.reference[0].x, layout.reference[0].y),
+                  uv3(sk.frame, layout.reference[1].x, layout.reference[1].y),
+                ],
+              }),
             });
           }
         }
@@ -1759,11 +1773,11 @@ export function ViewportView() {
       s.mode.constructionMode,
     );
     if (!result?.created) return;
-    result.created.constraints.push(
-      ...dimConstraintsFor(tool, result.created, d.fields),
-    );
     clearDimEntry();
-    await applyCreated(result.created, result.chain);
+    await applyCreated(
+      pinTypedDims(tool, result.created, d.fields),
+      result.chain,
+    );
   }
 
   /** Build geometry once a tool has enough clicks; null = needs more clicks.
@@ -2264,8 +2278,12 @@ export function ViewportView() {
           );
           if (existing) {
             setDimEdit({
-              constraintId: existing.id,
-              value: String((existing as any).value),
+              fields: [
+                {
+                  constraintId: existing.id,
+                  value: String((existing as any).value),
+                },
+              ],
               x: e.clientX,
               y: e.clientY,
             });
@@ -2280,8 +2298,12 @@ export function ViewportView() {
           await s.commitDraftSketch();
           // open the label editor immediately
           setDimEdit({
-            constraintId: constraint.id,
-            value: String(round3(currentValue)),
+            fields: [
+              {
+                constraintId: constraint.id,
+                value: String(round3(currentValue)),
+              },
+            ],
             x: e.clientX,
             y: e.clientY,
           });
@@ -2346,31 +2368,61 @@ export function ViewportView() {
     if (!draft) return;
     const ent = draft.entities.find((x) => x.id === entityId);
     if (!ent || ent.kind === "point") return;
+    if (ent.kind === "line") {
+      const dims = tools.lineDimensions(
+        entityId,
+        draft.entities,
+        draft.constraints,
+      );
+      s.updateDraftSketch(draft.entities, dims.constraints);
+      await s.commitDraftSketch();
+      const labels = dimFieldsFor("line") ?? [];
+      const fields: DimEditField[] = [];
+      for (const [i, id] of [dims.lengthId, dims.angleId].entries()) {
+        const c = dims.constraints.find((x) => x.id === id) as any;
+        const stored = draft.constraints.some((x) => x.id === id);
+        fields.push({
+          constraintId: id,
+          value: String(stored ? c.value : round3(c.value)),
+          label: labels[i]?.label ?? "",
+          unit: labels[i]?.unit ?? "",
+        });
+      }
+      setDimEdit({ fields, x: e.clientX, y: e.clientY });
+      return;
+    }
     const existing = draft.constraints.find(
       (c) =>
-        (c.type === "length" && (c as any).line === entityId) ||
-        ((c.type === "radius" || c.type === "diameter") &&
-          (c as any).entity === entityId),
+        (c.type === "radius" || c.type === "diameter") && c.entity === entityId,
     );
     if (existing) {
       setDimEdit({
-        constraintId: existing.id,
-        value: String((existing as any).value),
+        fields: [
+          {
+            constraintId: existing.id,
+            value: String((existing as any).value),
+          },
+        ],
         x: e.clientX,
         y: e.clientY,
       });
       return;
     }
-    const kind =
-      ent.kind === "line" ? "line" : ent.kind === "circle" ? "circle" : "arc";
-    const constraint = tools.dimensionFor([{ kind, id: entityId } as any], 0);
+    const constraint = tools.dimensionFor(
+      [{ kind: ent.kind, id: entityId }],
+      0,
+    );
     if (!constraint) return;
     (constraint as any).value = measureCurrent(constraint, draft.entities);
     s.updateDraftSketch(draft.entities, [...draft.constraints, constraint]);
     await s.commitDraftSketch();
     setDimEdit({
-      constraintId: constraint.id,
-      value: String(round3((constraint as any).value)),
+      fields: [
+        {
+          constraintId: constraint.id,
+          value: String(round3((constraint as any).value)),
+        },
+      ],
       x: e.clientX,
       y: e.clientY,
     });
@@ -2594,16 +2646,21 @@ export function ViewportView() {
       setDimEdit(null);
       return;
     }
-    const v = Number(dimEdit.value);
-    if (Number.isFinite(v) && v > 0) {
+    let constraints = draft.constraints;
+    for (const f of dimEdit.fields) {
+      const edited = constraints.find((c) => c.id === f.constraintId);
+      const v = edited ? tools.dimensionValue(edited, f.value) : null;
+      if (v === null) continue;
       // the edited value wins; any other dimension on the same target is a
       // stale duplicate (older sketches could stack them) and goes away
-      const constraints = tools.dedupeDimensions(
-        draft.constraints.map((c) =>
-          c.id === dimEdit.constraintId ? { ...c, value: v } : c,
+      constraints = tools.dedupeDimensions(
+        constraints.map((c) =>
+          c.id === f.constraintId ? { ...c, value: v } : c,
         ) as SketchConstraint[],
-        dimEdit.constraintId,
+        f.constraintId,
       );
+    }
+    if (constraints !== draft.constraints) {
       s.updateDraftSketch(draft.entities, constraints);
       await s.commitDraftSketch();
     }
@@ -2611,14 +2668,13 @@ export function ViewportView() {
   }
 
   /** Remove the dimension whose label is being edited. */
-  async function deleteDimEdit() {
-    if (!dimEdit) return;
+  async function deleteDimEdit(ids: string[]) {
     const s = useStore.getState();
     const draft = s.draftSketch;
     if (draft) {
       s.updateDraftSketch(
         draft.entities,
-        draft.constraints.filter((c) => c.id !== dimEdit.constraintId),
+        draft.constraints.filter((c) => !ids.includes(c.id)),
       );
       await s.commitDraftSketch();
     }
@@ -2699,8 +2755,12 @@ export function ViewportView() {
                 void s.commitDraftSketch();
               } else {
                 setDimEdit({
-                  constraintId: l.id,
-                  value: l.text.replace(/[^\d.-]/g, ""),
+                  fields: [
+                    {
+                      constraintId: l.id,
+                      value: l.text.replace(/[^\d.-]/g, ""),
+                    },
+                  ],
                   x: e.clientX,
                   y: e.clientY,
                 });
@@ -2713,32 +2773,56 @@ export function ViewportView() {
       </div>
       <SketchOffsetIndicators />
       {dimEdit && (
-        <div className="dim-edit" style={{ left: dimEdit.x, top: dimEdit.y }}>
-          <input
-            autoFocus
-            aria-label="Dimension value"
-            value={dimEdit.value}
-            onChange={(e) => setDimEdit({ ...dimEdit, value: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === "Return") void commitDimEdit();
-              if (e.key === "Escape") setDimEdit(null);
-              // Delete on an emptied box removes the dimension altogether
-              if (
-                (e.key === "Delete" || e.key === "Backspace") &&
-                dimEdit.value === ""
-              ) {
-                e.preventDefault();
-                void deleteDimEdit();
-              }
-            }}
-            onBlur={() => void commitDimEdit()}
-          />
+        <div
+          className="dim-edit"
+          style={{ left: dimEdit.x, top: dimEdit.y }}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+              void commitDimEdit();
+          }}
+        >
+          {dimEdit.fields.map((f, i) => (
+            <Fragment key={f.constraintId}>
+              {f.label && <span className="dim-key">{f.label}</span>}
+              <input
+                autoFocus={i === 0}
+                aria-label={
+                  f.label ? `Dimension ${f.label}` : "Dimension value"
+                }
+                value={f.value}
+                onChange={(e) =>
+                  setDimEdit({
+                    ...dimEdit,
+                    fields: dimEdit.fields.map((x) =>
+                      x === f ? { ...x, value: e.target.value } : x,
+                    ),
+                  })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Return")
+                    void commitDimEdit();
+                  if (e.key === "Escape") setDimEdit(null);
+                  // Delete on an emptied box removes the dimension altogether
+                  if (
+                    (e.key === "Delete" || e.key === "Backspace") &&
+                    f.value === ""
+                  ) {
+                    e.preventDefault();
+                    void deleteDimEdit([f.constraintId]);
+                  }
+                }}
+              />
+              {f.unit && <span className="dim-unit">{f.unit}</span>}
+            </Fragment>
+          ))}
           <button
             className="dim-edit-delete"
             title="Delete this dimension"
             aria-label="Delete dimension"
             onPointerDown={(e) => e.preventDefault()} // keep the input's blur from committing first
-            onClick={() => void deleteDimEdit()}
+            onClick={() =>
+              void deleteDimEdit(dimEdit.fields.map((f) => f.constraintId))
+            }
           >
             ✕
           </button>
@@ -3125,6 +3209,7 @@ function dimensionText(c: SketchConstraint): string {
     case "diameter":
       return `⌀${round3((c as any).value)}`;
     case "angle":
+    case "lineAngle":
       return `${round3((c as any).value)}°`;
     default:
       return "";

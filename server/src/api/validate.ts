@@ -339,6 +339,13 @@ export function validateFeature(f: Feature): void {
           num(e.radius, "circle radius", 0, MAX_DIM);
         }
       }
+      for (const c of f.constraints) {
+        if (c.type !== "lineAngle") continue;
+        str(c.line, "line angle line", 100);
+        num(c.value, "line angle", -180, 180);
+        if (c.value === -180)
+          throw new ValidationError("line angle must be > -180");
+      }
       break;
     }
     case "extrude": {

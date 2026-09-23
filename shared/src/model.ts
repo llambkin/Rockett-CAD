@@ -9,7 +9,7 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export type Units = "mm" | "cm" | "m" | "in";
 
@@ -154,6 +154,7 @@ export type DimensionConstraint =
       value: number; // mm
     })
   | (ConstraintBase & { type: "length"; line: string; value: number })
+  | (ConstraintBase & { type: "lineAngle"; line: string; value: number })
   | (ConstraintBase & { type: "radius"; entity: string; value: number })
   | (ConstraintBase & { type: "diameter"; entity: string; value: number })
   | (ConstraintBase & { type: "angle"; a: string; b: string; value: number }); // degrees
@@ -437,6 +438,11 @@ export interface CadDocument {
 let idCounter = 0;
 
 /** Unique-enough id generator (time + counter + randomness). */
+export function normalizeDegrees(value: number): number {
+  const wrapped = value - 360 * Math.floor(value / 360);
+  return wrapped > 180 ? wrapped - 360 : wrapped;
+}
+
 export function newId(prefix: string): string {
   idCounter = (idCounter + 1) % 46656;
   const rand = Math.floor(Math.random() * 46656)

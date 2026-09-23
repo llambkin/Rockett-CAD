@@ -4,7 +4,7 @@
  */
 
 import type { SketchConstraint, SketchEntity } from "@rockett/shared";
-import { newId } from "@rockett/shared";
+import { newId, normalizeDegrees } from "@rockett/shared";
 
 export interface Created {
   entities: SketchEntity[];
@@ -493,6 +493,8 @@ export function dimensionKey(c: SketchConstraint): string | null {
   switch (c.type) {
     case "length":
       return `length:${x.line}`;
+    case "lineAngle":
+      return `lineAngle:${x.line}`;
     case "radius":
     case "diameter":
       return `size:${x.entity}`;
@@ -690,6 +692,15 @@ export function dimConstraintsFor(
   if (tool === "line" && L !== null && lines[0]) {
     out.push({ id: newId("c"), type: "length", line: lines[0].id, value: L });
   }
+  const A = lockedValue(fields, "angle");
+  if (tool === "line" && A !== null && lines[0]) {
+    out.push({
+      id: newId("c"),
+      type: "lineAngle",
+      line: lines[0].id,
+      value: normalizeDegrees(A),
+    });
+  }
   if ((tool === "rect" || tool === "centerRect") && lines.length >= 2) {
     // createRect order: l1 = first horizontal side, l2 = first vertical side
     const W = lockedValue(fields, "width");
@@ -715,4 +726,79 @@ export function dimConstraintsFor(
     out.push({ id: newId("c"), type: "diameter", entity: circle.id, value: D });
   }
   return out;
+}
+
+export function pinTypedDims(
+  tool: string,
+  created: Created,
+  fields: DimField[],
+): Created {
+  return {
+    ...created,
+    constraints: withoutAxisLocks([
+      ...created.constraints,
+      ...dimConstraintsFor(tool, created, fields),
+    ]),
+  };
+}
+
+function withoutAxisLocks(constraints: SketchConstraint[]): SketchConstraint[] {
+  const angled = new Set(
+    constraints.flatMap((c) => (c.type === "lineAngle" ? [c.line] : [])),
+  );
+  return constraints.filter(
+    (c) =>
+      !(
+        (c.type === "horizontal" || c.type === "vertical") &&
+        angled.has(c.line)
+      ),
+  );
+}
+
+export function lineDimensions(
+  lineId: string,
+  entities: SketchEntity[],
+  constraints: SketchConstraint[],
+): { constraints: SketchConstraint[]; lengthId: string; angleId: string } {
+  const line = entities.find((e) => e.id === lineId);
+  const point = (id: string | undefined) =>
+    entities.find((e) => e.id === id && e.kind === "point");
+  const a = point(line?.kind === "line" ? line.p1 : undefined);
+  const b = point(line?.kind === "line" ? line.p2 : undefined);
+  if (a?.kind !== "point" || b?.kind !== "point")
+    throw new Error(`unknown line ${lineId}`);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length =
+    constraints.find((c) => c.type === "length" && c.line === lineId) ??
+    ({
+      id: newId("c"),
+      type: "length",
+      line: lineId,
+      value: Math.hypot(dx, dy),
+    } satisfies SketchConstraint);
+  const angle =
+    constraints.find((c) => c.type === "lineAngle" && c.line === lineId) ??
+    ({
+      id: newId("c"),
+      type: "lineAngle",
+      line: lineId,
+      value: normalizeDegrees((Math.atan2(dy, dx) * 180) / Math.PI),
+    } satisfies SketchConstraint);
+  const added = [length, angle].filter((c) => !constraints.includes(c));
+  return {
+    constraints: withoutAxisLocks([...constraints, ...added]),
+    lengthId: length.id,
+    angleId: angle.id,
+  };
+}
+
+export function dimensionValue(
+  c: SketchConstraint,
+  text: string,
+): number | null {
+  const v = Number(text);
+  if (!text.trim() || !Number.isFinite(v)) return null;
+  if (c.type === "lineAngle") return normalizeDegrees(v);
+  return v > 0 ? v : null;
 }

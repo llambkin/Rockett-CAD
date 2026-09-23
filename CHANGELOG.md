@@ -48,6 +48,9 @@ change gets a `Schema N` line in the section that ships it.
 
 ### Changed
 
+- Schema 5: a sketch line can keep its angle from the sketch +X axis
+  (`lineAngle`). A typed ∠ is stored, and double-click edits a line's
+  length and angle. The 4 to 5 migration only bumps the version.
 - `/api/health` returns `version`, `schemaVersion` and `commit`.
 - `npm test` runs `tsc` on all workspaces first.
 - Docker: base image pinned by digest; build and runtime installs use `npm ci`

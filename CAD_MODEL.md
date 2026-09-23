@@ -267,6 +267,23 @@ the rebuild yields a different number or kind of curves. Editing a source curve
 does not rebuild its offsets: they keep their positions until the next
 distance edit.
 
+## Line angles (schema 5)
+
+Schema version 5 adds the `lineAngle` constraint `{ line, value }`: the
+direction of a line from its start to its end, in degrees counter-clockwise
+from the sketch +X axis, stored in (-180, 180]. The 4 to 5 migration only
+bumps the version. The API rejects a `lineAngle` outside that range.
+
+The solver adds one residual, the signed angle from the target direction to
+the line, wrapped to (-pi, pi] with `atan2`, so it stays continuous as the
+line turns through 180 degrees. It removes one degree of freedom and counts
+toward the badge and conflict report like `length` and `angle`.
+
+A typed ∠ while drawing a line stores a `lineAngle` next to a typed L.
+Double-clicking a line edits its L and ∠ together, first adding either one
+at its current value when missing. A `lineAngle` replaces any `horizontal`
+or `vertical` constraint on the same line, which it implies.
+
 ## Tangent edge chains
 
 Fillet/Chamfer store optional tangentChain metadata (absent preserves prior

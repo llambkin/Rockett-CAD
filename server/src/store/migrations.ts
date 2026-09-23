@@ -14,6 +14,7 @@ const MIGRATIONS: Record<number, Migration> = {
   1: (doc) => ({ ...doc, schemaVersion: 2 }),
   2: (doc) => ({ ...doc, schemaVersion: 3 }),
   3: (doc) => ({ ...doc, schemaVersion: 4 }),
+  4: (doc) => ({ ...doc, schemaVersion: 5 }),
   // 1 → 2 example:
   // 1: (doc) => ({ ...doc, schemaVersion: 2, somethingNew: [] }),
 };
