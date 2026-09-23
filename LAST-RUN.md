@@ -1,21 +1,21 @@
 # Last run
 
-- 86 commits since adoption (`e328a0f`). Done: OPS-001 to 016, 018 to 022,
-  024 to 031; BUG-001 to 003, 009 to 025 and BUG-CP; KIT-001 to 007, 016, 017,
-  019 to 023; AUTH-002 to 004 and 008; SET-006, SET-008; PERF-001, 009, 020;
-  CUST-003; EXCH-001; DEC-403.
-- AUTH-008: every write to `/api` needs an `Origin` listed in
-  `ROCKETT_ALLOWED_ORIGINS`, and the server will not start without it. The
-  browser smoke harness reserves a port and passes its own origin.
-- New rows from Mark on 2026-09-23: OPS-032 to 034 (README feature lines, cost
-  table, god file benches), BUG-026 and 027 (line angle constraint, angle snap
-  and lock), SET-022 (user snap angles).
-- Dev runs `c8e6b94`. Prod is unchanged.
-- In flight: OPS-017, OPS-032, KIT-018, KIT-024, SET-009, BUG-026.
+- 137 commits since adoption (`e328a0f`). Done: OPS-001 to 022, 024 to 034
+  and OPS-CP; BUG-001 to 003, 009 to 033 and BUG-CP; KIT-001 to 007, 010,
+  014, 016 to 027; AUTH-002 to 004, 008, 011; SET-006, 008, 009, 011, 023;
+  PERF-001, 009, 020; CUST-003, 019, 022; DOC-028; EXCH-001, 013, 014;
+  DEC-403, 406.
+- Since `cc3d66a`, 29 rows landed: OPS-017, 032 to 034 and OPS-CP; KIT-010,
+  014, 018, 024 to 027; BUG-026 to 033; SET-009, 011, 023; CUST-019, 022;
+  EXCH-013, 014; DOC-028; DEC-406.
+- New rows: BUG-028 to 033, SET-023, CUST-019 to 024, DOC-028, DOC-029,
+  DEC-405 to 407, EXCH-013 to 020.
+- Dev runs `18a105d`. Prod is unchanged.
+- In flight: BUG-034, EXCH-016, EXCH-017, PERF-002, DOC-001, DOC-002.
 
 ## Next
 
-OPS-017
+KIT-008
 
 ## Stuck
 
