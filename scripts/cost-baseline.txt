@@ -3,8 +3,8 @@ client/src/components/DraggablePanel.tsx DraggablePanel 125
 client/src/components/FeatureDialog.tsx 1288
 client/src/components/FeatureDialog.tsx DialogBody 923
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 190
-client/src/components/ModelTree.tsx 535
-client/src/components/ModelTree.tsx ModelTree 470
+client/src/components/ModelTree.tsx 606
+client/src/components/ModelTree.tsx ModelTree 477
 client/src/components/ProjectItems.tsx 517
 client/src/components/ProjectItems.tsx ItemRow 89
 client/src/components/ProjectItems.tsx ProjectItems 153
