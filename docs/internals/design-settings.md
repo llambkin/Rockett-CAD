@@ -1,12 +1,13 @@
 # Settings panel and black theme
 
-Status: proposal for Mark to approve under DEC-403. This is not an approved
-design. SET-007 and SET-011 wait until DEC-403 records the approval under
-Rulings in `WORK-ORDER.md`.
+Status: approved under DEC-403. The live theme is the graded greys from
+Mark's Greys ruling (SET-023), with the text accent split from the viewport
+accent and the pairs BUG-030 and BUG-034 fixed; see Graded greys. The black
+values below are what SET-011 shipped before that ruling.
 
-The panel builds every page from the SET-001 registry. The theme replaces
-today's grey palette with a black one. SET-008 and SET-009 move today's values
-into tokens unchanged; SET-011 swaps in the values below.
+The panel builds every page from the SET-001 registry. SET-008 and SET-009
+moved the old values into tokens unchanged; SET-011 swapped in the black
+values below, and SET-023 replaced its surfaces with the graded greys.
 
 ## Settings panel
 
@@ -251,13 +252,22 @@ and `#4cc36a` for the X and Y axes and cut preview, and `#b3b3b3` for
 inactive sketches: each clears 3:1 on `viewport-bg`, and the ruling keeps
 the accent. `sketch-dimmed` and the view cube edges follow `border` (3.80 on
 `viewport-bg`). The `accent-dim` borders listed above now use `accent`.
-`edge` reaches 1.11 on `viewport-bg`, as it did before SET-011.
 
 BUG-030 fixed three pairs the lighter tokens broke. `.btn.primary:hover`
 writes `bg0` on `accent` (10.40, was white at 1.56). `.btn:hover` takes the
 `bg2` surface instead of `border` (white at 12.90, was 3.64).
 `viewcube-face` returns to `#3d4249`, its value before SET-011, so the cube
 reads lighter than `viewport-bg` again (label 10.13).
+
+BUG-034 made the cube paint those values. Its face texture had no colour
+space, so three.js lightened it and `#3d4249` showed as `#868b92`; the texture
+now sets `SRGBColorSpace`. `viewcube-border` leaves `border` for `#8c8c8c`
+(3.01 on `viewcube-face`; `#868686` gave 2.78). `edge` keeps `#30343a`, 6.54
+on `body`. No colour reaches 3:1 on both `body` and `viewport-bg` (the best is
+2.68), so by Mark's choice `edge` is held to `body` only; it reaches 1.11 on
+`viewport-bg`, where the body fill carries the outline (7.24). Lighting
+renders the faces from `#66686c` to `#818589`, so edges stay faint on the
+shaded side (2.24 to 3.37); that waits on a lighting or edge-style decision.
 
 ## Contrast method
 

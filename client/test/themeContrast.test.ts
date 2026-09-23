@@ -79,6 +79,8 @@ const pairs: Pair[] = [
   ["on-accent", "accent-wash", 7],
   ["err-fill-text", "err-fill", 7],
   ["viewcube-label", "viewcube-face", 7],
+  ["viewcube-border", "viewcube-face", 3],
+  ["edge", "body", 3],
   ...marks.map((fg): Pair => [fg, "viewport-bg", 3]),
 ];
 

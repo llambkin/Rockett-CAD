@@ -66,7 +66,7 @@ export const THEME_TOKENS = {
   "move-axis-z": blue,
   "move-axis-hover": hover,
   "viewcube-face": "#3d4249",
-  "viewcube-border": border,
+  "viewcube-border": "#8c8c8c",
   "viewcube-edge": border,
   "viewcube-label": text,
   "light-sky": "#ffffff",

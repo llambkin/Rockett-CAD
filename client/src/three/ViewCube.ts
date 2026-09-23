@@ -28,7 +28,9 @@ function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
   ctx.translate(64, 64);
   ctx.rotate(rotation);
   ctx.fillText(label, 0, 0);
-  return new THREE.CanvasTexture(c);
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 export class ViewCube {
