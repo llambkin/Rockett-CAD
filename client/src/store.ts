@@ -295,6 +295,15 @@ function previewBodyTints(s: {
   return previewTints(feature, base.bodies, s.evaluation.bodies);
 }
 
+export function previewBodies(s: {
+  mode: Mode;
+  evaluation: EvaluateResult | null;
+}): BodyPayload[] {
+  return s.mode.name === "dialog" && preview.base
+    ? preview.base.bodies
+    : (s.evaluation?.bodies ?? []);
+}
+
 export function previewScene(s: {
   mode: Mode;
   document: CadDocument | null;
@@ -306,10 +315,10 @@ export function previewScene(s: {
 } {
   const bodies = s.evaluation?.bodies ?? [];
   const tints = previewBodyTints(s);
-  if (s.mode.name !== "dialog" || !preview.base)
-    return { bodies, tints, ghosts: [] };
+  const shown = previewBodies(s);
+  if (shown === bodies) return { bodies, tints, ghosts: [] };
   return {
-    bodies: preview.base.bodies,
+    bodies: shown,
     tints: new Map(),
     ghosts: bodies.flatMap((body) => {
       const tint = tints.get(body.bodyId);

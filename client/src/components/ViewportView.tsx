@@ -34,6 +34,7 @@ import { listenWheel } from "../three/wheel";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
 import {
   loadPreviewBase,
+  previewBodies,
   previewScene,
   previewedFeature,
   useStore,
@@ -481,9 +482,7 @@ export function ViewportView() {
     }
     const faceSel = s.selection.find((x) => x.kind === "face") as any;
     if (faceSel) {
-      const body = s.evaluation?.bodies.find(
-        (b) => b.bodyId === faceSel.bodyId,
-      );
+      const body = previewBodies(s).find((b) => b.bodyId === faceSel.bodyId);
       const face = body?.faces.find((f) => f.name === faceSel.faceName);
       if (body && face && face.surface.type === "plane") {
         let cx = 0,
@@ -565,7 +564,7 @@ export function ViewportView() {
   // build / rebuild the gizmo when the extrude dialog selection changes
   useEffect(() => {
     extrudeSlot.rebuild(buildExtrudeGizmo);
-  }, [mode, selection, evaluation]);
+  }, [mode, selection, evaluation, baseLoads]);
 
   function buildExtrudeGizmo(): ExtrudeGizmo | null {
     setGizmoLabel(null);
@@ -697,9 +696,7 @@ export function ViewportView() {
           axisDir = to3(p2.x, p2.y).sub(axisOrigin);
         }
       } else if (edgeSel) {
-        const body = s.evaluation?.bodies.find(
-          (b) => b.bodyId === edgeSel.bodyId,
-        );
+        const body = previewBodies(s).find((b) => b.bodyId === edgeSel.bodyId);
         const ed = body?.edges.find((x) => x.name === edgeSel.edgeName);
         if (ed && ed.polyline.length >= 6) {
           const pl = ed.polyline;
@@ -782,7 +779,7 @@ export function ViewportView() {
         viewportRef.current.requestRender();
       }
     };
-  }, [mode, selection, evaluation, dialogParams]);
+  }, [mode, selection, evaluation, dialogParams, baseLoads]);
 
   // rotational drag handle for the revolve angle (ring around the axis)
   useEffect(() => {
@@ -790,7 +787,14 @@ export function ViewportView() {
     // axisSource/axis in deps: the axis dropdown may switch AFTER mount
     // (auto-switch on edge pick) — the ring must follow. Angle deliberately
     // excluded so drags don't rebuild the ring under the pointer.
-  }, [mode, selection, evaluation, dialogParams.axisSource, dialogParams.axis]);
+  }, [
+    mode,
+    selection,
+    evaluation,
+    dialogParams.axisSource,
+    dialogParams.axis,
+    baseLoads,
+  ]);
 
   function buildRevolveGizmo(): RevolveGizmo | null {
     const vp = viewportRef.current;

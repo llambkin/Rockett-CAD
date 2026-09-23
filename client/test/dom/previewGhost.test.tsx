@@ -6,8 +6,6 @@ import {
   createEmptyDocument,
   type BodyPayload,
   type CadDocument,
-  type EdgeInfo,
-  type EvaluateResult,
   type Feature,
 } from "@rockett/shared";
 import { FeatureDialog } from "../../src/components/FeatureDialog";
@@ -16,9 +14,18 @@ import { openFeatureEditor } from "../../src/components/Timeline";
 import { PREVIEW_DWELL_MS } from "../../src/livePreview";
 import { useStore } from "../../src/store";
 import { viewportHandle } from "../../src/viewportRef";
-import { worldToClient } from "../../src/three/screen";
 import { themeColor } from "../../src/theme/tokens";
 import { api } from "../../src/api";
+import {
+  box,
+  edge,
+  pointer,
+  quad,
+  result,
+  S,
+  sizeViewport,
+  type P,
+} from "../helpers/boxScene";
 
 vi.mock("three", async (importOriginal) => ({
   ...(await importOriginal<typeof import("three")>()),
@@ -36,105 +43,6 @@ vi.mock("../../src/api", () => ({
     replaceDocument: vi.fn(),
   },
 }));
-
-type P = [number, number, number];
-const S = 10;
-
-function quad(corners: P[], name: string, into: BodyPayload) {
-  const at = into.positions.length / 3;
-  const start = into.indices.length;
-  const [a, b, c] = corners.map((p) => new THREE.Vector3(...p));
-  const n = b!.clone().sub(a!).cross(c!.clone().sub(a!)).normalize();
-  for (const p of corners) {
-    into.positions.push(...p);
-    into.normals.push(n.x, n.y, n.z);
-  }
-  into.indices.push(at, at + 1, at + 2, at, at + 2, at + 3);
-  into.faces.push({
-    name,
-    start,
-    count: 6,
-    surface: { type: "other" },
-    area: 0,
-  });
-}
-
-function edge(name: string, a: P, b: P): EdgeInfo {
-  return {
-    name,
-    polyline: [...a, ...b],
-    length: new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)),
-    curve: { type: "line", a, b },
-  };
-}
-
-function box(meshKey: string): BodyPayload {
-  const body: BodyPayload = {
-    bodyId: "b1",
-    name: "Body1",
-    visible: true,
-    meshKey,
-    positions: [],
-    normals: [],
-    indices: [],
-    faces: [],
-    edges: [],
-    vertices: [],
-    bbox: { min: [0, 0, 0], max: [S, S, S] },
-  };
-  quad(
-    [
-      [0, 0, S],
-      [S, 0, S],
-      [S, S, S],
-      [0, S, S],
-    ],
-    "top",
-    body,
-  );
-  quad(
-    [
-      [0, 0, 0],
-      [0, S, 0],
-      [S, S, 0],
-      [S, 0, 0],
-    ],
-    "bottom",
-    body,
-  );
-  quad(
-    [
-      [0, 0, 0],
-      [S, 0, 0],
-      [S, 0, S],
-      [0, 0, S],
-    ],
-    "front",
-    body,
-  );
-  quad(
-    [
-      [S, 0, 0],
-      [S, S, 0],
-      [S, S, S],
-      [S, 0, S],
-    ],
-    "right",
-    body,
-  );
-  for (const [x, y] of [
-    [0, 0],
-    [S, 0],
-    [S, S],
-    [0, S],
-  ] as const)
-    body.edges.push(edge(`z${x}${y}`, [x, y, 0], [x, y, S]));
-  for (const z of [0, S]) {
-    body.edges.push(edge(`x0${z}`, [0, 0, z], [S, 0, z]));
-    body.edges.push(edge(`y${S}${z}`, [S, 0, z], [S, S, z]));
-  }
-  return body;
-}
 
 const original = box("box");
 const filleted: BodyPayload = (() => {
@@ -162,14 +70,6 @@ const filleted: BodyPayload = (() => {
 const picked = { kind: "edge", bodyId: "b1", edgeName: `x0${S}` } as const;
 const other = { kind: "edge", bodyId: "b1", edgeName: `z${S}0` } as const;
 
-const result = (bodies: BodyPayload[]): EvaluateResult => ({
-  bodies,
-  planes: [],
-  sketches: [],
-  featureStatuses: [],
-  kernelMs: 0,
-});
-
 const fillet = {
   id: "fillet1",
   type: "fillet",
@@ -183,15 +83,12 @@ const fillet = {
 let saved: CadDocument;
 let root: ReturnType<typeof createRoot> | null = null;
 let host: HTMLElement;
-const size = Object.getOwnPropertyDescriptors(HTMLElement.prototype);
+let restoreSize: () => void;
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
-  Object.defineProperties(HTMLElement.prototype, {
-    clientWidth: { configurable: true, get: () => 800 },
-    clientHeight: { configurable: true, get: () => 600 },
-  });
+  restoreSize = sizeViewport();
   saved = createEmptyDocument("proj", "doc");
   saved.features.push(
     {
@@ -226,10 +123,7 @@ afterEach(async () => {
   root = null;
   host?.remove();
   vi.useRealTimers();
-  Object.defineProperties(HTMLElement.prototype, {
-    clientWidth: size.clientWidth!,
-    clientHeight: size.clientHeight!,
-  });
+  restoreSize();
 });
 
 async function wait(ms: number) {
@@ -302,25 +196,9 @@ function selectedEdgeLines() {
 }
 
 async function click(world: P) {
-  const vp = viewportHandle.current!;
-  const at = worldToClient(
-    vp.canvasRect(),
-    vp.camera,
-    new THREE.Vector3(...world),
-  );
-  const canvas = host.querySelector("canvas")!;
-  canvas.setPointerCapture = () => {};
-  canvas.releasePointerCapture = () => {};
-  const init = {
-    bubbles: true,
-    button: 0,
-    pointerId: 1,
-    clientX: at.x,
-    clientY: at.y,
-  };
   await act(async () => {
-    canvas.dispatchEvent(new PointerEvent("pointerdown", init));
-    canvas.dispatchEvent(new PointerEvent("pointerup", init));
+    pointer("pointerdown", new THREE.Vector3(...world));
+    pointer("pointerup", new THREE.Vector3(...world));
   });
   await wait(0);
 }

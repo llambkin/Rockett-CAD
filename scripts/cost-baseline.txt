@@ -15,9 +15,9 @@ client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 98
 client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 136
-client/src/components/ViewportView.tsx 3138
-client/src/components/ViewportView.tsx ViewportView 2903
-client/src/components/ViewportView.tsx computeGizmoSource 102
+client/src/components/ViewportView.tsx 3142
+client/src/components/ViewportView.tsx ViewportView 2906
+client/src/components/ViewportView.tsx computeGizmoSource 100
 client/src/components/ViewportView.tsx handleHover 135
 client/src/components/ViewportView.tsx handlePrimaryUp 191
 client/src/components/ViewportView.tsx handleSketchClick 236
@@ -26,7 +26,7 @@ client/src/components/ViewportView.tsx pointerToSketchUV 224
 client/src/components/ViewportView.tsx useEffect() 112
 client/src/components/ViewportView.tsx useEffect()#2 274
 client/src/sketchTools.ts 827
-client/src/store.ts 1161
+client/src/store.ts 1170
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 744
 client/src/three/CadViewport.ts 1042
