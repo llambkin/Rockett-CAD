@@ -1,7 +1,7 @@
 client/src/App.tsx Workspace 248
 client/src/components/DraggablePanel.tsx DraggablePanel 125
-client/src/components/FeatureDialog.tsx 1355
-client/src/components/FeatureDialog.tsx DialogBody 984
+client/src/components/FeatureDialog.tsx 1357
+client/src/components/FeatureDialog.tsx DialogBody 986
 client/src/components/FeatureDialog.tsx ExportPanel 81
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 240
 client/src/components/ModelTree.tsx ModelTree 377
@@ -9,7 +9,7 @@ client/src/components/ProjectItems.tsx ItemRow 85
 client/src/components/ProjectItems.tsx ProjectItems 135
 client/src/components/ProjectList.tsx ProjectList 92
 client/src/components/SketchOffsetPanel.tsx OffsetBody 252
-client/src/components/Timeline.tsx Timeline 152
+client/src/components/Timeline.tsx Timeline 154
 client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 203
 client/src/components/Toolbar.tsx Toolbar 92
@@ -39,8 +39,8 @@ client/src/three/sketchRender.ts renderSketches 168
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 591
 server/src/api/routes.ts createApiRouter 433
-server/src/geometry/engine.ts evaluate 110
-server/src/geometry/features.ts 1899
+server/src/geometry/engine.ts evaluate 116
+server/src/geometry/features.ts 1907
 server/src/geometry/features.ts applyToolOperation 89
 server/src/geometry/features.ts buildPrism 81
 server/src/geometry/features.ts chamferByEnvelope 272
@@ -50,7 +50,7 @@ server/src/geometry/sketchGeom.ts buildWire 81
 server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 88
-shared/src/model.ts 501
+shared/src/model.ts 510
 shared/src/profiles.ts 633
 shared/src/profiles.ts detectProfiles 405
 shared/src/sketchModify.ts 806
