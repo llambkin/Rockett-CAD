@@ -3,6 +3,7 @@ import {
   createEmptyDocument,
   detectProfiles,
   type ExtrudeFeature,
+  type LinearPatternFeature,
   type SketchFeature,
 } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
@@ -214,7 +215,7 @@ it(
     const doc = manyBodyPart(),
       engine = engineFor(doc.id);
     expect(engine.evaluate(doc).bodies).toHaveLength(1000);
-    expect(tessellated.mock.calls.length).toBe(1000);
+    expect(tessellated.mock.calls.length).toBe(1);
 
     tessellated.mockClear();
     expect(engine.evaluate(doc).bodies).toHaveLength(1000);
@@ -226,6 +227,40 @@ it(
       .bodies.find((b) => b.bodyId === "b:box");
     expect(renamed).toMatchObject({ name: "Renamed", visible: false });
     expect(tessellated.mock.calls.length).toBe(0);
+    dropEngine(doc.id);
+  },
+);
+
+const names = (items: { name: string }[]) => items.map((i) => i.name);
+
+it(
+  "moves cached meshes for linear pattern copies instead of meshing them",
+  { timeout: 600_000 },
+  () => {
+    const doc = manyBodyPart(),
+      engine = engineFor(doc.id);
+    engine.evaluate(doc);
+    const py = doc.features.find(
+      (f): f is LinearPatternFeature => f.id === "py",
+    )!;
+    py.count = 41;
+
+    tessellated.mockClear();
+    const result = engine.evaluate(doc);
+    expect(result.bodies).toHaveLength(1025);
+    expect(tessellated.mock.calls.length).toBe(0);
+
+    const bodies = engine.stateAt(doc).bodies;
+    for (const moved of result.bodies) {
+      const fresh = tessellateBody(bodies.get(moved.bodyId)!, moved);
+      expect(names(moved.faces)).toEqual(names(fresh.faces));
+      expect(names(moved.edges)).toEqual(names(fresh.edges));
+      expect(names(moved.vertices)).toEqual(names(fresh.vertices));
+      expect(moved.indices.length).toBe(fresh.indices.length);
+      [...moved.bbox.min, ...moved.bbox.max].forEach((v, i) =>
+        expect(v).toBeCloseTo([...fresh.bbox.min, ...fresh.bbox.max][i]!, 6),
+      );
+    }
     dropEngine(doc.id);
   },
 );

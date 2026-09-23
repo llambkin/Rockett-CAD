@@ -212,8 +212,34 @@ kernel memory (see Destructors). After PERF-034:
   `mesh.hash` replaces it.
 
 A change upstream of the pattern still makes every body a new shape, so it
-re-evaluates the pattern and re-meshes all bodies: the pattern count edit
-above. Responses still carry every mesh until PERF-024.
+re-evaluates the pattern. Since PERF-035 it meshes only the changed source
+bodies and moves the copies. Responses still carry every mesh until PERF-024.
+
+PERF-035: `evalLinearPattern` records on each uncombined copy its source body,
+offset and name prefix `p{i}:{featureId}`. When the source's mesh is cached,
+the engine moves its positions, edge polylines, vertices, bbox and the plane,
+cylinder, line and circle anchors by the offset, keeps normals and indices,
+and prefixes each face name, and each face name inside edge and vertex names.
+The copy's `meshKey` hashes the source key, offset and prefix. A copy meshes
+as before when its source is not cached, or the source holds an unnamed or
+repeated face name, or a face name holding `|`, `[` or `]`, or named `seam`.
+Circular patterns, mirrors and moves still mesh each copy, because rotation
+or reflection can reorder the centroid tie-breaks in naming.
+
+Engine time of the pattern count edit: `engine.evaluate` on `many-body` after
+one cold evaluation, alternating the Y count between 41 and 40, three edits
+each way, no warm-up, on `class-a`, Node 24.12.0. Load average was 22 to 24
+before and 9 to 20 after. The audit below measured 9.4 to 10.7 s for 40 to 41.
+
+| call             | before                        | after                        |
+| ---------------- | ----------------------------- | ---------------------------- |
+| edit 40 to 41    | median 9.94 s, 9.63 to 13.1 s | median 936 ms, 930 to 950 ms |
+| edit 41 to 40    | median 10.0 s, 9.26 to 23.3 s | median 902 ms, 898 to 925 ms |
+| cold, one sample | 25.8 s                        | 1.26 s                       |
+
+What remains is feature evaluation. A cold evaluation now meshes one body
+instead of 1,000, so the `evaluate cold many-body` and payload rows under
+Baselines predate PERF-035.
 
 ## Audit of 2026-09-23
 

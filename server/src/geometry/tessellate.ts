@@ -143,6 +143,78 @@ export function tessellateBody(
   };
 }
 
+export function movePayload(
+  source: BodyPayload,
+  bodyId: string,
+  offset: Vec3,
+  prefix: string,
+): BodyPayload | undefined {
+  const faceNames = source.faces.map((f) => f.name);
+  if (
+    new Set(faceNames).size < faceNames.length ||
+    faceNames.some((n) => n === "?" || n === "seam" || /[|[\]]/.test(n))
+  )
+    return undefined;
+  const at = (p: Vec3): Vec3 => [
+    p[0] + offset[0],
+    p[1] + offset[1],
+    p[2] + offset[2],
+  ];
+  const along = (xs: number[]) => xs.map((x, i) => x + offset[i % 3]!);
+  const named = (n: string) => `${prefix}:${n}`;
+  const adjacent = (n: string) =>
+    n.replace(
+      /^([ev])\[(.*)\]/,
+      (_, kind: string, inner: string) =>
+        `${kind}[${inner
+          .split("|")
+          .map((f) => (f === "seam" || f === "?" ? f : named(f)))
+          .join("|")}]`,
+    );
+  return {
+    ...source,
+    bodyId,
+    meshKey: createHash("sha256")
+      .update(JSON.stringify([source.meshKey, offset, prefix]))
+      .digest("hex"),
+    positions: along(source.positions),
+    faces: source.faces.map((f) => ({
+      ...f,
+      name: named(f.name),
+      surface:
+        f.surface.type === "other"
+          ? f.surface
+          : { ...f.surface, origin: at(f.surface.origin) },
+    })),
+    edges: source.edges.map((e) => ({
+      ...e,
+      name: adjacent(e.name),
+      polyline: along(e.polyline),
+      curve: movedCurve(e.curve, at),
+    })),
+    vertices: source.vertices.map((v) => ({
+      name: adjacent(v.name),
+      position: at(v.position),
+    })),
+    bbox: { min: at(source.bbox.min), max: at(source.bbox.max) },
+  };
+}
+
+function movedCurve(
+  curve: EdgeInfo["curve"],
+  at: (p: Vec3) => Vec3,
+): EdgeInfo["curve"] {
+  if (curve.type === "line")
+    return { ...curve, a: at(curve.a), b: at(curve.b) };
+  if (curve.type === "other") return curve;
+  return {
+    ...curve,
+    center: at(curve.center),
+    ...(curve.start && { start: at(curve.start) }),
+    ...(curve.end && { end: at(curve.end) }),
+  };
+}
+
 function viewportDeflection({ min, max }: ReturnType<typeof bboxOf>): number {
   const diagonal = Math.hypot(
     max[0] - min[0],

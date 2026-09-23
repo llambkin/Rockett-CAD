@@ -99,8 +99,12 @@ export interface EvaluatedSketch {
   profiles: Profile[];
 }
 
+export interface StateBody extends NamedBody {
+  copyOf?: { source: NamedBody; offset: Vec3; prefix: string };
+}
+
 export interface EvalState {
-  bodies: Map<string, NamedBody>;
+  bodies: Map<string, StateBody>;
   sketches: Map<string, EvaluatedSketch>;
   planes: Map<string, { frame: PlaneFrame; size: number }>;
 }
@@ -1695,12 +1699,12 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
       for (let i = 1; i < f.count; i++) {
-        const trsf = placementToTrsf(
-          Placement.fromTranslation(V.scale(V.scale(direction, f.spacing), i)),
-        );
+        const offset = V.scale(V.scale(direction, f.spacing), i);
+        const prefix = `p${i}:${f.id}`;
+        const trsf = placementToTrsf(Placement.fromTranslation(offset));
         const tr = new k.BRepBuilderAPI_Transform_2(body.shape, trsf, true);
         const instance = tr.Shape();
-        const instNames = transformNames(tr, body, `p${i}:${f.id}`);
+        const instNames = transformNames(tr, body, prefix);
         tr.delete();
         trsf.delete();
         if (f.combine) {
@@ -1731,6 +1735,9 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
             instance,
             finalizeNames(instance, instNames, f.id),
           );
+          const copy = state.bodies.get(newId);
+          if (copy && !state.bodies.has(`${newId}:2`))
+            copy.copyOf = { source: body, offset, prefix };
         }
       }
       if (f.combine) {

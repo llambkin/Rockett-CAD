@@ -25,9 +25,10 @@ import {
   emptyState,
   evaluateFeature,
   type EvalState,
+  type StateBody,
 } from "./features.js";
 import type { Sources } from "./importers.js";
-import { tessellateBody } from "./tessellate.js";
+import { movePayload, tessellateBody } from "./tessellate.js";
 import type { NamedBody } from "./naming.js";
 import { shapeHash, type Shape } from "./kernel.js";
 import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
@@ -87,6 +88,10 @@ function payloadBytes(p: BodyPayload): number {
   let numbers = p.positions.length + p.normals.length + p.indices.length;
   for (const edge of p.edges) numbers += edge.polyline.length;
   return numbers * 8;
+}
+
+function cacheKey(body: NamedBody): string {
+  return `${body.bodyId}:${shapeHash(body.shape)}`;
 }
 
 interface Tessellation {
@@ -182,9 +187,8 @@ class DocumentEngine {
         name: body.bodyId,
         visible: true,
       };
-      const cacheKey = `${body.bodyId}:${shapeHash(body.shape)}`;
       bodies.push({
-        ...this.tessellated(cacheKey, body, meta),
+        ...this.tessellated(body, meta),
         name: meta.name,
         visible: meta.visible,
       });
@@ -217,30 +221,44 @@ class DocumentEngine {
   }
 
   private tessellated(
-    cacheKey: string,
-    body: NamedBody,
+    body: StateBody,
     meta: { name: string; visible: boolean },
   ): BodyPayload {
-    const cached = this.tessCache.get(cacheKey);
-    this.tessCache.delete(cacheKey);
-    if (
-      cached &&
-      !cached.shape.isDeleted() &&
-      cached.shape.IsSame(body.shape)
-    ) {
-      this.tessCache.set(cacheKey, cached);
-      return cached.payload;
-    }
-    if (cached) this.tessBytes -= payloadBytes(cached.payload);
-    const payload = tessellateBody(body, meta);
-    this.tessCache.set(cacheKey, { shape: body.shape, payload });
+    const hit = this.cached(body);
+    if (hit) return hit;
+    const payload = this.moved(body) ?? tessellateBody(body, meta);
+    const key = cacheKey(body);
+    const stale = this.tessCache.get(key);
+    this.tessCache.delete(key);
+    if (stale) this.tessBytes -= payloadBytes(stale.payload);
+    this.tessCache.set(key, { shape: body.shape, payload });
     this.tessBytes += payloadBytes(payload);
-    for (const [key, old] of this.tessCache) {
+    for (const [old, entry] of this.tessCache) {
       if (this.tessBytes <= TESS_CACHE_BYTES) break;
-      this.tessCache.delete(key);
-      this.tessBytes -= payloadBytes(old.payload);
+      this.tessCache.delete(old);
+      this.tessBytes -= payloadBytes(entry.payload);
     }
     return payload;
+  }
+
+  private cached(body: NamedBody): BodyPayload | undefined {
+    const key = cacheKey(body);
+    const entry = this.tessCache.get(key);
+    if (
+      !entry ||
+      entry.shape.isDeleted() ||
+      body.shape.isDeleted() ||
+      !entry.shape.IsSame(body.shape)
+    )
+      return undefined;
+    this.tessCache.delete(key);
+    this.tessCache.set(key, entry);
+    return entry.payload;
+  }
+
+  private moved({ bodyId, copyOf }: StateBody): BodyPayload | undefined {
+    const source = copyOf && this.cached(copyOf.source);
+    return source && movePayload(source, bodyId, copyOf.offset, copyOf.prefix);
   }
 
   /** Access the evaluated state at the current cache tip (for measure/export). */
