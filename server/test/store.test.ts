@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { LocalStorage } from "../src/store/storage.js";
 import {
   documentMigrations,
   migrate,
@@ -10,11 +11,14 @@ import {
 } from "../src/store/migrations.js";
 import { createEmptyDocument, SCHEMA_VERSION } from "@rockett/shared";
 
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 async function tempStore(): Promise<ProjectStore> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
-  const store = new ProjectStore(dir);
-  await store.init();
-  return store;
+  return new ProjectStore(new LocalStorage(dir, fs));
 }
 
 describe("project store", () => {
@@ -31,7 +35,7 @@ describe("project store", () => {
 
   it("refuses to load a document from a newer schema", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
-    const store = new ProjectStore(dir);
+    const store = new ProjectStore(new LocalStorage(dir, fs));
     const doc = await store.create("Future");
     const file = path.join(dir, "projects", doc.id, "document.json");
     await fs.writeFile(file, JSON.stringify({ ...doc, schemaVersion: 99 }));
@@ -81,6 +85,7 @@ describe("project store", () => {
   it("lists and duplicates projects", async () => {
     const store = await tempStore();
     const a = await store.create("A");
+    const { assetId } = await store.saveAsset(a.id, png);
     await store.create("B");
     const list = await store.list();
     expect(list).toHaveLength(2);
@@ -88,6 +93,7 @@ describe("project store", () => {
     const copy = await store.duplicate(a.id, "A2");
     expect(copy.id).not.toBe(a.id);
     expect(copy.name).toBe("A2");
+    expect(await store.readAsset(copy.id, assetId)).toEqual(png);
     expect(await store.list()).toHaveLength(3);
   });
 
@@ -95,6 +101,31 @@ describe("project store", () => {
     const store = await tempStore();
     await expect(store.load("../etc/passwd")).rejects.toThrow(/invalid/);
     await expect(store.load("..%2F..")).rejects.toThrow(/invalid/);
+  });
+
+  it("leaves no asset file when storage fails mid-write", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
+    const failing = {
+      ...fs,
+      open: async (file: string, flags?: string) => {
+        const handle = await fs.open(file, flags);
+        return Object.assign(Object.create(handle), {
+          writeFile: async (data: Uint8Array) => {
+            if (!file.includes(`${path.sep}assets${path.sep}`))
+              return handle.writeFile(data);
+            await handle.writeFile(data.subarray(0, 8));
+            throw new Error("disk full");
+          },
+          sync: () => handle.sync(),
+          close: () => handle.close(),
+        });
+      },
+    } as typeof fs;
+    const store = new ProjectStore(new LocalStorage(dir, failing));
+    const doc = await store.create("Assets");
+    await expect(store.saveAsset(doc.id, png)).rejects.toThrow("disk full");
+    const assets = path.join(dir, "projects", doc.id, "assets");
+    expect(await fs.readdir(assets).catch(() => [])).toEqual([]);
   });
 
   it("removes projects", async () => {

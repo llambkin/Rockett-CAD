@@ -1,4 +1,3 @@
-import { promises as fs } from "node:fs";
 import {
   parse,
   PROJECT_FILE_FORMAT,
@@ -62,9 +61,9 @@ export const downloadProjectFile =
     const document = await store.load(String(req.params.id));
     const assets: Record<string, string> = {};
     for (const name of referencedAssets(document))
-      assets[name] = (
-        await fs.readFile(await store.assetPath(document.id, name))
-      ).toString("base64");
+      assets[name] = (await store.readAsset(document.id, name)).toString(
+        "base64",
+      );
     const file: ProjectFile = {
       format: PROJECT_FILE_FORMAT,
       version: PROJECT_FILE_VERSION,

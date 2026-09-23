@@ -34,13 +34,10 @@ let storeDir = "";
 beforeAll(async () => {
   await initKernel();
   storeDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-api-"));
-  store = new ProjectStore(storeDir);
-  await store.init();
+  const storage = new LocalStorage(storeDir, fs);
+  store = new ProjectStore(storage);
   const app = express();
-  app.use(
-    "/api",
-    createApiRouter(store, new FolderStore(new LocalStorage(storeDir, fs))),
-  );
+  app.use("/api", createApiRouter(store, new FolderStore(storage)));
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
   });

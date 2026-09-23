@@ -1,15 +1,3 @@
-/**
- * Project persistence.
- *
- * Layout under DATA_DIR (a mounted Docker volume in production):
- *   projects/{id}/document.json   — the parametric document (source of truth)
- *   projects/{id}/assets/{id}.ext — uploaded reference images
- *   projects/{id}/exports/        — optionally retained export files
- *
- * Writes are atomic (tmp file + rename) so a crash never corrupts a project.
- */
-
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
@@ -20,7 +8,7 @@ import {
 } from "@rockett/shared";
 import { JsonStore, StoreError } from "./jsonStore.js";
 import { documentMigrations } from "./migrations.js";
-import { LocalStorage, type Storage } from "./storage.js";
+import type { Storage } from "./storage.js";
 
 export { StoreError };
 
@@ -63,10 +51,7 @@ function imageExt(data: Buffer, label: string): string {
 export class ProjectStore {
   private documents: JsonStore<CadDocument>;
 
-  constructor(
-    private readonly dataDir: string,
-    storage: Storage = new LocalStorage(dataDir, fs),
-  ) {
+  constructor(private readonly storage: Storage) {
     this.documents = new JsonStore({
       storage,
       root: "projects",
@@ -81,14 +66,6 @@ export class ProjectStore {
           );
       },
     });
-  }
-
-  private projectDir(id: string): string {
-    return path.join(this.dataDir, this.documents.dir(id));
-  }
-
-  async init(): Promise<void> {
-    await fs.mkdir(path.join(this.dataDir, "projects"), { recursive: true });
   }
 
   async list(): Promise<ProjectSummary[]> {
@@ -114,12 +91,6 @@ export class ProjectStore {
   async create(name: string): Promise<CadDocument> {
     const id = crypto.randomBytes(6).toString("hex");
     const doc = createEmptyDocument(id, name || "Untitled");
-    await fs.mkdir(path.join(this.projectDir(id), "assets"), {
-      recursive: true,
-    });
-    await fs.mkdir(path.join(this.projectDir(id), "exports"), {
-      recursive: true,
-    });
     await this.save(doc);
     return doc;
   }
@@ -141,24 +112,12 @@ export class ProjectStore {
     copy.id = crypto.randomBytes(6).toString("hex");
     copy.name = newName || `${src.name} (copy)`;
     copy.createdAt = new Date().toISOString();
-    await fs.mkdir(path.join(this.projectDir(copy.id), "assets"), {
-      recursive: true,
-    });
-    await fs.mkdir(path.join(this.projectDir(copy.id), "exports"), {
-      recursive: true,
-    });
-    // copy assets
-    const srcAssets = path.join(this.projectDir(id), "assets");
-    try {
-      for (const f of await fs.readdir(srcAssets)) {
-        await fs.copyFile(
-          path.join(srcAssets, f),
-          path.join(this.projectDir(copy.id), "assets", f),
-        );
-      }
-    } catch {
-      // no assets
-    }
+    const from = this.assetDir(id);
+    for (const f of await this.storage.list(from))
+      await this.storage.writeAtomic(
+        path.posix.join(this.assetDir(copy.id), f),
+        await this.storage.read(path.posix.join(from, f)),
+      );
     await this.save(copy);
     return copy;
   }
@@ -166,8 +125,6 @@ export class ProjectStore {
   remove(id: string): Promise<void> {
     return this.documents.remove(id);
   }
-
-  // ----- assets (reference images) -----
 
   async saveAsset(
     projectId: string,
@@ -204,24 +161,26 @@ export class ProjectStore {
     const file = this.assetFile(projectId, assetId, label);
     if (path.extname(assetId) !== `.${imageExt(data, label)}`)
       throw new StoreError(`${label}extension does not match the image type`);
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, data);
+    await this.storage.writeAtomic(file, data);
+  }
+
+  private assetDir(projectId: string): string {
+    return path.posix.join(this.documents.dir(projectId), "assets");
   }
 
   private assetFile(projectId: string, assetId: string, label = ""): string {
     if (!ASSET_ID_RE.test(assetId))
       throw new StoreError(`${label}invalid asset id`);
-    return path.join(this.projectDir(projectId), "assets", assetId);
+    return path.posix.join(this.assetDir(projectId), assetId);
   }
 
-  async assetPath(projectId: string, assetId: string): Promise<string> {
-    const p = this.assetFile(projectId, assetId);
+  async readAsset(projectId: string, assetId: string): Promise<Buffer> {
+    const file = this.assetFile(projectId, assetId);
     try {
-      await fs.access(p);
+      return await this.storage.read(file);
     } catch {
       throw new StoreError("asset not found", "not_found");
     }
-    return p;
   }
 
   async saveExport(
@@ -230,8 +189,9 @@ export class ProjectStore {
     data: Buffer,
   ): Promise<void> {
     if (!/^[\w.-]{1,120}$/.test(fileName)) return;
-    const dir = path.join(this.projectDir(projectId), "exports");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, fileName), data);
+    await this.storage.writeAtomic(
+      path.posix.join(this.documents.dir(projectId), "exports", fileName),
+      data,
+    );
   }
 }

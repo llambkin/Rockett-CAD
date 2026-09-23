@@ -37,8 +37,7 @@ async function main() {
   console.log(`[rockett] kernel ready in ${Date.now() - t0}ms`);
 
   const storage = new LocalStorage(DATA_DIR, fs.promises);
-  const store = new ProjectStore(DATA_DIR, storage);
-  await store.init();
+  const store = new ProjectStore(storage);
   console.log(`[rockett] data dir: ${DATA_DIR}`);
 
   // static client (production build)

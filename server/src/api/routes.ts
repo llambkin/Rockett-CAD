@@ -582,8 +582,8 @@ export function createApiRouter(
   on(
     ROUTES.asset,
     wrap(async (req, res) => {
-      const p = await store.assetPath(req.params.id, req.params.assetId);
-      res.sendFile(p);
+      const { id, assetId } = req.params;
+      res.type(assetId).send(await store.readAsset(id, assetId));
     }),
   );
 

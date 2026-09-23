@@ -24,8 +24,8 @@ export async function startTestApp(
   options: { clientDir?: string; allowedOrigins?: string[] } = {},
 ): Promise<TestApp> {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-app-"));
-  const store = new ProjectStore(dataDir);
-  await store.init();
+  const storage = new LocalStorage(dataDir, fs);
+  const store = new ProjectStore(storage);
   const server = http.createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -33,7 +33,7 @@ export async function startTestApp(
     "request",
     createApp({
       store,
-      folders: new FolderStore(new LocalStorage(dataDir, fs)),
+      folders: new FolderStore(storage),
       clientDir: options.clientDir,
       allowedOrigins: [origin, ...(options.allowedOrigins ?? [])],
     }),
