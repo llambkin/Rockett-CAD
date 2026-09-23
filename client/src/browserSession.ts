@@ -1,10 +1,10 @@
 import { referencedAssets, type CadDocument } from "@rockett/shared";
 import { api, watchProject } from "./api";
 import {
+  browserProjectFile,
   getBrowserProject,
   saveBrowserDocument,
   StaleRecord,
-  toProjectFile,
 } from "./browserProjects";
 import { BROWSER_PATH, browserKeyFromPath, browserProjectPath } from "./paths";
 import { followPath as followProjectPath, useStore } from "./store";
@@ -96,9 +96,8 @@ export async function openBrowserProject(
   let session: Session;
   try {
     const record = await getBrowserProject(key);
-    const file = await toProjectFile(record);
     const { document } = await api.uploadProjectFile(
-      new File([JSON.stringify(file)], `${record.name}.rockett`),
+      await browserProjectFile(record),
       { temporary: "true" },
     );
     session = {

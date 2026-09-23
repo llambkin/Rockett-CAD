@@ -201,6 +201,71 @@ async function renameOpen(p: Page, name: string) {
   await p.locator(".doc-rename").press("Enter");
 }
 
+async function serverProject(name: string): Promise<string> {
+  const form = new FormData();
+  const file = { ...fixture, document: { ...fixture.document, name } };
+  form.append("file", new Blob([JSON.stringify(file)]), `${name}.rockett`);
+  const { document } = await api("/projects/file", {
+    method: "POST",
+    body: form,
+  });
+  return document.id;
+}
+
+const serverNames = async () =>
+  ((await api("/projects")) as ProjectSummary[]).map((p) => p.name).toSorted();
+
+const keptAssets = (p: Page, name: string) =>
+  p.evaluate(
+    (n) =>
+      new Promise<Record<string, string>>((resolve, reject) => {
+        const open = indexedDB.open("rockett", 1);
+        open.addEventListener("error", () => reject(open.error));
+        open.onsuccess = () => {
+          const req = open.result
+            .transaction("projects")
+            .objectStore("projects")
+            .getAll();
+          req.onsuccess = async () => {
+            open.result.close();
+            const r = req.result.find((x) => x.name === n);
+            const out: Record<string, string> = {};
+            for (const [asset, blob] of Object.entries<Blob>(r.assets)) {
+              const bytes = new Uint8Array(await blob.arrayBuffer());
+              out[asset] = btoa(String.fromCharCode(...bytes));
+            }
+            resolve(out);
+          };
+        };
+      }),
+    name,
+  );
+
+async function moveTo(p: Page, name: string, target: string) {
+  await row(p, name).click({ button: "right" });
+  await p
+    .locator(".context-menu")
+    .getByRole("button", { name: "Move to…" })
+    .click();
+  const dialog = p.locator(".dialog-panel");
+  await dialog
+    .locator(".tree-item", { hasText: new RegExp(`^${target}$`) })
+    .click();
+  await dialog.getByRole("button", { name: "Move", exact: true }).click();
+}
+
+function answer(p: Page, accept: boolean) {
+  const prompts: string[] = [];
+  p.once("dialog", (d) => {
+    prompts.push(d.message());
+    void (accept ? d.accept() : d.dismiss());
+  });
+  return prompts;
+}
+
+const intoBrowser = (name: string) =>
+  `Move "${name}" to this browser? Other users lose access, and clearing this site's data deletes it.`;
+
 const rowNames = (p: Page) =>
   p.locator(".project-row .project-open b").allTextContents();
 const row = (p: Page, name: string) =>
@@ -261,6 +326,7 @@ it("renames, duplicates, downloads and deletes in IndexedDB without calling the 
     "Rename",
     "Duplicate",
     "Download",
+    "Move to…",
     "Delete",
   ]);
   await page
@@ -461,4 +527,91 @@ it("shows the error after the recreated copy goes missing too", async () => {
   await missing.waitFor();
   expect((await kept(page, "k1")).name).toBe("Motor cover");
   failures.length = 0;
+});
+
+it("moves a server project to this browser only after the confirm", async () => {
+  const id = await serverProject("Gear plate");
+  const moving = watch(await context.newPage());
+  await moving.goto(app.origin);
+  const dismissed = answer(moving, false);
+  await moveTo(moving, "Gear plate", "This browser");
+  await poll(async () => dismissed).toEqual([intoBrowser("Gear plate")]);
+  expect(await serverNames()).toContain("Gear plate");
+  expect(await stored(moving)).not.toContain("Gear plate");
+  await moving.close();
+
+  await page.goto(app.origin);
+  const prompts = answer(page, true);
+  await moveTo(page, "Gear plate", "This browser");
+  await poll(() => stored(page)).toContain("Gear plate");
+  expect(prompts).toEqual([intoBrowser("Gear plate")]);
+  await poll(serverNames).not.toContain("Gear plate");
+  await expect
+    .poll(async () => (await fetch(`${app.origin}/api/projects/${id}`)).status)
+    .toBe(404);
+  expect(await keptAssets(page, "Gear plate")).toEqual(fixture.assets);
+  await row(page, "This browser").getByText("2 projects").waitFor();
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
+});
+
+it("moves a browser project into a server folder without a confirm", async () => {
+  const { folder } = await api("/folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Plates" }),
+  });
+  const moving = watch(await context.newPage());
+  const prompts = answer(moving, false);
+  await moving.goto(`${app.origin}/browser`);
+  await moveTo(moving, "Gear plate", "Plates");
+  await poll(() => stored(moving)).not.toContain("Gear plate");
+  expect(prompts).toEqual([]);
+  const listed: ProjectSummary[] = await api("/projects");
+  const moved = listed.find((p) => p.name === "Gear plate")!;
+  expect((await api("/folders")).placement[moved.id]).toBe(folder.id);
+  const file = await api(`/projects/${moved.id}/file`);
+  expect(file.assets).toEqual(fixture.assets);
+  await moving.close();
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
+});
+
+it("keeps both copies and names the one left when removing the source fails", async () => {
+  const id = await serverProject("Gear cover");
+  await page.goto(app.origin);
+  answer(page, true);
+  await page.route(`**/api/projects/${id}`, (route) =>
+    route.request().method() === "DELETE"
+      ? route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Boom", code: "internal" }),
+        })
+      : route.continue(),
+  );
+  await moveTo(page, "Gear cover", "This browser");
+  await page
+    .locator(".error-banner")
+    .getByText(
+      '"Gear cover" is in this browser, but the server copy was not removed.',
+    )
+    .waitFor();
+  await page.unroute(`**/api/projects/${id}`);
+  expect(await serverNames()).toContain("Gear cover");
+  expect(await stored(page)).toContain("Gear cover");
+  failures.length = 0;
+  expect(app.serverErrors).toEqual([]);
+});
+
+it("moves a project dropped on This browser", async () => {
+  await serverProject("Gear shaft");
+  await page.goto(app.origin);
+  const prompts = answer(page, true);
+  await row(page, "Gear shaft").dragTo(row(page, "This browser"));
+  await poll(() => stored(page)).toContain("Gear shaft");
+  expect(prompts).toEqual([intoBrowser("Gear shaft")]);
+  await poll(serverNames).not.toContain("Gear shaft");
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
 });

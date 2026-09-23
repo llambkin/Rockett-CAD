@@ -1,6 +1,12 @@
 import { Fragment, useState, type ReactNode } from "react";
 import type { FolderTree } from "@rockett/shared";
-import { canMoveTo, parentOf, subfolders, type Item } from "../projectTree";
+import {
+  canMoveTo,
+  parentOf,
+  subfolders,
+  THIS_BROWSER,
+  type Item,
+} from "../projectTree";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 
@@ -45,6 +51,7 @@ export function MoveDialog({
         <div className="move-tree">
           {row(null, "Projects")}
           <div className="tree-children">{branch(null)}</div>
+          {row(THIS_BROWSER, "This browser")}
         </div>
       </div>
       <DialogFooter

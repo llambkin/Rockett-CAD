@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { listBrowserProjects } from "../browserProjects";
+import { listBrowserProjects, moveToServer } from "../browserProjects";
 import {
   BROWSER_PATH,
   browserKeyFromPath,
@@ -151,7 +151,7 @@ export function ProjectList() {
     setError(null);
     void work.then(reread, (e) => setError(e.message));
   };
-  const run = runThen(server.refresh);
+  const run = runThen(() => Promise.all([server.refresh(), kept.refresh()]));
   const create = () =>
     api
       .createProject(name || "Untitled", folderId)
@@ -205,9 +205,11 @@ export function ProjectList() {
             (inBrowser ? (
               <BrowserItems
                 records={kept.value}
+                tree={tree}
                 renaming={renaming}
                 setRenaming={setRenaming}
                 onOpenFolder={openFolder}
+                onMove={(r, to) => run(moveToServer(r, to))}
                 run={runThen(kept.refresh)}
               />
             ) : (

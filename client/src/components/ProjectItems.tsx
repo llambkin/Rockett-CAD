@@ -5,6 +5,7 @@ import {
   deleteBrowserProject,
   downloadBrowserProject,
   duplicateBrowserProject,
+  moveToBrowser,
   renameBrowserProject,
   type BrowserProject,
 } from "../browserProjects";
@@ -15,6 +16,7 @@ import {
   itemCount,
   projectsIn,
   subfolders,
+  THIS_BROWSER,
   trail,
   type Item,
 } from "../projectTree";
@@ -247,6 +249,17 @@ function projectActions(
 
 const BrowserGlyph = ICONS.browser;
 
+const confirmIntoBrowser = (name: string) =>
+  window.confirm(
+    `Move "${name}" to this browser? Other users lose access, and clearing this site's data deletes it.`,
+  );
+
+const moveTo = (item: Item, open: (item: Item) => void): RowAction => ({
+  label: "Move to…",
+  glyph: "⇥",
+  run: () => open(item),
+});
+
 export function ProjectItems({
   projects,
   tree,
@@ -273,11 +286,13 @@ export function ProjectItems({
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Item | null>(null);
   const move = (item: Item, target: string | null) =>
-    run(
-      item.kind === "project"
-        ? api.placeProject(item.id, target)
-        : api.moveFolder(item.id, target),
-    );
+    target !== THIS_BROWSER
+      ? run(
+          item.kind === "project"
+            ? api.placeProject(item.id, target)
+            : api.moveFolder(item.id, target),
+        )
+      : confirmIntoBrowser(item.name) && run(moveToBrowser(item.id, item.name));
   const { source, target } = useDragMove(tree, move);
   const rename = (item: Item) => (name: string | null) => {
     setRenaming(null);
@@ -305,11 +320,6 @@ export function ProjectItems({
       drag={source(item)}
     />
   );
-  const moveTo = (item: Item): RowAction => ({
-    label: "Move to…",
-    glyph: "⇥",
-    run: () => setMoving(item),
-  });
   const folders = subfolders(tree, folderId);
   const here = projectsIn(tree, projects, folderId);
   const pinned = folderId === null ? kept : null;
@@ -322,10 +332,11 @@ export function ProjectItems({
       />
       {pinned !== null && (
         <ItemRow
-          item={{ kind: "folder", id: "browser", name: "This browser" }}
+          item={{ kind: "folder", id: THIS_BROWSER, name: "This browser" }}
           meta={count(pinned, "project")}
           glyph={<BrowserGlyph />}
           actions={[]}
+          drop={target(THIS_BROWSER)}
           onOpen={onOpenBrowser}
           onMenu={setMenu}
         />
@@ -335,7 +346,7 @@ export function ProjectItems({
         const n = itemCount(tree, projects, f.id);
         return row(item, count(n, "item"), [
           { label: "Rename", glyph: "✎", run: () => setRenaming(item) },
-          moveTo(item),
+          moveTo(item, setMoving),
           {
             label: "Delete",
             glyph: "✕",
@@ -362,7 +373,7 @@ export function ProjectItems({
               download: () => api.downloadProjectFile(p.id),
               remove: () => api.deleteProject(p.id),
             },
-            [moveTo(item)],
+            [moveTo(item, setMoving)],
           ),
         );
       })}
@@ -391,39 +402,54 @@ export function ProjectItems({
 
 export function BrowserItems({
   records,
+  tree,
   renaming,
   setRenaming,
   onOpenFolder,
+  onMove,
   run,
 }: {
   records: BrowserProject[];
+  tree: FolderTree;
   renaming: Renaming;
   setRenaming: (r: Renaming) => void;
   onOpenFolder: (id: string | null) => void;
+  onMove: (r: BrowserProject, folderId: string | null) => void;
   run: Run;
 }) {
   const [menu, setMenu] = useState<Menu>(null);
+  const [moving, setMoving] = useState<Item | null>(null);
   return (
     <>
       <Breadcrumb
-        folders={[{ id: "browser", name: "This browser" }]}
+        folders={[{ id: THIS_BROWSER, name: "This browser" }]}
         onOpen={onOpenFolder}
         target={() => ({ active: false })}
       />
       {records.map((r) => {
-        const item: Item = { kind: "project", id: r.key, name: r.name };
+        const item: Item = {
+          kind: "project",
+          id: r.key,
+          name: r.name,
+          inBrowser: true,
+        };
         return (
           <ItemRow
             key={r.key}
             item={item}
             meta={`${features(r)} · ${size(r.size)}`}
             renaming={renaming?.kind === "project" && renaming.id === r.key}
-            actions={projectActions(r.name, run, {
-              rename: () => setRenaming(item),
-              duplicate: () => duplicateBrowserProject(r.key),
-              download: () => downloadBrowserProject(r),
-              remove: () => deleteBrowserProject(r.key),
-            })}
+            actions={projectActions(
+              r.name,
+              run,
+              {
+                rename: () => setRenaming(item),
+                duplicate: () => duplicateBrowserProject(r.key),
+                download: () => downloadBrowserProject(r),
+                remove: () => deleteBrowserProject(r.key),
+              },
+              [moveTo(item, setMoving)],
+            )}
             onOpen={() => void openBrowserProject(r.key)}
             onRename={(name) => {
               setRenaming(null);
@@ -437,6 +463,18 @@ export function BrowserItems({
         <div className="tree-empty">No projects in this browser yet.</div>
       )}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {moving && (
+        <MoveDialog
+          tree={tree}
+          item={moving}
+          onMove={(t) => {
+            setMoving(null);
+            const r = records.find((x) => x.key === moving.id);
+            if (r) onMove(r, t);
+          }}
+          onClose={() => setMoving(null)}
+        />
+      )}
     </>
   );
 }

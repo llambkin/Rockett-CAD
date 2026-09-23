@@ -234,7 +234,10 @@ it("dims the current folder, the moved folder and its descendants in Move to", a
     ["Plates (this folder)", true],
     ["Bolts", true],
     ["Enclosures", false],
+    ["This browser", true],
   ]);
+  await click(items[6] as HTMLElement);
+  expect(items[6]!.classList.contains("selected")).toBe(false);
   await click(items[2] as HTMLElement);
   expect(button("Move", host.querySelector(".dialog-panel")!)).toHaveProperty(
     "disabled",

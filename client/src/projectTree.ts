@@ -4,7 +4,10 @@ export interface Item {
   kind: "folder" | "project";
   id: string;
   name: string;
+  inBrowser?: true;
 }
+
+export const THIS_BROWSER = "browser";
 
 export const EMPTY_TREE: FolderTree = { folders: [], placement: {} };
 
@@ -51,6 +54,7 @@ export function trail(tree: FolderTree, id: string | null): Folder[] {
 }
 
 export function parentOf(tree: FolderTree, item: Item): string | null {
+  if (item.inBrowser) return THIS_BROWSER;
   return item.kind === "project"
     ? folderOf(tree, item.id)
     : (find(tree, item.id)?.parentId ?? null);
@@ -66,5 +70,6 @@ export function canMoveTo(
   target: string | null,
 ): boolean {
   if (target === parentOf(tree, item)) return false;
+  if (target === THIS_BROWSER) return item.kind === "project";
   return item.kind === "project" || !isInside(tree, target, item.id);
 }

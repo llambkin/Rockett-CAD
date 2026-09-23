@@ -5,6 +5,7 @@ import {
   type CadDocument,
   type ProjectFile,
 } from "@rockett/shared";
+import { api } from "./api";
 
 export interface BrowserProject {
   key: string;
@@ -165,6 +166,9 @@ export const duplicateBrowserProject = (key: string) =>
 export const deleteBrowserProject = (key: string) =>
   transact<void>("readwrite", (store) => void store.delete(key));
 
+const keepBrowserProject = (r: BrowserProject) =>
+  transact<void>("readwrite", (store) => void store.add(r));
+
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000)
@@ -200,4 +204,34 @@ export async function downloadBrowserProject(r: BrowserProject) {
     blob: new Blob([JSON.stringify(file)], { type: "application/json" }),
     fileName: `${r.name}.rockett`,
   };
+}
+
+export async function browserProjectFile(r: BrowserProject): Promise<File> {
+  const { blob, fileName } = await downloadBrowserProject(r);
+  return new File([blob], fileName);
+}
+
+export async function moveToBrowser(id: string, name: string): Promise<void> {
+  const { blob } = await api.downloadProjectFile(id);
+  await keepBrowserProject(fromProjectFile(JSON.parse(await blob.text())));
+  await api.deleteProject(id).catch(() => {
+    throw new Error(
+      `"${name}" is in this browser, but the server copy was not removed.`,
+    );
+  });
+}
+
+export async function moveToServer(
+  r: BrowserProject,
+  folderId: string | null,
+): Promise<void> {
+  await api.uploadProjectFile(
+    await browserProjectFile(r),
+    folderId === null ? {} : { folderId },
+  );
+  await deleteBrowserProject(r.key).catch(() => {
+    throw new Error(
+      `"${r.name}" is on the server, but the copy in this browser was not removed.`,
+    );
+  });
 }
