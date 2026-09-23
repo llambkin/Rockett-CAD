@@ -253,6 +253,12 @@ the accent. `sketch-dimmed` and the view cube edges follow `border` (3.80 on
 `viewport-bg`). The `accent-dim` borders listed above now use `accent`.
 `edge` reaches 1.11 on `viewport-bg`, as it did before SET-011.
 
+BUG-030 fixed three pairs the lighter tokens broke. `.btn.primary:hover`
+writes `bg0` on `accent` (10.40, was white at 1.56). `.btn:hover` takes the
+`bg2` surface instead of `border` (white at 12.90, was 3.64).
+`viewcube-face` returns to `#3d4249`, its value before SET-011, so the cube
+reads lighter than `viewport-bg` again (label 10.13).
+
 ## Contrast method
 
 Every figure above comes from the WCAG 2.2 relative-luminance formula, rounded

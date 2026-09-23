@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { contrastRatio } from "../src/theme/contrast";
 import { THEME_TOKENS, type ThemeColor } from "../src/theme/tokens";
@@ -14,6 +16,7 @@ it("paints the graded greys and the primary text white", () => {
   expect(THEME_TOKENS.bg0).toBe("#1e2124");
   expect(THEME_TOKENS["viewport-bg"]).toBe("#2a2d30");
   expect(THEME_TOKENS.text).toBe("#ffffff");
+  expect(THEME_TOKENS["viewcube-face"]).toBe("#3d4249");
 });
 
 const surfaces: ThemeColor[] = [
@@ -80,6 +83,46 @@ const pairs: Pair[] = [
 ];
 
 it.each(pairs)("%s on %s meets %d:1", (fg, bg, target) => {
+  expect(
+    contrastRatio(THEME_TOKENS[fg], THEME_TOKENS[bg]),
+  ).toBeGreaterThanOrEqual(target);
+});
+
+const css = readFileSync(
+  fileURLToPath(new URL("../src/theme.css", import.meta.url)),
+  "utf8",
+);
+
+function declared(selector: string, property: string): ThemeColor | undefined {
+  const block = css.split(`\n${selector} {\n`)[1]?.split("}")[0];
+  if (block === undefined) throw new Error(`theme.css has no ${selector} rule`);
+  const match = new RegExp(`(?:^|\\s)${property}: var\\(--([\\w-]+)\\)`).exec(
+    block,
+  );
+  return match?.[1] as ThemeColor | undefined;
+}
+
+function painted(cascade: string[], property: string): ThemeColor | undefined {
+  return cascade
+    .map((selector) => declared(selector, property))
+    .filter((token) => token !== undefined)
+    .at(-1);
+}
+
+const buttonStates: [string, number, string[]][] = [
+  [".btn", 7, [".btn"]],
+  [".btn:hover", 4.5, [".btn", ".btn:hover"]],
+  [".btn.primary", 7, [".btn", ".btn:hover", ".btn.primary"]],
+  [
+    ".btn.primary:hover",
+    7,
+    [".btn", ".btn:hover", ".btn.primary", ".btn.primary:hover"],
+  ],
+];
+
+it.each(buttonStates)("%s text meets %d:1", (_, target, cascade) => {
+  const fg = painted(cascade, "color") ?? "text";
+  const bg = painted(cascade, "background") ?? "bg0";
   expect(
     contrastRatio(THEME_TOKENS[fg], THEME_TOKENS[bg]),
   ).toBeGreaterThanOrEqual(target);
