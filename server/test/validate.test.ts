@@ -9,6 +9,61 @@ import {
 const base = { id: "f1", name: "F1", suppressed: false };
 const profile = { sketchId: "sk", profileId: "p" };
 const plane = { kind: "origin", plane: "XY" } as const;
+const axis = { kind: "originAxis", axis: "Z" };
+const extrude = {
+  ...base,
+  type: "extrude",
+  profiles: [profile],
+  distance: 5,
+  direction: "normal",
+  operation: "newBody",
+};
+const revolve = {
+  ...base,
+  type: "revolve",
+  profiles: [profile],
+  axis,
+  angle: 90,
+  operation: "newBody",
+};
+const sweep = {
+  ...base,
+  type: "sweep",
+  profiles: [profile],
+  pathSketchId: "path",
+  operation: "newBody",
+};
+const loft = {
+  ...base,
+  type: "loft",
+  sections: [profile, profile],
+  operation: "newBody",
+};
+const emboss = {
+  ...base,
+  type: "emboss",
+  profiles: [profile],
+  depth: 1,
+  mode: "emboss",
+};
+const linearPattern = {
+  ...base,
+  type: "linearPattern",
+  bodies: ["b1"],
+  direction: { kind: "axis", axis: "X" },
+  count: 2,
+  spacing: 5,
+  combine: false,
+};
+const circularPattern = {
+  ...base,
+  type: "circularPattern",
+  bodies: ["b1"],
+  axis,
+  count: 2,
+  totalAngle: 360,
+  combine: false,
+};
 
 const cases: Array<{ valid: Feature; invalid: Feature }> = [
   {
@@ -113,43 +168,6 @@ describe("validateFeature", () => {
   it("references and lists", () => {
     const face = { kind: "face", bodyId: "b1", faceName: "f" };
     const edge = { kind: "edge", bodyId: "b1", edgeName: "e" };
-    const axis = { kind: "originAxis", axis: "Z" };
-    const extrude = {
-      ...base,
-      type: "extrude",
-      profiles: [profile],
-      distance: 5,
-      direction: "normal",
-      operation: "newBody",
-    };
-    const revolve = {
-      ...base,
-      type: "revolve",
-      profiles: [profile],
-      axis,
-      angle: 90,
-      operation: "newBody",
-    };
-    const sweep = {
-      ...base,
-      type: "sweep",
-      profiles: [profile],
-      pathSketchId: "path",
-      operation: "newBody",
-    };
-    const loft = {
-      ...base,
-      type: "loft",
-      sections: [profile, profile],
-      operation: "newBody",
-    };
-    const emboss = {
-      ...base,
-      type: "emboss",
-      profiles: [profile],
-      depth: 1,
-      mode: "emboss",
-    };
     const shell = { ...base, type: "shell", openFaces: [], thickness: 1 };
     const offsetFace = {
       ...base,
@@ -159,24 +177,6 @@ describe("validateFeature", () => {
     };
     const fillet = { ...base, type: "fillet", edges: [edge], radius: 1 };
     const chamfer = { ...base, type: "chamfer", edges: [edge], distance: 1 };
-    const linearPattern = {
-      ...base,
-      type: "linearPattern",
-      bodies: ["b1"],
-      direction: { kind: "axis", axis: "X" },
-      count: 2,
-      spacing: 5,
-      combine: false,
-    };
-    const circularPattern = {
-      ...base,
-      type: "circularPattern",
-      bodies: ["b1"],
-      axis,
-      count: 2,
-      totalAngle: 360,
-      combine: false,
-    };
     const move = {
       ...base,
       type: "move",
@@ -223,6 +223,74 @@ describe("validateFeature", () => {
       { ...circularPattern, bodies: undefined },
       { ...circularPattern, bodies: [] },
       { ...move, bodies: [""] },
+    ];
+    for (const f of invalid)
+      expect
+        .soft(() => validateFeature(f as any), JSON.stringify(f))
+        .toThrow(ValidationError);
+  });
+
+  it("enums and flags", () => {
+    const combine = {
+      ...base,
+      type: "combine",
+      operation: "cut",
+      targetBody: "b1",
+      toolBodies: ["b2"],
+      keepTools: false,
+    };
+    const mirror = {
+      ...base,
+      type: "mirror",
+      bodies: ["b1"],
+      plane,
+      combine: false,
+    };
+    const referenceImage = {
+      ...base,
+      type: "referenceImage",
+      plane,
+      assetId: "a",
+      fileName: "a.png",
+      transform: { u: 0, v: 0, rotation: 0, scale: 1 },
+      opacity: 1,
+      visible: true,
+      width: 1,
+      height: 1,
+    };
+    const valid: object[] = [
+      { ...emboss, mode: "deboss" },
+      { ...combine, keepTools: true },
+      { ...mirror, combine: true },
+      { ...linearPattern, combine: true },
+      { ...circularPattern, combine: true },
+      { ...referenceImage, visible: false },
+    ];
+    for (const operation of ["newBody", "join", "cut", "intersect"])
+      for (const f of [extrude, revolve, sweep, loft])
+        valid.push({ ...f, operation });
+    for (const direction of ["normal", "reverse", "symmetric", "twoSided"])
+      valid.push({ ...extrude, direction });
+    for (const f of valid)
+      expect
+        .soft(() => validateFeature(f as any), JSON.stringify(f))
+        .not.toThrow();
+    const invalid = [
+      ...[extrude, revolve, sweep, loft].flatMap((f) => [
+        { ...f, operation: "bogus" },
+        { ...f, operation: undefined },
+      ]),
+      { ...extrude, direction: "sideways" },
+      { ...extrude, direction: undefined },
+      { ...emboss, mode: "raise" },
+      { ...emboss, mode: undefined },
+      { ...combine, keepTools: "false" },
+      { ...combine, keepTools: undefined },
+      { ...mirror, combine: 1 },
+      { ...linearPattern, combine: "true" },
+      { ...circularPattern, combine: undefined },
+      { ...referenceImage, visible: "yes" },
+      { ...referenceImage, visible: undefined },
     ];
     for (const f of invalid)
       expect

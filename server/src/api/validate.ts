@@ -42,6 +42,20 @@ function list(
   for (const x of v) item(x, label);
 }
 
+function oneOf(v: unknown, label: string, values: readonly string[]): void {
+  if (typeof v !== "string" || !values.includes(v)) {
+    throw new ValidationError(`${label} must be one of ${values.join(", ")}`);
+  }
+}
+
+function bool(v: unknown, label: string): void {
+  if (typeof v !== "boolean") {
+    throw new ValidationError(`${label} must be a boolean`);
+  }
+}
+
+const OPERATIONS = ["newBody", "join", "cut", "intersect"] as const;
+
 function record(v: unknown, label: string): void {
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
     throw new ValidationError(`${label} must be an object`);
@@ -137,9 +151,7 @@ export function validateFeature(f: Feature): void {
           }
         }
       }
-      if (f.visible !== undefined && typeof f.visible !== "boolean") {
-        throw new ValidationError("sketch visible must be a boolean");
-      }
+      if (f.visible !== undefined) bool(f.visible, "sketch visible");
       for (const e of f.entities) record(e, "sketch entity");
       const entityIds = new Set(f.entities.map((e) => e.id));
       if (entityIds.size !== f.entities.length)
@@ -179,6 +191,13 @@ export function validateFeature(f: Feature): void {
       num(f.distance, "extrude distance", -MAX_DIM, MAX_DIM);
       if (Math.abs(f.distance) < 0.000001)
         throw new ValidationError("extrude distance must be non-zero");
+      oneOf(f.direction, "extrude direction", [
+        "normal",
+        "reverse",
+        "symmetric",
+        "twoSided",
+      ]);
+      oneOf(f.operation, "extrude operation", OPERATIONS);
       if (f.distance2 !== undefined)
         num(f.distance2, "second distance", 0, MAX_DIM);
       if (f.startOffset !== undefined)
@@ -194,23 +213,24 @@ export function validateFeature(f: Feature): void {
     case "revolve":
       list(f.profiles, "revolve profiles", 1, 64, profileRef);
       num(f.angle, "revolve angle", -360, 360);
+      oneOf(f.operation, "revolve operation", OPERATIONS);
       break;
     case "sweep":
       list(f.profiles, "sweep profiles", 1, 64, profileRef);
       str(f.pathSketchId, "sweep path sketch", 100);
+      oneOf(f.operation, "sweep operation", OPERATIONS);
       break;
     case "loft":
       list(f.sections, "loft sections", 2, 64, profileRef);
+      oneOf(f.operation, "loft operation", OPERATIONS);
       break;
     case "fillet":
-      if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean")
-        throw new ValidationError("tangentChain must be boolean");
+      if (f.tangentChain !== undefined) bool(f.tangentChain, "tangentChain");
       num(f.radius, "fillet radius", 0.000001, MAX_DIM);
       list(f.edges, "fillet edges", 1, 256, edgeRef);
       break;
     case "chamfer":
-      if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean")
-        throw new ValidationError("tangentChain must be boolean");
+      if (f.tangentChain !== undefined) bool(f.tangentChain, "tangentChain");
       num(f.distance, "chamfer distance", 0.000001, MAX_DIM);
       list(f.edges, "chamfer edges", 1, 256, edgeRef);
       break;
@@ -219,13 +239,10 @@ export function validateFeature(f: Feature): void {
       list(f.openFaces, "shell open faces", 0, 256, faceRef);
       break;
     case "combine":
-      if (!["join", "cut", "intersect"].includes(f.operation)) {
-        throw new ValidationError(
-          "combine operation must be join, cut or intersect",
-        );
-      }
+      oneOf(f.operation, "combine operation", ["join", "cut", "intersect"]);
       str(f.targetBody, "combine target body");
       list(f.toolBodies, "combine tool bodies", 1, 64, str);
+      bool(f.keepTools, "combine keepTools");
       break;
     case "splitBody":
       str(f.body, "split body");
@@ -234,16 +251,19 @@ export function validateFeature(f: Feature): void {
     case "mirror":
       list(f.bodies, "mirror bodies", 1, 64, str);
       planeRef(f.plane, "mirror plane");
+      bool(f.combine, "mirror combine");
       break;
     case "linearPattern":
       list(f.bodies, "pattern bodies", 1, 64, str);
       num(f.count, "pattern count", 2, 500);
       num(f.spacing, "pattern spacing", -MAX_DIM, MAX_DIM);
+      bool(f.combine, "pattern combine");
       break;
     case "circularPattern":
       list(f.bodies, "pattern bodies", 1, 64, str);
       num(f.count, "pattern count", 2, 500);
       num(f.totalAngle, "pattern angle", -360, 360);
+      bool(f.combine, "pattern combine");
       break;
     case "constructionPlane":
       record(f.method, "plane method");
@@ -257,6 +277,7 @@ export function validateFeature(f: Feature): void {
       num(f.transform.scale, "image scale", 1e-9, MAX_DIM);
       num(f.width, "image width", 1, 65536);
       num(f.height, "image height", 1, 65536);
+      bool(f.visible, "image visible");
       break;
     case "offsetFace":
       num(f.distance, "offset distance", -MAX_DIM, MAX_DIM);
@@ -265,6 +286,7 @@ export function validateFeature(f: Feature): void {
     case "emboss":
       list(f.profiles, "emboss profiles", 1, 64, profileRef);
       num(f.depth, "emboss depth", 0.000001, MAX_DIM);
+      oneOf(f.mode, "emboss mode", ["emboss", "deboss"]);
       break;
     case "move":
       list(f.bodies, "move bodies", 1, 64, str);
