@@ -3,7 +3,12 @@
  * they reach the kernel so the API never executes arbitrary input.
  */
 
-import type { CadDocument, Feature } from "@rockett/shared";
+import {
+  SCHEMA_VERSION,
+  UNIT_TO_MM,
+  type CadDocument,
+  type Feature,
+} from "@rockett/shared";
 
 export class ValidationError extends Error {
   status = 400;
@@ -19,6 +24,12 @@ function num(v: unknown, label: string, min?: number, max?: number): void {
   if (max !== undefined && v > max) {
     throw new ValidationError(`${label} must be ≤ ${max}`);
   }
+}
+
+function int(v: unknown, label: string, min?: number, max?: number): void {
+  num(v, label, min, max);
+  if (!Number.isInteger(v))
+    throw new ValidationError(`${label} must be an integer`);
 }
 
 function str(v: unknown, label: string, maxLen = 200): void {
@@ -136,6 +147,7 @@ export function validateFeature(f: Feature): void {
   record(f, "feature");
   str(f.id, "feature id", 100);
   if (f.name !== undefined) str(f.name, "feature name", 120);
+  bool(f.suppressed, "feature suppressed");
   switch (f.type) {
     case "importStep":
       str(f.filename, "STEP filename", 255);
@@ -355,7 +367,30 @@ export function validateDocument(doc: CadDocument): void {
   if (!Array.isArray(doc.features) || doc.features.length > 2000) {
     throw new ValidationError("features list invalid");
   }
-  num(doc.timelinePosition, "timeline position", 0, doc.features.length);
+  if (doc.schemaVersion !== SCHEMA_VERSION)
+    throw new ValidationError(`schema version must be ${SCHEMA_VERSION}`);
+  oneOf(doc.units, "units", Object.keys(UNIT_TO_MM));
+  str(doc.createdAt, "createdAt");
+  str(doc.modifiedAt, "modifiedAt");
+  int(doc.timelinePosition, "timeline position", 0, doc.features.length);
+  record(doc.bodyMeta, "body meta");
+  for (const meta of Object.values(doc.bodyMeta)) {
+    record(meta, "body meta");
+    if (typeof meta.name !== "string")
+      throw new ValidationError("body name must be a string");
+    bool(meta.visible, "body visible");
+  }
+  record(doc.counters, "counters");
+  for (const n of Object.values(doc.counters)) int(n, "counter", 0);
+  if (doc.camera !== undefined) {
+    record(doc.camera, "camera");
+    for (const key of ["position", "target", "up"] as const)
+      list(doc.camera[key], `camera ${key}`, 3, 3, num);
+    oneOf(doc.camera.projection, "camera projection", [
+      "orthographic",
+      "perspective",
+    ]);
+  }
   const ids = new Set<string>();
   for (const f of doc.features) {
     validateFeature(f);

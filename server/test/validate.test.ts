@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { Feature } from "@rockett/shared";
+import { createEmptyDocument, type Feature } from "@rockett/shared";
+import { migrateDocument } from "../src/store/migrations.js";
 import {
   validateDocument,
   validateFeature,
@@ -401,5 +403,62 @@ describe("validateFeature", () => {
     expect(() =>
       validateFeature({ ...base, type: "cam" } as unknown as Feature),
     ).toThrow(/unknown feature type cam/);
+  });
+});
+
+describe("validateDocument", () => {
+  it("document base shape", () => {
+    const fixture = migrateDocument(
+      JSON.parse(
+        readFileSync(
+          new URL("./fixtures/invalid-top-fillet.json", import.meta.url),
+          "utf8",
+        ),
+      ).document,
+    );
+    const doc = {
+      ...createEmptyDocument("d", "D"),
+      features: [{ ...base, type: "fillet", edges: [edge], radius: 1 }],
+      timelinePosition: 1,
+      bodyMeta: { b1: { name: "", visible: false } },
+      counters: { fillet: 1, body: 0 },
+      camera: {
+        position: [1, 2, 3],
+        target: [0, 0, 0],
+        up: [0, 0, 1],
+        projection: "perspective",
+      },
+    };
+    for (const valid of [fixture, createEmptyDocument("e", "E"), doc])
+      expect(() => validateDocument(valid as any)).not.toThrow();
+    const invalid = [
+      { features: [{ ...doc.features[0], suppressed: "yes" }] },
+      { features: [{ ...doc.features[0], suppressed: undefined }] },
+      { schemaVersion: 3 },
+      { schemaVersion: "4" },
+      { units: "ft" },
+      { bodyMeta: null },
+      { bodyMeta: { b1: null } },
+      { bodyMeta: { b1: { name: 1, visible: true } } },
+      { bodyMeta: { b1: { name: "B", visible: "yes" } } },
+      { counters: [] },
+      { counters: { fillet: -1 } },
+      { counters: { fillet: 1.5 } },
+      { counters: { fillet: "1" } },
+      { createdAt: 0 },
+      { modifiedAt: undefined },
+      { timelinePosition: 0.5 },
+      { camera: null },
+      { camera: { ...doc.camera, position: [0, 0] } },
+      { camera: { ...doc.camera, up: [0, 0, "1"] } },
+      { camera: { ...doc.camera, projection: "fisheye" } },
+    ];
+    for (const change of invalid)
+      expect
+        .soft(
+          () => validateDocument({ ...doc, ...change } as any),
+          JSON.stringify(change),
+        )
+        .toThrow(ValidationError);
   });
 });
