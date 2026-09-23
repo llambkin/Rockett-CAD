@@ -154,7 +154,12 @@ function run(features: Feature[]) {
     }
   });
   const result = engine.evaluate(doc);
-  const state = engine.stateAt(doc);
+  const volumes = new Map(
+    [...engine.stateAt(doc).bodies].map(([bodyId, b]) => [
+      bodyId,
+      volumeOf(b.shape),
+    ]),
+  );
   dropEngine(id);
   return {
     result,
@@ -169,7 +174,7 @@ function run(features: Feature[]) {
         );
       return b;
     },
-    volume: (bodyId: string) => volumeOf(state.bodies.get(bodyId)!.shape),
+    volume: (bodyId: string) => volumes.get(bodyId)!,
   };
 }
 

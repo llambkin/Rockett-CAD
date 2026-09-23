@@ -1,4 +1,4 @@
-import { getKernel, faces as facesOf, type Shape } from "./kernel.js";
+import { getKernel, faces as facesOf, release, type Shape } from "./kernel.js";
 
 export interface FaceMesh {
   face: Shape;
@@ -25,8 +25,7 @@ export function meshShape(
     const loc = new k.TopLoc_Location_1();
     const triHandle = k.BRep_Tool.Triangulation(face, loc, 0);
     if (triHandle.IsNull()) {
-      loc.delete();
-      triHandle.delete();
+      release([loc, triHandle, face]);
       continue;
     }
     const tri = triHandle.get();
@@ -39,12 +38,14 @@ export function meshShape(
 
     tri.ComputeNormals();
     for (let i = 1; i <= tri.NbNodes(); i++) {
-      const p = tri.Node(i).Transformed(trsf);
+      const node = tri.Node(i);
+      const p = node.Transformed(trsf);
       positions.push(p.X(), p.Y(), p.Z());
-      p.delete();
-      const d = tri.Normal_1(i).Transformed(trsf);
+      release([node, p]);
+      const normal = tri.Normal_1(i);
+      const d = normal.Transformed(trsf);
       normals.push(sgn * d.X(), sgn * d.Y(), sgn * d.Z());
-      d.delete();
+      release([normal, d]);
     }
     for (let i = 1; i <= tri.NbTriangles(); i++) {
       const t = tri.Triangle(i);

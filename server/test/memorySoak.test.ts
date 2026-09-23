@@ -15,6 +15,7 @@ const CYCLES = Number(process.env.ROCKETT_SOAK_CYCLES ?? 300);
 const EVERY = 100;
 const REWIND = 3;
 const POCKETS = 25;
+const HANDLES_PER_CYCLE = 500;
 const mb = (bytes: number) => Math.round(bytes / 2 ** 20);
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -212,6 +213,16 @@ it(
     expect(samples.filter((s) => s.phase === "edit-tail").length).toBe(
       Math.ceil(CYCLES / EVERY) + 1,
     );
+    for (const [phase] of phases) {
+      const rows = samples.filter((s) => s.phase === phase);
+      const settled = rows.find((s) => s.cycle === EVERY)!;
+      const last = rows.at(-1)!;
+      expect(
+        (Number(last.liveHandles) - Number(settled.liveHandles)) /
+          (Number(last.cycle) - EVERY),
+        `${phase} live handles a cycle from cycle ${EVERY} to ${last.cycle}`,
+      ).toBeLessThan(HANDLES_PER_CYCLE);
+    }
   },
   (15 + CYCLES / 10) * 60_000,
 );

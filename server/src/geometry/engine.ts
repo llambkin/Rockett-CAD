@@ -37,6 +37,17 @@ interface Snapshot {
   statuses: FeatureStatus[];
 }
 
+function releaseSnapshots(
+  discarded: Pick<Snapshot, "state">[],
+  retained: Pick<Snapshot, "state">[],
+): void {
+  const shapes = (snapshots: Pick<Snapshot, "state">[]) =>
+    snapshots.flatMap((s) => [...s.state.bodies.values()].map((b) => b.shape));
+  const kept = new Set(shapes(retained));
+  for (const shape of new Set(shapes(discarded)))
+    if (!kept.has(shape)) shape.delete();
+}
+
 /** Cache key for a feature: its JSON minus display-only fields, so hiding a
  * sketch in the viewport doesn't re-evaluate the timeline after it. */
 function featureKey(feature: CadDocument["features"][number]): string {
@@ -74,7 +85,7 @@ class DocumentEngine {
     ) {
       valid++;
     }
-    this.snapshots.length = valid;
+    releaseSnapshots(this.snapshots.splice(valid), this.snapshots);
     const start = Math.min(valid, upTo);
 
     let state: EvalState =
@@ -105,6 +116,7 @@ class DocumentEngine {
             error: err?.message ?? String(err),
           };
           // keep pre-failure state
+          releaseSnapshots([{ state: next }], this.snapshots);
           next.bodies = new Map(state.bodies);
           next.sketches = new Map(state.sketches);
           next.planes = new Map(state.planes);
@@ -202,6 +214,7 @@ class DocumentEngine {
   }
 
   invalidate(): void {
+    releaseSnapshots(this.snapshots, []);
     this.snapshots = [];
     this.tessCache.clear();
     this.tessBytes = 0;
@@ -220,6 +233,7 @@ export function engineFor(docId: string): DocumentEngine {
 }
 
 export function dropEngine(docId: string): void {
+  engines.get(docId)?.invalidate();
   engines.delete(docId);
 }
 

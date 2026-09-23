@@ -73,48 +73,72 @@ export function* explore(
     if (!seen.has(h)) {
       seen.add(h);
       yield s;
-    }
+    } else s.delete();
     ex.Next();
   }
   ex.delete();
 }
 
-export function faces(shape: Shape): Shape[] {
+type Owned = { delete(): void };
+
+export function release(handles: Iterable<Owned>): void {
+  for (const handle of handles) handle.delete();
+}
+
+export function scoped<T>(
+  fn: (own: <H extends Owned>(handle: H) => H) => T,
+): T {
+  const owned: Owned[] = [];
+  try {
+    return fn((handle) => {
+      owned.push(handle);
+      return handle;
+    });
+  } finally {
+    release(owned);
+  }
+}
+
+function downcast(shape: Shape, type: "face" | "edge" | "vertex" | "solid") {
   const k = getKernel();
-  return [...explore(shape, "face")].map((f) => k.TopoDS.Face_1(f));
+  const cast = {
+    face: k.TopoDS.Face_1,
+    edge: k.TopoDS.Edge_1,
+    vertex: k.TopoDS.Vertex_1,
+    solid: k.TopoDS.Solid_1,
+  }[type];
+  return [...explore(shape, type)].map((s) => {
+    const typed = cast(s);
+    s.delete();
+    return typed;
+  });
+}
+
+export function faces(shape: Shape): Shape[] {
+  return downcast(shape, "face");
 }
 
 export function edges(shape: Shape): Shape[] {
-  const k = getKernel();
-  return [...explore(shape, "edge")].map((e) => k.TopoDS.Edge_1(e));
+  return downcast(shape, "edge");
 }
 
 export function vertices(shape: Shape): Shape[] {
-  const k = getKernel();
-  return [...explore(shape, "vertex")].map((v) => k.TopoDS.Vertex_1(v));
+  return downcast(shape, "vertex");
 }
 
 export function solids(shape: Shape): Shape[] {
-  const k = getKernel();
-  return [...explore(shape, "solid")].map((s) => k.TopoDS.Solid_1(s));
+  return downcast(shape, "solid");
 }
 
-/** Convert a TopTools_ListOfShape to a JS array (does not delete the list). */
+/** Convert a TopTools_ListOfShape to a JS array and delete the list. */
 export function listToArray(list: any): Shape[] {
   const out: Shape[] = [];
   if (!list) return out;
-  const size = list.Size();
-  if (size === 0) return out;
-  // NCollection lists expose iterators awkwardly through embind;
-  // use First/RemoveFirst on a copy instead.
-  const k = getKernel();
-  const copy = new k.TopTools_ListOfShape_1();
-  copy.Assign(list);
-  for (let i = 0; i < size; i++) {
-    out.push(copy.First_1());
-    copy.RemoveFirst();
+  while (list.Size() > 0) {
+    out.push(list.First_1());
+    list.RemoveFirst();
   }
-  copy.delete();
+  list.delete();
   return out;
 }
 

@@ -85,10 +85,10 @@ Benches over them:
   bytes, the stringify time is printed with it.
 
 The two many-feature full regenerations run 0 warm-up and 2 samples. Shapes
-are never freed yet (see Memory soak; PERF-006 fixes it), and one full
+are never freed yet (see Memory soak, Destructors), and one full
 many-feature regeneration grows the kernel heap by about 700 MB, forced GC included. The
 heap caps at 4 GB, so 12 regenerations in one process would abort. PERF-006
-can restore the default plan. For the same reason `evaluate cold many-body`,
+could not change that, since the kernel binding frees almost nothing. For the same reason `evaluate cold many-body`,
 which grows the heap by about 100 MB per sample, lives in `payload.bench.ts`,
 so it runs in its own worker.
 
@@ -196,7 +196,7 @@ same object.
 | pattern count 40 to 41  | 9.8 s       | 9.7 to 10.1 s                 |
 
 The before figures grow between calls because every tessellation leaks
-kernel handles (PERF-006). After PERF-034:
+kernel memory (see Destructors). After PERF-034:
 
 - The tessellation cache is least recently used and bounded at 256 MB per
   engine, counting 8 bytes per number in the mesh arrays and edge polylines.
@@ -310,8 +310,9 @@ At cycle 0, every 100 cycles, the last cycle and after `dropEngine`, it
 forces GC twice (`--expose-gc` is set at runtime) and prints one `memory soak`
 JSON line: RSS, V8 heap used, WASM heap size, handle counts and the one-minute
 load average. The WASM heap never shrinks, so its size is the high-water mark,
-and use under the initial 100 MB does not show. The test asserts only that the
-samples exist and are finite. PERF-006 owns the budget.
+and use under the initial 100 MB does not show. The test asserts that the
+samples exist and are finite, and that live handles grow by under 500 a cycle
+from cycle 100 to the last in each phase (PERF-006).
 
 Handle counts come from wrapping every Embind class constructor, static
 function and method at start-up. A returned class handle is live until its
@@ -398,6 +399,60 @@ valid`), `invalidate()` and `dropEngine` drop them without `.delete()`. That
 - A rewind costs one tessellation of an uncached body, then nothing.
 - RSS outgrows the WASM and JS heaps: 3,302 MB at the end against 1,865 plus
   330 MB. The remainder is not attributed.
+
+### Destructors
+
+PERF-006 deleted every shape its snapshots drop and every short-lived handle
+on the soak paths, and the heap kept growing. The kernel binding cannot free
+most objects. Run on 2026-09-23, `class-a`, Node 24.12.0, same fixture and
+cycles, load average 10.7 to 37.3:
+
+| phase      | before: handles a cycle | after: handles a cycle | before: WASM heap, cycle 100 to 300 | after: WASM heap, cycle 100 to 300 |
+| ---------- | ----------------------- | ---------------------- | ----------------------------------- | ---------------------------------- |
+| cold       | 96,267 in all           | 1,474 in all           | 100 MB                              | 100 MB                             |
+| edit-tail  | 23,788                  | 232                    | 613 to 1,479 MB                     | 516 to 1,383 MB                    |
+| rewind     | 0                       | 0                      | 1,479 MB, flat                      | 1,383 MB, flat                     |
+| tessellate | 19,017                  | 231                    | 1,576 to 1,865 MB                   | 1,479 to 1,672 MB                  |
+
+The handles left each cycle are 231 `Poly_Triangulation` pointers from
+`.get()`, which own nothing, plus one `Message_ProgressRange` in edit-tail. Heap growth barely
+moved: 4.3 MB an edit-tail cycle and about 1 MB a tessellation.
+
+The cause is in `opencascade.js` 2.0.0-beta.b5ff984. A class bound under its
+own name, such as `TopoDS_Shape`, `gp_Pnt`, `BRepFilletAPI_MakeFillet` or
+`BRepCheck_Analyzer`, shares one Embind destructor that frees nothing: a
+24-byte block passed to it is not returned to `malloc`. A constructor
+overload class such as `gp_Pnt_3` has a working destructor. So `.delete()`
+frees what `new X_n(...)` made, and nothing that a kernel call returned or
+that a single-constructor class made. Measured bytes per call:
+
+| call                                                         | bytes kept |
+| ------------------------------------------------------------ | ---------- |
+| `new gp_Pnt_3()` then `.delete()`                            | 0.5        |
+| `p.Transformed(t)` then `.delete()`, or without `.delete()`  | 32         |
+| `new TopoDS_Shape()` then `.delete()`                        | 16.6       |
+| `new BRepFilletAPI_MakeFillet(box)` then `.delete()`         | 13,429     |
+| one-edge fillet of a box, builder deleted                    | 39,711     |
+| `BRepCheck_Analyzer` of a box, deleted                       | 59,761     |
+| meshed sphere, shape deleted                                 | 329,441    |
+| meshed sphere, `Nullify()` then deleted                      | 1,352      |
+| edit-tail at 25 pockets, with or without `Nullify` on delete | 4,413,440  |
+| `tessellateBody` of an unchanged 25-pocket body              | 1,114,522  |
+
+`Nullify()` frees the geometry behind a returned shape, but the fillet builder
+and the validity analyzer are never destroyed, and each holds its result
+body, so edit-tail keeps every fillet and its triangulation. Tessellation
+keeps 32 bytes for each `gp_Pnt` and `gp_Dir` a node returns. No JavaScript
+change bounds the heap. Mark chose on 2026-09-23 to recycle the worker, so
+PERF-018 owns the heap bound, and the soak asserts live handles instead: under
+500 a cycle from cycle 100 to the last, in every phase.
+
+Since deleted shapes never return their memory, no new shape can reuse a freed
+address, so a shape hash in the tessellation cache key cannot name a stale
+body. A kernel build whose shapes free would break that; REF-004's identity
+key must land with it. On PERF-034's cache every edit-tail cycle adds an
+entry: 301 entries and 288 MB more JS heap after 300 cycles, bounded by its
+256 MB payload cap.
 
 ## Cost table
 

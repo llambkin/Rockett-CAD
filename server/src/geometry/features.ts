@@ -53,6 +53,7 @@ import {
   planarFacePlane,
   pnt,
   progress,
+  release,
   shapeHash,
   solids,
   vec,
@@ -147,6 +148,7 @@ export function resolvePlaneFrame(state: EvalState, ref: PlaneRef): PlaneFrame {
     );
   }
   const plane = planarFacePlane(face);
+  face.delete();
   if (!plane) throw new Error(`face ${ref.face.faceName} is not planar`);
   return frameFromPlane(plane.origin, plane.normal);
 }
@@ -497,13 +499,13 @@ function buildPrism(
     for (const e of edgesOf(face)) {
       const entityId = offsetEdgeEntity.get(shapeHash(e));
       if (!entityId) continue;
-      const gen = prism.Generated(e);
-      for (const g of listToArray(gen)) {
+      const gen = listToArray(prism.Generated(e));
+      for (const g of gen) {
         if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
           provisional.set(shapeHash(g), `f:${featureId}:s:${entityId}`);
         }
       }
-      gen.delete?.();
+      release(gen);
     }
     // caps
     const firstShape = prism.FirstShape_1();
@@ -666,13 +668,13 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
       for (const e of edgesOf(pf.face)) {
         const entityId = pf.edgeEntity.get(shapeHash(e));
         if (!entityId) continue;
-        const gen = revol.Generated(e);
-        for (const g of listToArray(gen)) {
+        const gen = listToArray(revol.Generated(e));
+        for (const g of gen) {
           if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
             provisional.set(shapeHash(g), `f:${f.id}:s:${entityId}`);
           }
         }
-        gen.delete?.();
+        release(gen);
       }
       if (!full) {
         for (const cap of facesOf(revol.FirstShape_1())) {
@@ -890,11 +892,11 @@ function sketchEntityToEdge(
 
 function collectEdges(
   body: NamedBody,
+  byName: Map<string, Shape>,
   refs: EdgeRef[],
   tangentChain: boolean | undefined,
   label: string,
 ): { edge: Shape; name: string }[] {
-  const byName = computeEdgeNames(body).byName;
   const resolve = (ref: EdgeRef) => {
     if (ref.bodyId !== body.bodyId) {
       throw new Error(`all ${label} edges must belong to the same body`);
@@ -909,6 +911,45 @@ function collectEdges(
   return tangentChain ? tangentEdges(body, refs).map(resolve) : seeds;
 }
 
+function blendNames(
+  op: any,
+  body: NamedBody,
+  sourceEdges: { edge: Shape }[],
+  result: Shape,
+  featureId: string,
+): NameMap {
+  const k = getKernel();
+  // Modified faces keep names; generated fillet faces are named per edge.
+  const provisional: NameMap = new Map();
+  const bodyFaces = facesOf(body.shape);
+  try {
+    for (const face of bodyFaces) {
+      const name = body.names.get(shapeHash(face));
+      if (!name || op.IsDeleted(face)) continue;
+      const modified = listToArray(op.Modified(face));
+      for (const mf of modified.length > 0 ? modified : [face]) {
+        provisional.set(shapeHash(mf), name);
+      }
+      release(modified);
+    }
+  } finally {
+    release(bodyFaces);
+  }
+  sourceEdges.forEach((se, i) => {
+    const gen = listToArray(op.Generated(se.edge));
+    gen.forEach((g, j) => {
+      if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
+        provisional.set(
+          shapeHash(g),
+          `f:${featureId}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
+        );
+      }
+    });
+    release(gen);
+  });
+  return finalizeNames(result, provisional, featureId);
+}
+
 function evalFillet(state: EvalState, f: FilletFeature): void {
   if (f.edges.length === 0) throw new Error("no edges selected");
   if (f.radius <= 0) throw new Error("fillet radius must be positive");
@@ -917,64 +958,51 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
   if (!body) throw new Error(`body ${bodyId} no longer exists`);
   const k = getKernel();
   kernelCall("fillet", () => {
-    const sourceEdges = collectEdges(body, f.edges, f.tangentChain, "fillet");
+    const byName = computeEdgeNames(body).byName;
     const op = new k.BRepFilletAPI_MakeFillet(
       body.shape,
       k.ChFi3d_FilletShape.ChFi3d_Rational,
     );
-    for (const { edge } of sourceEdges) {
-      if (!op.Contour(edge)) op.Add_2(f.radius, edge);
-    }
-    op.Build(progress());
-    if (!op.IsDone()) {
-      op.delete();
-      throw new Error(
-        `fillet of radius ${f.radius} failed — radius may be too large for the geometry`,
-      );
-    }
-    const result = op.Shape();
-    // IsDone only confirms that the algorithm completed. Some edge junctions
-    // produce an invalid solid even when it reports success; never publish it.
-    const check = new k.BRepCheck_Analyzer(result, true, false);
-    let valid: boolean;
+    let result: Shape | undefined;
     try {
-      valid = check.IsValid_2();
-    } finally {
-      check.delete();
-    }
-    if (!valid) {
-      op.delete();
-      throw new Error(
-        `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`,
+      const sourceEdges = collectEdges(
+        body,
+        byName,
+        f.edges,
+        f.tangentChain,
+        "fillet",
       );
-    }
-    // Modified faces keep names; generated fillet faces are named per edge.
-    const provisional: NameMap = new Map();
-    for (const face of facesOf(body.shape)) {
-      const name = body.names.get(shapeHash(face));
-      if (!name) continue;
-      if (op.IsDeleted(face)) continue;
-      const modified = listToArray(op.Modified(face));
-      if (modified.length > 0) {
-        for (const mf of modified) provisional.set(shapeHash(mf), name);
-      } else {
-        provisional.set(shapeHash(face), name);
+      for (const { edge } of sourceEdges) {
+        if (!op.Contour(edge)) op.Add_2(f.radius, edge);
       }
+      op.Build(progress());
+      if (!op.IsDone()) {
+        throw new Error(
+          `fillet of radius ${f.radius} failed — radius may be too large for the geometry`,
+        );
+      }
+      result = op.Shape();
+      // IsDone only confirms that the algorithm completed. Some edge junctions
+      // produce an invalid solid even when it reports success; never publish it.
+      const check = new k.BRepCheck_Analyzer(result, true, false);
+      let valid: boolean;
+      try {
+        valid = check.IsValid_2();
+      } finally {
+        check.delete();
+      }
+      if (!valid) {
+        throw new Error(
+          `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`,
+        );
+      }
+      const names = blendNames(op, body, sourceEdges, result, f.id);
+      registerBodySolids(state, bodyId, result, names);
+    } finally {
+      result?.delete();
+      op.delete();
+      release(byName.values());
     }
-    sourceEdges.forEach((se, i) => {
-      const gen = listToArray(op.Generated(se.edge));
-      gen.forEach((g, j) => {
-        if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(
-            shapeHash(g),
-            `f:${f.id}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
-          );
-        }
-      });
-    });
-    const names = finalizeNames(result, provisional, f.id);
-    op.delete();
-    registerBodySolids(state, bodyId, result, names);
   });
 }
 
@@ -1268,57 +1296,46 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
   if (!body) throw new Error(`body ${bodyId} no longer exists`);
   const k = getKernel();
   kernelCall("chamfer", () => {
-    const sourceEdges = collectEdges(body, f.edges, f.tangentChain, "chamfer");
+    const byName = computeEdgeNames(body).byName;
     const op = new k.BRepFilletAPI_MakeChamfer(body.shape);
-    for (const { edge } of sourceEdges) {
-      if (!op.Contour(edge)) op.Add_2(f.distance, edge);
-    }
-    op.Build(progress());
-    if (!op.IsDone()) {
-      op.delete();
-      // ChFi3d can't consume a face (e.g. chamfers from both caps meeting
-      // mid-wall); a boolean envelope can, for complete planar outlines
-      const viaEnvelope = chamferByEnvelope(
+    let result: Shape | undefined;
+    try {
+      const sourceEdges = collectEdges(
         body,
-        sourceEdges,
-        f.distance,
-        f.id,
+        byName,
+        f.edges,
+        f.tangentChain,
+        "chamfer",
       );
-      if (!viaEnvelope) {
-        throw new Error(
-          `could not build a ${f.distance} mm chamfer — check for missing connecting edges or try a smaller distance`,
+      for (const { edge } of sourceEdges) {
+        if (!op.Contour(edge)) op.Add_2(f.distance, edge);
+      }
+      op.Build(progress());
+      if (!op.IsDone()) {
+        // ChFi3d can't consume a face (e.g. chamfers from both caps meeting
+        // mid-wall); a boolean envelope can, for complete planar outlines
+        const viaEnvelope = chamferByEnvelope(
+          body,
+          sourceEdges,
+          f.distance,
+          f.id,
         );
-      }
-      registerBodySolids(state, bodyId, viaEnvelope.shape, viaEnvelope.names);
-      return;
-    }
-    const result = op.Shape();
-    const provisional: NameMap = new Map();
-    for (const face of facesOf(body.shape)) {
-      const name = body.names.get(shapeHash(face));
-      if (!name) continue;
-      if (op.IsDeleted(face)) continue;
-      const modified = listToArray(op.Modified(face));
-      if (modified.length > 0) {
-        for (const mf of modified) provisional.set(shapeHash(mf), name);
-      } else {
-        provisional.set(shapeHash(face), name);
-      }
-    }
-    sourceEdges.forEach((se, i) => {
-      const gen = listToArray(op.Generated(se.edge));
-      gen.forEach((g, j) => {
-        if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(
-            shapeHash(g),
-            `f:${f.id}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
+        if (!viaEnvelope) {
+          throw new Error(
+            `could not build a ${f.distance} mm chamfer — check for missing connecting edges or try a smaller distance`,
           );
         }
-      });
-    });
-    const names = finalizeNames(result, provisional, f.id);
-    op.delete();
-    registerBodySolids(state, bodyId, result, names);
+        registerBodySolids(state, bodyId, viaEnvelope.shape, viaEnvelope.names);
+        return;
+      }
+      result = op.Shape();
+      const names = blendNames(op, body, sourceEdges, result, f.id);
+      registerBodySolids(state, bodyId, result, names);
+    } finally {
+      result?.delete();
+      op.delete();
+      release(byName.values());
+    }
   });
 }
 

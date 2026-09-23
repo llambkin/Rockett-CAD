@@ -19,6 +19,8 @@ import {
   bboxOf,
   getKernel,
   lengthOf,
+  release,
+  scoped,
   shapeHash,
   type Shape,
 } from "./kernel.js";
@@ -48,66 +50,80 @@ export function tessellateBody(
   const faceInfos: FaceInfo[] = [];
   const bbox = bboxOf(body.shape);
 
-  for (const m of meshShape(body.shape, {
+  const meshes = meshShape(body.shape, {
     linear: opts.linear ?? viewportDeflection(bbox),
     angular: opts.angular ?? 0.35,
-  })) {
-    const start = indices.length;
-    const vertexOffset = positions.length / 3;
-    for (let i = 0; i < m.positions.length; i++) {
-      positions.push(m.positions[i]!);
-      normals.push(m.normals[i]!);
-    }
+  });
+  try {
+    for (const m of meshes) {
+      const start = indices.length;
+      const vertexOffset = positions.length / 3;
+      for (let i = 0; i < m.positions.length; i++) {
+        positions.push(m.positions[i]!);
+        normals.push(m.normals[i]!);
+      }
 
-    const P = m.positions;
-    let area = 0;
-    for (let i = 0; i < m.indices.length; i += 3) {
-      const a = m.indices[i]! * 3,
-        b = m.indices[i + 1]! * 3,
-        c = m.indices[i + 2]! * 3;
-      indices.push(
-        vertexOffset + m.indices[i]!,
-        vertexOffset + m.indices[i + 1]!,
-        vertexOffset + m.indices[i + 2]!,
-      );
-      const ux = P[b]! - P[a]!,
-        uy = P[b + 1]! - P[a + 1]!,
-        uz = P[b + 2]! - P[a + 2]!;
-      const vx = P[c]! - P[a]!,
-        vy = P[c + 1]! - P[a + 1]!,
-        vz = P[c + 2]! - P[a + 2]!;
-      area +=
-        Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
-    }
+      const P = m.positions;
+      let area = 0;
+      for (let i = 0; i < m.indices.length; i += 3) {
+        const a = m.indices[i]! * 3,
+          b = m.indices[i + 1]! * 3,
+          c = m.indices[i + 2]! * 3;
+        indices.push(
+          vertexOffset + m.indices[i]!,
+          vertexOffset + m.indices[i + 1]!,
+          vertexOffset + m.indices[i + 2]!,
+        );
+        const ux = P[b]! - P[a]!,
+          uy = P[b + 1]! - P[a + 1]!,
+          uz = P[b + 2]! - P[a + 2]!;
+        const vx = P[c]! - P[a]!,
+          vy = P[c + 1]! - P[a + 1]!,
+          vz = P[c + 2]! - P[a + 2]!;
+        area +=
+          Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) /
+          2;
+      }
 
-    faceInfos.push({
-      name: body.names.get(shapeHash(m.face)) ?? "?",
-      start,
-      count: indices.length - start,
-      surface: surfaceInfo(m.face),
-      area,
-    });
+      faceInfos.push({
+        name: body.names.get(shapeHash(m.face)) ?? "?",
+        start,
+        count: indices.length - start,
+        surface: surfaceInfo(m.face),
+        area,
+      });
+    }
+  } finally {
+    release(meshes.map((m) => m.face));
   }
 
-  const edgeNames = computeEdgeNames(body);
+  const edgeNames = computeEdgeNames(body).byName;
   const edgeInfos: EdgeInfo[] = [];
-  for (const [name, edge] of edgeNames.byName) {
-    const polyline = sampleEdge(edge);
-    if (polyline.length < 6) continue;
-    edgeInfos.push({
-      name,
-      polyline,
-      length: lengthOf(edge),
-      curve: curveInfo(edge),
-    });
+  try {
+    for (const [name, edge] of edgeNames) {
+      const polyline = sampleEdge(edge);
+      if (polyline.length < 6) continue;
+      edgeInfos.push({
+        name,
+        polyline,
+        length: lengthOf(edge),
+        curve: curveInfo(edge),
+      });
+    }
+  } finally {
+    release(edgeNames.values());
   }
 
-  const vertexNames = computeVertexNames(body);
+  const vertexNames = computeVertexNames(body).byName;
   const vertexInfos: VertexInfo[] = [];
-  for (const [name, vertex] of vertexNames.byName) {
-    const p = k.BRep_Tool.Pnt(vertex);
-    vertexInfos.push({ name, position: [p.X(), p.Y(), p.Z()] });
-    p.delete();
+  try {
+    for (const [name, vertex] of vertexNames) {
+      const p = k.BRep_Tool.Pnt(vertex);
+      vertexInfos.push({ name, position: [p.X(), p.Y(), p.Z()] });
+      p.delete();
+    }
+  } finally {
+    release(vertexNames.values());
   }
 
   const mesh = {
@@ -140,89 +156,76 @@ function viewportDeflection({ min, max }: ReturnType<typeof bboxOf>): number {
 function surfaceInfo(face: Shape): FaceInfo["surface"] {
   const k = getKernel();
   try {
-    const surf = new k.BRepAdaptor_Surface_2(face, false);
-    const type = surf.GetType();
-    if (type === k.GeomAbs_SurfaceType.GeomAbs_Plane) {
-      const pln = surf.Plane();
-      const axis = pln.Axis();
-      const locP = pln.Location();
-      const d = axis.Direction();
-      const reversed =
-        face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED;
-      const sgn = reversed ? -1 : 1;
-      const out: FaceInfo["surface"] = {
-        type: "plane",
-        origin: [locP.X(), locP.Y(), locP.Z()] as Vec3,
-        normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as Vec3,
-      };
-      surf.delete();
-      return out;
-    }
-    if (type === k.GeomAbs_SurfaceType.GeomAbs_Cylinder) {
-      const cyl = surf.Cylinder();
-      const axis = cyl.Axis();
-      const locP = cyl.Location();
-      const d = axis.Direction();
-      const out: FaceInfo["surface"] = {
-        type: "cylinder",
-        origin: [locP.X(), locP.Y(), locP.Z()] as Vec3,
-        axis: [d.X(), d.Y(), d.Z()] as Vec3,
-        radius: cyl.Radius(),
-      };
-      surf.delete();
-      return out;
-    }
-    surf.delete();
+    return scoped((own): FaceInfo["surface"] => {
+      const surf = own(new k.BRepAdaptor_Surface_2(face, false));
+      const type = surf.GetType();
+      if (type === k.GeomAbs_SurfaceType.GeomAbs_Plane) {
+        const pln = own(surf.Plane());
+        const locP = own(pln.Location());
+        const d = own(own(pln.Axis()).Direction());
+        const reversed =
+          face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED;
+        const sgn = reversed ? -1 : 1;
+        return {
+          type: "plane",
+          origin: [locP.X(), locP.Y(), locP.Z()] as Vec3,
+          normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as Vec3,
+        };
+      }
+      if (type === k.GeomAbs_SurfaceType.GeomAbs_Cylinder) {
+        const cyl = own(surf.Cylinder());
+        const locP = own(cyl.Location());
+        const d = own(own(cyl.Axis()).Direction());
+        return {
+          type: "cylinder",
+          origin: [locP.X(), locP.Y(), locP.Z()] as Vec3,
+          axis: [d.X(), d.Y(), d.Z()] as Vec3,
+          radius: cyl.Radius(),
+        };
+      }
+      return { type: "other" };
+    });
   } catch {
-    // fall through
+    return { type: "other" };
   }
-  return { type: "other" };
 }
 
 export function curveInfo(edge: Shape): EdgeInfo["curve"] {
   const k = getKernel();
   try {
-    const curve = new k.BRepAdaptor_Curve_2(edge);
-    const type = curve.GetType();
-    if (type === k.GeomAbs_CurveType.GeomAbs_Line) {
-      const p1 = curve.Value(curve.FirstParameter());
-      const p2 = curve.Value(curve.LastParameter());
-      const out: EdgeInfo["curve"] = {
-        type: "line",
-        a: [p1.X(), p1.Y(), p1.Z()] as Vec3,
-        b: [p2.X(), p2.Y(), p2.Z()] as Vec3,
-      };
-      p1.delete();
-      p2.delete();
-      curve.delete();
-      return out;
-    }
-    if (type === k.GeomAbs_CurveType.GeomAbs_Circle) {
-      const circ = curve.Circle();
-      const c = circ.Location();
-      const ax = circ.Axis();
-      const d = ax.Direction();
-      const start = curve.Value(curve.FirstParameter());
-      const end = curve.Value(curve.LastParameter());
-      const out: EdgeInfo["curve"] = {
-        type: "circle",
-        center: [c.X(), c.Y(), c.Z()] as Vec3,
-        axis: [d.X(), d.Y(), d.Z()] as Vec3,
-        radius: circ.Radius(),
-        start: [start.X(), start.Y(), start.Z()],
-        end: [end.X(), end.Y(), end.Z()],
-        sweep: curve.LastParameter() - curve.FirstParameter(),
-      };
-      start.delete();
-      end.delete();
-      curve.delete();
-      return out;
-    }
-    curve.delete();
+    return scoped((own): EdgeInfo["curve"] => {
+      const curve = own(new k.BRepAdaptor_Curve_2(edge));
+      const type = curve.GetType();
+      if (type === k.GeomAbs_CurveType.GeomAbs_Line) {
+        const p1 = own(curve.Value(curve.FirstParameter()));
+        const p2 = own(curve.Value(curve.LastParameter()));
+        return {
+          type: "line",
+          a: [p1.X(), p1.Y(), p1.Z()] as Vec3,
+          b: [p2.X(), p2.Y(), p2.Z()] as Vec3,
+        };
+      }
+      if (type === k.GeomAbs_CurveType.GeomAbs_Circle) {
+        const circ = own(curve.Circle());
+        const c = own(circ.Location());
+        const d = own(own(circ.Axis()).Direction());
+        const start = own(curve.Value(curve.FirstParameter()));
+        const end = own(curve.Value(curve.LastParameter()));
+        return {
+          type: "circle",
+          center: [c.X(), c.Y(), c.Z()] as Vec3,
+          axis: [d.X(), d.Y(), d.Z()] as Vec3,
+          radius: circ.Radius(),
+          start: [start.X(), start.Y(), start.Z()],
+          end: [end.X(), end.Y(), end.Z()],
+          sweep: curve.LastParameter() - curve.FirstParameter(),
+        };
+      }
+      return { type: "other" };
+    });
   } catch {
-    // fall through
+    return { type: "other" };
   }
-  return { type: "other" };
 }
 
 function sampleEdge(edge: Shape): number[] {

@@ -52,6 +52,15 @@ whatever produces them. The engine evaluates chronologically, so dependencies
 are always evaluated first; an edit invalidates exactly the downstream suffix
 (snapshot cache, CAD_MODEL.md → "Regeneration").
 
+Snapshots own the kernel shapes in their state. The kernel never frees a
+shape by itself, so when snapshots are truncated, invalidated or their engine
+is dropped, `releaseSnapshots` in `engine.ts` deletes every body shape that
+only discarded snapshots hold. A shape a kept snapshot shares through
+`cloneState` stays. A failed feature releases its partial state the same way.
+A caller that needs a shape after its engine is dropped reads what it needs
+first. Short-lived handles, such as explored faces and edges, name lookups
+and adaptors, are deleted by the code that made them.
+
 If an upstream change removes geometry a downstream feature references, that
 feature is marked in the timeline:
 
