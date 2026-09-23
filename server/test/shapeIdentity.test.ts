@@ -20,11 +20,11 @@ function withCollidingHash<T>(run: () => T): T {
   }
 }
 
-it("faces() of a box keeps one of six faces when their hashes collide", () => {
+it("faces() of a box keeps all six faces when their hashes collide", () => {
   const box = new (getKernel().BRepPrimAPI_MakeBox_2)(20, 30, 10);
 
   expect(faces(box.Shape())).toHaveLength(6);
-  expect(withCollidingHash(() => faces(box.Shape()))).toHaveLength(1);
+  expect(withCollidingHash(() => faces(box.Shape()))).toHaveLength(6);
   box.delete();
 });
 

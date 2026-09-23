@@ -60,23 +60,13 @@ export function* explore(
     wire: k.TopAbs_ShapeEnum.TopAbs_WIRE,
     shell: k.TopAbs_ShapeEnum.TopAbs_SHELL,
   };
-  const ex = new k.TopExp_Explorer_2(
-    shape,
-    enumMap[type],
-    k.TopAbs_ShapeEnum.TopAbs_SHAPE,
-  );
-  // De-duplicate: an explorer visits shared subshapes once per occurrence.
-  const seen = new Set<number>();
-  while (ex.More()) {
-    const s = ex.Current();
-    const h = shapeHash(s);
-    if (!seen.has(h)) {
-      seen.add(h);
-      yield s;
-    } else s.delete();
-    ex.Next();
+  const map = new k.TopTools_IndexedMapOfShape_1();
+  try {
+    k.TopExp.MapShapes_1(shape, enumMap[type], map);
+    for (let i = 1; i <= map.Extent(); i++) yield map.FindKey(i);
+  } finally {
+    map.delete();
   }
-  ex.delete();
 }
 
 type Owned = { delete(): void };

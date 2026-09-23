@@ -35,7 +35,7 @@ server/src/geometry/engine.ts 22
 server/src/geometry/exporters.ts 12
 server/src/geometry/features.ts 104
 server/src/geometry/frames.ts 21
-server/src/geometry/kernel.ts 22
+server/src/geometry/kernel.ts 21
 server/src/geometry/measure.ts 4
 server/src/geometry/naming.ts 47
 server/src/geometry/sketchGeom.ts 46
