@@ -43,7 +43,11 @@ export interface ProjectFile {
 export function referencedAssets(doc: CadDocument): Set<string> {
   return new Set(
     doc.features.flatMap((f) =>
-      f.type === "referenceImage" ? [f.assetId] : [],
+      f.type === "referenceImage"
+        ? [f.assetId]
+        : f.type === "importStep"
+          ? [f.blob]
+          : [],
     ),
   );
 }

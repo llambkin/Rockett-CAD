@@ -6,8 +6,8 @@ import {
   type ProjectSummary,
 } from "@rockett/shared";
 import { build } from "../build.js";
-import { BlobStore } from "./blobStore.js";
-import { JsonStore, StoreError, type Inventory } from "./jsonStore.js";
+import { BlobStore, HASH_RE, PendingBlobs } from "./blobStore.js";
+import { JsonStore, sha256, StoreError, type Inventory } from "./jsonStore.js";
 import { documentMigrations, TooNewError } from "./migrations.js";
 import type { Storage } from "./storage.js";
 
@@ -57,8 +57,12 @@ function imageExt(data: Buffer, label: string): string {
   return type.ext;
 }
 
+function stepBlobs(doc: CadDocument): string[] {
+  return doc.features.flatMap((f) => (f.type === "importStep" ? [f.blob] : []));
+}
+
 export class ProjectStore {
-  private documents: JsonStore<CadDocument>;
+  private documents: JsonStore<CadDocument, PendingBlobs>;
 
   constructor(
     private readonly storage: Storage,
@@ -74,6 +78,13 @@ export class ProjectStore {
       migrations: documentMigrations,
       unbacked: (id) => this.isTemporary(id),
       validate,
+      effects: {
+        context: async () => new PendingBlobs(),
+        commit: async (id, pending) => {
+          for (const bytes of pending.blobs.values())
+            await this.blobs(id).put(bytes);
+        },
+      },
     });
   }
 
@@ -164,6 +175,8 @@ export class ProjectStore {
           await this.storage.read(path.posix.join(from, f)),
         );
     }
+    for (const bytes of (await this.sources(src)).values())
+      await this.blobs(copy.id).put(bytes);
     await this.save(copy);
     return copy;
   }
@@ -242,7 +255,11 @@ export class ProjectStore {
     try {
       if (temporary) await this.writeMarker(id);
       for (const [assetId, data] of assets)
-        await this.writeAsset(id, assetId, data, `asset ${assetId}: `);
+        if (HASH_RE.test(assetId)) {
+          if (sha256(data) !== assetId)
+            throw new StoreError(`asset ${assetId}: content does not match`);
+          await this.blobs(id).put(data);
+        } else await this.writeAsset(id, assetId, data, `asset ${assetId}: `);
       const imported = { ...doc, id };
       await this.save(imported);
       return imported;
@@ -269,6 +286,28 @@ export class ProjectStore {
       this.storage,
       path.posix.join(this.documents.dir(projectId), "blobs"),
     );
+  }
+
+  async blob(projectId: string, hash: string): Promise<Buffer> {
+    try {
+      return await this.blobs(projectId).get(hash);
+    } catch (err) {
+      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
+      const { context } = await this.documents.migrated(projectId);
+      const pending = context.blobs.get(hash);
+      if (!pending) throw err;
+      return pending;
+    }
+  }
+
+  async sources(doc: CadDocument): Promise<Map<string, Buffer>> {
+    const out = new Map<string, Buffer>();
+    for (const hash of stepBlobs(doc)) {
+      if (out.has(hash)) continue;
+      const bytes = await this.blob(doc.id, hash).catch(() => undefined);
+      if (bytes) out.set(hash, bytes);
+    }
+    return out;
   }
 
   private assetDir(projectId: string): string {

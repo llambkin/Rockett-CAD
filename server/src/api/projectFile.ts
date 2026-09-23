@@ -13,6 +13,7 @@ import type { Request, Response } from "express";
 import type { FolderStore } from "../store/folderStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import { documentMigrations, migrate } from "../store/migrations.js";
+import { HASH_RE, PendingBlobs } from "../store/blobStore.js";
 import { validateDocument } from "./validate.js";
 
 const ATTR_CHAR = /[A-Za-z0-9!#$&+.^_`|~-]/;
@@ -55,9 +56,11 @@ export const downloadProjectFile =
     const document = await store.load(String(req.params.id));
     const assets: Record<string, string> = {};
     for (const name of referencedAssets(document))
-      assets[name] = (await store.readAsset(document.id, name)).toString(
-        "base64",
-      );
+      assets[name] = (
+        HASH_RE.test(name)
+          ? await store.blob(document.id, name)
+          : await store.readAsset(document.id, name)
+      ).toString("base64");
     const file: ProjectFile = {
       format: PROJECT_FILE_FORMAT,
       version: PROJECT_FILE_VERSION,
@@ -95,7 +98,8 @@ export const uploadProjectFile =
       throw new ValidationError(
         `project schema ${file.document.schemaVersion} is newer than this server's schema ${SCHEMA_VERSION}`,
       );
-    const document = migrate(documentMigrations, file.document);
+    const pending = new PendingBlobs();
+    const document = migrate(documentMigrations, file.document, pending);
     validateDocument(document);
     const referenced = referencedAssets(document);
     for (const name of Object.keys(file.assets))
@@ -106,7 +110,7 @@ export const uploadProjectFile =
     const assets = new Map(
       [...referenced].map((name) => [
         name,
-        decodeAsset(name, file.assets[name]),
+        pending.blobs.get(name) ?? decodeAsset(name, file.assets[name]),
       ]),
     );
     const imported = () => store.importProject(document, assets, temporary);

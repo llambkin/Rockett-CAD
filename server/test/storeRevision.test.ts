@@ -6,6 +6,7 @@ import { SCHEMA_VERSION } from "@rockett/shared";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { validateDocument } from "../src/api/validate.js";
 import { LocalStorage } from "../src/store/storage.js";
+import { withStepBlobs } from "./helpers/stepFixture.js";
 
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 const rootVersion = JSON.parse(
@@ -84,7 +85,7 @@ describe("document revision", () => {
     expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
     expect(loaded.revision).toBe(0);
     expect(loaded.savedWith).toBeNull();
-    expect(loaded.features).toEqual(fixture.features);
+    expect(loaded.features).toEqual(withStepBlobs(fixture.features));
     await store.save(loaded);
     expect((await stored(dir, fixture.id)).revision).toBe(1);
   });

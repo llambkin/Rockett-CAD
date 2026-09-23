@@ -19,7 +19,7 @@ import type {
 import { createEmptyDocument } from "@rockett/shared";
 import { initKernel, volumeOf } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
-import { stepFixture } from "./helpers/stepFixture.js";
+import { stepBlob, stepFixture, stepSources } from "./helpers/stepFixture.js";
 
 beforeAll(initKernel, 120_000);
 
@@ -153,9 +153,9 @@ function run(features: Feature[]) {
       r.profileId = p.id;
     }
   });
-  const result = engine.evaluate(doc);
+  const result = engine.evaluate(doc, undefined, stepSources);
   const volumes = new Map(
-    [...engine.stateAt(doc).bodies].map(([bodyId, b]) => [
+    [...engine.stateAt(doc, undefined, stepSources).bodies].map(([bodyId, b]) => [
       bodyId,
       volumeOf(b.shape),
     ]),
@@ -1030,7 +1030,7 @@ describe("importStep", () => {
         ...meta("step"),
         type: "importStep",
         filename: "box.step",
-        data: stepFixture(),
+        blob: stepBlob(stepFixture()),
       },
     ]);
     expectOk(r);
@@ -1053,7 +1053,7 @@ describe("importStep", () => {
         ...meta("step"),
         type: "importStep",
         filename: "bad.step",
-        data: "ISO-10303-21;\nnot a model",
+        blob: stepBlob("ISO-10303-21;\nnot a model"),
       },
     ]);
     expect(r.status("step")?.status).toBe("error");

@@ -102,14 +102,17 @@ docker run -d --name rockett-cad \
         ├── document.json   # the parametric document (full history)
         ├── temporary.json  # present only on a temporary copy of a browser project
         ├── assets/         # uploaded reference images
-        ├── blobs/          # content-addressed files, each named by its sha256
+        ├── blobs/          # STEP, IGES and BREP sources, each named by its sha256
         └── exports/        # server-retained exports (opt-in per export)
 ```
 
 A project saved by an older schema is migrated on disk by its next save.
 Before that write, the whole project directory is copied to `backups/`, named
 by the old schema and a hash of its contents, so a second migration of
-different contents never overwrites the first backup. While the migration runs,
+different contents never overwrites the first backup. A migration that moves
+data out of `document.json` into `blobs/` writes those blobs before the backup,
+so the backup also holds them; the old document never reads them, and a retry
+finds the same files and reuses the same backup. While the migration runs,
 `backups/projects/{projectId}/migrating.json` records it; at startup, and before
 the next save, a project with that record is restored from its backup. Startup
 also logs how many projects still predate the current schema. A temporary

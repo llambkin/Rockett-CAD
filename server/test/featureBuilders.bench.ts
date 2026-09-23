@@ -15,7 +15,7 @@ import {
   type EvalState,
 } from "../src/geometry/features.js";
 import { computeEdgeNames } from "../src/geometry/naming.js";
-import { stepFixture } from "./helpers/stepFixture.js";
+import { stepBlob, stepFixture, stepSources } from "./helpers/stepFixture.js";
 
 const SAMPLES = { iterations: 10, warmupIterations: 2, time: 0, warmupTime: 0 };
 
@@ -110,7 +110,7 @@ const cases: Case[] = [
       ...meta("imp"),
       type: "importStep",
       filename: "box.step",
-      data: stepFixture(),
+      blob: stepBlob(stepFixture()),
     }),
   },
   {
@@ -326,10 +326,15 @@ beforeAll(initKernel, 120_000);
 test.for(cases)("$name", async ({ name, prefix, feature }, { bench }) => {
   const state = emptyState();
   prefix.forEach((f, i) =>
-    evaluateFeature(state, withProfiles(state, f), prefix.slice(0, i)),
+    evaluateFeature(
+      state,
+      withProfiles(state, f),
+      prefix.slice(0, i),
+      stepSources,
+    ),
   );
   const target = withProfiles(state, feature(state));
   await bench(name, () =>
-    evaluateFeature(cloneState(state), target, prefix),
+    evaluateFeature(cloneState(state), target, prefix, stepSources),
   ).run(SAMPLES);
 });

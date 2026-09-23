@@ -80,7 +80,7 @@ import {
 } from "./frames.js";
 import { curveInfo } from "./tessellate.js";
 import { tangentEdges } from "./tangentEdges.js";
-import { readImport, readMesh } from "./importers.js";
+import { readImport, readMesh, type Sources } from "./importers.js";
 import {
   arcEdge,
   buildProfileFace,
@@ -1855,10 +1855,11 @@ export function evaluateFeature(
   state: EvalState,
   feature: Feature,
   earlier: Feature[],
+  sources: Sources = new Map(),
 ): string | void {
   switch (feature.type) {
     case "importStep": {
-      const shape = readImport(feature);
+      const shape = readImport(feature, sources);
       registerBodySolids(
         state,
         `b:${feature.id}`,

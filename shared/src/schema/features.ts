@@ -188,16 +188,11 @@ const referenceImage = feature("referenceImage", {
   height: Type.Number({ minimum: 1, maximum: 65536 }),
 });
 
-const importStep = Type.Refine(
-  feature("importStep", {
-    filename: Type.String({ minLength: 1, maxLength: 255 }),
-    format: Type.Optional(Type.Enum(["iges", "brep"])),
-    data: Type.String({ maxLength: MAX_IMPORT_BYTES }),
-  }),
-  (f) =>
-    f.format !== undefined || f.data.trimStart().startsWith("ISO-10303-21;"),
-  () => "needs STEP data unless format is iges or brep",
-);
+const importStep = feature("importStep", {
+  filename: Type.String({ minLength: 1, maxLength: 255 }),
+  format: Type.Optional(Type.Enum(["iges", "brep"])),
+  blob: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+});
 
 const importMesh = feature("importMesh", {
   filename: Type.String({ minLength: 1, maxLength: 255 }),

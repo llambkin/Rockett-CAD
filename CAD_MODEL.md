@@ -17,7 +17,14 @@ history survives close/reopen; embedded imports increase document size.
 ### STEP, IGES and BREP imports
 
 Schema version 3 adds `importStep` features containing `filename` and the
-original STEP text in `data`. OCCT reads this source during regeneration,
+original STEP text in `data`. Schema 8 moves that text to the project's blob
+store: the feature holds `blob`, the sha256 of the UTF-8 bytes, and
+`projects/<id>/blobs/<sha256>` holds the bytes the kernel reads. Routes load
+the blobs a document names before they evaluate it, so the engine's cache key
+for the feature is its small JSON, not the file. The 7 to 8 migration hashes
+each inline `data`, and the next save writes the blob before the document
+that drops `data`; until then a read serves the bytes from the stored
+document. OCCT reads this source during regeneration,
 normalizes lengths to millimetres, and registers each solid as a body. The
 source travels with document snapshots and duplicates. Imports can be
 suppressed, deleted, or rolled back, and downstream features reference their

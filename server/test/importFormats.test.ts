@@ -109,18 +109,20 @@ describe.each([
 });
 
 it("evaluates a STEP import saved before imports had a format", async () => {
-  const doc = createEmptyDocument("legacystep01", "Legacy STEP");
-  doc.features = [
-    {
-      id: "step",
-      type: "importStep",
-      name: "Fixture.step",
-      suppressed: false,
-      filename: "Fixture.step",
-      data: stepFixture(),
-    },
-  ];
-  doc.timelinePosition = 1;
+  const doc = {
+    ...createEmptyDocument("legacystep01", "Legacy STEP"),
+    features: [
+      {
+        id: "step",
+        type: "importStep",
+        name: "Fixture.step",
+        suppressed: false,
+        filename: "Fixture.step",
+        data: stepFixture(),
+      },
+    ],
+    timelinePosition: 1,
+  };
   const dir = path.join(app.dataDir, "projects", doc.id);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(

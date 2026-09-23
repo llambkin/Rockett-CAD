@@ -16,6 +16,9 @@ import {
   type Shape,
 } from "./kernel.js";
 import { read3mf } from "./read3mf.js";
+import { sha256 } from "../store/jsonStore.js";
+
+export type Sources = ReadonlyMap<string, Uint8Array>;
 
 type Format = NonNullable<ImportStepFeature["format"]> | "step";
 
@@ -82,9 +85,17 @@ function withFile<T>(
   }
 }
 
-export function readImport(feature: ImportStepFeature): Shape {
+export function readImport(
+  feature: ImportStepFeature,
+  sources: Sources,
+): Shape {
   const reader = READERS[feature.format ?? "step"],
-    shape = withFile(feature.data, reader.extension, reader.read);
+    data = sources.get(feature.blob);
+  if (!data)
+    throw new Error(
+      `The ${reader.label} source of ${feature.filename} is missing or damaged.`,
+    );
+  const shape = withFile(data, reader.extension, reader.read);
   if (shape && !shape.IsNull() && solids(shape).length > 0) return shape;
   shape?.delete();
   throw new Error(`No solid found in the ${reader.label} file.`);
@@ -277,27 +288,38 @@ export function readMesh(feature: ImportMeshFeature): {
   }
 }
 
+interface Imported {
+  features: Feature[];
+  sources: Map<string, Buffer>;
+}
+
 function importer(format: Format, extensions: string[]) {
   return {
     format,
     label: READERS[format].label,
     extensions,
-    read(bytes: Buffer, filename: string): Feature[] {
-      const feature: ImportStepFeature = {
-        id: newId("import"),
-        type: "importStep",
-        name: filename.slice(0, 120),
-        suppressed: false,
-        filename,
-        ...(format !== "step" && { format }),
-        data: bytes.toString("utf8").replace(/^\uFEFF/, ""),
-      };
+    read(bytes: Buffer, filename: string): Imported {
+      const source = Buffer.from(
+          bytes.toString("utf8").replace(/^\uFEFF/, ""),
+          "utf8",
+        ),
+        blob = sha256(source),
+        sources = new Map([[blob, source]]),
+        feature: ImportStepFeature = {
+          id: newId("import"),
+          type: "importStep",
+          name: filename.slice(0, 120),
+          suppressed: false,
+          filename,
+          ...(format !== "step" && { format }),
+          blob,
+        };
       try {
-        readImport(feature).delete();
+        readImport(feature, sources).delete();
       } catch (error) {
         throw new ValidationError((error as Error).message);
       }
-      return [feature];
+      return { features: [feature], sources };
     },
   };
 }
@@ -307,18 +329,21 @@ function meshImporter(format: MeshFormat) {
     format,
     label: MESH_READERS[format].label,
     extensions: [`.${format}`],
-    read(bytes: Buffer, filename: string): Feature[] {
-      return [
-        {
-          id: newId("import"),
-          type: "importMesh",
-          name: filename.slice(0, 120),
-          suppressed: false,
-          filename,
-          format,
-          data: bytes.toString("base64"),
-        },
-      ];
+    read(bytes: Buffer, filename: string): Imported {
+      return {
+        features: [
+          {
+            id: newId("import"),
+            type: "importMesh",
+            name: filename.slice(0, 120),
+            suppressed: false,
+            filename,
+            format,
+            data: bytes.toString("base64"),
+          },
+        ],
+        sources: new Map(),
+      };
     },
   };
 }

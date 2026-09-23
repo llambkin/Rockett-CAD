@@ -26,6 +26,7 @@ import {
   evaluateFeature,
   type EvalState,
 } from "./features.js";
+import type { Sources } from "./importers.js";
 import { tessellateBody } from "./tessellate.js";
 import type { NamedBody } from "./naming.js";
 import { shapeHash } from "./kernel.js";
@@ -50,7 +51,7 @@ function releaseSnapshots(
 
 /** Cache key for a feature: its JSON minus display-only fields, so hiding a
  * sketch in the viewport doesn't re-evaluate the timeline after it. */
-function featureKey(feature: CadDocument["features"][number]): string {
+export function featureKey(feature: CadDocument["features"][number]): string {
   const { visible: _visible, ...geometric } = feature as any;
   return JSON.stringify(geometric);
 }
@@ -68,7 +69,11 @@ class DocumentEngine {
   private tessCache = new Map<string, BodyPayload>();
   private tessBytes = 0;
 
-  evaluate(doc: CadDocument, position?: number): EvaluateResult {
+  evaluate(
+    doc: CadDocument,
+    position?: number,
+    sources: Sources = new Map(),
+  ): EvaluateResult {
     const t0 = performance.now();
     const upTo = Math.min(
       position ?? doc.timelinePosition,
@@ -105,6 +110,7 @@ class DocumentEngine {
             next,
             feature,
             doc.features.slice(0, i),
+            sources,
           );
           status = warning
             ? { featureId: feature.id, status: "warning", warning }
@@ -203,8 +209,12 @@ class DocumentEngine {
   }
 
   /** Access the evaluated state at the current cache tip (for measure/export). */
-  stateAt(doc: CadDocument, position?: number): EvalState {
-    this.evaluate(doc, position);
+  stateAt(
+    doc: CadDocument,
+    position?: number,
+    sources: Sources = new Map(),
+  ): EvalState {
+    this.evaluate(doc, position, sources);
     const upTo = Math.min(
       position ?? doc.timelinePosition,
       doc.features.length,

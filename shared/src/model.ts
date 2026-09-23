@@ -11,7 +11,7 @@
 
 import type { Units } from "./units.js";
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -361,7 +361,7 @@ export interface ImportStepFeature extends FeatureBase {
   type: "importStep";
   filename: string;
   format?: "iges" | "brep";
-  data: string;
+  blob: string;
 }
 
 export interface ImportMeshFeature extends FeatureBase {

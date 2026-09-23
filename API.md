@@ -71,8 +71,9 @@ migration; an invalid one is 422 naming the first failure.
 
 A project travels as one `.rockett` file, JSON of shape
 `{ format: "rockett-project", version: 1, document, assets }`. `assets` maps
-each asset id the document's reference images use to its bytes in base64, so
-a file holds only the assets the document references.
+each asset id the document's reference images use, and each sha256 an
+`importStep` feature names in `blob`, to its bytes in base64, so a file holds
+only the files the document references.
 
 `GET /projects/:id/file` returns the file as an attachment named after the
 project: an ASCII `filename` plus a UTF-8 `filename*`.
@@ -81,8 +82,10 @@ project: an ASCII `filename` plus a UTF-8 `filename*`.
 `{ document }` for a new project with a new id. An older document schema is
 migrated as a saved project is on load, then the document is validated as
 `PUT /projects/:id/document` validates it. Every asset must be referenced by
-the document, carry a valid asset id, decode from base64 and pass the image
-upload rules, and every referenced asset must be present. A file with a newer
+the document and decode from base64. An image asset carries a valid asset id
+and passes the image upload rules; a STEP source must hash to its key. Every
+referenced asset must be present, except the STEP sources an older document
+still holds inline, which migration moves out. A file with a newer
 `version` or `schemaVersion` gets 400 naming both versions. Any failure
 returns 400 and creates nothing: a project half made when an asset fails is
 removed.
@@ -144,8 +147,9 @@ A mesh over 200,000 triangles is 400 with its count, for example
 `The STL mesh has 200,001 triangles; the limit is 200,000.` An open mesh
 imports with feature status `warning` and a `warning` message. A 3MF zip entry
 that expands past 256 MB is 400. Invalid files are rejected before a new
-project is kept. The source is embedded in the document; uploads that take the
-document beyond 40 MB are rejected.
+project is kept. A STEP, IGES or BREP source is stored in the project's blob
+store and the feature names its sha256 in `blob`; a mesh source is embedded in
+the document, and uploads that take the document beyond 40 MB are rejected.
 
 | Method & path                        | Body                    | Notes                                                                        |
 | ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |

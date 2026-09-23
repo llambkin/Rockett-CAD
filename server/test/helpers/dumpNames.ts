@@ -9,7 +9,7 @@ import {
 } from "@rockett/shared";
 import { initKernel } from "../../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../../src/geometry/engine.js";
-import { stepFixture } from "./stepFixture.js";
+import { stepBlob, stepFixture, stepSources } from "./stepFixture.js";
 
 export const meta = (id: string) => ({ id, name: id, suppressed: false });
 
@@ -117,7 +117,7 @@ export const TIMELINES: Record<string, () => Feature[]> = {
       ...meta("step"),
       type: "importStep",
       filename: "two.step",
-      data: stepFixture(true),
+      blob: stepBlob(stepFixture(true)),
     },
   ],
 };
@@ -126,7 +126,7 @@ export function evaluateTimeline(id: string, features: Feature[]) {
   const doc = createEmptyDocument(id, id);
   doc.features = features;
   doc.timelinePosition = features.length;
-  const result = engineFor(id).evaluate(doc);
+  const result = engineFor(id).evaluate(doc, undefined, stepSources);
   dropEngine(id);
   return result;
 }

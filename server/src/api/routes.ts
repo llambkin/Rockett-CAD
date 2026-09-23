@@ -207,10 +207,17 @@ export function createApiRouter(
       result.catch((err) => fail(res, err));
     };
 
+  async function evaluate(doc: CadDocument, position?: number) {
+    return engineFor(doc.id).evaluate(doc, position, await store.sources(doc));
+  }
+
+  async function stateAt(doc: CadDocument, position?: number) {
+    return engineFor(doc.id).stateAt(doc, position, await store.sources(doc));
+  }
+
   /** Evaluate + make sure every body has display metadata. */
   async function evaluateAndSync(doc: CadDocument, position?: number) {
-    const engine = engineFor(doc.id);
-    const evaluation = engine.evaluate(doc, position);
+    const evaluation = await evaluate(doc, position);
     let metaChanged = pruneGroups(doc, evaluation, position);
     for (const body of evaluation.bodies) {
       if (!doc.bodyMeta[body.bodyId]) {
@@ -317,7 +324,7 @@ export function createApiRouter(
     ROUTES.evaluate,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      res.json(engineFor(doc.id).evaluate(doc, evaluationPosition(req, doc)));
+      res.json(await evaluate(doc, evaluationPosition(req, doc)));
     }),
   );
 
@@ -349,7 +356,7 @@ export function createApiRouter(
         `Choose a ${IMPORTERS.flatMap((i) => i.extensions).join(", ")} file`,
       );
     const filename = file.originalname.replace(/^.*[\\/]/, "").slice(0, 255);
-    const features = importer.read(file.buffer, filename);
+    const { features, sources } = importer.read(file.buffer, filename);
     features.forEach(validateFeature);
     const created = !req.params.id;
     const doc = created
@@ -363,7 +370,11 @@ export function createApiRouter(
         throw new ValidationError(
           `This import would exceed the 40 MB project limit. Start a separate project for this ${importer.label} file.`,
         );
-      const evaluation = engineFor(doc.id).evaluate(doc);
+      const evaluation = engineFor(doc.id).evaluate(
+        doc,
+        undefined,
+        new Map([...(await store.sources(doc)), ...sources]),
+      );
       for (const feature of features) {
         const status = evaluation.featureStatuses.find(
           (s) => s.featureId === feature.id,
@@ -373,6 +384,8 @@ export function createApiRouter(
             status?.error ?? `${importer.label} import failed`,
           );
       }
+      for (const bytes of sources.values())
+        await store.blobs(doc.id).put(bytes);
       await store.save(doc);
       res.json({ document: doc, evaluation: await evaluateAndSync(doc) });
     } catch (error) {
@@ -445,7 +458,7 @@ export function createApiRouter(
       if (!sketch || sketch.type !== "sketch")
         throw new ValidationError("Sketch not found");
       const { edge: ref, entityId } = req.body;
-      const state = engineFor(doc.id).stateAt(doc, index);
+      const state = await stateAt(doc, index);
       const body = state.bodies.get(ref.bodyId);
       const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
       if (!edge)
@@ -506,7 +519,7 @@ export function createApiRouter(
           ? undefined
           : doc.features.findIndex((f) => f.id === beforeFeatureId);
       if (index === -1) throw new ValidationError("Feature not found");
-      const state = engineFor(doc.id).stateAt(doc, index);
+      const state = await stateAt(doc, index);
       const body = state.bodies.get(edge.bodyId);
       if (!body)
         throw new ValidationError("Body not found before this feature");
@@ -550,8 +563,7 @@ export function createApiRouter(
     ROUTES.measure,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const engine = engineFor(doc.id);
-      const state = engine.stateAt(doc);
+      const state = await stateAt(doc);
       res.json(measure(state, req.body));
     }),
   );
@@ -569,8 +581,7 @@ export function createApiRouter(
         retain,
       }: ExportRequest = req.body;
       const exporter = EXPORTERS[format];
-      const engine = engineFor(doc.id);
-      const state = engine.stateAt(doc);
+      const state = await stateAt(doc);
       const missing = requestedIds.filter((id) => !state.bodies.has(id));
       if (missing.length)
         throw new ValidationError(

@@ -2,6 +2,27 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { edges, getKernel, pnt, progress } from "../../src/geometry/kernel.js";
+import { sha256 } from "../../src/store/jsonStore.js";
+
+export const stepSources = new Map<string, Buffer>();
+
+export function withStepBlobs(features: Array<Record<string, unknown>>) {
+  return features.map(({ data, ...feature }) =>
+    feature.type === "importStep"
+      ? {
+          ...feature,
+          blob: sha256(Buffer.from(String(data), "utf8")),
+        }
+      : { ...feature, ...(data !== undefined && { data }) },
+  );
+}
+
+export function stepBlob(text: string): string {
+  const bytes = Buffer.from(text, "utf8"),
+    hash = sha256(bytes);
+  stepSources.set(hash, bytes);
+  return hash;
+}
 
 function writeStep(shapes: any[], file: string): string {
   const k = getKernel(),

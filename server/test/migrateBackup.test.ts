@@ -9,6 +9,7 @@ import { validateDocument } from "../src/api/validate.js";
 import { documentMigrations, migrate } from "../src/store/migrations.js";
 import { LocalStorage, type Storage } from "../src/store/storage.js";
 import { MemoryStorage } from "./helpers/memoryStorage.js";
+import { PendingBlobs } from "../src/store/blobStore.js";
 
 const fixtureRaw = await fs.readFile(
   path.join(import.meta.dirname, "fixtures", "schema", "v4.json"),
@@ -25,9 +26,13 @@ const original = new Map([
   ["assets/0123456789abcdef.png", png],
   ["exports/part.stl", Buffer.from("solid part\nendsolid part\n")],
 ]);
-const migrated = new Map(original).set(
+const pending = new PendingBlobs();
+const migratedDoc = migrate(documentMigrations, fixture, pending);
+const backedUp = new Map<string, Buffer>(original);
+for (const [hash, bytes] of pending.blobs) backedUp.set(`blobs/${hash}`, bytes);
+const migrated = new Map(backedUp).set(
   "document.json",
-  Buffer.from(JSON.stringify(migrate(documentMigrations, fixture), null, 1)),
+  Buffer.from(JSON.stringify(migratedDoc, null, 1)),
 );
 
 type When = "before" | "after";
@@ -149,11 +154,11 @@ function same(a: Files, b: Files, except?: string): boolean {
 }
 
 function generation(live: Files): string {
-  if (same(live, original)) return "old";
+  if (same(live, original) || same(live, backedUp)) return "old";
   if (same(live, migrated)) return "migrated";
   const doc = JSON.parse(live.get("document.json")?.toString() ?? "{}");
   if (
-    same(live, original, "document.json") &&
+    same(live, backedUp, "document.json") &&
     doc.name === "Edited" &&
     doc.schemaVersion === SCHEMA_VERSION
   )
@@ -180,7 +185,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
 
     const [backup, ...others] = await backups(storage);
     expect(others).toEqual([]);
-    const entries = [...original];
+    const entries = [...backedUp];
     entries.sort(([a], [b]) => (a < b ? -1 : 1));
     const sums = entries
       .map(([name, data]) => `${sha(data)}  ${name}\n`)
@@ -188,15 +193,18 @@ describe.each(backends)("project migration on %s", (_, make) => {
     expect(backup).toBe(`v4-${sha(Buffer.from(sums)).slice(0, 16)}`);
     const dir = `backups/${project}/${backup}`;
     expect((await storage.read(`${dir}/SHA256SUMS`)).toString()).toBe(sums);
-    expect(await snapshot(storage, `${dir}/files`)).toEqual(original);
+    expect(await snapshot(storage, `${dir}/files`)).toEqual(backedUp);
+    expect(
+      (await storage.read(`${dir}/files/document.json`)).equals(fixtureRaw),
+    ).toBe(true);
 
     const restored = new MemoryStorage();
     for (const [name, data] of await snapshot(storage, `${dir}/files`))
       await restored.writeAtomic(`${project}/${name}`, data);
-    expect(await snapshot(restored, project)).toEqual(original);
+    expect(await snapshot(restored, project)).toEqual(backedUp);
     const reopened = new ProjectStore(restored, validateDocument);
     const loaded = await reopened.load(id);
-    expect(loaded.features).toEqual(fixture.features);
+    expect(loaded.features).toEqual(migratedDoc.features);
     expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
     expect(await reopened.readAsset(id, "0123456789abcdef.png")).toEqual(png);
 
@@ -265,7 +273,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
               backend.clean,
               `backups/${project}/${kept[0]}/files`,
             ),
-          ).toEqual(original);
+          ).toEqual(backedUp);
         }
     },
   );
@@ -297,7 +305,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
               backend.clean,
               `backups/${project}/${kept[0]}/files`,
             ),
-          ).toEqual(original);
+          ).toEqual(backedUp);
         }
     },
   );
@@ -329,7 +337,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
     const [backup] = await backups(clean);
     const dir = `backups/${project}/${backup}`;
     const copied = await snapshot(clean, `${dir}/files`);
-    expect(copied).toEqual(original);
+    expect(copied).toEqual(backedUp);
     for (const line of (await clean.read(`${dir}/SHA256SUMS`))
       .toString()
       .split("\n")

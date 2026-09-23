@@ -2,12 +2,22 @@ import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 
 type Value = Record<string, unknown>;
 
+export interface MigrationContext {
+  put(bytes: Uint8Array): string;
+}
+
 export interface Migrations<T> {
   namespace: string;
   current: number;
   field: keyof T & string;
-  steps: Record<number, (value: Value) => Value>;
+  steps: Record<number, (value: Value, context: MigrationContext) => Value>;
 }
+
+export const NO_BLOBS: MigrationContext = {
+  put() {
+    throw new Error("this migration needs a blob store");
+  },
+};
 
 export class MissingStepError extends Error {
   constructor(
@@ -33,7 +43,11 @@ export class TooNewError extends Error {
   }
 }
 
-export function migrate<T>(table: Migrations<T>, value: unknown): T {
+export function migrate<T>(
+  table: Migrations<T>,
+  value: unknown,
+  context: MigrationContext = NO_BLOBS,
+): T {
   const record = (typeof value === "object" && value ? value : {}) as Value;
   const version = record[table.field];
   if (typeof version !== "number" || !Number.isInteger(version))
@@ -44,9 +58,15 @@ export function migrate<T>(table: Migrations<T>, value: unknown): T {
   for (let from = version; from < table.current; from++) {
     const step = table.steps[from];
     if (!step) throw new MissingStepError(table.namespace, from, table.current);
-    current = { ...step(current), [table.field]: from + 1 };
+    current = { ...step(current, context), [table.field]: from + 1 };
   }
   return current as T;
+}
+
+function stepBlob(feature: Value, context: MigrationContext): Value {
+  const { data, ...rest } = feature;
+  if (typeof data !== "string") return feature;
+  return { ...rest, blob: context.put(Buffer.from(data, "utf8")) };
 }
 
 export const documentMigrations: Migrations<CadDocument> = {
@@ -60,5 +80,11 @@ export const documentMigrations: Migrations<CadDocument> = {
     4: (doc) => doc,
     5: (doc) => ({ ...doc, groups: [] }),
     6: (doc) => ({ ...doc, revision: 0, savedWith: null }),
+    7: (doc, context) => ({
+      ...doc,
+      features: (doc.features as Value[]).map((feature) =>
+        feature.type === "importStep" ? stepBlob(feature, context) : feature,
+      ),
+    }),
   },
 };

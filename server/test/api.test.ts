@@ -13,6 +13,7 @@ import {
   vi,
 } from "vitest";
 import express from "express";
+import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -126,7 +127,9 @@ describe("REST API MVP workflow", () => {
     const imported = await response.json();
     expect(imported.document.name).toBe("Fixture");
     expect(imported.evaluation.bodies).toHaveLength(1);
-    expect(imported.document.features[0].data).toBe(source);
+    expect(imported.document.features[0].blob).toBe(
+      crypto.createHash("sha256").update(source).digest("hex"),
+    );
     const url = `/projects/${imported.document.id}`;
     const copy = await api("POST", url + "/duplicate");
     expect(

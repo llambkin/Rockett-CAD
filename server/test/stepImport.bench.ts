@@ -4,7 +4,11 @@ import { initKernel } from "../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../src/geometry/engine.js";
 import { readImport } from "../src/geometry/importers.js";
 import { record, SAMPLES, SLOW_SAMPLES } from "./helpers/perfFixtures.js";
-import { largeStepFixture } from "./helpers/stepFixture.js";
+import {
+  largeStepFixture,
+  stepBlob,
+  stepSources,
+} from "./helpers/stepFixture.js";
 
 const BOXES = 355;
 
@@ -22,7 +26,7 @@ test("large STEP", { timeout: 3_600_000 }, async ({ bench }) => {
     name: "Large.step",
     suppressed: false,
     filename: "Large.step",
-    data,
+    blob: stepBlob(data),
   };
   const doc = {
     ...createEmptyDocument("bench-large-step", "Large STEP"),
@@ -35,8 +39,8 @@ test("large STEP", { timeout: 3_600_000 }, async ({ bench }) => {
     "import large STEP",
     await bench("import large STEP", sync, () => {
       dropEngine(doc.id);
-      readImport(feature).delete();
-      result = engineFor(doc.id).evaluate(doc);
+      readImport(feature, stepSources).delete();
+      result = engineFor(doc.id).evaluate(doc, undefined, stepSources);
     }).run(SLOW_SAMPLES),
     SLOW_SAMPLES.iterations,
   );
@@ -48,7 +52,7 @@ test("large STEP", { timeout: 3_600_000 }, async ({ bench }) => {
   record(
     "evaluate noop large STEP",
     await bench("evaluate noop large STEP", sync, () => {
-      engine.evaluate(doc);
+      engine.evaluate(doc, undefined, stepSources);
     }).run(SAMPLES),
     SAMPLES.iterations,
   );

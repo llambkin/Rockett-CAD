@@ -209,15 +209,15 @@ const fixtures: {
       ...base,
       type: "importStep",
       filename: "part.step",
-      data: "\n ISO-10303-21;\nHEADER;",
+      blob: "a".repeat(64),
     },
     invalid: {
       ...base,
       type: "importStep",
       filename: "part.step",
-      data: "solid part",
+      blob: "A".repeat(64),
     },
-    path: "",
+    path: "/blob",
   },
   importMesh: {
     valid: {

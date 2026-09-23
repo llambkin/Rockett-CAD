@@ -5,13 +5,14 @@ import os from "node:os";
 import { SCHEMA_VERSION } from "@rockett/shared";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { validateDocument } from "../src/api/validate.js";
+import { withStepBlobs } from "./helpers/stepFixture.js";
 import { LocalStorage } from "../src/store/storage.js";
 
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 
 describe("schema fixtures", () => {
-  it.each([1, 2, 3, 4, 5, 6])(
-    "loads v%i at the current schema with features unchanged",
+  it.each([1, 2, 3, 4, 5, 6, 7])(
+    "loads v%i at the current schema with features unchanged apart from STEP sources",
     async (version) => {
       const raw = await fs.readFile(
         path.join(fixtures, `v${version}.json`),
@@ -30,12 +31,12 @@ describe("schema fixtures", () => {
       ).load(fixture.id);
 
       expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
-      expect(loaded.features).toEqual(fixture.features);
+      expect(loaded.features).toEqual(withStepBlobs(fixture.features));
       expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
       expect(loaded.timelinePosition).toBe(fixture.timelinePosition);
       expect(loaded.groups).toEqual(fixture.groups ?? []);
-      expect(loaded.revision).toBe(0);
-      expect(loaded.savedWith).toBeNull();
+      expect(loaded.revision).toBe(fixture.revision ?? 0);
+      expect(loaded.savedWith).toEqual(fixture.savedWith ?? null);
       await fs.rm(dir, { recursive: true, force: true });
     },
   );
