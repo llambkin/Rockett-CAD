@@ -16,27 +16,27 @@ client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 98
 client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3154
-client/src/components/ViewportView.tsx ViewportView 2917
+client/src/components/ViewportView.tsx 3200
+client/src/components/ViewportView.tsx ViewportView 2962
 client/src/components/ViewportView.tsx computeGizmoSource 100
-client/src/components/ViewportView.tsx handleHover 135
+client/src/components/ViewportView.tsx handleHover 144
 client/src/components/ViewportView.tsx handlePrimaryUp 191
-client/src/components/ViewportView.tsx handleSketchClick 236
+client/src/components/ViewportView.tsx handleSketchClick 245
 client/src/components/ViewportView.tsx onPointerMove 113
-client/src/components/ViewportView.tsx pointerToSketchUV 224
+client/src/components/ViewportView.tsx pointerToSketchUV 221
 client/src/components/ViewportView.tsx useEffect() 108
 client/src/components/ViewportView.tsx useEffect()#2 276
 client/src/sketchTools.ts 827
-client/src/store.ts 1193
+client/src/store.ts 1218
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 762
-client/src/three/CadViewport.ts 1042
+client/src/store.ts useStore 786
+client/src/three/CadViewport.ts 1047
 client/src/three/CadViewport.ts addHighlight 104
 client/src/three/CadViewport.ts buildBody 87
-client/src/three/CadViewport.ts pick 183
+client/src/three/CadViewport.ts pick 188
 client/src/three/ViewCube.ts constructor 95
 client/src/three/revolveGhost.ts buildRevolveGhost 99
-client/src/three/sketchRender.ts buildSketch 162
+client/src/three/sketchRender.ts buildSketch 164
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 706
 server/src/api/routes.ts createApiRouter 520
@@ -52,10 +52,9 @@ server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 105
 shared/src/model.ts 521
-shared/src/profiles.ts 574
-shared/src/sketchModify.ts 806
+shared/src/profiles.ts 589
+shared/src/sketchModify.ts 741
 shared/src/sketchModify.ts joinOffsetEndpoints 110
-shared/src/sketchModify.ts modifySketch 144
 shared/src/sketchModify.ts offsetRoundedChain 124
 shared/src/sketchModify.ts offsetSketch 159
 shared/src/solver.ts 628
