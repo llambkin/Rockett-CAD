@@ -12,13 +12,14 @@ import fs from "node:fs";
 import type { AddressInfo } from "node:net";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
+import { FolderStore } from "./store/folderStore.js";
 import { createApp } from "./app.js";
 import { parseAllowedOrigins } from "./auth/origin.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.ROCKETT_PORT || 8788);
-const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, "../../data");
+const DATA_DIR = process.env.DATA_DIR || path.resolve(here, "../../data");
 
 let allowedOrigins: string[];
 try {
@@ -40,14 +41,19 @@ async function main() {
 
   // static client (production build)
   const candidates = [
-    path.resolve(__dirname, "../../client/dist"), // repo layout (dev/prod)
-    path.resolve(__dirname, "./client/dist"), // Docker image layout
-    path.resolve(__dirname, "../client/dist"),
+    path.resolve(here, "../../client/dist"), // repo layout (dev/prod)
+    path.resolve(here, "./client/dist"), // Docker image layout
+    path.resolve(here, "../client/dist"),
   ];
   const clientDir = candidates.find((c) =>
     fs.existsSync(path.join(c, "index.html")),
   );
-  const app = createApp({ store, clientDir, allowedOrigins });
+  const app = createApp({
+    store,
+    folders: new FolderStore(DATA_DIR),
+    clientDir,
+    allowedOrigins,
+  });
   if (clientDir) {
     console.log(`[rockett] serving client from ${clientDir}`);
   } else {

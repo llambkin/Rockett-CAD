@@ -90,6 +90,8 @@ docker run -d --name rockett-cad \
 
 ```
 /data
+├── folders/
+│   └── folders.json        # the shared folder tree and project placement
 └── projects/
     └── {projectId}/
         ├── document.json   # the parametric document (full history)

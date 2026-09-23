@@ -22,6 +22,7 @@ import { SCHEMA_VERSION, type EvaluateResult } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { createApiRouter } from "../src/api/routes.js";
+import { FolderStore } from "../src/store/folderStore.js";
 import { stepFixture } from "./helpers/stepFixture.js";
 
 let base = "";
@@ -35,7 +36,7 @@ beforeAll(async () => {
   store = new ProjectStore(storeDir);
   await store.init();
   const app = express();
-  app.use("/api", createApiRouter(store));
+  app.use("/api", createApiRouter(store, new FolderStore(storeDir)));
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
   });

@@ -5,6 +5,7 @@ export * from "./api.js";
 export * from "./routes.js";
 export * from "./schema/index.js";
 export * from "./schema/features.js";
+export * from "./schema/folders.js";
 export * from "./projection.js";
 export * from "./sketchModify.js";
 export * from "./sketchOffsets.js";

@@ -25,6 +25,7 @@ import {
 } from "@rockett/shared";
 import { version } from "../../../package.json";
 import type { ProjectStore } from "../store/projectStore.js";
+import type { FolderStore } from "../store/folderStore.js";
 import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { engineFor, dropEngine } from "../geometry/engine.js";
@@ -47,6 +48,7 @@ import {
   safeFileName,
   uploadProjectFile,
 } from "./projectFile.js";
+import { folderRoutes } from "./folderRoutes.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -142,7 +144,22 @@ const EXPORTERS: Record<
   },
 };
 
-export function createApiRouter(store: ProjectStore): Router {
+function evaluationPosition(req: any, doc: CadDocument): number | undefined {
+  if (req.query.position === undefined) return undefined;
+  const position = Number(req.query.position);
+  if (
+    !Number.isInteger(position) ||
+    position < 0 ||
+    position > doc.features.length
+  )
+    throw new ValidationError("invalid evaluation position");
+  return position;
+}
+
+export function createApiRouter(
+  store: ProjectStore,
+  folders: FolderStore,
+): Router {
   const router = Router();
   router.use(json({ limit: "50mb" }));
   const on = (route: Route, ...handlers: RequestHandler[]) =>
@@ -163,19 +180,6 @@ export function createApiRouter(store: ProjectStore): Router {
         : fn(req, res);
       result.catch((err) => fail(res, err));
     };
-
-  /** Temporary evaluation range; does not move the persisted timeline marker. */
-  function evaluationPosition(req: any, doc: CadDocument): number | undefined {
-    if (req.query.position === undefined) return undefined;
-    const position = Number(req.query.position);
-    if (
-      !Number.isInteger(position) ||
-      position < 0 ||
-      position > doc.features.length
-    )
-      throw new ValidationError("invalid evaluation position");
-    return position;
-  }
 
   /** Evaluate + make sure every body has display metadata. */
   async function evaluateAndSync(doc: CadDocument, position?: number) {
@@ -224,7 +228,11 @@ export function createApiRouter(store: ProjectStore): Router {
     ROUTES.createProject,
     wrap(async (req, res) => {
       const name = (req.body.name ?? "Untitled").slice(0, 200);
-      const doc = await store.create(name);
+      const { folderId } = req.body;
+      const doc =
+        folderId === undefined
+          ? await store.create(name)
+          : await folders.createIn(folderId, () => store.create(name));
       res.json({ document: doc });
     }),
   );
@@ -249,6 +257,7 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       await store.remove(req.params.id);
       dropEngine(req.params.id);
+      await folders.place(req.params.id, null);
       res.json({ ok: true });
     }),
   );
@@ -273,6 +282,9 @@ export function createApiRouter(store: ProjectStore): Router {
       res.json({ document: doc });
     }),
   );
+
+  for (const [route, handler] of folderRoutes(folders, store))
+    on(route, wrap(handler));
 
   // ----- evaluation -----
 

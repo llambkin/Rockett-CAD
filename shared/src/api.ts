@@ -109,6 +109,17 @@ export interface ProjectSummary {
   featureCount: number;
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
+export interface FolderTree {
+  folders: Folder[];
+  placement: Record<string, string>;
+}
+
 export interface MeasureRequest {
   refs: Array<
     | { kind: "face"; bodyId: string; faceName: string }

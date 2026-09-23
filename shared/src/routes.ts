@@ -3,12 +3,20 @@ import type { CadDocument, EdgeRef, Feature, SketchEntity } from "./model.js";
 import type {
   EvaluateResult,
   ExportRequest,
+  Folder,
+  FolderTree,
   MeasureRequest,
   MeasureResult,
   ProjectResponse,
   ProjectSummary,
 } from "./api.js";
 import { edgeRef, faceRef } from "./schema/features.js";
+import {
+  createFolderBody,
+  folderId,
+  placeProjectBody,
+  updateFolderBody,
+} from "./schema/folders.js";
 
 export interface MutationResponse {
   document: CadDocument;
@@ -39,7 +47,7 @@ export interface Health {
   describe: string | null;
 }
 
-export type Method = "GET" | "POST" | "PUT" | "DELETE";
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 declare const exchange: unique symbol;
 
@@ -87,10 +95,13 @@ const topoRef = Type.Union([
 export const ROUTES = {
   health: route<never, Health>()("GET", "/health"),
   listProjects: route<never, ProjectSummary[]>()("GET", "/projects"),
-  createProject: route<{ name?: string }, ProjectResponse>()(
+  createProject: route<{ name?: string; folderId?: string }, ProjectResponse>()(
     "POST",
     "/projects",
-    name,
+    Type.Object({
+      name: Type.Optional(Type.String()),
+      folderId: Type.Optional(folderId),
+    }),
   ),
   importStep: route<FormData, MutationResponse>()(
     "POST",
@@ -111,6 +122,11 @@ export const ROUTES = {
     "POST",
     "/projects/:id/rename",
     name,
+  ),
+  placeProject: route<{ folderId: string | null }, { ok: true }>()(
+    "PUT",
+    "/projects/:id/folder",
+    placeProjectBody,
   ),
   downloadProjectFile: route<never, Blob>()("GET", "/projects/:id/file"),
   evaluate: route<never, EvaluateResult>()("GET", "/projects/:id/evaluate"),
@@ -191,16 +207,26 @@ export const ROUTES = {
     "/projects/:id/assets",
   ),
   asset: route<never, Blob>()("GET", "/projects/:id/assets/:assetId"),
+  listFolders: route<never, FolderTree>()("GET", "/folders"),
+  createFolder: route<
+    { name: string; parentId?: string | null },
+    { folder: Folder }
+  >()("POST", "/folders", createFolderBody),
+  updateFolder: route<
+    { name?: string; parentId?: string | null },
+    { folder: Folder }
+  >()("PATCH", "/folders/:id", updateFolderBody),
+  deleteFolder: route<never, { ok: true }>()("DELETE", "/folders/:id"),
 };
 
 export function pathFor<P extends string>(
-  route: Route<P>,
+  target: Route<P>,
   params: PathParams<P>,
 ): string {
   const values: Partial<Record<string, string>> = params;
-  return route.path.replace(/:(\w+)/g, (_match, name: string) => {
-    const value = values[name];
-    if (value === undefined) throw new Error(`${route.path} needs :${name}`);
+  return target.path.replace(/:(\w+)/g, (_match, key: string) => {
+    const value = values[key];
+    if (value === undefined) throw new Error(`${target.path} needs :${key}`);
     return encodeURIComponent(value);
   });
 }

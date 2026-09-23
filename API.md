@@ -10,7 +10,7 @@ status:
 | Code         | Status | Meaning                                                   |
 | ------------ | ------ | --------------------------------------------------------- |
 | `validation` | 400    | The request, upload or feature is invalid.                |
-| `not_found`  | 404    | The project, feature, body or asset does not exist.       |
+| `not_found`  | 404    | The project, folder, feature, body or asset is missing.   |
 | `too_large`  | 413    | An upload is over its limit.                              |
 | `conflict`   | 409    | The request conflicts with current state.                 |
 | `kernel`     | 503    | The geometry kernel cannot serve the request.             |
@@ -39,15 +39,15 @@ snapshots sent by different clients.
 
 ## Projects
 
-| Method & path                  | Body        | Returns                                                                                                                                         |
-| ------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                  | none        | `{ ok: true, version, schemaVersion, commit, describe }` (`commit` from `ROCKETT_COMMIT`, `describe` from `ROCKETT_DESCRIBE`, each else `null`) |
-| `GET /projects`                | none        | `ProjectSummary[]`                                                                                                                              |
-| `POST /projects`               | `{ name }`  | `{ document }`                                                                                                                                  |
-| `GET /projects/:id`            | none        | `{ document }`                                                                                                                                  |
-| `DELETE /projects/:id`         | none        | `{ ok }`                                                                                                                                        |
-| `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied)                                                                                                                  |
-| `POST /projects/:id/rename`    | `{ name }`  | `{ document }`                                                                                                                                  |
+| Method & path                  | Body                   | Returns                                                                                                                                         |
+| ------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                  | none                   | `{ ok: true, version, schemaVersion, commit, describe }` (`commit` from `ROCKETT_COMMIT`, `describe` from `ROCKETT_DESCRIBE`, each else `null`) |
+| `GET /projects`                | none                   | `ProjectSummary[]`                                                                                                                              |
+| `POST /projects`               | `{ name?, folderId? }` | `{ document }`                                                                                                                                  |
+| `GET /projects/:id`            | none                   | `{ document }`                                                                                                                                  |
+| `DELETE /projects/:id`         | none                   | `{ ok }`                                                                                                                                        |
+| `POST /projects/:id/duplicate` | `{ name? }`            | `{ document }` (assets copied)                                                                                                                  |
+| `POST /projects/:id/rename`    | `{ name }`             | `{ document }`                                                                                                                                  |
 
 ### Project file
 
@@ -68,6 +68,33 @@ upload rules, and every referenced asset must be present. A file with a newer
 `version` or `schemaVersion` gets 400 naming both versions. Any failure
 returns 400 and creates nothing: a project half made when an asset fails is
 removed.
+
+## Folders
+
+One folder tree is shared by every user. `GET /folders` returns
+`{ folders: Folder[], placement }`: each folder is `{ id, name, parentId }`
+with `parentId` `null` at the root, and `placement` maps a project id to its
+folder id. A project missing from `placement` sits at the root. Folders live
+in `folders.json`, apart from the documents, so a move never changes a
+document or its `modifiedAt`.
+
+| Method & path              | Body                   | Returns      |
+| -------------------------- | ---------------------- | ------------ |
+| `GET /folders`             | none                   | `FolderTree` |
+| `POST /folders`            | `{ name, parentId? }`  | `{ folder }` |
+| `PATCH /folders/:id`       | `{ name?, parentId? }` | `{ folder }` |
+| `DELETE /folders/:id`      | none                   | `{ ok }`     |
+| `PUT /projects/:id/folder` | `{ folderId }`         | `{ ok }`     |
+
+A `null` `parentId` or `folderId` means the root. A name is 1 to 200
+characters. A `parentId` or `folderId` naming a missing folder is 400, and so
+is a move into the folder itself or a folder inside it. An unknown folder in
+the path is 404, as is an unknown project. Deleting a folder that holds a
+folder or a project is 409 and deletes nothing.
+
+`POST /projects` with a `folderId` creates the project in that folder in one
+call. A missing folder is 400 and creates nothing. Deleting a project drops
+its placement.
 
 ## Model
 

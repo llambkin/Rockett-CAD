@@ -13,6 +13,7 @@ import { engineFor, dropEngine } from "../src/geometry/engine.js";
 import { write3mf, writeStl } from "../src/geometry/exporters.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { createApiRouter } from "../src/api/routes.js";
+import { FolderStore } from "../src/store/folderStore.js";
 
 let server: Server | undefined;
 let apiUrl = "";
@@ -20,12 +21,11 @@ let store: ProjectStore;
 
 beforeAll(async () => {
   await initKernel();
-  store = new ProjectStore(
-    await fs.mkdtemp(path.join(os.tmpdir(), "rockett-export-")),
-  );
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-export-"));
+  store = new ProjectStore(dir);
   await store.init();
   const app = express();
-  app.use("/api", createApiRouter(store));
+  app.use("/api", createApiRouter(store, new FolderStore(dir)));
   const listening = app.listen(0);
   await new Promise((resolve) => listening.once("listening", resolve));
   server = listening;

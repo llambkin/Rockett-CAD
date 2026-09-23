@@ -7,10 +7,14 @@ import os from "node:os";
 import path from "node:path";
 import { ROUTES, pathFor } from "@rockett/shared";
 import { createApiRouter } from "../src/api/routes.js";
+import { FolderStore } from "../src/store/folderStore.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 
 function registered(): string[] {
-  const router = createApiRouter(new ProjectStore(os.tmpdir()));
+  const router = createApiRouter(
+    new ProjectStore(os.tmpdir()),
+    new FolderStore(os.tmpdir()),
+  );
   return router.stack.flatMap((layer) => {
     const route = layer.route;
     if (!route) return [];
@@ -30,6 +34,9 @@ const wrongTyped: Partial<
   Record<keyof typeof ROUTES, { body: object; detail: string }>
 > = {
   createProject: { body: { name: 5 }, detail: "/name" },
+  placeProject: { body: { folderId: 5 }, detail: "/folderId" },
+  createFolder: { body: { name: 5 }, detail: "/name" },
+  updateFolder: { body: { parentId: 5 }, detail: "/parentId" },
   duplicateProject: { body: { name: 5 }, detail: "/name" },
   renameProject: { body: { name: 5 }, detail: "/name" },
   setTimeline: { body: { position: "2" }, detail: "/position" },
@@ -55,7 +62,10 @@ let dataDir = "";
 
 beforeAll(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-contract-"));
-  const app = express().use("/api", createApiRouter(new ProjectStore(dataDir)));
+  const app = express().use(
+    "/api",
+    createApiRouter(new ProjectStore(dataDir), new FolderStore(dataDir)),
+  );
   server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
   });
@@ -87,7 +97,7 @@ describe("route contract", () => {
     const withBody = Object.entries(ROUTES)
       .filter(([, route]) => "body" in route)
       .map(([name]) => name);
-    expect(withBody.sort()).toEqual(Object.keys(wrongTyped).sort());
+    expect(new Set(withBody)).toEqual(new Set(Object.keys(wrongTyped)));
   });
 
   it.each(Object.entries(wrongTyped))(
