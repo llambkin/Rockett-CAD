@@ -1,6 +1,8 @@
 /** Typed client for the Rockett CAD REST API. */
 
 import type {
+  ApiErrorBody,
+  ApiErrorCode,
   CadDocument,
   EvaluateResult,
   Feature,
@@ -25,28 +27,47 @@ export interface Health {
 
 let health: Promise<Health> | undefined;
 
-async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${url}`, {
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: ApiErrorCode,
+    readonly detail?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function toApiError(res: Response): Promise<ApiError> {
+  const body: Partial<ApiErrorBody> | null = await res.json().catch(() => null);
+  if (typeof body?.error === "string" && typeof body.code === "string")
+    return new ApiError(body.error, res.status, body.code, body.detail);
+  return new ApiError(
+    res.statusText || `HTTP ${res.status}`,
+    res.status,
+    "internal",
+  );
+}
+
+export async function request<T>(
+  method: string,
+  path: string,
+  { body, signal }: { body?: unknown; signal?: AbortSignal } = {},
+): Promise<T> {
+  const res = await fetch(`/api${path}`, {
     method,
     headers:
       body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const j = await res.json();
-      detail = j.error ?? detail;
-    } catch {
-      // keep statusText
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw await toApiError(res);
   return res.json() as Promise<T>;
 }
 
 export const api = {
-  health: () => (health ??= req<Health>("GET", "/health")),
+  health: () => (health ??= request<Health>("GET", "/health")),
   async importStep(file: File, projectId?: string): Promise<MutationResponse> {
     const form = new FormData();
     form.append("file", file);
@@ -60,72 +81,80 @@ export const api = {
     if (!res.ok) throw new Error(result.error ?? "STEP import failed");
     return result;
   },
-  listProjects: () => req<ProjectSummary[]>("GET", "/projects"),
+  listProjects: () => request<ProjectSummary[]>("GET", "/projects"),
   createProject: (name: string) =>
-    req<{ document: CadDocument }>("POST", "/projects", { name }),
+    request<{ document: CadDocument }>("POST", "/projects", { body: { name } }),
   getProject: (id: string) =>
-    req<{ document: CadDocument }>("GET", `/projects/${id}`),
-  deleteProject: (id: string) => req<{ ok: true }>("DELETE", `/projects/${id}`),
+    request<{ document: CadDocument }>("GET", `/projects/${id}`),
+  deleteProject: (id: string) =>
+    request<{ ok: true }>("DELETE", `/projects/${id}`),
   duplicateProject: (id: string, name?: string) =>
-    req<{ document: CadDocument }>("POST", `/projects/${id}/duplicate`, {
-      name,
+    request<{ document: CadDocument }>("POST", `/projects/${id}/duplicate`, {
+      body: { name },
     }),
   renameProject: (id: string, name: string) =>
-    req<{ document: CadDocument }>("POST", `/projects/${id}/rename`, { name }),
+    request<{ document: CadDocument }>("POST", `/projects/${id}/rename`, {
+      body: { name },
+    }),
 
   evaluate: (id: string, position?: number) =>
-    req<EvaluateResult>(
+    request<EvaluateResult>(
       "GET",
       `/projects/${id}/evaluate${position === undefined ? "" : `?position=${position}`}`,
     ),
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
-    req<{ edges: EdgeRef[] }>("POST", `/projects/${id}/tangent-edges`, {
-      edge,
-      beforeFeatureId,
+    request<{ edges: EdgeRef[] }>("POST", `/projects/${id}/tangent-edges`, {
+      body: { edge, beforeFeatureId },
     }),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
-    req<{ entities: SketchEntity[] }>(
+    request<{ entities: SketchEntity[] }>(
       "POST",
       `/projects/${id}/features/${fid}/project`,
-      { edge, entityId },
+      { body: { edge, entityId } },
     ),
 
   addFeature: (id: string, feature: Feature) =>
-    req<MutationResponse>("POST", `/projects/${id}/features`, { feature }),
+    request<MutationResponse>("POST", `/projects/${id}/features`, {
+      body: { feature },
+    }),
   updateFeature: (
     id: string,
     fid: string,
     feature: Partial<Feature>,
     position?: number,
   ) =>
-    req<MutationResponse>(
+    request<MutationResponse>(
       "PUT",
       `/projects/${id}/features/${fid}${position === undefined ? "" : `?position=${position}`}`,
-      { feature },
+      { body: { feature } },
     ),
   deleteFeature: (id: string, fid: string) =>
-    req<MutationResponse>("DELETE", `/projects/${id}/features/${fid}`),
+    request<MutationResponse>("DELETE", `/projects/${id}/features/${fid}`),
   setTimeline: (id: string, position: number) =>
-    req<MutationResponse>("POST", `/projects/${id}/timeline`, { position }),
+    request<MutationResponse>("POST", `/projects/${id}/timeline`, {
+      body: { position },
+    }),
   replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    req<MutationResponse>(
+    request<MutationResponse>(
       "PUT",
       `/projects/${id}/document${position === undefined ? "" : `?position=${position}`}`,
-      { document },
+      { body: { document } },
     ),
   updateBody: (
     id: string,
     bodyId: string,
     patch: { name?: string; visible?: boolean },
   ) =>
-    req<MutationResponse>(
+    request<MutationResponse>(
       "PUT",
       `/projects/${id}/bodies/${encodeURIComponent(bodyId)}`,
-      patch,
+      { body: patch },
     ),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
-    req<MeasureResult>("POST", `/projects/${id}/measure`, { refs }),
+    request<MeasureResult>("POST", `/projects/${id}/measure`, {
+      body: { refs },
+    }),
 
   async exportModel(
     id: string,
