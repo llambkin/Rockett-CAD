@@ -11,6 +11,7 @@ import {
   type ChamferFeature,
   type CombineFeature,
   type ConstructionPlaneFeature,
+  type EdgeRef,
   type EmbossFeature,
   type ExtrudeFeature,
   type Feature,
@@ -882,6 +883,27 @@ function sketchEntityToEdge(
   return null;
 }
 
+function collectEdges(
+  body: NamedBody,
+  refs: EdgeRef[],
+  tangentChain: boolean | undefined,
+  label: string,
+): { edge: Shape; name: string }[] {
+  const byName = computeEdgeNames(body).byName;
+  const resolve = (ref: EdgeRef) => {
+    if (ref.bodyId !== body.bodyId) {
+      throw new Error(`all ${label} edges must belong to the same body`);
+    }
+    const edge = byName.get(ref.edgeName);
+    if (!edge) {
+      throw new Error(`referenced edge no longer exists: ${ref.edgeName}`);
+    }
+    return { edge, name: ref.edgeName };
+  };
+  const seeds = refs.map(resolve);
+  return tangentChain ? tangentEdges(body, refs).map(resolve) : seeds;
+}
+
 function evalFillet(state: EvalState, f: FilletFeature): void {
   if (f.edges.length === 0) throw new Error("no edges selected");
   if (f.radius <= 0) throw new Error("fillet radius must be positive");
@@ -890,22 +912,13 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
   if (!body) throw new Error(`body ${bodyId} no longer exists`);
   const k = getKernel();
   kernelCall("fillet", () => {
-    const edgeNames = computeEdgeNames(body);
+    const sourceEdges = collectEdges(body, f.edges, f.tangentChain, "fillet");
     const op = new k.BRepFilletAPI_MakeFillet(
       body.shape,
       k.ChFi3d_FilletShape.ChFi3d_Rational,
     );
-    const sourceEdges: { edge: Shape; name: string }[] = [];
-    for (const ref of f.tangentChain ? tangentEdges(body, f.edges) : f.edges) {
-      if (ref.bodyId !== bodyId) {
-        throw new Error("all fillet edges must belong to the same body");
-      }
-      const edge = edgeNames.byName.get(ref.edgeName);
-      if (!edge) {
-        throw new Error(`referenced edge no longer exists: ${ref.edgeName}`);
-      }
+    for (const { edge } of sourceEdges) {
       if (!op.Contour(edge)) op.Add_2(f.radius, edge);
-      sourceEdges.push({ edge, name: ref.edgeName });
     }
     op.Build(progress());
     if (!op.IsDone()) {
@@ -1244,17 +1257,10 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
   if (!body) throw new Error(`body ${bodyId} no longer exists`);
   const k = getKernel();
   kernelCall("chamfer", () => {
-    const edgeNames = computeEdgeNames(body);
+    const sourceEdges = collectEdges(body, f.edges, f.tangentChain, "chamfer");
     const op = new k.BRepFilletAPI_MakeChamfer(body.shape);
-    const sourceEdges: { edge: Shape; name: string }[] = [];
-    for (const ref of f.tangentChain ? tangentEdges(body, f.edges) : f.edges) {
-      if (ref.bodyId !== bodyId)
-        throw new Error("all chamfer edges must belong to the same body");
-      const edge = edgeNames.byName.get(ref.edgeName);
-      if (!edge)
-        throw new Error(`referenced edge no longer exists: ${ref.edgeName}`);
+    for (const { edge } of sourceEdges) {
       if (!op.Contour(edge)) op.Add_2(f.distance, edge);
-      sourceEdges.push({ edge, name: ref.edgeName });
     }
     op.Build(progress());
     if (!op.IsDone()) {
