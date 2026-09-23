@@ -1,6 +1,6 @@
 # Last run
 
-Paused on request after the batch deployed. Dev runs `777efbb`, schema 11,
+Paused on request after the batch deployed and 0.2.0 was proposed upstream. Dev runs `777efbb`, schema 11,
 with everything below. No agents are running.
 
 - Deployed to dev this batch: BUG-041, DOC-018, DOC-019, CUST-034, CUST-035,
@@ -14,8 +14,8 @@ with everything below. No agents are running.
   window, with focus in it.
 - CUST-037: the Controls help opens up to 90% of the window in reflowing
   columns and resizes from its corner, remembered until reload.
-- Waiting on Mark: a v0.2.0 pull request to the upstream repository. Its
-  draft is held privately, not in this repository.
+- Released 0.2.0 and opened it as a pull request to the upstream
+  repository, marked unfinished. It waits on the upstream owner's review.
 - CUST-034: curves that touch tangentially now split sketch regions, so a
   circle inscribed in a square gives the disc and four corners, each picked
   and extruded on its own. Regions bounded by the same curves get distinct

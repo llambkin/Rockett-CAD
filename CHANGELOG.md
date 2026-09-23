@@ -8,7 +8,7 @@ A release moves `Unreleased` into a dated `## X.Y.Z` section and gets an
 annotated tag `vX.Y.Z` on that `origin/main` commit. Every `SCHEMA_VERSION`
 change gets a `Schema N` line in the section that ships it.
 
-## Unreleased
+## 0.2.0 (2026-09-23)
 
 ### Added
 
