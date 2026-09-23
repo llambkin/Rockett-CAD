@@ -39,7 +39,7 @@ COPY client/package.json client/package.json
 RUN npm ci --omit=dev --workspace server --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
-COPY --from=build /app/server/dist/server.js server.js
+COPY --from=build /app/server/dist/server.js server.mjs
 COPY --from=build /app/client/dist client/dist
 
 # Non-root user; /data is the single persistent volume.
@@ -52,4 +52,4 @@ EXPOSE 8788
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
   CMD node -e "fetch('http://127.0.0.1:8788/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+CMD ["node", "server.mjs"]
