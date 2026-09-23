@@ -265,6 +265,35 @@ function endPreviews(): Promise<void> | null {
   return preview.inFlight;
 }
 
+function projectPath(id: string): string {
+  return `/projects/${encodeURIComponent(id)}`;
+}
+
+function projectIdFromPath(path: string): string | null {
+  const segment = /^\/projects\/([^/]+)\/?$/.exec(path)?.[1];
+  if (segment === undefined) return null;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function showPath(path: string): void {
+  if (window.location.pathname !== path)
+    window.history.pushState(null, "", path);
+}
+
+export function followPath(): Promise<void> | void {
+  const id = projectIdFromPath(window.location.pathname);
+  const s = useStore.getState();
+  if (id === null) {
+    if (s.projectId !== null) s.closeProject();
+    return;
+  }
+  if (id !== s.projectId) return s.openProject(id);
+}
+
 export const useStore = create<State>((set, get) => ({
   projectId: null,
   document: null,
@@ -298,13 +327,18 @@ export const useStore = create<State>((set, get) => ({
         dialogParams: {},
         busy: false,
       });
+      showPath(projectPath(id));
     } catch (e: any) {
-      set({ error: e.message, busy: false });
+      window.history.replaceState(null, "", "/");
+      get().closeProject();
+      set({ error: e.message });
     }
   },
 
   closeProject() {
+    showPath("/");
     set({
+      error: null,
       projectId: null,
       document: null,
       evaluation: null,

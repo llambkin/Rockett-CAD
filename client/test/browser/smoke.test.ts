@@ -162,6 +162,16 @@ it("creates, edits, extrudes, rolls back, exports and reopens a project", async 
     [50, 20, 10].map((n) => expect.closeTo(n, 6)),
   );
 
+  expect(new URL(page.url()).pathname).toBe(`/projects/${id}`);
+  await page.reload();
+  await bodiesHeader().getByText("Bodies (1)").waitFor();
+  await expect
+    .poll(() => chips().locator(".tl-name").allTextContents())
+    .toEqual(["Sketch1", "Extrude1"]);
+  await page.goBack();
+  await page.locator(".project-open", { hasText: "Smoke plate" }).waitFor();
+  expect(new URL(page.url()).pathname).toBe("/");
+
   expect(failures).toEqual([]);
   expect(app.serverErrors).toEqual([]);
 });

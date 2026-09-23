@@ -67,6 +67,7 @@ everything downstream against persistent topology references.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control.
 - **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
 - **Tool panels**: panels stay inside the window; Escape cancels a feature dialog and reverts its preview.
+- **Reload**: refreshing the page reopens the project you had open; Back returns to the list.
 - **Errors**: stay visible until dismissed, and their text can be copied.
 - **Version label**: the bottom-right corner shows the running build; hover for commit, version and schema.
 

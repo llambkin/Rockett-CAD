@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ProjectSummary } from "@rockett/shared";
 import { api } from "./api";
-import { useStore } from "./store";
+import { followPath, useStore } from "./store";
 import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
@@ -22,13 +22,20 @@ import {
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
+  useEffect(() => {
+    void followPath();
+    window.addEventListener("popstate", followPath);
+    return () => window.removeEventListener("popstate", followPath);
+  }, []);
   return projectId ? <Workspace /> : <ProjectList />;
 }
 
 function ProjectList() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [listError, setError] = useState<string | null>(null);
+  const loadError = useStore((s) => s.error);
+  const error = listError ?? loadError;
   /** id of the project whose name is being edited in place */
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const openProject = useStore((s) => s.openProject);
