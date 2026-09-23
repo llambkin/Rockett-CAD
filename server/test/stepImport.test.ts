@@ -60,5 +60,22 @@ it("imports multiple B-Rep bodies, persists them, and supports downstream fillet
 
 it("rejects invalid STEP and cleans its temporary kernel file", () => {
   expect(() => readStep("ISO-10303-21;\nnot a STEP model")).toThrow();
-  expect(getKernel().FS.analyzePath("/rockett-import.step").exists).toBe(false);
+  expect(
+    getKernel()
+      .FS.readdir("/")
+      .filter((f: string) => f.endsWith(".step")),
+  ).toEqual([]);
+});
+
+it("a file already at `/rockett-import.step` survives `readStep`", () => {
+  const fs = getKernel().FS,
+    file = "/rockett-import.step";
+  fs.writeFile(file, "keep");
+  readStep(stepFixture(false)).delete();
+  expect(fs.analyzePath(file).exists).toBe(true);
+  expect(fs.readFile(file, { encoding: "utf8" })).toBe("keep");
+  fs.unlink(file);
+  expect(fs.readdir("/").filter((f: string) => f.endsWith(".step"))).toEqual(
+    [],
+  );
 });

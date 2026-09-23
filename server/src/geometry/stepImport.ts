@@ -1,9 +1,10 @@
+import crypto from "node:crypto";
 import { getKernel, solids, progress, type Shape } from "./kernel.js";
 
 /** Read exact B-Rep geometry using OCCT's STEP translator, in millimetres. */
 export function readStep(data: string): Shape {
   const k = getKernel(),
-    file = "/rockett-import.step";
+    file = `/rockett-import-${crypto.randomUUID()}.step`;
   const reader = new k.STEPControl_Reader_1();
   try {
     k.FS.writeFile(file, data);
