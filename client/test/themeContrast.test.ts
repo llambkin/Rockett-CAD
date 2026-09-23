@@ -42,6 +42,8 @@ const text: ThemeColor[] = [
 ];
 const marks: ThemeColor[] = [
   "body",
+  "preview-add",
+  "preview-cut",
   "selection",
   "hover",
   "sketch-line",
@@ -81,6 +83,8 @@ const pairs: Pair[] = [
   ["viewcube-label", "viewcube-face", 7],
   ["viewcube-border", "viewcube-face", 3],
   ["edge", "body", 3],
+  ["edge", "preview-add", 3],
+  ["edge", "preview-cut", 3],
   ...marks.map((fg): Pair => [fg, "viewport-bg", 3]),
 ];
 

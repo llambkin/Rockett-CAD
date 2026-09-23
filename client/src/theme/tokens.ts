@@ -41,6 +41,8 @@ export const THEME_TOKENS = {
   "shadow-panel": "rgba(0, 0, 0, 0.4)",
   "viewport-bg": "#2a2d30",
   body: "#b7bcc1",
+  "preview-add": "#8cbf9e",
+  "preview-cut": "#d4a4a7",
   edge: "#30343a",
   selection: blue,
   hover,

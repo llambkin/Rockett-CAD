@@ -17,7 +17,7 @@ import type {
 import type { Selection } from "../store";
 import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
-import { themeColor } from "../theme/tokens";
+import { themeColor, type ThemeColor } from "../theme/tokens";
 import { cameraTween, orbitAbout, type CameraPose } from "./camera";
 import { frameScheduler } from "./frameScheduler";
 
@@ -583,6 +583,14 @@ export class CadViewport {
       vertexNames,
       payload: p,
     };
+  }
+
+  setBodyTints(tints: ReadonlyMap<string, ThemeColor>) {
+    for (const [id, b] of this.bodies)
+      (b.mesh.material as THREE.MeshStandardMaterial).color.set(
+        themeColor(tints.get(id) ?? "body"),
+      );
+    this.requestRender();
   }
 
   setBodyDimmed(dim: boolean, exceptBodyId?: string) {

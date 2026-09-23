@@ -31,7 +31,12 @@ import { RevolveGizmo } from "../three/RevolveGizmo";
 import { GizmoSlot } from "../three/gizmoSlot";
 import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
-import { previewedFeature, useStore, type Selection } from "../store";
+import {
+  previewBodyTints,
+  previewedFeature,
+  useStore,
+  type Selection,
+} from "../store";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import * as tools from "../sketchTools";
@@ -82,6 +87,7 @@ export function ViewportView() {
   const hover = useStore((s) => s.hover);
   const draftSketch = useStore((s) => s.draftSketch);
   const dialogParams = useStore((s) => s.dialogParams);
+  const previewBaseline = useStore((s) => s.previewBaseline);
 
   const [dimEdit, setDimEdit] = useState<{
     fields: DimEditField[];
@@ -304,6 +310,10 @@ export function ViewportView() {
     vp.syncConstructionPlanes(evaluation.planes, names, visible);
     syncReferenceImages(vp, document_, evaluation);
   }, [evaluation, document_]);
+
+  useEffect(() => {
+    viewportRef.current?.setBodyTints(previewBodyTints(useStore.getState()));
+  }, [evaluation, previewBaseline]);
 
   // ---- sync sketches / profiles / highlights ----
   useEffect(() => {

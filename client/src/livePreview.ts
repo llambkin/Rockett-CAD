@@ -1,4 +1,5 @@
-import type { Feature } from "@rockett/shared";
+import type { BodyPayload, Feature } from "@rockett/shared";
+import type { ThemeColor } from "./theme/tokens";
 
 type Send = (featureId: string, patch: Partial<Feature>) => Promise<void>;
 
@@ -45,4 +46,54 @@ export function createLivePreview({
     },
     cancel,
   };
+}
+
+function removesMaterial(feature: Feature): boolean {
+  switch (feature.type) {
+    case "extrude":
+    case "revolve":
+    case "sweep":
+    case "loft":
+    case "combine":
+      return feature.operation === "cut" || feature.operation === "intersect";
+    case "emboss":
+      return feature.mode === "deboss";
+    case "offsetFace":
+      return feature.distance < 0;
+    case "shell":
+    case "fillet":
+    case "chamfer":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function sameNumbers(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function sameMesh(a: BodyPayload | undefined, b: BodyPayload): boolean {
+  return (
+    a === b ||
+    (a !== undefined &&
+      sameNumbers(a.positions, b.positions) &&
+      sameNumbers(a.indices, b.indices))
+  );
+}
+
+export function previewTints(
+  feature: Feature,
+  before: BodyPayload[],
+  after: BodyPayload[],
+): Map<string, ThemeColor> {
+  const tint = removesMaterial(feature) ? "preview-cut" : "preview-add";
+  const old = new Map(before.map((b) => [b.bodyId, b]));
+  return new Map(
+    after
+      .filter((b) => !sameMesh(old.get(b.bodyId), b))
+      .map((b) => [b.bodyId, tint]),
+  );
 }

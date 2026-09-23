@@ -9,6 +9,7 @@
 
 import { create } from "zustand";
 import type {
+  BodyPayload,
   CadDocument,
   EvaluateResult,
   Feature,
@@ -27,6 +28,8 @@ import {
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
+import { previewTints } from "./livePreview";
+import type { ThemeColor } from "./theme/tokens";
 
 // ---------------------------------------------------------------------------
 
@@ -253,8 +256,16 @@ const preview: {
   pending: { fid: string; patch: Partial<Feature> } | null;
   inFlight: Promise<void> | null;
   provisional: { id: string; added: boolean } | null;
+  base: { fid: string; bodies: BodyPayload[] } | null;
   error: string | null;
-} = { seq: 0, pending: null, inFlight: null, provisional: null, error: null };
+} = {
+  seq: 0,
+  pending: null,
+  inFlight: null,
+  provisional: null,
+  base: null,
+  error: null,
+};
 
 export function previewedFeature(s: {
   mode: Mode;
@@ -263,6 +274,17 @@ export function previewedFeature(s: {
   if (s.mode.name !== "dialog") return undefined;
   const id = s.mode.editFeatureId ?? preview.provisional?.id;
   return s.document?.features.find((f) => f.id === id);
+}
+
+export function previewBodyTints(s: {
+  document: CadDocument | null;
+  evaluation: EvaluateResult | null;
+}): Map<string, ThemeColor> {
+  const base = preview.base;
+  const feature = s.document?.features.find((f) => f.id === base?.fid);
+  if (!base || !feature || feature.suppressed || !s.evaluation)
+    return new Map();
+  return previewTints(feature, base.bodies, s.evaluation.bodies);
 }
 
 async function sendPreviews(): Promise<void> {
@@ -390,6 +412,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       await endPreviews();
       const m = await fn();
+      preview.base = null;
       set((s) => ({
         document: m.document,
         evaluation: m.evaluation,
@@ -405,9 +428,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async updateFeaturePreview(fid, patch) {
-    const { document, previewBaseline } = get();
+    const { document, evaluation, previewBaseline } = get();
     if (!document) return;
     if (!previewBaseline) {
+      preview.base = { fid, bodies: evaluation?.bodies ?? [] };
       set({ previewBaseline: JSON.parse(JSON.stringify(document)) });
     }
     preview.seq++;
@@ -432,6 +456,7 @@ export const useStore = create<State>((set, get) => ({
     const { previewBaseline } = get();
     const settling = endPreviews();
     preview.provisional = null;
+    preview.base = null;
     if (!previewBaseline) return;
     const current = () => get().projectId === previewBaseline.id;
     set({ busy: true });
