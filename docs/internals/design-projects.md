@@ -1,7 +1,7 @@
 # Project list: folders, sort and filter
 
-Status: proposal awaiting Mark's approval under DEC-406. DOC-029 and CUST-023
-wait until DEC-406 records it under Rulings in `WORK-ORDER.md`. Colours are
+Status: approved by Mark in full under DEC-406 on 2026-09-23, recorded under
+Rulings in `WORK-ORDER.md`. Colours are
 the SET-023 graded greys in `design-settings.md`. Everything composes the
 DEC-004 patterns already in `App.tsx` (`project-list-card`, `project-row`,
 `icon-btn`, `RenameInput`) and elsewhere (`context-menu`, `DraggablePanel`,
@@ -33,8 +33,8 @@ that need DEC-406: the breadcrumb, and drag to move, a gesture DEC-004 names.
 - Breadcrumb ancestors are `accent` text buttons (9.39 on `bg1`). Folder rows
   are `project-row`s with a glyph and item count, above projects.
 - Create, New folder and STEP import act in the current folder. A new folder
-  opens in `RenameInput`. A new project is created, then moved; named risk:
-  if the move fails it sits at the root, where it is still found.
+  opens in `RenameInput`. A new project is created with its `folderId`, so
+  it lands in the folder in one write.
 
 ## Right-click menus
 
