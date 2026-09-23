@@ -29,6 +29,7 @@ import * as tools from "../sketchTools";
 import { DIALOG_PICKS } from "../dialogPicks";
 import { dimensionLayout } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
+import { createLivePreview } from "../livePreview";
 
 interface DimLabel {
   id: string;
@@ -37,6 +38,13 @@ interface DimLabel {
   /** Attachment on the measured geometry, independent of label placement. */
   anchorWorld: THREE.Vector3;
 }
+
+const livePreview = createLivePreview({
+  intervalMs: 250,
+  send: (featureId, patch) =>
+    useStore.getState().updateFeaturePreview(featureId, patch),
+  now: () => performance.now(),
+});
 
 export function ViewportView() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -72,7 +80,6 @@ export function ViewportView() {
   const moveDragRef = useRef(false);
   const revolveGizmoRef = useRef<RevolveGizmo | null>(null);
   const revolveDragRef = useRef(false);
-  const previewThrottleRef = useRef({ last: 0, inFlight: false });
   /** in-progress dimension-label drag (repositioning the label) */
   const dimDragRef = useRef<{
     id: string;
@@ -870,17 +877,7 @@ export function ViewportView() {
           modeNow.editFeatureId &&
           a !== 0
         ) {
-          const th = previewThrottleRef.current;
-          const now = performance.now();
-          if (now - th.last > 250 && !th.inFlight) {
-            th.last = now;
-            th.inFlight = true;
-            void s
-              .updateFeaturePreview(modeNow.editFeatureId, { angle: a } as any)
-              .finally(() => {
-                th.inFlight = false;
-              });
-          }
+          livePreview.during(modeNow.editFeatureId, { angle: a } as any);
         }
         lastX = e.clientX;
         lastY = e.clientY;
@@ -909,19 +906,9 @@ export function ViewportView() {
           modeNow.dialog === "move" &&
           modeNow.editFeatureId
         ) {
-          const th = previewThrottleRef.current;
-          const now = performance.now();
-          if (now - th.last > 250 && !th.inFlight) {
-            th.last = now;
-            th.inFlight = true;
-            void s
-              .updateFeaturePreview(modeNow.editFeatureId, {
-                translation: t,
-              } as any)
-              .finally(() => {
-                th.inFlight = false;
-              });
-          }
+          livePreview.during(modeNow.editFeatureId, {
+            translation: t,
+          } as any);
         }
         lastX = e.clientX;
         lastY = e.clientY;
@@ -959,28 +946,17 @@ export function ViewportView() {
             modeNow.dialog === "extrude" &&
             modeNow.editFeatureId
           ) {
-            const th = previewThrottleRef.current;
-            const now = performance.now();
-            if (now - th.last > 250 && !th.inFlight) {
-              th.last = now;
-              th.inFlight = true;
-              const previewPatch = zeroed
+            livePreview.during(
+              modeNow.editFeatureId,
+              (zeroed
                 ? { suppressed: true }
                 : {
                     suppressed: false,
                     distance: Math.abs(v),
                     direction:
                       patch.direction ?? s.dialogParams.direction ?? "normal",
-                  };
-              void s
-                .updateFeaturePreview(
-                  modeNow.editFeatureId,
-                  previewPatch as any,
-                )
-                .finally(() => {
-                  th.inFlight = false;
-                });
-            }
+                  }) as any,
+            );
           }
         }
       } else if (orbiting) {
@@ -1012,9 +988,7 @@ export function ViewportView() {
           Number.isFinite(a) &&
           a !== 0
         ) {
-          void s.updateFeaturePreview(s.mode.editFeatureId, {
-            angle: a,
-          } as any);
+          livePreview.commit(s.mode.editFeatureId, { angle: a } as any);
         }
         return;
       }
@@ -1029,7 +1003,7 @@ export function ViewportView() {
           s.mode.dialog === "move" &&
           s.mode.editFeatureId
         ) {
-          void s.updateFeaturePreview(s.mode.editFeatureId, {
+          livePreview.commit(s.mode.editFeatureId, {
             translation: [
               Number(s.dialogParams.tx) || 0,
               Number(s.dialogParams.ty) || 0,
@@ -1052,7 +1026,7 @@ export function ViewportView() {
         ) {
           const dist = Number(s.dialogParams.distance);
           if (Number.isFinite(dist) && dist !== 0) {
-            void s.updateFeaturePreview(s.mode.editFeatureId, {
+            livePreview.commit(s.mode.editFeatureId, {
               suppressed: false,
               distance: dist,
               direction: s.dialogParams.direction ?? "normal",
@@ -1060,7 +1034,7 @@ export function ViewportView() {
           } else if (dist === 0) {
             // Ctrl-zeroed: leave the feature suppressed so profiles stay
             // pickable; dragging the arrow (or OK) brings it back.
-            void s.updateFeaturePreview(s.mode.editFeatureId, {
+            livePreview.commit(s.mode.editFeatureId, {
               suppressed: true,
             } as any);
           }
