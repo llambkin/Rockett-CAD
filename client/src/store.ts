@@ -28,8 +28,7 @@ import {
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
-import { previewTints } from "./livePreview";
-import type { ThemeColor } from "./theme/tokens";
+import { previewTints, type PreviewTint } from "./livePreview";
 
 // ---------------------------------------------------------------------------
 
@@ -280,7 +279,7 @@ export function previewedFeature(s: {
 export function previewBodyTints(s: {
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
-}): Map<string, ThemeColor> {
+}): Map<string, PreviewTint> {
   const base = preview.base;
   const feature = s.document?.features.find((f) => f.id === base?.fid);
   if (!base || !feature || feature.suppressed || !s.evaluation)

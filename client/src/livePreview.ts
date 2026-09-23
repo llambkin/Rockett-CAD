@@ -1,4 +1,4 @@
-import type { BodyPayload, Feature } from "@rockett/shared";
+import type { BodyPayload, FaceInfo, Feature } from "@rockett/shared";
 import type { ThemeColor } from "./theme/tokens";
 
 type Send = (featureId: string, patch: Partial<Feature>) => Promise<void>;
@@ -69,16 +69,53 @@ function removesMaterial(feature: Feature): boolean {
   }
 }
 
+export interface PreviewTint {
+  tint: ThemeColor;
+  ranges: { start: number; count: number }[];
+}
+
+function sameTriangles(
+  a: BodyPayload,
+  fa: FaceInfo,
+  b: BodyPayload,
+  fb: FaceInfo,
+): boolean {
+  if (fa.count !== fb.count) return false;
+  for (let i = 0; i < fb.count; i++) {
+    const pa = a.indices[fa.start + i]! * 3;
+    const pb = b.indices[fb.start + i]! * 3;
+    for (let k = 0; k < 3; k++)
+      if (a.positions[pa + k] !== b.positions[pb + k]) return false;
+  }
+  return true;
+}
+
+function changedFaces(old: BodyPayload | undefined, body: BodyPayload) {
+  if (!old) return [{ start: 0, count: body.indices.length }];
+  const before = new Map(old.faces.map((f) => [f.name, f]));
+  const added = body.faces.filter((f) => !before.has(f.name));
+  const changed =
+    added.length > 0
+      ? added
+      : body.faces.filter(
+          (f) => !sameTriangles(old, before.get(f.name)!, body, f),
+        );
+  return changed.map(({ start, count }) => ({ start, count }));
+}
+
 export function previewTints(
   feature: Feature,
   before: BodyPayload[],
   after: BodyPayload[],
-): Map<string, ThemeColor> {
+): Map<string, PreviewTint> {
   const tint = removesMaterial(feature) ? "preview-cut" : "preview-add";
-  const old = new Map(before.map((b) => [b.bodyId, b.meshKey]));
-  return new Map(
-    after
-      .filter((b) => old.get(b.bodyId) !== b.meshKey)
-      .map((b) => [b.bodyId, tint]),
-  );
+  const old = new Map(before.map((b) => [b.bodyId, b]));
+  const tints = new Map<string, PreviewTint>();
+  for (const body of after) {
+    const base = old.get(body.bodyId);
+    if (base?.meshKey === body.meshKey) continue;
+    const ranges = changedFaces(base, body);
+    if (ranges.length > 0) tints.set(body.bodyId, { tint, ranges });
+  }
+  return tints;
 }

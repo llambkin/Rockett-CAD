@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import type { Feature } from "@rockett/shared";
+import type { BodyPayload, Feature } from "@rockett/shared";
 import {
   createLivePreview,
   PREVIEW_DWELL_MS,
@@ -93,16 +93,86 @@ it("cancel and commit drop a pending dwell", () => {
   vi.useRealTimers();
 });
 
-it("tints a preview body only when its mesh key differs from the baseline", () => {
-  const [kept, moved, added] = manyBodyPayloads(3, 1);
-  const cut = { type: "extrude", operation: "cut" } as Feature;
-  const after = JSON.parse(
-    JSON.stringify([kept, { ...moved, meshKey: "moved" }, added]),
-  );
-  expect(previewTints(cut, [kept!, moved!], after)).toEqual(
+const cut = { type: "extrude", operation: "cut" } as Feature;
+
+function reshape(body: BodyPayload, face: number, dz: number): BodyPayload {
+  const { start, count } = body.faces[face]!;
+  const positions = [...body.positions];
+  for (const i of new Set(body.indices.slice(start, start + count)))
+    positions[i * 3 + 2]! += dz;
+  return { ...body, meshKey: `${body.meshKey}~${face}`, positions };
+}
+
+function withNewFace(body: BodyPayload): BodyPayload {
+  const base = body.positions.length / 3;
+  const start = body.indices.length;
+  return {
+    ...body,
+    meshKey: `${body.meshKey}+fillet`,
+    positions: [...body.positions, 0, 0, 0, 1, 0, 0, 0, 1, 0],
+    normals: [...body.normals, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+    indices: [...body.indices, base, base + 1, base + 2],
+    faces: [
+      ...body.faces,
+      { ...body.faces[0]!, name: "f:fillet", start, count: 3 },
+    ],
+  };
+}
+
+const roundTrip = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+it("leaves a body untinted while its mesh key matches the baseline", () => {
+  const [kept] = manyBodyPayloads(1, 1);
+  const moved = { ...reshape(kept!, 1, 1), meshKey: kept!.meshKey };
+  expect(previewTints(cut, [kept!], roundTrip([moved]))).toEqual(new Map());
+});
+
+it("tints every face of a new body", () => {
+  const [kept, added] = manyBodyPayloads(2, 1);
+  expect(previewTints(cut, [kept!], roundTrip([kept!, added!]))).toEqual(
     new Map([
-      [moved!.bodyId, "preview-cut"],
-      [added!.bodyId, "preview-cut"],
+      [
+        added!.bodyId,
+        {
+          tint: "preview-cut",
+          ranges: [{ start: 0, count: added!.indices.length }],
+        },
+      ],
+    ]),
+  );
+});
+
+it("tints only the new faces when a feature adds faces and trims others", () => {
+  const [body] = manyBodyPayloads(1, 1);
+  const filleted = withNewFace(reshape(body!, 1, -0.5));
+  const fillet = filleted.faces.at(-1)!;
+  expect(previewTints(cut, [body!], roundTrip([filleted]))).toEqual(
+    new Map([
+      [
+        body!.bodyId,
+        {
+          tint: "preview-cut",
+          ranges: [{ start: fillet.start, count: fillet.count }],
+        },
+      ],
+    ]),
+  );
+});
+
+it("tints the moved faces when a changed body keeps every face name", () => {
+  const [body] = manyBodyPayloads(1, 1);
+  const join = { type: "extrude", operation: "join" } as Feature;
+  const edited = reshape(body!, 1, 2);
+  const cap = edited.faces[1]!;
+  expect(previewTints(join, [body!], roundTrip([edited]))).toEqual(
+    new Map([
+      [
+        body!.bodyId,
+        {
+          tint: "preview-add",
+          ranges: [{ start: cap.start, count: cap.count }],
+        },
+      ],
     ]),
   );
 });

@@ -15,9 +15,10 @@ import type {
   Vec3,
 } from "@rockett/shared";
 import type { Selection } from "../store";
+import type { PreviewTint } from "../livePreview";
 import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
-import { themeColor, type ThemeColor } from "../theme/tokens";
+import { themeColor } from "../theme/tokens";
 import { cameraTween, orbitAbout, type CameraPose } from "./camera";
 import { frameScheduler } from "./frameScheduler";
 
@@ -83,6 +84,8 @@ export function uv3(frame: PlaneFrame, u: number, v: number): THREE.Vector3 {
 interface BodyObjects {
   group: THREE.Group;
   mesh: THREE.Mesh;
+  material: THREE.MeshStandardMaterial;
+  tint: THREE.MeshStandardMaterial | null;
   edges: THREE.LineSegments;
   /** segment index → edge name */
   edgeSegments: string[];
@@ -602,6 +605,8 @@ export class CadViewport {
     return {
       group,
       mesh,
+      material: mat,
+      tint: null,
       edges,
       edgeSegments,
       vertices,
@@ -610,20 +615,30 @@ export class CadViewport {
     };
   }
 
-  setBodyTints(tints: ReadonlyMap<string, ThemeColor>) {
-    for (const [id, b] of this.bodies)
-      (b.mesh.material as THREE.MeshStandardMaterial).color.set(
-        themeColor(tints.get(id) ?? "body"),
-      );
-    this.requestRender();
-  }
-
-  setBodyDimmed(dim: boolean, exceptBodyId?: string) {
+  setBodyTints(tints: ReadonlyMap<string, PreviewTint>) {
     for (const [id, b] of this.bodies) {
-      const mat = b.mesh.material as THREE.MeshStandardMaterial;
-      mat.transparent = dim && id !== exceptBodyId;
-      mat.opacity = dim && id !== exceptBodyId ? 0.35 : 1;
-      mat.needsUpdate = true;
+      const tint = tints.get(id);
+      const geom = b.mesh.geometry;
+      geom.clearGroups();
+      if (!tint) {
+        b.mesh.material = b.material;
+        b.tint?.dispose();
+        b.tint = null;
+        continue;
+      }
+      b.tint ??= b.material.clone();
+      b.tint.color.set(themeColor(tint.tint));
+      let at = 0;
+      for (const { start, count } of tint.ranges.toSorted(
+        (x, y) => x.start - y.start,
+      )) {
+        if (start > at) geom.addGroup(at, start - at, 0);
+        geom.addGroup(start, count, 1);
+        at = start + count;
+      }
+      const end = geom.index?.count ?? 0;
+      if (end > at) geom.addGroup(at, end - at, 0);
+      b.mesh.material = [b.material, b.tint];
     }
     this.requestRender();
   }

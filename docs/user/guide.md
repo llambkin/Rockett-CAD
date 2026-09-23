@@ -172,11 +172,12 @@ cancels an open feature dialog, reverts its live preview and clears the
 selection.
 
 A feature dialog previews its result in the model 0.3 seconds after your last
-change, for a new feature as well as an edit. Until you press OK, the bodies it
-creates or changes are tinted: green when the feature adds material, red when
-it removes material (cut, intersect, deboss, shell, fillet, chamfer, a negative
-face offset). Other bodies look as usual. OK keeps the previewed feature as one
-undo step and clears the tint; Cancel, Escape or closing the dialog removes it.
+change, for a new feature as well as an edit. Until you press OK, the faces it
+adds are tinted, and a new body is tinted whole: green when the feature adds
+material, red when it removes material (cut, intersect, deboss, shell, fillet,
+chamfer, a negative face offset). An edit that adds no face tints the faces
+that moved. Everything else looks as usual. OK keeps the previewed feature as one undo step
+and clears the tint; Cancel, Escape or closing the dialog removes it.
 
 Errors remain visible until dismissed or the next operation starts, and their
 text can be selected and copied.

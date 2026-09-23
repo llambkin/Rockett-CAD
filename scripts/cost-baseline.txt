@@ -26,12 +26,12 @@ client/src/components/ViewportView.tsx pointerToSketchUV 224
 client/src/components/ViewportView.tsx useEffect() 112
 client/src/components/ViewportView.tsx useEffect()#2 274
 client/src/sketchTools.ts 827
-client/src/store.ts 1026
+client/src/store.ts 1025
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 686
-client/src/three/CadViewport.ts 989
+client/src/three/CadViewport.ts 1004
 client/src/three/CadViewport.ts addHighlight 104
-client/src/three/CadViewport.ts buildBody 85
+client/src/three/CadViewport.ts buildBody 87
 client/src/three/CadViewport.ts pick 183
 client/src/three/ViewCube.ts constructor 95
 client/src/three/revolveGhost.ts buildRevolveGhost 99
