@@ -10,7 +10,7 @@ export const projects = [
       "client/test/**/*.test.ts",
       "modules/*/test/**/*.test.ts",
     ],
-    exclude: ["**/test/dom/**"],
+    exclude: ["**/test/dom/**", "**/test/browser/**"],
   },
   {
     name: "dom",
@@ -21,6 +21,14 @@ export const projects = [
     ],
     exclude: [],
     setupFiles: ["client/test/dom/setup.ts"],
+  },
+  {
+    name: "browser",
+    environment: "node",
+    include: ["client/test/browser/**/*.test.ts"],
+    exclude: [],
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 ];
 
