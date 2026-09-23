@@ -69,7 +69,7 @@ everything downstream against persistent topology references.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control.
 - **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
-- **Tool panels**: stay inside the window and open with the main number selected; Enter confirms, Escape cancels and reverts a preview.
+- **Tool panels**: stay inside the window, open with the main number selected and list each pick to remove or highlight; Enter confirms, Escape cancels and reverts a preview.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.
 - **Tree selection**: Ctrl or Cmd+click adds bodies or sketches, Shift+click selects a range; right-click acts on all.
 - **Live preview**: feature dialogs show the result after you stop typing, tinted green for added and red for removed material until OK.
