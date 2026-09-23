@@ -15,8 +15,8 @@ client/src/components/Toolbar.tsx SketchToolbar 202
 client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/Toolbar.tsx applyConstraint 110
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 138
-client/src/components/ViewportView.tsx 3120
-client/src/components/ViewportView.tsx ViewportView 2887
+client/src/components/ViewportView.tsx 3116
+client/src/components/ViewportView.tsx ViewportView 2882
 client/src/components/ViewportView.tsx computeGizmoSource 102
 client/src/components/ViewportView.tsx handleHover 135
 client/src/components/ViewportView.tsx handlePrimaryUp 191
@@ -24,12 +24,12 @@ client/src/components/ViewportView.tsx handleSketchClick 236
 client/src/components/ViewportView.tsx onPointerMove 112
 client/src/components/ViewportView.tsx pointerToSketchUV 224
 client/src/components/ViewportView.tsx useEffect() 112
-client/src/components/ViewportView.tsx useEffect()#2 279
+client/src/components/ViewportView.tsx useEffect()#2 274
 client/src/sketchTools.ts 827
 client/src/store.ts 1024
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 685
-client/src/three/CadViewport.ts 964
+client/src/three/CadViewport.ts 988
 client/src/three/CadViewport.ts addHighlight 104
 client/src/three/CadViewport.ts buildBody 85
 client/src/three/CadViewport.ts pick 183
