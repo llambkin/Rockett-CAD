@@ -23,15 +23,15 @@ snapshots sent by different clients.
 
 ## Projects
 
-| Method & path                  | Body        | Returns                                                                                      |
-| ------------------------------ | ----------- | -------------------------------------------------------------------------------------------- |
-| `GET /health`                  | none        | `{ ok: true, version, schemaVersion, commit }` (`commit` from `ROCKETT_COMMIT`, else `null`) |
-| `GET /projects`                | none        | `ProjectSummary[]`                                                                           |
-| `POST /projects`               | `{ name }`  | `{ document }`                                                                               |
-| `GET /projects/:id`            | none        | `{ document }`                                                                               |
-| `DELETE /projects/:id`         | none        | `{ ok }`                                                                                     |
-| `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied)                                                               |
-| `POST /projects/:id/rename`    | `{ name }`  | `{ document }`                                                                               |
+| Method & path                  | Body        | Returns                                                                                                                                         |
+| ------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                  | none        | `{ ok: true, version, schemaVersion, commit, describe }` (`commit` from `ROCKETT_COMMIT`, `describe` from `ROCKETT_DESCRIBE`, each else `null`) |
+| `GET /projects`                | none        | `ProjectSummary[]`                                                                                                                              |
+| `POST /projects`               | `{ name }`  | `{ document }`                                                                                                                                  |
+| `GET /projects/:id`            | none        | `{ document }`                                                                                                                                  |
+| `DELETE /projects/:id`         | none        | `{ ok }`                                                                                                                                        |
+| `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied)                                                                                                                  |
+| `POST /projects/:id/rename`    | `{ name }`  | `{ document }`                                                                                                                                  |
 
 ## Model
 

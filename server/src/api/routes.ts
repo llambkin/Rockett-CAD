@@ -151,6 +151,7 @@ export function createApiRouter(store: ProjectStore): Router {
       version,
       schemaVersion: SCHEMA_VERSION,
       commit: process.env.ROCKETT_COMMIT || null,
+      describe: process.env.ROCKETT_DESCRIBE || null,
     });
   });
 

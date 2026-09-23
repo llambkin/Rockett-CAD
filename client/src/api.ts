@@ -16,6 +16,15 @@ export interface MutationResponse {
   evaluation: EvaluateResult;
 }
 
+export interface Health {
+  version: string;
+  schemaVersion: number;
+  commit: string | null;
+  describe: string | null;
+}
+
+let health: Promise<Health> | undefined;
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
     method,
@@ -37,6 +46,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
+  health: () => (health ??= req<Health>("GET", "/health")),
   async importStep(file: File, projectId?: string): Promise<MutationResponse> {
     const form = new FormData();
     form.append("file", file);

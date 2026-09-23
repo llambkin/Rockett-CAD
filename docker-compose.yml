@@ -6,12 +6,14 @@ name: rockett-cad
 #   ROCKETT_TAG        image tag (default local)
 #   ROCKETT_MEM_LIMIT  container memory cap (default 6g)
 #   ROCKETT_COMMIT     git revision baked into the image and /api/health
+#   ROCKETT_DESCRIBE   git describe output baked into the image and /api/health
 services:
   rockett-cad:
     build:
       context: .
       args:
         ROCKETT_COMMIT: ${ROCKETT_COMMIT:-}
+        ROCKETT_DESCRIBE: ${ROCKETT_DESCRIBE:-}
     image: rockett-cad:${ROCKETT_TAG:-local}
     restart: unless-stopped
     ports:

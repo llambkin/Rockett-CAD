@@ -12,6 +12,7 @@ import { MeasurePanel } from "./components/MeasurePanel";
 import { StepImportButton } from "./components/StepImportButton";
 import { DraggablePanel } from "./components/DraggablePanel";
 import { viewportHandle } from "./viewportRef";
+import { versionLabel } from "./versionLabel";
 import {
   IDLE_SHORTCUTS,
   SKETCH_SHORTCUTS,
@@ -140,6 +141,23 @@ function ProjectList() {
           )}
         </div>
       </div>
+      <VersionLabel />
+    </div>
+  );
+}
+
+function VersionLabel() {
+  const [label, setLabel] = useState<ReturnType<typeof versionLabel>>();
+  useEffect(() => {
+    api
+      .health()
+      .then((h) => setLabel(versionLabel(h)))
+      .catch(() => setLabel(undefined));
+  }, []);
+  if (!label) return null;
+  return (
+    <div className="version-label" title={label.title}>
+      {label.text}
     </div>
   );
 }
@@ -361,6 +379,7 @@ function Workspace() {
         <FeatureDialog />
         <SketchOffsetPanel />
         <MeasurePanel />
+        <VersionLabel />
         {showHelp && (
           <DraggablePanel title="Keyboard & mouse controls">
             <div className="dialog-body shortcut-help">

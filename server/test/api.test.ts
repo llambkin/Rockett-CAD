@@ -3,7 +3,15 @@
  * create project → sketch → extrude → sketch on face → cut → fillet →
  * rollback → edit → measure → export → reload.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import express from "express";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -504,16 +512,27 @@ describe("REST API MVP workflow", () => {
     ).rejects.toThrow(/400.*supported: stl, 3mf/);
   });
 
-  it("reports version, schema version and commit on health", async () => {
-    const health = await api("GET", "/health");
+  it("reports version, schema version, commit and describe on health", async () => {
     const root = JSON.parse(
       await fs.readFile(new URL("../../package.json", import.meta.url), "utf8"),
     );
-    expect(health).toEqual({
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    vi.stubEnv("ROCKETT_COMMIT", "");
+    vi.stubEnv("ROCKETT_DESCRIBE", "");
+    expect(await api("GET", "/health")).toEqual({
       ok: true,
       version: root.version,
       schemaVersion: SCHEMA_VERSION,
-      commit: process.env.ROCKETT_COMMIT || null,
+      commit: null,
+      describe: null,
+    });
+    vi.stubEnv("ROCKETT_COMMIT", "2267c0d5a1b2c3d4e5f60718293a4b5c6d7e8f90");
+    vi.stubEnv("ROCKETT_DESCRIBE", "v0.1.0-12-g2267c0d");
+    expect(await api("GET", "/health")).toMatchObject({
+      commit: "2267c0d5a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      describe: "v0.1.0-12-g2267c0d",
     });
   });
 });

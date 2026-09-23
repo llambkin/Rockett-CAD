@@ -7,7 +7,9 @@ dependencies). All persistent state lives under **one volume: `/data`**.
 ## Compose
 
 ```bash
-ROCKETT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
+ROCKETT_COMMIT=$(git rev-parse HEAD) \
+ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
+  docker compose up -d --build
 # → http://127.0.0.1:8788
 ```
 
@@ -23,18 +25,21 @@ the header of the file lists every variable.
 # dev: rebuild from the checkout you are working in
 ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_HOST_PORT="$DEV_PORT" ROCKETT_TAG=dev \
 ROCKETT_COMMIT=$(git rev-parse HEAD) \
+ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
   docker compose -p rockett-cad-dev up -d --build
 
 # prod: build a revision-tagged image from a clean deploy checkout
 REV=$(git rev-parse --short HEAD)
 ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_TAG=$REV ROCKETT_COMMIT=$(git rev-parse HEAD) \
+ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
   docker compose -p rockett-cad-prod up -d --build
 ```
 
 Roll prod back by rerunning `up -d --no-build` with the previous `ROCKETT_TAG`;
 keep that image until the new one is trusted. Confirm what is running with
 `curl http://<host>:<port>/api/health`, whose `commit` must match the intended
-revision.
+revision. The UI shows the same build in its bottom-right corner: `describe`
+when set, else the version and short commit, else `dev`.
 
 Back up an instance's data with
 `docker compose -p rockett-cad-prod exec -T rockett-cad tar czf - -C /data . > rockett-prod.tgz`
@@ -42,7 +47,9 @@ Back up an instance's data with
 ## Manual
 
 ```bash
-docker build -t rockett-cad:latest .
+docker build -t rockett-cad:latest \
+  --build-arg ROCKETT_COMMIT=$(git rev-parse HEAD) \
+  --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) .
 docker run -d --name rockett-cad \
   -p 8788:8788 \
   -v /path/to/appdata/rockett-cad:/data \
@@ -77,11 +84,12 @@ persistence tests and was smoke-tested against a live container.
 
 ## Environment
 
-| Variable         | Default | Purpose                                            |
-| ---------------- | ------- | -------------------------------------------------- |
-| `ROCKETT_PORT`   | `8788`  | HTTP port inside the container                     |
-| `DATA_DIR`       | `/data` | Persistent root                                    |
-| `ROCKETT_COMMIT` | empty   | Git revision reported by `/api/health` (build arg) |
+| Variable           | Default | Purpose                                                                      |
+| ------------------ | ------- | ---------------------------------------------------------------------------- |
+| `ROCKETT_PORT`     | `8788`  | HTTP port inside the container                                               |
+| `DATA_DIR`         | `/data` | Persistent root                                                              |
+| `ROCKETT_COMMIT`   | empty   | Git revision reported by `/api/health` (build arg)                           |
+| `ROCKETT_DESCRIBE` | empty   | `git describe --tags --always --dirty` reported by `/api/health` (build arg) |
 
 ## Security
 
