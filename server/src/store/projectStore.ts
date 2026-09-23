@@ -5,6 +5,7 @@ import {
   type CadDocument,
   type ProjectSummary,
 } from "@rockett/shared";
+import { BlobStore } from "./blobStore.js";
 import { JsonStore, StoreError, type Inventory } from "./jsonStore.js";
 import { documentMigrations, TooNewError } from "./migrations.js";
 import type { Storage } from "./storage.js";
@@ -145,12 +146,15 @@ export class ProjectStore {
     copy.id = newId();
     copy.name = newName || `${src.name} (copy)`;
     copy.createdAt = new Date().toISOString();
-    const from = this.assetDir(id);
-    for (const f of await this.storage.list(from))
-      await this.storage.writeAtomic(
-        path.posix.join(this.assetDir(copy.id), f),
-        await this.storage.read(path.posix.join(from, f)),
-      );
+    for (const dir of ["assets", "blobs"]) {
+      const from = path.posix.join(this.documents.dir(id), dir);
+      const to = path.posix.join(this.documents.dir(copy.id), dir);
+      for (const f of await this.storage.list(from))
+        await this.storage.writeAtomic(
+          path.posix.join(to, f),
+          await this.storage.read(path.posix.join(from, f)),
+        );
+    }
     await this.save(copy);
     return copy;
   }
@@ -249,6 +253,13 @@ export class ProjectStore {
     if (path.extname(assetId) !== `.${imageExt(data, label)}`)
       throw new StoreError(`${label}extension does not match the image type`);
     await this.storage.writeAtomic(file, data);
+  }
+
+  blobs(projectId: string): BlobStore {
+    return new BlobStore(
+      this.storage,
+      path.posix.join(this.documents.dir(projectId), "blobs"),
+    );
   }
 
   private assetDir(projectId: string): string {

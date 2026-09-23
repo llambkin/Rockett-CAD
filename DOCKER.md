@@ -102,6 +102,7 @@ docker run -d --name rockett-cad \
         ├── document.json   # the parametric document (full history)
         ├── temporary.json  # present only on a temporary copy of a browser project
         ├── assets/         # uploaded reference images
+        ├── blobs/          # content-addressed files, each named by its sha256
         └── exports/        # server-retained exports (opt-in per export)
 ```
 

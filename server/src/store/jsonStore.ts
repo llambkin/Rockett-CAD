@@ -31,7 +31,7 @@ export interface Inventory {
   failed: Array<{ key: string; error: string }>;
 }
 
-function sha256(data: string | Uint8Array): string {
+export function sha256(data: string | Uint8Array): string {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
