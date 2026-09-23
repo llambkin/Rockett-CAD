@@ -1,10 +1,10 @@
 client/src/App.tsx Workspace 250
 client/src/components/DraggablePanel.tsx DraggablePanel 125
-client/src/components/FeatureDialog.tsx 1291
+client/src/components/FeatureDialog.tsx 1297
 client/src/components/FeatureDialog.tsx DialogBody 920
-client/src/components/FeatureDialog.tsx ReferenceImagePanel 189
-client/src/components/ModelTree.tsx 606
-client/src/components/ModelTree.tsx ModelTree 477
+client/src/components/FeatureDialog.tsx ReferenceImagePanel 188
+client/src/components/ModelTree.tsx 610
+client/src/components/ModelTree.tsx ModelTree 478
 client/src/components/ProjectItems.tsx 517
 client/src/components/ProjectItems.tsx ItemRow 89
 client/src/components/ProjectItems.tsx ProjectItems 153
@@ -14,21 +14,21 @@ client/src/components/Timeline.tsx Timeline 178
 client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 98
 client/src/components/Toolbar.tsx Toolbar 92
-client/src/components/ViewportContextMenu.tsx ViewportContextMenu 136
-client/src/components/ViewportView.tsx 3145
-client/src/components/ViewportView.tsx ViewportView 2909
+client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
+client/src/components/ViewportView.tsx 3153
+client/src/components/ViewportView.tsx ViewportView 2917
 client/src/components/ViewportView.tsx computeGizmoSource 100
 client/src/components/ViewportView.tsx handleHover 135
 client/src/components/ViewportView.tsx handlePrimaryUp 191
 client/src/components/ViewportView.tsx handleSketchClick 236
 client/src/components/ViewportView.tsx onPointerMove 113
 client/src/components/ViewportView.tsx pointerToSketchUV 224
-client/src/components/ViewportView.tsx useEffect() 112
+client/src/components/ViewportView.tsx useEffect() 108
 client/src/components/ViewportView.tsx useEffect()#2 276
 client/src/sketchTools.ts 827
-client/src/store.ts 1170
+client/src/store.ts 1193
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 744
+client/src/store.ts useStore 762
 client/src/three/CadViewport.ts 1042
 client/src/three/CadViewport.ts addHighlight 104
 client/src/three/CadViewport.ts buildBody 87
@@ -37,7 +37,7 @@ client/src/three/ViewCube.ts constructor 95
 client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 162
 client/src/three/toolPreview.ts updateToolPreview 158
-server/src/api/routes.ts 705
+server/src/api/routes.ts 706
 server/src/api/routes.ts createApiRouter 520
 server/src/geometry/engine.ts evaluate 108
 server/src/geometry/features.ts 1974
