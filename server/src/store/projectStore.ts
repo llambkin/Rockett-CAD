@@ -15,12 +15,13 @@ import crypto from "node:crypto";
 import {
   SCHEMA_VERSION,
   createEmptyDocument,
-  type ApiErrorCode,
   type CadDocument,
   type ProjectSummary,
 } from "@rockett/shared";
+import { JsonStore, StoreError } from "./jsonStore.js";
 import { migrateDocument } from "./migrations.js";
-import { ProjectQueue } from "./projectQueue.js";
+
+export { StoreError };
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ASSET_ID_RE = /^[a-f0-9]{16}\.(png|jpg|webp)$/;
@@ -58,44 +59,38 @@ function imageExt(data: Buffer, label: string): string {
   return type.ext;
 }
 
-export class StoreError extends Error {
-  constructor(
-    message: string,
-    readonly code: ApiErrorCode = "validation",
-  ) {
-    super(message);
-  }
-}
-
 export class ProjectStore {
-  private saves = new ProjectQueue();
+  private documents: JsonStore<CadDocument>;
 
-  constructor(private dataDir: string) {}
-
-  private projectsDir(): string {
-    return path.join(this.dataDir, "projects");
+  constructor(dataDir: string) {
+    this.documents = new JsonStore({
+      root: path.join(dataDir, "projects"),
+      name: "project",
+      key: ID_RE,
+      file: "document.json",
+      migrate: migrateDocument,
+      validate: (doc) => {
+        if (doc.schemaVersion !== SCHEMA_VERSION)
+          throw new StoreError(
+            `document schema ${doc.schemaVersion} does not match ${SCHEMA_VERSION}`,
+          );
+      },
+    });
   }
 
-  /** Validated project directory — rejects path traversal. */
   private projectDir(id: string): string {
-    if (!ID_RE.test(id)) throw new StoreError(`invalid project id`);
-    return path.join(this.projectsDir(), id);
+    return this.documents.dir(id);
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.projectsDir(), { recursive: true });
+    await fs.mkdir(this.documents.options.root, { recursive: true });
   }
 
   async list(): Promise<ProjectSummary[]> {
-    await this.init();
-    const entries = await fs.readdir(this.projectsDir(), {
-      withFileTypes: true,
-    });
     const out: ProjectSummary[] = [];
-    for (const e of entries) {
-      if (!e.isDirectory() || !ID_RE.test(e.name)) continue;
+    for (const id of await this.documents.keys()) {
       try {
-        const doc = await this.load(e.name);
+        const doc = await this.load(id);
         out.push({
           id: doc.id,
           name: doc.name,
@@ -124,49 +119,15 @@ export class ProjectStore {
     return doc;
   }
 
-  async load(id: string): Promise<CadDocument> {
-    const file = path.join(this.projectDir(id), "document.json");
-    let raw: string;
-    try {
-      raw = await fs.readFile(file, "utf8");
-    } catch {
-      throw new StoreError(`project ${id} not found`, "not_found");
-    }
-    let doc: CadDocument;
-    try {
-      doc = JSON.parse(raw);
-    } catch {
-      throw new StoreError(`project ${id} is corrupted`, "internal");
-    }
-    return migrateDocument(doc);
+  load(id: string): Promise<CadDocument> {
+    return this.documents.read(id);
   }
 
   async save(doc: CadDocument): Promise<void> {
-    // Windows cannot reliably replace the same destination concurrently.
-    // Capture the submitted version before waiting for earlier saves.
     const snapshot = structuredClone(doc);
-    await this.saves.run(doc.id, () => this.writeDocument(snapshot));
+    snapshot.modifiedAt = new Date().toISOString();
+    await this.documents.write(doc.id, snapshot);
     doc.modifiedAt = snapshot.modifiedAt;
-  }
-
-  private async writeDocument(doc: CadDocument): Promise<void> {
-    if (doc.schemaVersion !== SCHEMA_VERSION) {
-      throw new StoreError(
-        `document schema ${doc.schemaVersion} does not match ${SCHEMA_VERSION}`,
-      );
-    }
-    doc.modifiedAt = new Date().toISOString();
-    const dir = this.projectDir(doc.id);
-    await fs.mkdir(dir, { recursive: true });
-    const file = path.join(dir, "document.json");
-    const tmp = `${file}.${crypto.randomUUID()}.tmp`;
-    try {
-      await fs.writeFile(tmp, JSON.stringify(doc, null, 1), "utf8");
-      await fs.rename(tmp, file);
-    } finally {
-      // Each save owns its temporary file, including when a write fails.
-      await fs.rm(tmp, { force: true });
-    }
   }
 
   async duplicate(id: string, newName?: string): Promise<CadDocument> {
@@ -197,9 +158,8 @@ export class ProjectStore {
     return copy;
   }
 
-  async remove(id: string): Promise<void> {
-    const dir = this.projectDir(id);
-    await fs.rm(dir, { recursive: true, force: true });
+  remove(id: string): Promise<void> {
+    return this.documents.remove(id);
   }
 
   // ----- assets (reference images) -----
