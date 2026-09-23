@@ -8,7 +8,7 @@
  */
 
 import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
-import { arcAngles } from "@rockett/shared";
+import { arcAngles, LINEAR_TOL, UNIT_DOT_TOL } from "@rockett/shared";
 import {
   getKernel,
   kernelCall,
@@ -58,7 +58,7 @@ export function snapper(): (x: number, y: number) => [number, number] {
   const known: [number, number][] = [];
   return (x, y) => {
     for (const k of known) {
-      if (Math.hypot(k[0] - x, k[1] - y) < 1e-6) return k;
+      if (Math.hypot(k[0] - x, k[1] - y) < LINEAR_TOL) return k;
     }
     const p: [number, number] = [x, y];
     known.push(p);
@@ -324,7 +324,7 @@ export function subtractSketchRegionsFromFace(
         const cls = new k.BRepClass_FaceClassifier_4(
           faceT,
           pnt(w[0], w[1], w[2]),
-          1e-6,
+          LINEAR_TOL,
           false,
           0.1,
         );
@@ -341,7 +341,7 @@ export function subtractSketchRegionsFromFace(
       const n = sk.frame.normal;
       const o = sk.frame.origin;
       const ndot = Math.abs(n[0] * fn[0] + n[1] * fn[1] + n[2] * fn[2]);
-      if (ndot < 1 - 1e-6) continue;
+      if (ndot < 1 - UNIT_DOT_TOL) continue;
       const doff = Math.abs(
         (o[0] - fp[0]) * fn[0] +
           (o[1] - fp[1]) * fn[1] +

@@ -4,6 +4,7 @@
  */
 
 import {
+  LINEAR_TOL,
   SCHEMA_VERSION,
   UNIT_TO_MM,
   type CadDocument,
@@ -248,6 +249,7 @@ export function knownKeys(v: object, type: unknown): void {
 }
 
 const MAX_DIM = 100_000; // 100 m in mm — sanity bound
+const MIN_OFFSET_MM = 1e-7;
 
 export function validateFeature(f: Feature): void {
   record(f, "feature");
@@ -284,7 +286,7 @@ export function validateFeature(f: Feature): void {
             throw new ValidationError("duplicate offset id");
           ids.add(offset.id);
           num(offset.distance, "offset distance", -MAX_DIM, MAX_DIM);
-          if (Math.abs(offset.distance) < 1e-7)
+          if (Math.abs(offset.distance) < MIN_OFFSET_MM)
             throw new ValidationError("offset distance must be non-zero");
           num(offset.joinTolerance, "offset join tolerance", 0, 1);
           for (const refs of [offset.sourceIds, offset.entityIds]) {
@@ -351,7 +353,7 @@ export function validateFeature(f: Feature): void {
     case "extrude": {
       // signed: a negative distance extrudes to the other side of the sketch
       num(f.distance, "extrude distance", -MAX_DIM, MAX_DIM);
-      if (Math.abs(f.distance) < 0.000001)
+      if (Math.abs(f.distance) < LINEAR_TOL)
         throw new ValidationError("extrude distance must be non-zero");
       oneOf(f.direction, "extrude direction", [
         "normal",
@@ -389,16 +391,16 @@ export function validateFeature(f: Feature): void {
       break;
     case "fillet":
       if (f.tangentChain !== undefined) bool(f.tangentChain, "tangentChain");
-      num(f.radius, "fillet radius", 0.000001, MAX_DIM);
+      num(f.radius, "fillet radius", LINEAR_TOL, MAX_DIM);
       list(f.edges, "fillet edges", 1, 256, edgeRef);
       break;
     case "chamfer":
       if (f.tangentChain !== undefined) bool(f.tangentChain, "tangentChain");
-      num(f.distance, "chamfer distance", 0.000001, MAX_DIM);
+      num(f.distance, "chamfer distance", LINEAR_TOL, MAX_DIM);
       list(f.edges, "chamfer edges", 1, 256, edgeRef);
       break;
     case "shell":
-      num(f.thickness, "shell thickness", 0.000001, MAX_DIM);
+      num(f.thickness, "shell thickness", LINEAR_TOL, MAX_DIM);
       list(f.openFaces, "shell open faces", 0, 256, faceRef);
       break;
     case "combine":
@@ -456,7 +458,7 @@ export function validateFeature(f: Feature): void {
       break;
     case "emboss":
       list(f.profiles, "emboss profiles", 1, 64, profileRef);
-      num(f.depth, "emboss depth", 0.000001, MAX_DIM);
+      num(f.depth, "emboss depth", LINEAR_TOL, MAX_DIM);
       oneOf(f.mode, "emboss mode", ["emboss", "deboss"]);
       break;
     case "move":

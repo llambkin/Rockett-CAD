@@ -1,4 +1,4 @@
-import type { EdgeRef, Vec3 } from "@rockett/shared";
+import { LINEAR_TOL, type EdgeRef, type Vec3 } from "@rockett/shared";
 import { computeEdgeNames, type NamedBody } from "./naming.js";
 import {
   edges,
@@ -56,7 +56,7 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
   const chosen = new Set(seeds.map((r) => r.edgeName)),
     queue = [...chosen];
   const coincident = (a: Vec3, b: Vec3) =>
-    Math.hypot(...a.map((v, j) => v - b[j]!)) < 1e-6;
+    Math.hypot(...a.map((v, j) => v - b[j]!)) < LINEAR_TOL;
   const continues = (a: Vec3, b: Vec3) =>
     a.reduce((sum, v, j) => sum + v * b[j]!, 0) < -Math.cos(Math.PI / 180);
   for (let i = 0; i < queue.length; i++) {
@@ -66,7 +66,7 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
           name !== queue[i] &&
           endpoints.some(
             (other) =>
-              Math.hypot(...end.p.map((v, j) => v - other.p[j]!)) < 1e-6 &&
+              coincident(end.p, other.p) &&
               end.d.reduce((sum, v, j) => sum + v * other.d[j]!, 0) <
                 -Math.cos(Math.PI / 180),
           ),

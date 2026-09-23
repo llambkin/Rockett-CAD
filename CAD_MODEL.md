@@ -196,6 +196,27 @@ it, stable across regeneration while the same entities enclose the region.
 Suppressed features skip evaluation but still occupy a snapshot slot, so
 toggling suppression invalidates exactly the right suffix.
 
+## Tolerances
+
+`shared/src/tolerance.ts` owns the modelling tolerances. Each quantity has its
+own constant, even where two numbers match.
+
+- `LINEAR_TOL = 1e-6` mm: coincidence, sewing, loft, thick solid, face
+  classification, zero length and the smallest positive fillet, chamfer, shell,
+  emboss and extrude size.
+- `ANGULAR_TOL_DEG = 1e-9` degrees: full-turn tests in revolve and circular
+  pattern.
+- `UNIT_DOT_TOL = 1e-6`, no unit: the dot product of unit normals in parallel
+  and perpendicular face tests.
+- `MIN_OFFSET_MM = 1e-7` mm, in `server/src/api/validate.ts`: the smallest
+  sketch offset distance the API accepts. It is an input bound, not a
+  tolerance.
+
+Areas in mm2 are squared lengths and never compare against `LINEAR_TOL`.
+Solver convergence and pivot guards stay in `shared/src/solver.ts`, sketch
+region merging in `shared/src/profiles.ts`. No fingerprint quantisation exists
+yet; it gets its own constant when it does.
+
 ## Tessellation
 
 `BRepMesh_IncrementalMesh` (0.08 mm / 0.35 rad for the viewport) produces per
@@ -288,7 +309,7 @@ or `vertical` constraint on the same line, which it implies.
 
 Fillet/Chamfer store optional tangentChain metadata (absent preserves prior
 behaviour). New dialogs enable it. Exact OCCT endpoint derivatives find unique
-smooth continuations within 1 degree and 1e-6 mm; branching matches stop traversal.
+smooth continuations within 1 degree and `LINEAR_TOL`; branching matches stop traversal.
 The chain is resolved again at the feature position during regeneration. Native
 OCCT contours are added only once to prevent duplicate contour definitions when
 several selected edges already belong to the same contour. The selection toggle

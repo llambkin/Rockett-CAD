@@ -7,6 +7,9 @@ import {
   detectProfiles,
   solveSketch,
   projectEdge,
+  ANGULAR_TOL_DEG,
+  LINEAR_TOL,
+  UNIT_DOT_TOL,
   type AxisRef,
   type ChamferFeature,
   type CombineFeature,
@@ -222,7 +225,7 @@ function resolveProfiles(
 function bboxOverlap(a: Shape, b: Shape): boolean {
   const ba = bboxOf(a);
   const bb = bboxOf(b);
-  const margin = 1e-6;
+  const margin = LINEAR_TOL;
   for (let i = 0; i < 3; i++) {
     if (ba.max[i]! < bb.min[i]! - margin || bb.max[i]! < ba.min[i]! + -margin) {
       return false;
@@ -632,7 +635,7 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
   const axis = resolveAxis(state, f.axis);
   const k = getKernel();
   const angleRad = (Math.min(Math.abs(f.angle), 360) * Math.PI) / 180;
-  const full = Math.abs(f.angle) >= 360 - 1e-9;
+  const full = Math.abs(f.angle) >= 360 - ANGULAR_TOL_DEG;
   const sign = f.angle >= 0 ? 1 : -1;
 
   const tools: ToolResult[] = [];
@@ -775,7 +778,7 @@ function evalLoft(state: EvalState, f: LoftFeature): void {
   if (f.sections.length < 2)
     throw new Error("loft requires at least two sections");
   const tool = kernelCall("loft", () => {
-    const thru = new k.BRepOffsetAPI_ThruSections(true, false, 1e-6);
+    const thru = new k.BRepOffsetAPI_ThruSections(true, false, LINEAR_TOL);
     for (const ref of f.sections) {
       const sketch = state.sketches.get(ref.sketchId);
       if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
@@ -1022,7 +1025,7 @@ function chamferByEnvelope(
         (w) => shapeHash(w) !== shapeHash(face),
       );
       const wp = wall ? planarFacePlane(wall) : null;
-      if (!wall || !wp || Math.abs(dot(wp.normal, plane.normal)) > 1e-6)
+      if (!wall || !wp || Math.abs(dot(wp.normal, plane.normal)) > UNIT_DOT_TOL)
         return null;
       // the chamfer may use up the wall exactly, but not cut past it
       let wallDepth = 0;
@@ -1036,7 +1039,7 @@ function chamferByEnvelope(
         wallDepth = Math.max(wallDepth, -dot(rel, plane.normal));
         p.delete();
       }
-      if (wallDepth < distance - 1e-6) return null;
+      if (wallDepth < distance - LINEAR_TOL) return null;
       covered.add(h);
     }
     caps.push({ face, edges: fe, plane });
@@ -1124,7 +1127,13 @@ function chamferByEnvelope(
       p[1] - n[1] * distance,
       p[2] - n[2] * distance,
     ];
-    const sewing = new k.BRepBuilderAPI_Sewing(1e-6, true, true, true, false);
+    const sewing = new k.BRepBuilderAPI_Sewing(
+      LINEAR_TOL,
+      true,
+      true,
+      true,
+      false,
+    );
     const addFace = (wire: Shape): boolean => {
       const mk = new k.BRepBuilderAPI_MakeFace_15(k.TopoDS.Wire_1(wire), true);
       const ok = mk.IsDone();
@@ -1199,13 +1208,13 @@ function chamferByEnvelope(
         ],
         n,
       );
-      if (Math.abs(depth) < 1e-6) {
+      if (Math.abs(depth) < LINEAR_TOL) {
         if (capName) envNames.set(shapeHash(face), capName);
         continue;
       }
       // only the band's slanted faces sit strictly between the cap plane and
       // the band's deeper end; the far prism's faces all lie deeper
-      if (depth < 1e-6 || depth > distance - 1e-6) continue;
+      if (depth < LINEAR_TOL || depth > distance - LINEAR_TOL) continue;
       let best = -1;
       let bestDist = Infinity;
       mids.forEach((m, i) => {
@@ -1367,7 +1376,7 @@ function evalShell(state: EvalState, f: ShellFeature): void {
       body.shape,
       closing,
       -f.thickness,
-      1e-6,
+      LINEAR_TOL,
       k.BRepOffset_Mode.BRepOffset_Skin,
       false,
       false,
@@ -1732,7 +1741,7 @@ function evalCircularPattern(
   const axis = resolveAxis(state, f.axis);
   const k = getKernel();
   const total = ((f.totalAngle || 360) * Math.PI) / 180;
-  const fullCircle = Math.abs((f.totalAngle || 360) - 360) < 1e-9;
+  const fullCircle = Math.abs((f.totalAngle || 360) - 360) < ANGULAR_TOL_DEG;
   const step = fullCircle ? total / f.count : total / (f.count - 1);
   kernelCall("circularPattern", () => {
     const ax1 = new k.gp_Ax1_2(
