@@ -30,7 +30,8 @@ function idsBetween(first: number, last: number): number[] {
   return Array.from({ length: last - first - 1 }, (_, i) => first + 1 + i);
 }
 
-const nextMaterialId = () => new THREE.MeshBasicMaterial().id;
+const nextMaterialId = () =>
+  (new THREE.MeshBasicMaterial() as unknown as { id: number }).id;
 const nextGeometryId = () => new THREE.BufferGeometry().id;
 
 const entities: SketchEntity[] = [

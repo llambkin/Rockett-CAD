@@ -4,6 +4,7 @@ import {
   solveSketch,
   type SketchEntity,
   type SketchConstraint,
+  type SketchLine,
 } from "@rockett/shared";
 import {
   createRect,
@@ -75,7 +76,7 @@ describe("rectangle starting anchors", () => {
       { id: "ref", kind: "line", p1: "a", p2: "b", construction: true },
     ];
     const sides = rect.entities.filter(
-      (e) => e.kind === "line" && !e.construction,
+      (e): e is SketchLine => e.kind === "line" && !e.construction,
     );
     for (const endX of [50, 70]) {
       (source[1] as { x: number }).x = endX;
@@ -97,7 +98,7 @@ describe("rectangle starting anchors", () => {
     );
     const solved = resize(rect, 30, 12);
     const outline = rect.entities.filter(
-      (e) => e.kind === "line" && !e.construction,
+      (e): e is SketchLine => e.kind === "line" && !e.construction,
     );
     const corner = point(solved, outline[0].p1);
     const opposite = point(solved, outline[1].p2);
