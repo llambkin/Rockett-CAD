@@ -42,6 +42,7 @@ function body(bodyId: string, size: number): BodyPayload {
     bodyId,
     name: bodyId,
     visible: true,
+    meshKey: `${bodyId}:${size}`,
     positions: [0, 0, 0, size, 0, 0, 0, size, 0],
     normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
     indices: [0, 1, 2],
