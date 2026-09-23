@@ -1,5 +1,13 @@
-import { fromMm, toMm, type Units } from "@rockett/shared";
+import {
+  fromMm,
+  toMm,
+  type CadDocument,
+  type EvaluateResult,
+  type SketchFeature,
+  type Units,
+} from "@rockett/shared";
 import { useEffect, useRef, useState } from "react";
+import { selectionKey, useStore, type Selection } from "../../store";
 
 export function NumField({
   label,
@@ -206,19 +214,118 @@ export function CheckField({
   );
 }
 
+function numbered(kind: string, index: number, owner?: string): string {
+  const name = index >= 0 ? `${kind} ${index + 1}` : kind;
+  return owner ? `${name}, ${owner}` : name;
+}
+
+function pickLabel(
+  pick: Selection,
+  document: CadDocument | null,
+  evaluation: EvaluateResult | null,
+): string {
+  const featureName = (id: string) =>
+    document?.features.find((f) => f.id === id)?.name;
+  if (pick.kind === "plane") {
+    const ref = pick.ref;
+    if (ref.kind === "origin") return `${ref.plane} Plane`;
+    if (ref.kind === "construction")
+      return featureName(ref.featureId) ?? "Plane";
+    return pickLabel(ref.face, document, evaluation);
+  }
+  if ("bodyId" in pick) {
+    const body = evaluation?.bodies.find((b) => b.bodyId === pick.bodyId);
+    if (pick.kind === "body") return body?.name ?? "Body";
+    const [kind, list, name] =
+      pick.kind === "face"
+        ? ["Face", body?.faces, pick.faceName]
+        : pick.kind === "edge"
+          ? ["Edge", body?.edges, pick.edgeName]
+          : ["Vertex", body?.vertices, pick.vertexName];
+    return numbered(
+      kind,
+      list?.findIndex((x) => x.name === name) ?? -1,
+      body?.name,
+    );
+  }
+  const sketch = featureName(pick.sketchId);
+  if (pick.kind === "sketch") return sketch ?? "Sketch";
+  if (pick.kind === "profile") {
+    const profiles = evaluation?.sketches.find(
+      (s) => s.featureId === pick.sketchId,
+    )?.profiles;
+    return numbered(
+      "Profile",
+      profiles?.findIndex((x) => x.id === pick.profileId) ?? -1,
+      sketch,
+    );
+  }
+  const entities =
+    (document?.features.find((f) => f.id === pick.sketchId) as SketchFeature)
+      ?.entities ?? [];
+  const entity = entities.find((e) => e.id === pick.entityId);
+  if (!entity) return numbered("Entity", -1, sketch);
+  const same = entities.filter((e) => e.kind === entity.kind);
+  return numbered(
+    entity.kind[0]!.toUpperCase() + entity.kind.slice(1),
+    same.indexOf(entity),
+    sketch,
+  );
+}
+
 export function SelInfo({
   label,
-  count,
+  picks,
   hint,
 }: {
   label: string;
-  count: number;
+  picks: Selection[];
   hint: string;
 }) {
+  const document = useStore((s) => s.document);
+  const evaluation = useStore((s) => s.evaluation);
+  const setHover = useStore((s) => s.setHover);
+  const remove = (gone: Selection[]) => {
+    const keys = new Set(gone.map(selectionKey));
+    const s = useStore.getState();
+    s.setSelection(s.selection.filter((x) => !keys.has(selectionKey(x))));
+    setHover(null);
+  };
   return (
-    <div className={`sel-info ${count > 0 ? "have" : ""}`}>
-      <span>{label}</span>
-      <b>{count > 0 ? `${count} selected` : hint}</b>
-    </div>
+    <>
+      <div className={`sel-info ${picks.length > 0 ? "have" : ""}`}>
+        <span>{label}</span>
+        <b>{picks.length > 0 ? `${picks.length} selected` : hint}</b>
+      </div>
+      {picks.length > 0 && (
+        <div role="list" aria-label={label}>
+          {picks.map((pick) => {
+            const name = pickLabel(pick, document, evaluation);
+            return (
+              <div
+                key={selectionKey(pick)}
+                role="listitem"
+                className="measure-row"
+                onMouseEnter={() => setHover(pick)}
+                onMouseLeave={() => setHover(null)}
+              >
+                <span>{name}</span>
+                <button
+                  className="icon-btn danger"
+                  title="Remove"
+                  aria-label={`Remove ${name}`}
+                  onClick={() => remove([pick])}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          <button className="btn" onClick={() => remove(picks)}>
+            Clear
+          </button>
+        </div>
+      )}
+    </>
   );
 }

@@ -250,7 +250,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Profiles / faces"
-            count={profiles.length + faces.length}
+            picks={[...profiles, ...faces]}
             hint="click sketch regions or planar faces"
           />
           <NumField
@@ -339,12 +339,12 @@ function DialogBody({
         <>
           <SelInfo
             label="Profiles"
-            count={profiles.length}
+            picks={profiles}
             hint="click sketch regions"
           />
           <SelInfo
             label="Axis"
-            count={edges.length + sketchLines.length}
+            picks={[...edges, ...sketchLines]}
             hint="click a sketch line or body edge, or pick X/Y/Z"
           />
           <AxisField
@@ -390,7 +390,7 @@ function DialogBody({
       title = "Move";
       body = (
         <>
-          <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
+          <SelInfo label="Bodies" picks={bodies} hint="click bodies" />
           <NumField
             label="X (mm)"
             autoFocus
@@ -431,7 +431,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Profile"
-            count={profiles.length}
+            picks={profiles}
             hint="click a sketch region"
           />
           <SelectField
@@ -476,7 +476,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Sections (in order)"
-            count={profiles.length}
+            picks={profiles}
             hint="click 2+ profiles"
           />
           <SelectField
@@ -510,7 +510,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Profiles"
-            count={profiles.length}
+            picks={profiles}
             hint="sketch on a face, then pick regions"
           />
           <NumField
@@ -548,11 +548,7 @@ function DialogBody({
       title = "Fillet";
       body = (
         <>
-          <SelInfo
-            label="Edges"
-            count={edges.length}
-            hint="click model edges"
-          />
+          <SelInfo label="Edges" picks={edges} hint="click model edges" />
           <label>
             <input
               type="checkbox"
@@ -590,11 +586,7 @@ function DialogBody({
       title = "Chamfer";
       body = (
         <>
-          <SelInfo
-            label="Edges"
-            count={edges.length}
-            hint="click model edges"
-          />
+          <SelInfo label="Edges" picks={edges} hint="click model edges" />
           <label>
             <input
               type="checkbox"
@@ -634,7 +626,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Faces to remove"
-            count={faces.length}
+            picks={faces}
             hint="click faces to open"
           />
           <NumField
@@ -661,7 +653,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Bodies (first = target)"
-            count={bodies.length}
+            picks={bodies}
             hint="click bodies — first is the target"
           />
           <SelectField
@@ -700,14 +692,10 @@ function DialogBody({
       title = "Split Body";
       body = (
         <>
-          <SelInfo
-            label="Body"
-            count={bodies.length}
-            hint="click the body to split"
-          />
+          <SelInfo label="Body" picks={bodies} hint="click the body to split" />
           <SelInfo
             label="Split plane"
-            count={planes.length + faces.length}
+            picks={[...planes, ...faces]}
             hint="click an origin/construction plane or planar face"
           />
         </>
@@ -731,11 +719,7 @@ function DialogBody({
       title = "Press / Pull";
       body = (
         <>
-          <SelInfo
-            label="Faces"
-            count={faces.length}
-            hint="click planar faces"
-          />
+          <SelInfo label="Faces" picks={faces} hint="click planar faces" />
           <NumField
             label="Distance (mm, − = inward)"
             autoFocus
@@ -761,10 +745,10 @@ function DialogBody({
       title = "Mirror";
       body = (
         <>
-          <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
+          <SelInfo label="Bodies" picks={bodies} hint="click bodies" />
           <SelInfo
             label="Mirror plane"
-            count={planes.length + faces.length}
+            picks={[...planes, ...faces]}
             hint="origin/construction plane or planar face"
           />
           <CheckField
@@ -794,7 +778,12 @@ function DialogBody({
       title = "Rectangular Pattern";
       body = (
         <>
-          <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
+          <SelInfo label="Bodies" picks={bodies} hint="click bodies" />
+          <SelInfo
+            label="Direction edge"
+            picks={edges}
+            hint="click a body edge, or pick X/Y/Z"
+          />
           <SelectField
             label="Direction"
             value={
@@ -855,7 +844,12 @@ function DialogBody({
       title = "Circular Pattern";
       body = (
         <>
-          <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
+          <SelInfo label="Bodies" picks={bodies} hint="click bodies" />
+          <SelInfo
+            label="Axis"
+            picks={[...edges, ...sketchLines]}
+            hint="click a sketch line or body edge, or pick X/Y/Z"
+          />
           <AxisField
             axisSource={params.axisSource}
             axis={params.axis}
@@ -902,7 +896,7 @@ function DialogBody({
         <>
           <SelInfo
             label="Reference plane(s)"
-            count={planes.length + faces.length}
+            picks={[...planes, ...faces]}
             hint="origin plane / face (2 refs = midplane)"
           />
           <SelectField
@@ -1146,14 +1140,13 @@ function ReferenceImagePanel({
       <div className="dialog-body">
         {!existing && (
           <>
-            <div className={`sel-info ${selection.length > 0 ? "have" : ""}`}>
-              <span>Plane</span>
-              <b>
-                {selection.length > 0
-                  ? "selected"
-                  : "click a plane/face (default XY)"}
-              </b>
-            </div>
+            <SelInfo
+              label="Plane"
+              picks={selection.filter(
+                (s) => s.kind === "plane" || s.kind === "face",
+              )}
+              hint="click a plane/face (default XY)"
+            />
             <label className="field">
               <span>Image file</span>
               <input
@@ -1246,14 +1239,11 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
   return (
     <DraggablePanel title="Export for 3D printing">
       <div className="dialog-body">
-        <div className={`sel-info ${selectedBodies.length > 0 ? "have" : ""}`}>
-          <span>Bodies</span>
-          <b>
-            {selectedBodies.length > 0
-              ? `${selectedBodies.length} selected`
-              : `all visible (${evaluation?.bodies.filter((b) => b.visible).length ?? 0})`}
-          </b>
-        </div>
+        <SelInfo
+          label="Bodies"
+          picks={selection.filter((s) => s.kind === "body")}
+          hint={`all visible (${evaluation?.bodies.filter((b) => b.visible).length ?? 0})`}
+        />
         <label className="field">
           <span>Format</span>
           <select

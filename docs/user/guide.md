@@ -179,6 +179,13 @@ chamfer, a negative face offset). An edit that adds no face tints the faces
 that moved. Everything else looks as usual. OK keeps the previewed feature as one undo step
 and clears the tint; Cancel, Escape or closing the dialog removes it.
 
+A feature dialog lists its picks under each selection box, one row per edge,
+face, body, profile, plane or sketch line, such as `Edge 3, Body 1`. Hover a row
+to light that pick in the viewport, press its remove button to drop it, or
+press Clear to drop the whole list. Editing a feature fills the list with the picks it was
+built from. Edge, face and profile numbers count from 1 in the order the model
+reports them, so they can change when the body is rebuilt.
+
 Errors remain visible until dismissed or the next operation starts, and their
 text can be selected and copied.
 
