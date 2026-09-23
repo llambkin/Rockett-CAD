@@ -10,7 +10,6 @@ import { Router, json, type RequestHandler } from "express";
 import multer from "multer";
 import {
   nextFeatureName,
-  newId,
   parse,
   projectEdge,
   ROUTES,
@@ -34,7 +33,7 @@ import { resolvePlaneFrame } from "../geometry/features.js";
 import { computeEdgeNames } from "../geometry/naming.js";
 import { curveInfo } from "../geometry/tessellate.js";
 import { tangentEdges } from "../geometry/tangentEdges.js";
-import { readStep } from "../geometry/stepImport.js";
+import { importerFor, IMPORTERS } from "../geometry/importers.js";
 import { write3mf, writeStl } from "../geometry/exporters.js";
 import type { NamedBody } from "../geometry/naming.js";
 import {
@@ -111,7 +110,7 @@ const receiveImage = multipart(
 const receiveStep = multipart(
   "file",
   10,
-  "Upload one STEP file (.step or .stp), up to 10 MB.",
+  "Upload one STEP, IGES or BREP file, up to 10 MB.",
 );
 const receiveProjectFile = multipart(
   "file",
@@ -306,44 +305,37 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- features -----
   const importStep = wrap(async (req, res) => {
-    if (!req.file || !/\.(step|stp)$/i.test(req.file.originalname))
-      throw new ValidationError("Choose a .step or .stp file");
-    const filename = req.file.originalname
-      .replace(/^.*[\\/]/, "")
-      .slice(0, 255);
-    const feature: Feature = {
-      id: newId("import"),
-      type: "importStep",
-      name: filename.slice(0, 120),
-      suppressed: false,
-      filename,
-      data: req.file.buffer.toString("utf8").replace(/^\uFEFF/, ""),
-    };
-    validateFeature(feature);
-    // Reject bad geometry before creating a project or changing its history.
-    try {
-      readStep(feature.data).delete();
-    } catch (error) {
-      throw new ValidationError((error as Error).message);
-    }
+    const file = req.file,
+      importer = file && importerFor(file.originalname);
+    if (!file || !importer)
+      throw new ValidationError(
+        `Choose a ${IMPORTERS.flatMap((i) => i.extensions).join(", ")} file`,
+      );
+    const filename = file.originalname.replace(/^.*[\\/]/, "").slice(0, 255);
+    const features = importer.read(file.buffer, filename);
+    features.forEach(validateFeature);
     const created = !req.params.id;
     const doc = created
-      ? await store.create(filename.replace(/\.(step|stp)$/i, ""))
+      ? await store.create(filename.replace(/\.[^.]*$/, ""))
       : await store.load(req.params.id);
     try {
       const at = Math.min(doc.timelinePosition, doc.features.length);
-      doc.features.splice(at, 0, feature);
-      doc.timelinePosition = at + 1;
+      doc.features.splice(at, 0, ...features);
+      doc.timelinePosition = at + features.length;
       if (Buffer.byteLength(JSON.stringify(doc), "utf8") > 40 * 1024 * 1024)
         throw new ValidationError(
-          "This import would exceed the 40 MB project limit. Start a separate project for this STEP file.",
+          `This import would exceed the 40 MB project limit. Start a separate project for this ${importer.label} file.`,
         );
       const evaluation = engineFor(doc.id).evaluate(doc);
-      const status = evaluation.featureStatuses.find(
-        (s) => s.featureId === feature.id,
-      );
-      if (status?.status !== "ok")
-        throw new ValidationError(status?.error ?? "STEP import failed");
+      for (const feature of features) {
+        const status = evaluation.featureStatuses.find(
+          (s) => s.featureId === feature.id,
+        );
+        if (status?.status !== "ok")
+          throw new ValidationError(
+            status?.error ?? `${importer.label} import failed`,
+          );
+      }
       await store.save(doc);
       res.json({ document: doc, evaluation: await evaluateAndSync(doc) });
     } catch (error) {

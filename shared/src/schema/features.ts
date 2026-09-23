@@ -4,7 +4,7 @@ import { LINEAR_TOL } from "../tolerance.js";
 import { UNIT_TO_MM, type Units } from "../units.js";
 
 export const MAX_DIM = 100_000;
-const MAX_STEP_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
 const id = Type.String({ minLength: 1, maxLength: 100 });
 const bodyId = Type.String({ minLength: 1, maxLength: 200 });
@@ -188,16 +188,16 @@ const referenceImage = feature("referenceImage", {
   height: Type.Number({ minimum: 1, maximum: 65536 }),
 });
 
-const importStep = feature("importStep", {
-  filename: Type.String({ minLength: 1, maxLength: 255 }),
-  data: Type.Refine(
-    Type.String(),
-    (data) =>
-      data.length <= MAX_STEP_BYTES &&
-      data.trimStart().startsWith("ISO-10303-21;"),
-    () => "must be a STEP file up to 10 MB",
-  ),
-});
+const importStep = Type.Refine(
+  feature("importStep", {
+    filename: Type.String({ minLength: 1, maxLength: 255 }),
+    format: Type.Optional(Type.Enum(["iges", "brep"])),
+    data: Type.String({ maxLength: MAX_IMPORT_BYTES }),
+  }),
+  (f) =>
+    f.format !== undefined || f.data.trimStart().startsWith("ISO-10303-21;"),
+  () => "needs STEP data unless format is iges or brep",
+);
 
 const emboss = feature("emboss", {
   profiles: profiles(1),

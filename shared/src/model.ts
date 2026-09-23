@@ -360,7 +360,7 @@ export interface EmbossFeature extends FeatureBase {
 export interface ImportStepFeature extends FeatureBase {
   type: "importStep";
   filename: string;
-  /** Original STEP source retained so projects remain self-contained. */
+  format?: "iges" | "brep";
   data: string;
 }
 

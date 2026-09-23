@@ -30,7 +30,7 @@ client/test/dimensionDedupe.test.ts 2
 client/test/perpSnap.test.ts 13
 client/test/reopen.test.ts 11
 client/vite.config.ts 1
-server/src/api/routes.ts 24
+server/src/api/routes.ts 23
 server/src/geometry/engine.ts 23
 server/src/geometry/exporters.ts 12
 server/src/geometry/features.ts 104
@@ -39,7 +39,6 @@ server/src/geometry/kernel.ts 24
 server/src/geometry/measure.ts 4
 server/src/geometry/naming.ts 47
 server/src/geometry/sketchGeom.ts 46
-server/src/geometry/stepImport.ts 1
 server/src/geometry/tangentEdges.ts 6
 server/src/geometry/tessellate.ts 14
 server/src/index.ts 8
@@ -55,7 +54,7 @@ server/test/geometry.test.ts 12
 server/test/signedExtrude.test.ts 1
 server/test/unifyFaces.test.ts 3
 shared/src/api.ts 16
-shared/src/model.ts 85
+shared/src/model.ts 84
 shared/src/profiles.ts 57
 shared/src/projection.ts 1
 shared/src/sketchModify.ts 12

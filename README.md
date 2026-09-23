@@ -59,7 +59,7 @@ everything downstream against persistent topology references.
 
 ### Files
 
-- **STEP import**: start a project from a STEP file, or import one into an open project.
+- **Import**: start a project from a STEP, IGES or BREP file, or import one into an open project.
 - **Export**: download binary STL or multi-body 3MF with named bodies and a quality setting.
 - **Autosave**: every change saves to a readable JSON file that keeps the full feature history.
 

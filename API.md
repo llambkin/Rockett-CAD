@@ -71,15 +71,16 @@ removed.
 
 ## Model
 
-### STEP import
+### STEP, IGES and BREP import
 
 `POST /projects/import-step` creates a project named from the filename.
 `POST /projects/:id/import-step` inserts into an existing project's timeline
 at the current marker. Both accept multipart field `file` (`.step`/`.stp`,
-maximum 10 MB) and return `{ document, evaluation }`. Files must contain solid
-bodies. Invalid files are rejected before a new project is created. The STEP
-source is embedded in the document; uploads that take the document beyond
-40 MB are rejected.
+`.igs`/`.iges` or `.brep`, maximum 10 MB) and return `{ document, evaluation }`.
+Files must contain solid bodies. A file with none is 400 naming its format,
+for example `No solid found in the IGES file.` Invalid files are rejected
+before a new project is created. The source is embedded in the document;
+uploads that take the document beyond 40 MB are rejected.
 
 | Method & path                        | Body                    | Notes                                                                        |
 | ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |

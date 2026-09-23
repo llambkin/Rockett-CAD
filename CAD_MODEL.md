@@ -14,7 +14,7 @@ Geometry exists only inside the evaluation state and its caches, and is
 rebuilt from the recipe on demand. Saved projects are JSON, and the modelling
 history survives close/reopen; embedded imports increase document size.
 
-### STEP imports
+### STEP, IGES and BREP imports
 
 Schema version 3 adds `importStep` features containing `filename` and the
 original STEP text in `data`. OCCT reads this source during regeneration,
@@ -24,6 +24,17 @@ suppressed, deleted, or rolled back, and downstream features reference their
 named faces and edges. Assembly hierarchy, appearance, and source design
 history are not retained. Surface-only files are rejected; solid bodies are
 retained from mixed files. Each upload is limited to 10 MB.
+
+An `importStep` feature may also hold an IGES or BREP file, marked by an
+optional `format` of `iges` or `brep`; absent means STEP. IGES reads through
+`IGESControl_Reader`, converting to millimetres, and BREP through
+`BRepTools::Read` (the ASCII format that `BRepTools::Write` produces).
+`server/src/geometry/importers.ts` owns all three readers. A file that yields
+no solid is rejected as `No solid found in the IGES file.`, naming its format,
+so an IGES file written as trimmed faces only is rejected rather than sewn.
+The field needs no schema step: documents saved before it have no `format`
+and still read as STEP, so schema 5 stands. A build older than this one reads
+an IGES or BREP import as STEP and reports that feature as failed.
 
 ## Body identity
 

@@ -2,22 +2,22 @@ import { beforeAll, expect, it } from "vitest";
 import { createEmptyDocument } from "@rockett/shared";
 import { initKernel, volumeOf, getKernel } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
-import { readStep } from "../src/geometry/stepImport.js";
+import { readImport } from "../src/geometry/importers.js";
 import { stepFixture } from "./helpers/stepFixture.js";
 beforeAll(initKernel, 120000);
 
+const stepFile = (data: string) => ({
+  id: "step",
+  type: "importStep" as const,
+  name: "Imported",
+  filename: "fixture.step",
+  data,
+  suppressed: false,
+});
+
 it("imports multiple B-Rep bodies, persists them, and supports downstream fillets", () => {
   const doc = createEmptyDocument("step-test", "Imported");
-  doc.features = [
-    {
-      id: "step",
-      type: "importStep",
-      name: "Imported",
-      filename: "fixture.step",
-      data: stepFixture(true),
-      suppressed: false,
-    },
-  ];
+  doc.features = [stepFile(stepFixture(true))];
   doc.timelinePosition = 1;
   let engine = engineFor(doc.id),
     result = engine.evaluate(doc);
@@ -59,7 +59,9 @@ it("imports multiple B-Rep bodies, persists them, and supports downstream fillet
 });
 
 it("rejects invalid STEP and cleans its temporary kernel file", () => {
-  expect(() => readStep("ISO-10303-21;\nnot a STEP model")).toThrow();
+  expect(() => readImport(stepFile("ISO-10303-21;\nnot a STEP model"))).toThrow(
+    "No solid found in the STEP file.",
+  );
   expect(
     getKernel()
       .FS.readdir("/")
@@ -67,11 +69,11 @@ it("rejects invalid STEP and cleans its temporary kernel file", () => {
   ).toEqual([]);
 });
 
-it("a file already at `/rockett-import.step` survives `readStep`", () => {
+it("a file already at `/rockett-import.step` survives `readImport`", () => {
   const fs = getKernel().FS,
     file = "/rockett-import.step";
   fs.writeFile(file, "keep");
-  readStep(stepFixture(false)).delete();
+  readImport(stepFile(stepFixture(false))).delete();
   expect(fs.analyzePath(file).exists).toBe(true);
   expect(fs.readFile(file, { encoding: "utf8" })).toBe("keep");
   fs.unlink(file);

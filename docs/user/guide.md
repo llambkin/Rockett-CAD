@@ -100,9 +100,10 @@ and length. Press I to start.
 ### STEP import
 
 Start a project with **New project from STEP**, or use **Insert → Import STEP**
-in an existing project. It accepts `.step`/`.stp` files up to 10 MB containing
-solid bodies. Imported solids support further modelling; the source
-application's sketches and feature history are not imported.
+in an existing project. It accepts STEP (`.step`/`.stp`), IGES (`.igs`/`.iges`)
+and BREP (`.brep`) files up to 10 MB containing solid bodies. Imported solids
+support further modelling; the source application's sketches and feature
+history are not imported.
 
 ### Export
 

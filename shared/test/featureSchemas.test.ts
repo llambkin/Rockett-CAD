@@ -214,7 +214,7 @@ const fixtures: {
       filename: "part.step",
       data: "solid part",
     },
-    path: "/data",
+    path: "",
   },
   emboss: {
     valid: {
