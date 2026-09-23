@@ -97,6 +97,8 @@ change gets a `Schema N` line in the section that ships it.
 - Export requires `bodyIds`; a missing or non-array value returns 400. An
   empty array still exports every visible body. `ExportRequest.binary` is
   removed: STL export was always binary.
+- The Controls help opens up to 90% of the window in columns that reflow with
+  its width, resizes from its corner, and keeps that size until reload.
 
 ### Known issues
 

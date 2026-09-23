@@ -69,7 +69,7 @@ everything downstream against persistent topology references.
 
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, orthographic or perspective.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
-- **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control.
+- **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.
 - **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
 - **Tool panels**: open with the main number selected and list each pick to remove; Enter confirms, Escape reverts.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.

@@ -9,19 +9,12 @@ import { ViewportView } from "./components/ViewportView";
 import { FeatureDialog } from "./components/FeatureDialog";
 import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
-import { DraggablePanel } from "./components/DraggablePanel";
-import { DialogFooter } from "./components/form/DialogFooter";
+import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
 import { viewportHandle } from "./viewportRef";
-import {
-  IDLE_SHORTCUTS,
-  LINE_SHORTCUTS,
-  SKETCH_SHORTCUTS,
-  idleActionFor,
-  sketchToolFor,
-} from "./shortcuts";
+import { idleActionFor, sketchToolFor } from "./shortcuts";
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
@@ -281,120 +274,7 @@ function Workspace() {
         <SketchOffsetPanel />
         <MeasurePanel />
         <VersionLabel />
-        {showHelp && (
-          <DraggablePanel title="Keyboard & mouse controls">
-            <div className="dialog-body shortcut-help">
-              <p>
-                <b>Viewport</b>
-              </p>
-              <p>
-                Drag the ViewCube to orbit; click a face for a standard view.
-              </p>
-              <p>
-                Middle-drag or two-finger scroll pans; right-drag or
-                Shift+middle-drag orbits. Wheel or pinch zooms to the cursor.
-              </p>
-              <p>
-                <kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view
-              </p>
-              <p>
-                In the model tree, <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds
-                or removes a body or sketch and <kbd>Shift</kbd> + click selects
-                a range; right-click a selected row to act on all of them.{" "}
-                <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>G</kbd> groups the
-                selected rows.
-              </p>
-              <p>
-                <b>Modelling</b>
-              </p>
-              <p>
-                {IDLE_SHORTCUTS.map((x, i) => (
-                  <span key={x.key}>
-                    {i > 0 && " · "}
-                    <kbd>{x.key}</kbd> {x.label}
-                  </span>
-                ))}
-              </p>
-              <p>
-                <b>Sketching</b>
-              </p>
-              <p>
-                {SKETCH_SHORTCUTS.map((x, i) => (
-                  <span key={x.key}>
-                    {i > 0 && " · "}
-                    <kbd>{x.key}</kbd> {x.label}
-                  </span>
-                ))}
-              </p>
-              <p>
-                <kbd>X</kbd> Construction (applies to whatever tool you draw
-                with next: lines, rectangles, circles, arcs, polygons, slots)
-              </p>
-              <p>
-                Double-click a curve to edit its size. Drag a dimension label to
-                move it. Dimensioning something that already has a dimension
-                edits the existing one; the ✕ beside the value (or{" "}
-                <kbd>Delete</kbd> on an empty box) removes it.
-              </p>
-              <p>
-                <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds/removes selections,
-                including profiles. In Extrude, <kbd>Shift</kbd> + click picks a
-                face instead of a profile. <kbd>Esc</kbd> ends the drawing tool.
-              </p>
-              <p>
-                While drawing, type a size to lock it, <kbd>Tab</kbd> to move
-                between sizes, <kbd>Enter</kbd> to place the shape.
-              </p>
-              <p>
-                Line:{" "}
-                {LINE_SHORTCUTS.map((x, i) => (
-                  <span key={x.key}>
-                    {i > 0 && " · "}
-                    <kbd>{x.key}</kbd> {x.label}
-                  </span>
-                ))}
-              </p>
-              <p>
-                A line within 4° of a right angle to a line it starts from snaps
-                to exactly 90° (and gets a perpendicular constraint); move
-                further off or type an angle for anything else.
-              </p>
-              <p>
-                Right-click a sketch region for Extrude / Revolve, or a sketch
-                line to toggle construction; right-click a sketch in the tree to
-                extrude its free regions.
-              </p>
-              <p>
-                Extrude <b>Start offset</b> begins the extrusion on a plane that
-                far along the sketch or face normal (Fusion's Start → Offset);
-                the arrow and ghost move with it.
-              </p>
-              <p>
-                Extrude distance is signed: type a negative value (or drag the
-                arrow into the part) to go the other way; a typed negative
-                switches Join to Cut and the preview turns red.
-              </p>
-              <p>
-                Sketches stay visible after use — used regions shade faintly but
-                stay selectable; the eye in the tree hides a sketch. While
-                editing an extrude or revolve, hold <kbd>Ctrl</kbd> /{" "}
-                <kbd>⌘</kbd> to see the model without it and pick regions to add
-                or remove.
-              </p>
-              <p>
-                <kbd>Delete</kbd> removes selected sketch geometry.
-              </p>
-              <p>
-                <kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo · <kbd>Ctrl</kbd> +{" "}
-                <kbd>Y</kbd> Redo
-              </p>
-            </div>
-            <DialogFooter
-              onCancel={() => setShowHelp(false)}
-              cancelLabel="Close controls"
-            />
-          </DraggablePanel>
-        )}
+        {showHelp && <ControlsHelp onClose={() => setShowHelp(false)} />}
       </div>
       <Timeline />
       {error && (
