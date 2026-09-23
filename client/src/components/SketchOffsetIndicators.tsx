@@ -17,33 +17,30 @@ export function SketchOffsetIndicators() {
     const frame = evaluation?.sketches.find(
       (s) => s.featureId === draft.id,
     )?.frame;
-    if (!frame) return;
-    let handle = 0;
+    const vp = viewportHandle.current;
+    if (!frame || !vp) return;
     const update = () => {
-      const vp = viewportHandle.current;
-      if (vp && layer.current) {
-        const rect = vp.canvasRect();
-        for (const child of Array.from(layer.current.children)) {
-          const el = child as HTMLButtonElement;
-          const offset = draft.offsets?.find((o) => o.id === el.dataset.offset);
-          const anchor = offset && sketchOffsetAnchor(draft, offset);
-          if (!anchor) {
-            el.style.display = "none";
-            continue;
-          }
-          const p = worldToClient(
-            rect,
-            vp.camera,
-            uv3(frame, anchor.x, anchor.y),
-          );
-          el.style.display = p.inFront ? "block" : "none";
-          el.style.transform = `translate(${p.x - rect.left}px, ${p.y - rect.top - 18}px) translate(-50%, -100%)`;
+      if (!layer.current) return;
+      const rect = vp.canvasRect();
+      for (const child of Array.from(layer.current.children)) {
+        const el = child as HTMLButtonElement;
+        const offset = draft.offsets?.find((o) => o.id === el.dataset.offset);
+        const anchor = offset && sketchOffsetAnchor(draft, offset);
+        if (!anchor) {
+          el.style.display = "none";
+          continue;
         }
+        const p = worldToClient(
+          rect,
+          vp.camera,
+          uv3(frame, anchor.x, anchor.y),
+        );
+        el.style.display = p.inFront ? "block" : "none";
+        el.style.transform = `translate(${p.x - rect.left}px, ${p.y - rect.top - 18}px) translate(-50%, -100%)`;
       }
-      handle = requestAnimationFrame(update);
     };
-    update();
-    return () => cancelAnimationFrame(handle);
+    vp.requestRender();
+    return vp.onRender(update);
   }, [draft, mode.name, evaluation]);
   if (mode.name !== "sketch" || !draft) return null;
   return (

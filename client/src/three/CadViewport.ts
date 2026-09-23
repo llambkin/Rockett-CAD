@@ -109,6 +109,10 @@ export class CadViewport {
   private overlayRoot = new THREE.Group();
   private originRoot = new THREE.Group();
   private raycaster = new THREE.Raycaster();
+  private rect: DOMRect | null = null;
+  private forgetRect = () => {
+    this.rect = null;
+  };
   private animating: null | {
     start: number;
     poseAt: (t: number) => CameraPose;
@@ -159,10 +163,12 @@ export class CadViewport {
 
     this.buildOriginDisplay();
     this.resize();
+    window.addEventListener("scroll", this.forgetRect, true);
   }
 
   dispose() {
     this.frames.dispose();
+    window.removeEventListener("scroll", this.forgetRect, true);
     clearGroup(this.scene);
     this.bodies.clear();
     this.renderer.dispose();
@@ -177,6 +183,7 @@ export class CadViewport {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h);
+    this.rect = null;
     const aspect = w / h;
     this.orthoCam.left = -this.zoom * aspect;
     this.orthoCam.right = this.zoom * aspect;
@@ -294,7 +301,7 @@ export class CadViewport {
   }
 
   canvasRect(): DOMRect {
-    return this.renderer.domElement.getBoundingClientRect();
+    return (this.rect ??= this.renderer.domElement.getBoundingClientRect());
   }
 
   rayFromClient(clientX: number, clientY: number): THREE.Ray {

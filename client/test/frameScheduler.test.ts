@@ -71,6 +71,24 @@ describe("frameScheduler", () => {
     expect(draw).toHaveBeenCalledTimes(2);
   });
 
+  it("labels: listeners run once per rendered frame and zero times while idle", () => {
+    const frames = fakeFrames();
+    let left = 0;
+    const scheduler = frameScheduler(() => --left > 0, frames.source);
+    const projectLabels = vi.fn();
+    scheduler.onRender(projectLabels);
+    frames.run(120);
+    expect(projectLabels).toHaveBeenCalledTimes(0);
+    scheduler.requestRender();
+    scheduler.requestRender();
+    frames.run(120);
+    expect(projectLabels).toHaveBeenCalledTimes(1);
+    left = 10;
+    scheduler.requestRender();
+    frames.run(120);
+    expect(projectLabels).toHaveBeenCalledTimes(11);
+  });
+
   it("dispose cancels the pending frame and ignores later requests", () => {
     const frames = fakeFrames();
     const draw = vi.fn(() => true);
