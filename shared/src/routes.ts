@@ -243,6 +243,18 @@ export const ROUTES = {
   deleteFolder: route<never, { ok: true }>()("DELETE", "/folders/:id"),
 };
 
+export const DOCUMENT_EDITS: ReadonlySet<Route> = new Set<Route>([
+  ROUTES.renameProject,
+  ROUTES.replaceDocument,
+  ROUTES.importStepInto,
+  ROUTES.addFeature,
+  ROUTES.updateFeature,
+  ROUTES.deleteFeature,
+  ROUTES.setTimeline,
+  ROUTES.updateBody,
+  ROUTES.updateGroups,
+]);
+
 export function pathFor<P extends string>(
   target: Route<P>,
   params: PathParams<P>,

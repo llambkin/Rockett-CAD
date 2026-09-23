@@ -5,6 +5,7 @@ import path from "node:path";
 import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -12,11 +13,12 @@ const png = Buffer.from(
 );
 
 let app: TestApp;
+const send = trackRevisions((url, init) => app.request(url, init));
 let project: CadDocument;
 let assetId = "";
 
 async function json(url: string, init: RequestInit = {}): Promise<any> {
-  const res = await app.request(`/api${url}`, {
+  const res = await send(`/api${url}`, {
     ...init,
     headers: { "Content-Type": "application/json" },
   });
@@ -36,14 +38,14 @@ function form(field: string, bytes: Buffer | string, name: string) {
 
 async function upload(file: unknown): Promise<Response> {
   const bytes = typeof file === "string" ? file : JSON.stringify(file);
-  return app.request("/api/projects/file", {
+  return send("/api/projects/file", {
     method: "POST",
     body: form("file", bytes, "project.rockett"),
   });
 }
 
 async function download(id: string): Promise<any> {
-  const res = await app.request(`/api/projects/${id}/file`);
+  const res = await send(`/api/projects/${id}/file`);
   expect(res.status).toBe(200);
   return res.json();
 }
@@ -92,7 +94,7 @@ beforeAll(async () => {
   });
   const prefix = `/projects/${document.id}`;
   const post = (url: string, body: FormData) =>
-    app.request(`/api${prefix}${url}`, { method: "POST", body });
+    send(`/api${prefix}${url}`, { method: "POST", body });
   assetId = (await (await post("/assets", form("image", png, "a.png"))).json())
     .assetId;
   await post("/assets", form("image", png, "unused.png"));
@@ -135,7 +137,7 @@ afterAll(() => app?.close());
 
 describe("project file", () => {
   it("downloads a project with only its referenced assets and imports it under a new id", async () => {
-    const res = await app.request(`/api/projects/${project.id}/file`);
+    const res = await send(`/api/projects/${project.id}/file`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toBe(
       "attachment; filename=\"Bracket_v2_.rockett\"; filename*=UTF-8''Bracket%20%C3%B6%20%22v2%22.rockett",
@@ -161,9 +163,7 @@ describe("project file", () => {
     }).toEqual(project);
     expect(await projectDirs()).toEqual(new Set([...before, document.id]));
     expect((await json(`/projects/${document.id}`)).document).toEqual(document);
-    const asset = await app.request(
-      `/api/projects/${document.id}/assets/${assetId}`,
-    );
+    const asset = await send(`/api/projects/${document.id}/assets/${assetId}`);
     expect(Buffer.from(await asset.arrayBuffer())).toEqual(png);
   });
 
@@ -172,7 +172,7 @@ describe("project file", () => {
       method: "POST",
       body: JSON.stringify({ name: "a\ud800b" }),
     });
-    const res = await app.request(`/api/projects/${document.id}/file`);
+    const res = await send(`/api/projects/${document.id}/file`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toBe(
       "attachment; filename=\"a_b.rockett\"; filename*=UTF-8''a%EF%BF%BDb.rockett",
@@ -269,12 +269,12 @@ describe("project file", () => {
 
   it("rejects a request without a file and one over 64 MB", async () => {
     const before = await projectDirs();
-    const empty = await app.request("/api/projects/file", {
+    const empty = await send("/api/projects/file", {
       method: "POST",
       body: new FormData(),
     });
     expect(empty.status).toBe(400);
-    const big = await app.request("/api/projects/file", {
+    const big = await send("/api/projects/file", {
       method: "POST",
       body: form(
         "file",

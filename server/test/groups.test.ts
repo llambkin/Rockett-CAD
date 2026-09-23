@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { initKernel } from "../src/geometry/kernel.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 let app: TestApp;
+const send = trackRevisions((url, init) => app.request(url, init));
 
 beforeAll(async () => {
   await initKernel();
@@ -12,7 +14,7 @@ beforeAll(async () => {
 afterAll(() => app?.close());
 
 async function call(method: string, url: string, body?: unknown) {
-  const res = await app.request(`/api${url}`, {
+  const res = await send(`/api${url}`, {
     method,
     headers: { "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

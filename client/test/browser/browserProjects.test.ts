@@ -74,7 +74,7 @@ async function makeFixture(): Promise<ProjectFile> {
   };
   await api(`/projects/${document.id}/features`, {
     method: "POST",
-    headers: json,
+    headers: { ...json, "If-Match": `"${document.revision}"` },
     body: JSON.stringify({ feature }),
   });
   const file = await api(`/projects/${document.id}/file`);

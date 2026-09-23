@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { initKernel, solids, volumeOf } from "../src/geometry/kernel.js";
 import { engineFor } from "../src/geometry/engine.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 import { asciiStl, binaryStl, cube, strip } from "./helpers/meshFixtures.js";
 
 const OBJ_CUBE = `# quads, as most exporters write them
@@ -22,6 +23,7 @@ f 5 6 7 8
 `;
 
 let app: TestApp;
+const send = trackRevisions((url, init) => app.request(url, init));
 
 beforeAll(async () => {
   await initKernel();
@@ -37,7 +39,7 @@ function upload(
 ) {
   const form = new FormData();
   form.append("file", new Blob([contents]), filename);
-  return app.request(`/api${url}`, { method: "POST", body: form });
+  return send(`/api${url}`, { method: "POST", body: form });
 }
 
 async function imported(

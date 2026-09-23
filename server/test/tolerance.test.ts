@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { initKernel } from "../src/geometry/kernel.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 const read = (file: string) =>
   readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
@@ -32,11 +33,12 @@ describe("modelling tolerances", () => {
 describe("offset distance bound", () => {
   let app: TestApp;
   let projectId = "";
+  const send = trackRevisions((url, init) => app.request(url, init));
 
   beforeAll(async () => {
     await initKernel();
     app = await startTestApp();
-    const res = await app.request("/api/projects", {
+    const res = await send("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Tolerance" }),
@@ -48,7 +50,7 @@ describe("offset distance bound", () => {
   afterAll(() => app.close());
 
   const addSketch = (id: string, distance: number) =>
-    app.request(`/api/projects/${projectId}/features`, {
+    send(`/api/projects/${projectId}/features`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

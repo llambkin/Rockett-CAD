@@ -9,6 +9,7 @@
 import { Router, json, type RequestHandler } from "express";
 import multer from "multer";
 import {
+  DOCUMENT_EDITS,
   nextFeatureName,
   parse,
   PROJECT_FILE_LIMIT_MB,
@@ -51,12 +52,19 @@ import {
   uploadProjectFile,
 } from "./projectFile.js";
 import { folderRoutes } from "./folderRoutes.js";
+import {
+  checkRevision,
+  ifMatchRevision,
+  reply,
+  RevisionConflict,
+} from "./revision.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
   not_found: 404,
   too_large: 413,
   conflict: 409,
+  precondition_required: 428,
   unprocessable: 422,
   kernel: 503,
   internal: 500,
@@ -76,21 +84,29 @@ function fail(res: any, err: any) {
       error: err.message,
       code,
       ...(err.detail !== undefined && { detail: err.detail }),
+      ...(err instanceof RevisionConflict && { revision: err.revision }),
     });
   console.error(err);
   sendError(res, { error: "Internal server error", code });
 }
 
-function parseBody(schema: NonNullable<Route["body"]>): RequestHandler {
+function check(test: (req: any, res: any) => void): RequestHandler {
   return (req, res, next) => {
     try {
-      req.body = parse(schema, req.body ?? {});
+      test(req, res);
     } catch (err) {
       return fail(res, err);
     }
     next();
   };
 }
+
+const parseBody = (schema: NonNullable<Route["body"]>) =>
+  check((req) => (req.body = parse(schema, req.body ?? {})));
+
+const requireRevision = check((req, res) => {
+  res.locals.revision = ifMatchRevision(req.get("If-Match"));
+});
 
 function multipart(field: string, megabytes: number, error: string) {
   const receive = multer({
@@ -193,6 +209,7 @@ export function createApiRouter(
     router[route.method.toLowerCase() as Lowercase<Method>](
       route.path,
       ...(route.body ? [parseBody(route.body)] : []),
+      ...(DOCUMENT_EDITS.has(route) ? [requireRevision] : []),
       ...handlers,
     );
 
@@ -206,6 +223,9 @@ export function createApiRouter(
         : fn(req, res);
       result.catch((err) => fail(res, err));
     };
+
+  const editable = async (req: any, res: any) =>
+    checkRevision(await store.load(req.params.id), res.locals.revision);
 
   async function evaluate(doc: CadDocument, position?: number) {
     return engineFor(doc.id).evaluate(doc, position, await store.sources(doc));
@@ -279,8 +299,7 @@ export function createApiRouter(
   on(
     ROUTES.getProject,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      res.json({ document: doc });
+      reply(res, { document: await store.load(req.params.id) });
     }),
   );
 
@@ -308,10 +327,10 @@ export function createApiRouter(
   on(
     ROUTES.renameProject,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       doc.name = (req.body.name ?? doc.name).slice(0, 200);
       await store.save(doc);
-      res.json({ document: doc });
+      reply(res, { document: doc });
     }),
   );
 
@@ -340,10 +359,10 @@ export function createApiRouter(
       validateDocument(incoming);
       const position = evaluationPosition(req, incoming);
       // Replacement is an edit, not creation (e.g. a delayed undo after delete).
-      await store.load(req.params.id);
+      await editable(req, res);
       await store.save(incoming);
       const evaluation = await evaluateAndSync(incoming, position);
-      res.json({ document: incoming, evaluation });
+      reply(res, { document: incoming, evaluation });
     }),
   );
 
@@ -361,7 +380,7 @@ export function createApiRouter(
     const created = !req.params.id;
     const doc = created
       ? await store.create(filename.replace(/\.[^.]*$/, ""))
-      : await store.load(req.params.id);
+      : await editable(req, res);
     try {
       const at = Math.min(doc.timelinePosition, doc.features.length);
       doc.features.splice(at, 0, ...features);
@@ -387,7 +406,7 @@ export function createApiRouter(
       for (const bytes of sources.values())
         await store.blobs(doc.id).put(bytes);
       await store.save(doc);
-      res.json({ document: doc, evaluation: await evaluateAndSync(doc) });
+      reply(res, { document: doc, evaluation: await evaluateAndSync(doc) });
     } catch (error) {
       dropEngine(doc.id);
       if (created) await store.remove(doc.id);
@@ -400,7 +419,7 @@ export function createApiRouter(
   on(
     ROUTES.addFeature,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       const feature = req.body?.feature as Feature;
       record(feature, "feature");
       knownKeys(feature, feature.type);
@@ -417,14 +436,14 @@ export function createApiRouter(
       doc.timelinePosition = at + 1;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
+      reply(res, { document: doc, evaluation });
     }),
   );
 
   on(
     ROUTES.updateFeature,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       const position = evaluationPosition(req, doc);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
       if (idx < 0) throw new StoreError("feature not found", "not_found");
@@ -443,7 +462,7 @@ export function createApiRouter(
       doc.features[idx] = updated as Feature;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc, position);
-      res.json({ document: doc, evaluation });
+      reply(res, { document: doc, evaluation });
     }),
   );
 
@@ -483,28 +502,28 @@ export function createApiRouter(
   on(
     ROUTES.deleteFeature,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
       if (idx < 0) throw new StoreError("feature not found", "not_found");
       doc.features.splice(idx, 1);
       if (doc.timelinePosition > idx) doc.timelinePosition--;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
+      reply(res, { document: doc, evaluation });
     }),
   );
 
   on(
     ROUTES.setTimeline,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       const { position } = req.body;
       if (position > doc.features.length)
         throw new ValidationError("invalid timeline position", "/position");
       doc.timelinePosition = position;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
+      reply(res, { document: doc, evaluation });
     }),
   );
 
@@ -534,18 +553,18 @@ export function createApiRouter(
   on(
     ROUTES.updateGroups,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       doc.groups = req.body.groups;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
+      reply(res, { document: doc, evaluation });
     }),
   );
 
   on(
     ROUTES.updateBody,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const doc = await editable(req, res);
       const meta = doc.bodyMeta[req.params.bodyId];
       if (!meta) throw new StoreError("body not found", "not_found");
       const { name, visible } = req.body;
@@ -553,7 +572,7 @@ export function createApiRouter(
       if (visible !== undefined) meta.visible = visible;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
+      reply(res, { document: doc, evaluation });
     }),
   );
 

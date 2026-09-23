@@ -110,6 +110,7 @@ export interface ProjectSummary {
   modifiedAt: string;
   createdAt: string;
   featureCount: number;
+  revision?: number;
   status: "ok" | "invalid" | "tooNew";
   error?: string;
   schemaVersion?: number;
@@ -166,6 +167,7 @@ export type ApiErrorCode =
   | "not_found"
   | "too_large"
   | "conflict"
+  | "precondition_required"
   | "unprocessable"
   | "kernel"
   | "internal";
@@ -174,6 +176,7 @@ export interface ApiErrorBody {
   error: string;
   code: ApiErrorCode;
   detail?: string;
+  revision?: number;
 }
 
 export interface ProjectResponse {

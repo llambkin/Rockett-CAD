@@ -10,6 +10,7 @@ import { ProjectStore } from "../src/store/projectStore.js";
 import { validateDocument } from "../src/api/validate.js";
 import { LocalStorage, type Storage } from "../src/store/storage.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 const v7raw = await fs.readFile(path.join(fixtures, "v7.json"), "utf8");
@@ -31,6 +32,7 @@ const imageId = sha(png);
 const stepId = sha(inline);
 
 let app: TestApp;
+const send = trackRevisions((url, init) => app.request(url, init));
 
 beforeAll(async () => {
   await initKernel();
@@ -79,14 +81,13 @@ async function geometry(store: ProjectStore, doc: CadDocument) {
 describe("reference images in the blob store", () => {
   it("migrates a previous-schema PNG to a blob, serves identical bytes under the new id and drops assets/", async () => {
     const { id, project } = await seed(app.dataDir, v8raw, true);
-    const opened = (await (await app.request(`/api/projects/${id}`)).json())
-      .document;
+    const opened = (await (await send(`/api/projects/${id}`)).json()).document;
     expect(imageOf(opened).assetId).toBe(imageId);
-    const early = await app.request(`/api/projects/${id}/assets/${imageId}`);
+    const early = await send(`/api/projects/${id}/assets/${imageId}`);
     expect(early.status).toBe(200);
     expect(Buffer.from(await early.arrayBuffer())).toEqual(png);
 
-    const renamed = await app.request(`/api/projects/${id}/rename`, {
+    const renamed = await send(`/api/projects/${id}/rename`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Migrated" }),
@@ -101,16 +102,16 @@ describe("reference images in the blob store", () => {
       await fs.readFile(path.join(project, "document.json"), "utf8"),
     );
     expect(imageOf(saved).assetId).toBe(imageId);
-    const served = await app.request(`/api/projects/${id}/assets/${imageId}`);
+    const served = await send(`/api/projects/${id}/assets/${imageId}`);
     expect(served.status).toBe(200);
     expect(served.headers.get("content-type")).toBe("image/png");
     expect(Buffer.from(await served.arrayBuffer())).toEqual(png);
-    expect(
-      (await app.request(`/api/projects/${id}/assets/${legacyId}`)).status,
-    ).toBe(404);
-    expect(
-      (await app.request(`/api/projects/${id}/assets/${stepId}`)).status,
-    ).toBe(404);
+    expect((await send(`/api/projects/${id}/assets/${legacyId}`)).status).toBe(
+      404,
+    );
+    expect((await send(`/api/projects/${id}/assets/${stepId}`)).status).toBe(
+      404,
+    );
 
     const backups = path.join(app.dataDir, "backups", "projects", id);
     const [backup] = await fs.readdir(backups);
@@ -124,7 +125,7 @@ describe("reference images in the blob store", () => {
   });
 
   it("stores an uploaded image as a blob named by its sha256", async () => {
-    const created = await app.request("/api/projects", {
+    const created = await send("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Images" }),
@@ -132,7 +133,7 @@ describe("reference images in the blob store", () => {
     const { document } = await created.json();
     const form = new FormData();
     form.append("image", new Blob([png]), "pixel.png");
-    const res = await app.request(`/api/projects/${document.id}/assets`, {
+    const res = await send(`/api/projects/${document.id}/assets`, {
       method: "POST",
       body: form,
     });
@@ -241,16 +242,14 @@ describe("reference images in the blob store", () => {
       ]),
       "old.rockett",
     );
-    const up = await app.request("/api/projects/file", {
+    const up = await send("/api/projects/file", {
       method: "POST",
       body: form,
     });
     expect(up.status).toBe(200);
     const { document } = await up.json();
     expect(imageOf(document).assetId).toBe(imageId);
-    const file = await (
-      await app.request(`/api/projects/${document.id}/file`)
-    ).json();
+    const file = await (await send(`/api/projects/${document.id}/file`)).json();
     expect(Object.keys(file.assets).sort()).toEqual([imageId, stepId].sort());
     expect(Buffer.from(file.assets[imageId], "base64")).toEqual(png);
   });

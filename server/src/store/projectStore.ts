@@ -111,6 +111,7 @@ export class ProjectStore {
           createdAt: doc.createdAt,
           modifiedAt: doc.modifiedAt,
           featureCount: doc.features.length,
+          revision: doc.revision,
           status: "ok",
         });
       } catch (err) {

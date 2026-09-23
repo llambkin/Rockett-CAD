@@ -14,15 +14,16 @@ Route errors return `ApiErrorBody`: `{ "error": string, "code": ApiErrorCode,
 "detail"?: string }`. `error` is a message for the user. The code fixes the
 status:
 
-| Code            | Status | Meaning                                                   |
-| --------------- | ------ | --------------------------------------------------------- |
-| `validation`    | 400    | The request, upload or feature is invalid.                |
-| `not_found`     | 404    | The project, folder, feature, body or asset is missing.   |
-| `too_large`     | 413    | An upload is over its limit.                              |
-| `conflict`      | 409    | The request conflicts with current state.                 |
-| `unprocessable` | 422    | A stored project fails validation.                        |
-| `kernel`        | 503    | The geometry kernel cannot serve the request.             |
-| `internal`      | 500    | Server fault. The message is generic; the log has detail. |
+| Code                    | Status | Meaning                                                   |
+| ----------------------- | ------ | --------------------------------------------------------- |
+| `validation`            | 400    | The request, upload or feature is invalid.                |
+| `not_found`             | 404    | The project, folder, feature, body or asset is missing.   |
+| `too_large`             | 413    | An upload is over its limit.                              |
+| `conflict`              | 409    | The request conflicts with current state.                 |
+| `precondition_required` | 428    | A document edit arrived without `If-Match`.               |
+| `unprocessable`         | 422    | A stored project fails validation.                        |
+| `kernel`                | 503    | The geometry kernel cannot serve the request.             |
+| `internal`              | 500    | Server fault. The message is generic; the log has detail. |
 
 Mutating endpoints return `{ document, evaluation }`: the updated document
 plus a fresh incremental evaluation (bodies with tagged tessellation, feature
@@ -44,11 +45,32 @@ display metadata gets the default (its name is the body id) in the response
 only; mutating routes save new body metadata.
 
 Requests targeting the same project run sequentially within one API server,
-including evaluation. This prevents overlapping
-feature edits from overwriting each other. Separate projects have independent
-queues. Run only one server process against a data directory; these queues do
-not provide cross-process locking or conflict detection for stale document
-snapshots sent by different clients.
+including evaluation. Separate projects have independent queues. Run only one
+server process against a data directory; the queues do not lock across
+processes.
+
+### Document revisions
+
+The ETag of a project names its document: `document.json` and its
+`revision`, which every save raises by one. `GET /projects/:id` and every
+document edit answer with `ETag: "<revision>"`, the same value as
+`document.revision`. `GET /projects` gives each readable project's `revision`.
+
+The document edits, listed in `DOCUMENT_EDITS` in `shared/src/routes.ts`, are
+rename, `PUT /document`, import into a project, and the feature, timeline,
+body and group routes. Each needs `If-Match: "<revision>"` with the revision
+the caller last received. Inside the project queue the server compares it
+with the stored document:
+
+- no header: 428 `precondition_required`, nothing written;
+- a header that is not one quoted integer: 400 `validation`;
+- a different revision: 409 `conflict` with the stored `revision` in the
+  error body, nothing written.
+
+Creating, duplicating, uploading and deleting a project, placing it in a
+folder, uploading an image and retaining an export do not edit the document
+and take no `If-Match`. `client/src/api.ts` remembers the highest revision it
+has received per project and sends it on every document edit.
 
 ## Projects
 

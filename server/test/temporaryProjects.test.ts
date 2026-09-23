@@ -11,12 +11,14 @@ import {
 import { initKernel } from "../src/geometry/kernel.js";
 import { scheduleSweep } from "../src/app.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 let clock = Date.parse("2026-09-23T00:00:00.000Z");
 let app: TestApp;
+const send = trackRevisions((url, init) => app.request(url, init));
 
 beforeAll(async () => {
   await initKernel();
@@ -26,7 +28,7 @@ beforeAll(async () => {
 afterAll(() => app?.close());
 
 async function call(method: string, url: string, body?: unknown) {
-  const res = await app.request(`/api${url}`, {
+  const res = await send(`/api${url}`, {
     method,
     headers: { "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -44,7 +46,7 @@ async function upload(fields: Record<string, string> = {}) {
     assets: {},
   };
   body.append("file", new Blob([JSON.stringify(file)]), "p.rockett");
-  const res = await app.request("/api/projects/file", { method: "POST", body });
+  const res = await send("/api/projects/file", { method: "POST", body });
   return { status: res.status, body: await res.json() };
 }
 
@@ -149,6 +151,7 @@ describe("temporary projects", () => {
       path.join(dir(id), "temporary.json"),
       JSON.stringify({ owner: null, touchedAt: new Date(clock).toISOString() }),
     );
+    expect((await call("GET", `/projects/${id}`)).status).toBe(200);
     const renamed = await call("POST", `/projects/${id}/rename`, {
       name: "Renamed",
     });

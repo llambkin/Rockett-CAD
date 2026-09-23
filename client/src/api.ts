@@ -1,6 +1,7 @@
 /** Typed client for the Rockett CAD REST API. */
 
 import {
+  DOCUMENT_EDITS,
   pathFor,
   ROUTES,
   type ApiErrorBody,
@@ -47,6 +48,7 @@ async function toApiError(res: Response): Promise<ApiError> {
 
 interface RequestOptions {
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal | undefined;
   keepalive?: boolean;
 }
@@ -59,6 +61,15 @@ export interface ProjectWatch {
 }
 
 let watched: ProjectWatch | null = null;
+
+const revisions = new Map<string, number>();
+
+function received(document: { id?: unknown; revision?: unknown } | undefined) {
+  if (typeof document?.id !== "string" || typeof document.revision !== "number")
+    return;
+  const known = revisions.get(document.id) ?? -1;
+  if (document.revision > known) revisions.set(document.id, document.revision);
+}
 
 export function watchProject(watch: ProjectWatch | null): void {
   watched = watch;
@@ -91,6 +102,7 @@ export async function request(
   path: string,
   {
     body,
+    headers,
     signal,
     keepalive,
     response,
@@ -98,10 +110,13 @@ export async function request(
 ): Promise<unknown> {
   const form = body instanceof FormData;
   const watch = watching(path);
+  const sent = {
+    ...(body !== undefined && !form && { "Content-Type": "application/json" }),
+    ...headers,
+  };
   const res = await fetch(API + path, {
     method,
-    ...(body !== undefined &&
-      !form && { headers: { "Content-Type": "application/json" } }),
+    ...(Object.keys(sent).length > 0 && { headers: sent }),
     ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
     ...(signal && { signal }),
     ...(keepalive && { keepalive }),
@@ -113,6 +128,7 @@ export async function request(
   }
   if (response !== "blob") {
     const json = await res.json();
+    received(json?.document);
     if (method !== "GET" && json?.document?.id === watch?.id)
       watch?.onDocument(json.document);
     return json;
@@ -149,9 +165,17 @@ function send<P extends string, Req, Res>(
   } = {},
 ): Promise<Res> {
   const query = position === undefined ? "" : `?position=${position}`;
+  const id: string | undefined = (params as Partial<Record<string, string>>).id;
+  const revision =
+    DOCUMENT_EDITS.has(route) && id !== undefined
+      ? revisions.get(id)
+      : undefined;
   return request<Res>(route.method, pathFor(route, params) + query, {
     body,
     signal,
+    ...(revision !== undefined && {
+      headers: { "If-Match": `"${revision}"` },
+    }),
   });
 }
 
@@ -169,7 +193,11 @@ export const api = {
       ? send(ROUTES.importStepInto, { id: projectId }, options)
       : send(ROUTES.importStep, {}, options);
   },
-  listProjects: () => send(ROUTES.listProjects, {}),
+  listProjects: () =>
+    send(ROUTES.listProjects, {}).then((projects) => {
+      projects.forEach(received);
+      return projects;
+    }),
   createProject: (name: string, folderId: string | null = null) =>
     send(
       ROUTES.createProject,

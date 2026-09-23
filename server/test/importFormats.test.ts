@@ -12,6 +12,7 @@ import {
 import { engineFor } from "../src/geometry/engine.js";
 import { stepFixture } from "./helpers/stepFixture.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 const BOX_VOLUME = 20 * 30 * 10;
 
@@ -47,6 +48,7 @@ const brepBox = () =>
   });
 
 let app: TestApp;
+const send = trackRevisions((url, init) => app.request(url, init));
 
 beforeAll(async () => {
   await initKernel();
@@ -58,7 +60,7 @@ afterAll(() => app?.close());
 function upload(url: string, contents: string, filename: string) {
   const form = new FormData();
   form.append("file", new Blob([contents]), filename);
-  return app.request(`/api${url}`, { method: "POST", body: form });
+  return send(`/api${url}`, { method: "POST", body: form });
 }
 
 describe.each([
@@ -85,7 +87,7 @@ describe.each([
     ["an empty", ""],
     ["a corrupt", "not a CAD file\n"],
   ])(`rejects ${label} as %s file and changes nothing`, async (_, bytes) => {
-    const created = await app.request("/api/projects", {
+    const created = await send("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Target" }),
@@ -129,7 +131,7 @@ it("evaluates a STEP import saved before imports had a format", async () => {
     path.join(dir, "document.json"),
     JSON.stringify({ ...doc, schemaVersion: 5 }),
   );
-  const response = await app.request(`/api/projects/${doc.id}/evaluate`);
+  const response = await send(`/api/projects/${doc.id}/evaluate`);
   expect(response.status).toBe(200);
   const evaluation = await response.json();
   expect(evaluation.featureStatuses).toEqual([

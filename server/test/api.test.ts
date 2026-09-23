@@ -27,6 +27,7 @@ import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
 import { LocalStorage } from "../src/store/storage.js";
 import { stepFixture } from "./helpers/stepFixture.js";
+import { trackRevisions } from "./helpers/revisions.js";
 
 let base = "";
 let server: any;
@@ -50,8 +51,10 @@ afterAll(() => {
   server?.close();
 });
 
+const send = trackRevisions((url, init) => fetch(base + url, init));
+
 async function api(method: string, url: string, body?: unknown): Promise<any> {
-  const res = await fetch(`${base}${url}`, {
+  const res = await send(url, {
     method,
     headers: { "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -119,7 +122,7 @@ describe("REST API MVP workflow", () => {
     const upload = async (url: string, contents: string) => {
       const form = new FormData();
       form.append("file", new Blob([contents]), "Fixture.stp");
-      return fetch(base + url, { method: "POST", body: form });
+      return send(url, { method: "POST", body: form });
     };
     const source = stepFixture();
     const response = await upload("/projects/import-step", source);
@@ -241,7 +244,7 @@ describe("REST API MVP workflow", () => {
     ).rejects.toThrow(/duplicate sketch entity/);
     expect(await api("GET", url)).toEqual(before);
   });
-  it("preserves overlapping feature additions and recovers after invalid requests", async () => {
+  it("keeps one of six overlapping additions from one revision and recovers after invalid requests", async () => {
     const { document } = await api("POST", "/projects", { name: "Concurrent" });
     const load = store.load.bind(store);
     // Widen the read/write window to reproduce stale simultaneous reads.
@@ -266,11 +269,15 @@ describe("REST API MVP workflow", () => {
           }),
         ),
       );
-      expect(results.every((r) => r.status === "fulfilled")).toBe(true);
+      const rejected = results.flatMap((r) =>
+        r.status === "rejected" ? [String(r.reason)] : [],
+      );
+      expect(rejected).toHaveLength(5);
+      expect(rejected.every((reason) => / 409: /.test(reason))).toBe(true);
       const { document: saved } = await api("GET", `/projects/${document.id}`);
-      expect(saved.features).toHaveLength(6);
-      expect(new Set(saved.features.map((f: any) => f.name)).size).toBe(6);
-      expect(saved.timelinePosition).toBe(6);
+      expect(saved.features).toHaveLength(1);
+      expect(saved.revision).toBe(document.revision + 1);
+      expect(saved.timelinePosition).toBe(1);
       await expect(
         api("POST", `/projects/${document.id}/timeline`, { position: -1 }),
       ).rejects.toThrow(/400/);
@@ -548,7 +555,7 @@ describe("REST API MVP workflow", () => {
     const post = async (url: string, field: string, bytes: Buffer) => {
       const form = new FormData();
       form.append(field, new Blob([new Uint8Array(bytes)]), "upload");
-      return fetch(base + url, { method: "POST", body: form });
+      return send(url, { method: "POST", body: form });
     };
     const assets = `/projects/${document.id}/assets`;
     const png = Buffer.from(
@@ -581,7 +588,7 @@ describe("REST API MVP workflow", () => {
   it("answers every error with a coded body", async () => {
     const { document } = await api("POST", "/projects", { name: "Codes" });
     const call = async (url: string, init?: RequestInit) => {
-      const res = await fetch(base + url, init);
+      const res = await send(url, init);
       return { status: res.status, body: await res.json() };
     };
     const badFeature = await call(`/projects/${document.id}/features`, {
