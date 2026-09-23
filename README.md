@@ -32,55 +32,56 @@ everything downstream against persistent topology references.
 
 ## Features
 
-- **Parametric sketcher**: line, rectangle, centre rectangle, circle, 3-point
-  arc, polygon, slot, points, construction geometry; full constraint solver
-  (horizontal, vertical, parallel, perpendicular, tangent, coincident,
-  concentric, equal, midpoint, collinear, fix) and editable dimensions
-  (length, distance, radius, diameter, angle) with live DOF / constrained-state
-  feedback.
-- **Sketch offsets**: the Offset tool previews the result in yellow. Select a
-  curve, set the distance, and use Reverse direction to switch sides; positive
-  is left of a line or outside a circle or arc. Connected lines and rounded arc
-  corners chain automatically; Ctrl-click picks the chain yourself, in any
-  order. While editing the sketch, click an offset's **↔ Offset N: d mm** badge
-  to change its distance. Entity IDs stay the same, so downstream profile
-  references hold. Offset curves follow their distance and cannot be dragged.
-  Offsets made before schema 4 are plain geometry; recreate them to get a badge.
-- **Solid features**: extrude (new body / join / cut / intersect, symmetric,
-  two-sided, from sketch profiles _or_ planar faces), revolve, sweep, loft,
-  emboss/deboss. Sweep paths take lines and arcs drawn in any order; a
-  branched or broken path fails with "sweep path is not a connected chain".
-- **Modify**: fillet, chamfer, shell, boolean combine, split body,
-  press/pull (offset face), move (translate whole bodies along X, Y and Z by
-  typed values or the arrow gizmo).
-- **Replicate**: mirror, rectangular pattern, circular pattern.
-- **Construction**: offset planes, midplanes; sketch on any planar face.
-- **Reference images**: attach PNG/JPEG/WebP canvases to planes, with
-  two-point calibration to real dimensions.
-- **Feature timeline**: rename, edit, suppress, delete, roll back, insert
-  features mid-history; broken references are flagged, never silently dropped.
-- **Inspect**: point/edge/face measurement (distance, ΔXYZ, angle, radius,
-  area, length).
-- **Export**: binary STL and multi-body 3MF (bodies preserved as named
-  objects), with tessellation quality control.
-- **STEP import**: start a project with **New project from STEP**, or use
-  **Insert → Import STEP** in an existing project. Accepts `.step`/`.stp`
-  files up to 10 MB containing solid bodies. Imported solids support further
-  modelling; the source application's sketches and feature history are not imported.
-- **Persistence**: human-inspectable JSON project format that stores the full
-  parametric history (never just the final mesh); versioned schema with
-  migrations; automatic save on every change; survives container recreation.
-- **Undo/redo**: application-level, separate from the CAD timeline.
+### Sketch
+
+- **Sketcher**: draw lines, rectangles, circles, arcs, polygons, slots, points and construction geometry.
+- **Constraints and dimensions**: constrain shapes, drive them with editable dimensions and watch the remaining degrees of freedom.
+- **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
+- **Project, trim and extend**: link earlier model edges into a sketch, trim curves at intersections, extend them to boundaries.
+- **Edit in place**: editing a sketch rolls the model back to it; Finish Sketch returns to the saved position.
+
+### Model
+
+- **Solid features**: extrude, revolve, sweep, loft, emboss and deboss from sketch profiles or planar faces.
+- **Modify**: fillet, chamfer, shell, combine, split, press/pull and move bodies; shell with no open face hollows the body.
+- **Tangent chains**: fillet and chamfer pick smooth connected edges in one click.
+- **Replicate**: mirror, rectangular pattern and circular pattern.
+- **Construction**: offset planes and midplanes; sketch on any planar face.
+- **Reference images**: place PNG, JPEG or WebP images on planes and calibrate them to real size.
+- **Feature timeline**: rename, edit, suppress, delete, roll back and insert features; broken references are flagged, never dropped.
+
+### Inspect
+
+- **Measure**: distance, ΔXYZ, angle, radius, area and length between points, edges and faces.
+
+### Files
+
+- **STEP import**: start a project from a STEP file, or import one into an open project.
+- **Export**: download binary STL or multi-body 3MF with named bodies and a quality setting.
+- **Autosave**: every change saves to a readable JSON file that keeps the full feature history.
+
+### Workspace
+
+- **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, orthographic or perspective.
+- **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control.
+- **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
+- **Tool panels**: panels stay inside the window; Escape cancels a feature dialog and reverts its preview.
+- **Errors**: stay visible until dismissed, and their text can be copied.
+- **Version label**: the bottom-right corner shows the running build; hover for commit, version and schema.
+
+[docs/user/guide.md](docs/user/guide.md) explains how to use each one.
 
 ## Quick start (Docker)
 
 ```bash
-docker compose up -d
+ROCKETT_ALLOWED_ORIGINS=http://localhost:8788 docker compose up -d
 ```
 
-Then open http://localhost:8788. All state lives in the `rockett-cad_data`
-volume; DOCKER.md covers LAN access, running dev and prod side by side, and
-promoting the image dev verified to prod.
+Then open http://localhost:8788. The server refuses to start without
+`ROCKETT_ALLOWED_ORIGINS`, the comma-separated browser origins allowed to
+change projects; list the origin you browse to. All state lives in the
+`rockett-cad_data` volume; DOCKER.md covers LAN access, running dev and prod
+side by side, and promoting the image dev verified to prod.
 The container runs as the unprivileged `rockett` user: `/app` is root-owned
 and `/data` is the only path it writes.
 
@@ -104,10 +105,12 @@ A plain `docker compose up` records neither, so the label reads
 ```bash
 npm ci                 # .npmrc: install scripts off, exact pins on save
 npm run prepare        # once per clone: husky sets core.hooksPath to .husky/_
+export ROCKETT_ALLOWED_ORIGINS=http://localhost:5173
 npm run dev            # server on :8788 + Vite client on :5173
 npm test               # typecheck, then shared, server and client tests
 npm run lint           # oxlint
 npm run format:check   # Prettier
+npm run lint:readme    # README feature items stay within 20 words
 npm run lint:comments  # comment ratchet: no file may gain a comment
 npm run lint:writing   # writing lint over tracked markdown
 ```
@@ -119,6 +122,7 @@ The last two need masterrulez cloned to `~/masterrulez`. See
 
 | Doc                                        | Contents                                                          |
 | ------------------------------------------ | ----------------------------------------------------------------- |
+| [docs/user/guide.md](docs/user/guide.md)   | How to use each feature, controls and shortcuts                   |
 | [ARCHITECTURE.md](ARCHITECTURE.md)         | System overview, layers, technology choices                       |
 | [CAD_MODEL.md](CAD_MODEL.md)               | B-Rep representation, topology naming, regeneration, tessellation |
 | [FEATURE_TIMELINE.md](FEATURE_TIMELINE.md) | Timeline semantics, rollback, dependency handling                 |
@@ -128,50 +132,6 @@ The last two need masterrulez cloned to `~/masterrulez`. See
 | [WORK-ORDER.md](WORK-ORDER.md)             | Scope, rulings and planned work                                   |
 | [CHANGELOG.md](CHANGELOG.md)               | Changes per release, release and schema conventions               |
 | [Brief.md](Brief.md)                       | Original 3D-printing brief, kept as history                       |
-
-## Viewport controls
-
-Editing an existing sketch temporarily rolls the viewport and timeline marker
-back to that sketch. **Finish Sketch** regenerates the model at the previously
-saved timeline position. Entering edit mode does not change the saved marker or
-create an undo step.
-
-| Action                             | Input                                                                                                                                                                                   |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Select                             | Left click (Ctrl adds; Alt+click cycles overlapping picks)                                                                                                                              |
-| Context menu                       | Right click on geometry                                                                                                                                                                 |
-| Orbit                              | Right-drag, Shift+middle-drag, or drag the ViewCube                                                                                                                                     |
-| Pan                                | Middle-drag                                                                                                                                                                             |
-| Zoom                               | Scroll wheel (to cursor)                                                                                                                                                                |
-| Named views / fit / ortho or persp | Toolbar (right side) and ViewCube                                                                                                                                                       |
-| Shortcuts                          | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
-
-## Sketch modification tools
-
-- Project: click an earlier model edge to add a purple linked reference. Snap or
-  constrain new shapes to it to follow source edits. References are construction
-  geometry by default; toggle Construction on a selected reference to use it in a profile.
-- Trim: click the portion of a curve between intersections to remove it.
-- Extend: click near an endpoint to extend to the first intersecting boundary.
-- Offset: see Sketch offsets under Features.
-
-Each operation returns to Select and can be undone. Unsupported projections and
-collapsing offsets show an error. Trim/extend reports removed curve constraints.
-
-## Workspace usability
-
-Undo/redo stays inside an existing sketch and returns to Select. Opening a sketch
-from the model tree or timeline faces its plane automatically. Shift+F fits the
-model in view. The Controls button (or ?) lists keyboard and mouse controls.
-Tool panels keep their action buttons within the window; the arrow in the title
-bar restores their docked position. Errors remain visible until dismissed or
-the next operation starts, and their text can be selected and copied.
-
-Fillet and Chamfer default to **Select tangent chain**. Clicking an edge
-selects smooth connected edges (including line/arc joins); sharp corners and
-ambiguous branches stop the chain. Clicking a fully selected chain deselects it.
-Uncheck the option to pick edges individually. OCCT may still propagate a fillet
-or chamfer along a smooth contour as required by its native operation.
 
 ## License note
 

@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspace shared --if-present && npm run build --workspace server && npm run build --workspace client",
-    "check": "run-s lint format:check lint:comments lint:writing lint:pins lint:notices build test test:browser && sh scripts/check-work-order.sh",
+    "check": "run-s lint format:check lint:comments lint:writing lint:readme lint:pins lint:notices build test test:browser && sh scripts/check-work-order.sh",
     "dev": "npm-run-all --parallel dev:server dev:client",
     "dev:client": "npm run dev --workspace client",
     "dev:server": "npm run dev --workspace server",
@@ -19,6 +19,7 @@
     "lint:comments": "sh scripts/check-comments.sh",
     "lint:notices": "sh scripts/check-notices.sh",
     "lint:pins": "grep -nE '\"[~^*]' package.json shared/package.json server/package.json client/package.json; [ $? -eq 1 ]",
+    "lint:readme": "sh scripts/check-readme.sh",
     "lint:writing": "test -f ~/masterrulez/scripts/lint-writing || { echo 'masterrulez lint-writing is missing; clone masterrulez to ~/masterrulez' >&2; exit 1; } && node ~/masterrulez/scripts/lint-writing",
     "prepare": "husky",
     "start": "npm run start --workspace server",
