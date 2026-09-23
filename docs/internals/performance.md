@@ -84,7 +84,7 @@ its line count and bench median, else `no bench`.
   `modules/*/dist/bench.json` that exists. A bench task names its function as
   its first word, such as `solveSketch rectangle`, and matches functions in the
   workspace that wrote the file. The table never runs benches; run
-  `npm run bench -w server` first.
+  `npm run bench -ws --if-present` first.
 - `scripts/cost-baseline.txt` holds every `tidy` file and function with its
   line count; a repeated name in one file takes `#2`, `#3` in file order.
   `npm run lint:cost`, part of `npm run check`, fails when one grows, a new

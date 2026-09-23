@@ -9,6 +9,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
+    "bench": "vitest bench --run --reporter=default --reporter=json --outputFile.json=dist/bench.json",
     "test": "tsc -p . && vitest run"
   },
   "dependencies": {
