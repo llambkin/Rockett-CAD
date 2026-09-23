@@ -10,6 +10,7 @@ import type {
   PlaneFrame,
   SketchConstraint,
   SketchEntity,
+  SketchSolveStatus,
 } from "@rockett/shared";
 import { newId, modifySketch } from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
@@ -402,9 +403,9 @@ export function ViewportView() {
         let cx = 0,
           cy = 0;
         const n = p.polygon.length / 2;
-        for (let i = 0; i < p.polygon.length; i += 2) {
-          cx += p.polygon[i];
-          cy += p.polygon[i + 1];
+        for (let i = 0; i + 1 < p.polygon.length; i += 2) {
+          cx += p.polygon[i]!;
+          cy += p.polygon[i + 1]!;
         }
         return { frame: sk.frame, anchorUV: [cx / n, cy / n], profile: p };
       }
@@ -420,14 +421,25 @@ export function ViewportView() {
           cy = 0,
           cz = 0,
           count = 0;
+        const vertexAt = (i: number) => {
+          const vi = body.indices[i];
+          if (vi === undefined) return null;
+          const x = body.positions[vi * 3];
+          const y = body.positions[vi * 3 + 1];
+          const z = body.positions[vi * 3 + 2];
+          if (x === undefined || y === undefined || z === undefined)
+            return null;
+          return { vi, x, y, z };
+        };
         const seen = new Set<number>();
         for (let i = face.start; i < face.start + face.count; i++) {
-          const vi = body.indices[i];
-          if (seen.has(vi)) continue;
-          seen.add(vi);
-          cx += body.positions[vi * 3];
-          cy += body.positions[vi * 3 + 1];
-          cz += body.positions[vi * 3 + 2];
+          const v = vertexAt(i);
+          if (!v) return null;
+          if (seen.has(v.vi)) continue;
+          seen.add(v.vi);
+          cx += v.x;
+          cy += v.y;
+          cz += v.z;
           count++;
         }
         if (count === 0) return null;
@@ -449,16 +461,13 @@ export function ViewportView() {
         const ghostPositions: number[] = [];
         const ghostIndices: number[] = [];
         for (let i = face.start; i < face.start + face.count; i++) {
-          const vi = body.indices[i];
-          let ni = remap.get(vi);
+          const v = vertexAt(i);
+          if (!v) return null;
+          let ni = remap.get(v.vi);
           if (ni === undefined) {
             ni = ghostPositions.length / 3;
-            remap.set(vi, ni);
-            ghostPositions.push(
-              body.positions[vi * 3],
-              body.positions[vi * 3 + 1],
-              body.positions[vi * 3 + 2],
-            );
+            remap.set(v.vi, ni);
+            ghostPositions.push(v.x, v.y, v.z);
           }
           ghostIndices.push(ni);
         }
@@ -635,9 +644,9 @@ export function ViewportView() {
           const pl = ed.polyline;
           axisOrigin = new THREE.Vector3(pl[0], pl[1], pl[2]);
           axisDir = new THREE.Vector3(
-            pl[pl.length - 3] - pl[0],
-            pl[pl.length - 2] - pl[1],
-            pl[pl.length - 1] - pl[2],
+            pl[pl.length - 3]! - pl[0]!,
+            pl[pl.length - 2]! - pl[1]!,
+            pl[pl.length - 1]! - pl[2]!,
           );
         }
       }
@@ -647,7 +656,7 @@ export function ViewportView() {
         Y: [0, 1, 0],
         Z: [0, 0, 1],
       };
-      const d = dirs[s.dialogParams.axis ?? "Z"] ?? dirs.Z;
+      const d = dirs[s.dialogParams.axis ?? "Z"] ?? dirs.Z!;
       axisOrigin = new THREE.Vector3(0, 0, 0);
       axisDir = new THREE.Vector3(...d);
     }
@@ -730,9 +739,9 @@ export function ViewportView() {
     let cu = 0,
       cv = 0;
     const n = profile.polygon.length / 2;
-    for (let i = 0; i < n; i++) {
-      cu += profile.polygon[i * 2];
-      cv += profile.polygon[i * 2 + 1];
+    for (let i = 0; i * 2 + 1 < profile.polygon.length; i++) {
+      cu += profile.polygon[i * 2]!;
+      cv += profile.polygon[i * 2 + 1]!;
     }
     cu /= n || 1;
     cv /= n || 1;
@@ -1133,31 +1142,31 @@ export function ViewportView() {
         const pl = ed.polyline;
         if (pl.length < 6) continue;
         const uv: number[] = [];
-        for (let i = 0; i < pl.length; i += 3) {
-          const dx = pl[i] - o[0],
-            dy = pl[i + 1] - o[1],
-            dz = pl[i + 2] - o[2];
+        for (let i = 0; i + 2 < pl.length; i += 3) {
+          const dx = pl[i]! - o[0],
+            dy = pl[i + 1]! - o[1],
+            dz = pl[i + 2]! - o[2];
           uv.push(
             dx * xa[0] + dy * xa[1] + dz * xa[2],
             dx * ya[0] + dy * ya[1] + dz * ya[2],
           );
         }
         segs.push(uv);
-        addCorner(uv[0], uv[1]);
-        addCorner(uv[uv.length - 2], uv[uv.length - 1]);
+        addCorner(uv[0]!, uv[1]!);
+        addCorner(uv[uv.length - 2]!, uv[uv.length - 1]!);
         // midpoint by arc length
         let total = 0;
         for (let i = 0; i + 3 < uv.length; i += 2) {
-          total += Math.hypot(uv[i + 2] - uv[i], uv[i + 3] - uv[i + 1]);
+          total += Math.hypot(uv[i + 2]! - uv[i]!, uv[i + 3]! - uv[i + 1]!);
         }
         let acc = 0;
         for (let i = 0; i + 3 < uv.length; i += 2) {
-          const d = Math.hypot(uv[i + 2] - uv[i], uv[i + 3] - uv[i + 1]);
+          const d = Math.hypot(uv[i + 2]! - uv[i]!, uv[i + 3]! - uv[i + 1]!);
           if (acc + d >= total / 2 && d > 0) {
             const t = (total / 2 - acc) / d;
             mids.push({
-              x: uv[i] + t * (uv[i + 2] - uv[i]),
-              y: uv[i + 1] + t * (uv[i + 3] - uv[i + 1]),
+              x: uv[i]! + t * (uv[i + 2]! - uv[i]!),
+              y: uv[i + 1]! + t * (uv[i + 3]! - uv[i + 1]!),
             });
             break;
           }
@@ -1359,10 +1368,10 @@ export function ViewportView() {
     if (faceSnap) {
       for (const seg of faceSnap.segs) {
         for (let i = 0; i + 3 < seg.length; i += 2) {
-          const ax = seg[i],
-            ay = seg[i + 1];
-          const bx = seg[i + 2],
-            by = seg[i + 3];
+          const ax = seg[i]!,
+            ay = seg[i + 1]!;
+          const bx = seg[i + 2]!,
+            by = seg[i + 3]!;
           const abx = bx - ax,
             aby = by - ay;
           const len2 = abx * abx + aby * aby || 1;
@@ -1454,7 +1463,7 @@ export function ViewportView() {
           // the ghost honours typed (locked) sizes, exactly as the placed shape will
           const ghostCursor =
             dimRef.current && ts.clicks.length === 1
-              ? resolveDimCursor(tool, ts.clicks[0], uv, dimRef.current.fields)
+              ? resolveDimCursor(tool, ts.clicks[0]!, uv, dimRef.current.fields)
               : uv;
           updateToolPreview(
             vp,
@@ -1654,7 +1663,7 @@ export function ViewportView() {
     const r1 = (v: number) => Math.round(v * 100) / 100;
     const first = clicks[0];
     if (!first) return null;
-    const last = clicks[clicks.length - 1];
+    const last = clicks[clicks.length - 1]!;
     const dx = cursor.x - last.x;
     const dy = cursor.y - last.y;
     switch (tool) {
@@ -1695,7 +1704,7 @@ export function ViewportView() {
       }
       d.x = e.clientX;
       d.y = e.clientY;
-      const live = liveDimValues(tool, clicks[0], cursor);
+      const live = liveDimValues(tool, clicks[0]!, cursor);
       for (const f of d.fields) if (!f.locked) f.text = fmt2(live[f.key] ?? 0);
       refreshDim();
       setToolLabel(null);
@@ -1744,7 +1753,7 @@ export function ViewportView() {
       frame,
       d.tool as any,
       ts.clicks,
-      resolveDimCursor(d.tool, ts.clicks[0], ts.lastCursor, d.fields),
+      resolveDimCursor(d.tool, ts.clicks[0]!, ts.lastCursor, d.fields),
       Number(useStore.getState().dialogParams.polygonSides ?? 6) || 6,
     );
   }
@@ -1757,7 +1766,7 @@ export function ViewportView() {
     const ts = toolState.current;
     const d = dimRef.current;
     if (ts.clicks.length !== 1 || !d) return;
-    const first = ts.clicks[0];
+    const first = ts.clicks[0]!;
     const second = resolveDimCursor(tool, first, cursor, d.fields);
     const result = buildFromClicks(
       tool,
@@ -1794,29 +1803,32 @@ export function ViewportView() {
       case "line":
         return clicks.length >= 2
           ? {
-              created: tools.createLine(clicks[0], clicks[1], construction),
+              created: tools.createLine(clicks[0]!, clicks[1]!, construction),
               chain: true,
             }
           : null;
       case "rect":
         return clicks.length >= 2
-          ? { created: tools.createRect(clicks[0], clicks[1]), chain: false }
+          ? { created: tools.createRect(clicks[0]!, clicks[1]!), chain: false }
           : null;
       case "centerRect":
         return clicks.length >= 2
           ? {
-              created: tools.createCenterRect(clicks[0], clicks[1]),
+              created: tools.createCenterRect(clicks[0]!, clicks[1]!),
               chain: false,
             }
           : null;
       case "circle":
         return clicks.length >= 2
-          ? { created: tools.createCircle(clicks[0], clicks[1]), chain: false }
+          ? {
+              created: tools.createCircle(clicks[0]!, clicks[1]!),
+              chain: false,
+            }
           : null;
       case "arc3":
         return clicks.length >= 3
           ? {
-              created: tools.createArc3(clicks[0], clicks[1], clicks[2]),
+              created: tools.createArc3(clicks[0]!, clicks[1]!, clicks[2]!),
               chain: false,
             }
           : null;
@@ -1824,18 +1836,18 @@ export function ViewportView() {
         if (clicks.length < 2) return null;
         const sides = Number(s.dialogParams.polygonSides ?? 6) || 6;
         return {
-          created: tools.createPolygon(clicks[0], clicks[1], sides),
+          created: tools.createPolygon(clicks[0]!, clicks[1]!, sides),
           chain: false,
         };
       }
       case "slot": {
         if (clicks.length < 3) return null;
         const r = Math.hypot(
-          clicks[2].x - clicks[1].x,
-          clicks[2].y - clicks[1].y,
+          clicks[2]!.x - clicks[1]!.x,
+          clicks[2]!.y - clicks[1]!.y,
         );
         return {
-          created: tools.createSlot(clicks[0], clicks[1], Math.max(r, 0.5)),
+          created: tools.createSlot(clicks[0]!, clicks[1]!, Math.max(r, 0.5)),
           chain: false,
         };
       }
@@ -2155,7 +2167,7 @@ export function ViewportView() {
           s.setError("Click along the curve to choose which one to modify.");
           return;
         }
-        entityId = connected[0].id;
+        entityId = connected[0]!.id;
       }
       if (tool === "offset") {
         const additive = e.ctrlKey || e.metaKey;
@@ -2253,7 +2265,7 @@ export function ViewportView() {
         // single-target dimensions apply immediately; two points/lines need 2 clicks
         let constraint: SketchConstraint | null = null;
         if (kind === "line" || kind === "circle" || kind === "arc") {
-          constraint = tryDim([ts.dimTargets[ts.dimTargets.length - 1]]);
+          constraint = tryDim([ts.dimTargets[ts.dimTargets.length - 1]!]);
           ts.dimTargets = [];
         } else if (ts.dimTargets.length >= 2) {
           constraint = tryDim(ts.dimTargets.slice(-2));
@@ -2426,6 +2438,7 @@ export function ViewportView() {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const f = d.fields[d.active];
+      if (!f) return;
       const swallow = () => {
         e.preventDefault();
         e.stopPropagation();
@@ -2437,7 +2450,7 @@ export function ViewportView() {
         refreshDim();
       } else if (e.key === "Enter") {
         swallow();
-        void placeWithDims(ts.lastCursor ?? ts.clicks[0]);
+        void placeWithDims(ts.lastCursor ?? ts.clicks[0]!);
       } else if (e.key === "Backspace" && f.locked) {
         swallow();
         f.text = f.text.slice(0, -1);
@@ -2446,8 +2459,8 @@ export function ViewportView() {
           f.locked = false;
           const live = liveDimValues(
             d.tool,
-            ts.clicks[0],
-            ts.lastCursor ?? ts.clicks[0],
+            ts.clicks[0]!,
+            ts.lastCursor ?? ts.clicks[0]!,
           );
           f.text = fmt2(live[f.key] ?? 0);
         }
@@ -3075,7 +3088,7 @@ function ViewportHud() {
     );
     const status = solved?.solveStatus ?? "unconstrained";
     const dof = solved?.dof ?? 0;
-    const map: Record<string, { label: string; cls: string }> = {
+    const map: Record<SketchSolveStatus, { label: string; cls: string }> = {
       unconstrained: { label: `Unconstrained (${dof} DOF)`, cls: "warn" },
       partially_constrained: {
         label: `Partially constrained (${dof} DOF)`,

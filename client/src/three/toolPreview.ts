@@ -66,12 +66,12 @@ export function updateToolPreview(
   switch (tool) {
     case "line": {
       if (clicks.length < 1) return false;
-      g.add(ghostLine([P(clicks[0].x, clicks[0].y), P(cursor.x, cursor.y)]));
+      g.add(ghostLine([P(clicks[0]!.x, clicks[0]!.y), P(cursor.x, cursor.y)]));
       return true;
     }
     case "rect": {
       if (clicks.length < 1) return false;
-      const a = clicks[0];
+      const a = clicks[0]!;
       g.add(
         ghostLine([
           P(a.x, a.y),
@@ -85,7 +85,7 @@ export function updateToolPreview(
     }
     case "centerRect": {
       if (clicks.length < 1) return false;
-      const c = clicks[0];
+      const c = clicks[0]!;
       const w = Math.abs(cursor.x - c.x);
       const h = Math.abs(cursor.y - c.y);
       g.add(
@@ -101,19 +101,22 @@ export function updateToolPreview(
     }
     case "circle": {
       if (clicks.length < 1) return false;
-      const c = clicks[0];
+      const c = clicks[0]!;
       const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
       if (r > 1e-6) g.add(ghostLine(circlePts(c.x, c.y, r)));
       return true;
     }
     case "arc3": {
       if (clicks.length === 1) {
-        g.add(ghostLine([P(clicks[0].x, clicks[0].y), P(cursor.x, cursor.y)]));
+        g.add(
+          ghostLine([P(clicks[0]!.x, clicks[0]!.y), P(cursor.x, cursor.y)]),
+        );
         return true;
       }
       if (clicks.length === 2) {
         // arc through start, cursor, end (circumcircle sample)
-        const [s, e] = clicks;
+        const s = clicks[0]!;
+        const e = clicks[1]!;
         const b = cursor;
         const d =
           2 * (s.x * (b.y - e.y) + b.x * (e.y - s.y) + e.x * (s.y - b.y));
@@ -148,7 +151,7 @@ export function updateToolPreview(
     }
     case "polygon": {
       if (clicks.length < 1) return false;
-      const c = clicks[0];
+      const c = clicks[0]!;
       const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
       const a0 = Math.atan2(cursor.y - c.y, cursor.x - c.x);
       const pts: THREE.Vector3[] = [];
@@ -161,11 +164,14 @@ export function updateToolPreview(
     }
     case "slot": {
       if (clicks.length === 1) {
-        g.add(ghostLine([P(clicks[0].x, clicks[0].y), P(cursor.x, cursor.y)]));
+        g.add(
+          ghostLine([P(clicks[0]!.x, clicks[0]!.y), P(cursor.x, cursor.y)]),
+        );
         return true;
       }
       if (clicks.length === 2) {
-        const [c1, c2] = clicks;
+        const c1 = clicks[0]!;
+        const c2 = clicks[1]!;
         const r = Math.max(Math.hypot(cursor.x - c2.x, cursor.y - c2.y), 0.01);
         const dx = c2.x - c1.x,
           dy = c2.y - c1.y;
