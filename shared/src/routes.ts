@@ -11,11 +11,13 @@ import type {
   ExportRequest,
   Folder,
   FolderTree,
+  HeldMeshes,
   MeasureRequest,
   MeasureResult,
   ProjectResponse,
   ProjectSummary,
   ProjectView,
+  WireEvaluateResult,
 } from "./api.js";
 import { VIEW_VERSION } from "./api.js";
 import { edgeRef, faceRef, groupsSchema } from "./schema/features.js";
@@ -29,6 +31,11 @@ import {
 export interface MutationResponse {
   document: CadDocument;
   evaluation: EvaluateResult;
+}
+
+export interface WireMutationResponse {
+  document: CadDocument;
+  evaluation: WireEvaluateResult;
 }
 
 export const PROJECT_FILE_FORMAT = "rockett-project";
@@ -166,22 +173,22 @@ export const ROUTES = {
   ),
   downloadProjectFile: route<never, Blob>()("GET", "/projects/:id/file"),
   evaluate: route<never, EvaluateResult>()("GET", "/projects/:id/evaluate"),
-  replaceDocument: route<{ document: CadDocument }, MutationResponse>()(
-    "PUT",
-    "/projects/:id/document",
-  ),
+  replaceDocument: route<
+    { document: CadDocument } & HeldMeshes,
+    WireMutationResponse
+  >()("PUT", "/projects/:id/document"),
   importStepInto: route<FormData, MutationResponse>()(
     "POST",
     "/projects/:id/import-step",
   ),
-  addFeature: route<{ feature: Feature }, MutationResponse>()(
+  addFeature: route<{ feature: Feature } & HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/features",
   ),
-  updateFeature: route<{ feature: Partial<Feature> }, MutationResponse>()(
-    "PUT",
-    "/projects/:id/features/:fid",
-  ),
+  updateFeature: route<
+    { feature: Partial<Feature> } & HeldMeshes,
+    WireMutationResponse
+  >()("PUT", "/projects/:id/features/:fid"),
   projectEdge: route<
     { edge: EdgeRef; entityId: string },
     { entities: SketchEntity[] }
@@ -197,7 +204,7 @@ export const ROUTES = {
     "DELETE",
     "/projects/:id/features/:fid",
   ),
-  setTimeline: route<{ position: number }, MutationResponse>()(
+  setTimeline: route<{ position: number } & HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/timeline",
     Type.Object({ position: Type.Integer({ minimum: 0 }) }),
@@ -213,7 +220,10 @@ export const ROUTES = {
       beforeFeatureId: Type.Optional(Type.String()),
     }),
   ),
-  updateBody: route<{ name?: string; visible?: boolean }, MutationResponse>()(
+  updateBody: route<
+    { name?: string; visible?: boolean } & HeldMeshes,
+    WireMutationResponse
+  >()(
     "PUT",
     "/projects/:id/bodies/:bodyId",
     Type.Object({
@@ -221,11 +231,10 @@ export const ROUTES = {
       visible: Type.Optional(Type.Boolean()),
     }),
   ),
-  updateGroups: route<{ groups: TreeGroup[] }, MutationResponse>()(
-    "PUT",
-    "/projects/:id/groups",
-    Type.Object({ groups: groupsSchema }),
-  ),
+  updateGroups: route<
+    { groups: TreeGroup[] } & HeldMeshes,
+    WireMutationResponse
+  >()("PUT", "/projects/:id/groups", Type.Object({ groups: groupsSchema })),
   getView: route<never, ProjectView>()("GET", "/projects/:id/view"),
   putView: route<ProjectView, ProjectView>()(
     "PUT",

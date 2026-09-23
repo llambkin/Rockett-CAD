@@ -66,6 +66,7 @@ import {
   reply,
   RevisionConflict,
 } from "./revision.js";
+import { omitHeldMeshes } from "./heldMeshes.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -183,7 +184,7 @@ export function createApiRouter(
 ): Router {
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
-  router.use(json({ limit: "50mb" }));
+  router.use(json({ limit: "50mb" }), check(omitHeldMeshes));
   const on = (route: Route, ...handlers: RequestHandler[]) =>
     router[route.method.toLowerCase() as Lowercase<Method>](
       route.path,

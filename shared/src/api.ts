@@ -68,6 +68,15 @@ export interface BodyPayload {
   bbox: { min: Vec3; max: Vec3 };
 }
 
+export type HeldBodyPayload = Pick<
+  BodyPayload,
+  "bodyId" | "name" | "visible" | "meshKey"
+>;
+
+export interface HeldMeshes {
+  held?: string[];
+}
+
 export type FeatureRunStatus =
   "ok" | "warning" | "error" | "suppressed" | "rolledBack";
 
@@ -102,6 +111,10 @@ export interface EvaluateResult {
   planes: ConstructionPlanePayload[];
   /** Milliseconds spent in the kernel. */
   kernelMs: number;
+}
+
+export interface WireEvaluateResult extends Omit<EvaluateResult, "bodies"> {
+  bodies: Array<BodyPayload | HeldBodyPayload>;
 }
 
 export interface ProjectSummary {

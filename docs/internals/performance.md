@@ -69,6 +69,9 @@ under `npm test` and proves both evaluate with no error status.
 - `many-body` is `manyBodyPart()`: a 10 x 10 x 5 mm box with 1 mm fillets on
   its vertical edges, patterned 25 times along X, then all 25 bodies 40 times
   along Y, 15 mm apart and not combined. Five features, 1,000 bodies.
+- `fillet-drag` is `filletDragPart()`: `many-body` plus a 0.5 mm fillet on
+  one top edge of one pattern copy, `b:py:b:px:b:box:12:8`. Six features,
+  1,000 bodies.
 
 Benches over them:
 
@@ -213,7 +216,8 @@ kernel memory (see Destructors). After PERF-034:
 
 A change upstream of the pattern still makes every body a new shape, so it
 re-evaluates the pattern. Since PERF-035 it meshes only the changed source
-bodies and moves the copies. Responses still carry every mesh until PERF-024.
+bodies and moves the copies. Since PERF-041 a mutation response omits the
+meshes the client holds (see Fillet drag on many-body).
 
 PERF-035: `evalLinearPattern` records on each uncombined copy its source body,
 offset and name prefix `p{i}:{featureId}`. When the source's mesh is cached,
@@ -240,6 +244,67 @@ before and 9 to 20 after. The audit below measured 9.4 to 10.7 s for 40 to 41.
 What remains is feature evaluation. A cold evaluation now meshes one body
 instead of 1,000, so the `evaluate cold many-body` and payload rows under
 Baselines predate PERF-035.
+
+## Fillet drag on many-body
+
+Mark on 2026-09-23: "i foresee there being issues dragging a feature such as
+a fillet on a single item in a 1000 item clone like our stress test".
+`server/test/filletDrag.bench.ts` changes the `fillet-drag` fillet radius to
+a new value per sample, first on the engine alone, then as
+`PUT /api/projects/:id/features/drag` through `createApp` over loopback with
+`Accept-Encoding: gzip`, timed from request to last byte. It then times
+`JSON.parse` of the response text, standing in for the client, and
+`JSON.stringify` of the parsed result, standing in for the server. The
+`held` variant sends the 1,000 `meshKey`s of the evaluation before the drag.
+
+Ranges span six runs on 2026-09-23, `class-a`, Node 24.12.0, load average 10
+to 22: one of the code before PERF-041 and five after it, whose plain
+requests take the unchanged path. The last two ran on DOC-010, whose
+`revision` adds 17 bytes. The one-body change meshes one body; the other
+999 hit the tessellation cache.
+
+| per drag update                | before                         | after                    |
+| ------------------------------ | ------------------------------ | ------------------------ |
+| engine                         | median 58 to 123 ms            | unchanged                |
+| response JSON                  | 25,559,189 to 25,559,206 bytes | 308,204 to 308,221 bytes |
+| on the wire, gzip level 1      | 3,388,378 to 3,388,398 bytes   | 79,318 to 79,346 bytes   |
+| server `JSON.stringify`        | median 104 to 120 ms           | median 0.79 to 1.2 ms    |
+| request to last byte           | median 406 to 469 ms           | median 68 to 77 ms       |
+| client `JSON.parse`            | median 68 to 78 ms             | median 0.86 to 0.97 ms   |
+| end to end, request plus parse | about 475 to 550 ms            | about 69 to 78 ms        |
+
+The payload dominated: stringify, gzip, transfer and parse took about 420 ms
+of every update, the engine 58 to 123 ms. Now the engine takes most of what
+is left. `client/src/api.ts` parsed and refilled a 1,000-body response with
+999 held bodies in a median 1.1 ms in Node, from one probe of 10 samples.
+
+The budgets come from a drag that updates at least five times a second:
+200 ms a request, 100 ms of it engine, and a frame for each parse or
+stringify. The plain rows miss them and the held rows meet them. The engine
+missed its median in the one run at load average 22.
+
+| metric                               | fixture     | hardware class | runtime      | warm-up | repetitions | median            | p95              | budget                    |
+| ------------------------------------ | ----------- | -------------- | ------------ | ------- | ----------- | ----------------- | ---------------- | ------------------------- |
+| fillet drag engine many-body         | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 58.2 to 123 ms    | 62.9 to 152 ms   | median 100 ms, p95 200 ms |
+| fillet drag http many-body           | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 406 to 469 ms     | 432 to 595 ms    | median 200 ms, p95 400 ms |
+| fillet drag parse many-body          | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 68.2 to 78.3 ms   | 76.3 to 90.8 ms  | median 16 ms, p95 50 ms   |
+| fillet drag stringify many-body      | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 104 to 120 ms     | 119 to 148 ms    | median 16 ms, p95 50 ms   |
+| fillet drag http held many-body      | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 68.3 to 77.4 ms   | 73.2 to 82.7 ms  | median 200 ms, p95 400 ms |
+| fillet drag parse held many-body     | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 0.859 to 0.971 ms | 0.894 to 1.29 ms | median 16 ms, p95 50 ms   |
+| fillet drag stringify held many-body | fillet-drag | class-a        | Node 24.12.0 | 2       | 10          | 0.789 to 1.19 ms  | 0.812 to 1.28 ms | median 16 ms, p95 50 ms   |
+
+The client sends `held`, the `meshKey`s it holds, with every JSON mutation. The server answers a body whose key is held with its
+id, name, visibility and key only; `meshKey` hashes the whole mesh, so the key
+names the arrays exactly. `api.ts` refills those bodies from the map it sent
+with the request, not the newest one, so a reply that lands after a newer one
+still refills. It keeps one map, replaced by each mutation response and each
+`GET evaluate` of the whole timeline, so it holds the current evaluation plus
+any request in flight. A timeline peek or a preview base at an earlier
+position leaves it alone. The arrays are the same objects the store already
+holds. `held` travels in the body of the same `If-Match` edit (DOC-010); a 409
+or 428 carries no evaluation and leaves the map as it was. An older client
+sends nothing and gets every body in full. PERF-024 replaces this when meshes
+leave the JSON; `held` goes with it.
 
 ## Audit of 2026-09-23
 

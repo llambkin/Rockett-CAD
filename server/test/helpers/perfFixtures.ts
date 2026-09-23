@@ -171,3 +171,19 @@ export function manyBodyPart(): CadDocument {
     pattern("py", "Y", ["b:box", ...row], 40),
   ]);
 }
+
+export const DRAG_BODY = "b:py:b:px:b:box:12:8";
+
+export function filletDragPart(): CadDocument {
+  const doc = manyBodyPart();
+  const prefix = "p8:py:p12:px:f:box";
+  const edge: EdgeRef = {
+    kind: "edge",
+    bodyId: DRAG_BODY,
+    edgeName: `e[${prefix}:cap:end|${prefix}:s:boxSk-l1]`,
+  };
+  return document("perf-fillet-drag", [
+    ...doc.features,
+    fillet("drag", [edge], 0.5),
+  ]);
+}

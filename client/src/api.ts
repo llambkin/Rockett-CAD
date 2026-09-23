@@ -6,15 +6,21 @@ import {
   ROUTES,
   type ApiErrorBody,
   type ApiErrorCode,
+  type BodyPayload,
   type CadDocument,
   type EdgeRef,
+  type EvaluateResult,
   type ExportRequest,
   type Feature,
   type Health,
+  type HeldMeshes,
   type MeasureRequest,
+  type MutationResponse,
   type PathParams,
   type Route,
   type TreeGroup,
+  type WireEvaluateResult,
+  type WireMutationResponse,
 } from "@rockett/shared";
 
 export type { Health, MutationResponse } from "@rockett/shared";
@@ -189,6 +195,45 @@ function send<P extends string, Req, Res>(
   });
 }
 
+let meshes = new Map<string, BodyPayload>();
+
+function keep(evaluation: EvaluateResult): EvaluateResult {
+  meshes = new Map(evaluation.bodies.map((body) => [body.meshKey, body]));
+  return evaluation;
+}
+
+function refill(
+  evaluation: WireEvaluateResult,
+  held: ReadonlyMap<string, BodyPayload>,
+): EvaluateResult {
+  return {
+    ...evaluation,
+    bodies: evaluation.bodies.map((body) => {
+      if ("positions" in body) return body;
+      const mesh = held.get(body.meshKey);
+      if (!mesh) throw new Error(`The server omitted mesh ${body.meshKey}`);
+      return { ...mesh, ...body };
+    }),
+  };
+}
+
+async function holding<P extends string, Req>(
+  route: Route<P, Req & HeldMeshes, WireMutationResponse>,
+  params: PathParams<P>,
+  body: Req,
+  position?: number,
+): Promise<MutationResponse> {
+  const held = meshes;
+  const response = await send(route, params, {
+    body: { ...body, held: [...held.keys()] },
+    position,
+  });
+  return {
+    document: response.document,
+    evaluation: keep(refill(response.evaluation, held)),
+  };
+}
+
 function fileForm(name: string, file: File): FormData {
   const form = new FormData();
   form.append(name, file);
@@ -251,33 +296,35 @@ export const api = {
   deleteFolder: (id: string) => send(ROUTES.deleteFolder, { id }),
 
   evaluate: (id: string, position?: number) =>
-    send(ROUTES.evaluate, { id }, { position }),
+    send(ROUTES.evaluate, { id }, { position }).then((evaluation) =>
+      position === undefined ? keep(evaluation) : evaluation,
+    ),
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
     send(ROUTES.tangentEdges, { id }, { body: { edge, beforeFeatureId } }),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
     send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 
   addFeature: (id: string, feature: Feature) =>
-    send(ROUTES.addFeature, { id }, { body: { feature } }),
+    holding(ROUTES.addFeature, { id }, { feature }),
   updateFeature: (
     id: string,
     fid: string,
     feature: Partial<Feature>,
     position?: number,
-  ) => send(ROUTES.updateFeature, { id, fid }, { body: { feature }, position }),
+  ) => holding(ROUTES.updateFeature, { id, fid }, { feature }, position),
   deleteFeature: (id: string, fid: string) =>
     send(ROUTES.deleteFeature, { id, fid }),
   setTimeline: (id: string, position: number) =>
-    send(ROUTES.setTimeline, { id }, { body: { position } }),
+    holding(ROUTES.setTimeline, { id }, { position }),
   replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    send(ROUTES.replaceDocument, { id }, { body: { document }, position }),
+    holding(ROUTES.replaceDocument, { id }, { document }, position),
   updateBody: (
     id: string,
     bodyId: string,
     patch: { name?: string; visible?: boolean },
-  ) => send(ROUTES.updateBody, { id, bodyId }, { body: patch }),
+  ) => holding(ROUTES.updateBody, { id, bodyId }, patch),
   updateGroups: (id: string, groups: TreeGroup[]) =>
-    send(ROUTES.updateGroups, { id }, { body: { groups } }),
+    holding(ROUTES.updateGroups, { id }, { groups }),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
     send(ROUTES.measure, { id }, { body: { refs } }),

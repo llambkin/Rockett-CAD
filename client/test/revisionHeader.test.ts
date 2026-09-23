@@ -33,7 +33,15 @@ function server(start: number) {
           { id: "p2", name: "Listed", revision: 9, status: "ok" },
         ]);
       if (method !== "GET") revision++;
-      return Response.json({ document: document(), evaluation: {} });
+      const evaluation = {
+        bodies: [],
+        featureStatuses: [],
+        sketches: [],
+        planes: [],
+        kernelMs: 0,
+      };
+      if (url.endsWith("/evaluate")) return Response.json(evaluation);
+      return Response.json({ document: document(), evaluation });
     }),
   );
   return calls;
