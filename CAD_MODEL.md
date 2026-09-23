@@ -179,7 +179,9 @@ it, stable across regeneration while the same entities enclose the region.
 `server/src/geometry/engine.ts`:
 
 1. Features evaluate strictly in timeline order against an evaluation state
-   (bodies + solved sketches + construction frames).
+   (bodies + solved sketches + construction frames). Each evaluator sees only
+   the features before it, so a later feature cannot change an earlier result
+   behind its cache key.
 2. After each feature a **snapshot** is stored, keyed by the feature's JSON.
 3. On the next evaluation the longest prefix whose feature JSON is unchanged
    is reused; evaluation restarts from the first changed feature, so editing

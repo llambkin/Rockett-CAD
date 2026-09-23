@@ -14,8 +14,12 @@ server persists on every mutation (autosave).
 evaluation. This temporarily evaluates the first N features without moving the
 document's saved timeline marker, for sketch editing and undo/redo in a sketch.
 
+`GET /projects/:id/evaluate` never writes the project. A body without saved
+display metadata gets the default (its name is the body id) in the response
+only; mutating routes save new body metadata.
+
 Requests targeting the same project run sequentially within one API server,
-including evaluation (which can save body metadata). This prevents overlapping
+including evaluation. This prevents overlapping
 feature edits from overwriting each other. Separate projects have independent
 queues. Run only one server process against a data directory; these queues do
 not provide cross-process locking or conflict detection for stale document
@@ -81,6 +85,22 @@ clamped to 0.001 to 1; anything else returns 400.
 sane ranges, entity/constraint counts) and rejects duplicate feature ids;
 project/asset ids are pattern-checked against path traversal. The API exposes
 controlled modelling operations only.
+
+A feature must be a plain object with only the top-level keys its type
+declares, and `suppressed` must be a boolean. An update patch must also be an
+object; its keys are checked against the stored feature's type. The validator
+checks profile, face, edge, plane and axis references in depth, every list
+item, and each enum and flag (`operation`, extrude `direction`, emboss `mode`,
+`combine`, `keepTools`, `visible`).
+
+`PUT /projects/:id/document` also checks the document shape: `schemaVersion`
+equals the current version, `units` is `mm`, `cm`, `m` or `in`, `bodyMeta`
+values are `{ name: string, visible: boolean }`, `counters` are non-negative
+integers, `createdAt` and `modifiedAt` are strings, `timelinePosition` is an
+integer and `camera` has its shape when present. Loading a saved project
+migrates it without validating.
+
+Every validation failure returns 400 and nothing is saved.
 
 ## WebSockets
 
