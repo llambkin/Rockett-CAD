@@ -163,7 +163,11 @@ function image(id: string, assetId: string): ReferenceImageFeature {
   };
 }
 
-function sync(viewport: CadViewport, features: ReferenceImageFeature[]) {
+function sync(
+  viewport: CadViewport,
+  features: ReferenceImageFeature[],
+  hidden: string[] = [],
+) {
   const doc = {
     id: "p1",
     features,
@@ -172,7 +176,7 @@ function sync(viewport: CadViewport, features: ReferenceImageFeature[]) {
   const evaluation = {
     planes: features.map((f) => ({ featureId: f.id, frame, size: 10 })),
   } as unknown as EvaluateResult;
-  syncReferenceImages(viewport, doc, evaluation);
+  syncReferenceImages(viewport, doc, evaluation, new Set(hidden));
 }
 
 function stubImageLoads() {
@@ -211,7 +215,7 @@ describe("reference images", () => {
     const textureDispose = vi.spyOn(removed.material.map!, "dispose");
     const keptTextureDispose = vi.spyOn(kept.material.map!, "dispose");
 
-    sync(viewport, [{ ...a, visible: false }, b]);
+    sync(viewport, [a, b], ["a"]);
 
     expect(geometryDispose).toHaveBeenCalledTimes(1);
     expect(materialDispose).toHaveBeenCalledTimes(1);
@@ -233,7 +237,7 @@ describe("reference images", () => {
     if (!texture) throw new Error("expected a textured image mesh");
     const textureDispose = vi.spyOn(texture, "dispose");
 
-    sync(viewport, [{ ...a, visible: false }]);
+    sync(viewport, [a], ["a"]);
     expect(textureDispose).not.toHaveBeenCalled();
 
     finishLoads();

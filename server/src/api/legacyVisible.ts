@@ -3,8 +3,8 @@ import type {
   EvaluateResult,
   Feature,
   ProjectView,
+  Visibility,
 } from "@rockett/shared";
-import type { Visibility } from "../store/migrations.js";
 
 export function takeVisible(feature: Partial<Feature>, id: string): Visibility {
   const { visible } = feature as { visible?: boolean };

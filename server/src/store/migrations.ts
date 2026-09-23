@@ -1,11 +1,10 @@
-import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
+import {
+  SCHEMA_VERSION,
+  type CadDocument,
+  type Visibility,
+} from "@rockett/shared";
 
 type Value = Record<string, unknown>;
-
-export interface Visibility {
-  bodies: Record<string, boolean>;
-  features: Record<string, boolean>;
-}
 
 export interface MigrationContext {
   put(bytes: Uint8Array): string;

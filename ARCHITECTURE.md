@@ -45,7 +45,9 @@ first-load regeneration of a moderate model tens of ms).
 persists (autosave on every mutation) and responds with the updated document
 plus a freshly evaluated model. Undo/redo is a client-side stack of document
 snapshots restored through a full-document endpoint, deliberately distinct
-from the CAD timeline (see FEATURE_TIMELINE.md).
+from the CAD timeline (see FEATURE_TIMELINE.md). What is hidden is view state,
+not document: the client keeps it in a `view` slice and saves it with
+`PUT /view`, outside undo and evaluation.
 
 **Shared parametric code.** The constraint solver and profile detection are
 plain TypeScript used by _both_ sides: the browser solves interactively while

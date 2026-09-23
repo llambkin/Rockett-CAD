@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createEmptyDocument } from "@rockett/shared";
+import { createEmptyDocument, emptyView } from "@rockett/shared";
 import { ModelTree } from "../../src/components/ModelTree";
 import { useStore } from "../../src/store";
 
@@ -49,6 +49,7 @@ beforeEach(() => {
     projectId: "p1",
     document: createEmptyDocument("p1", "Part"),
     evaluation: evaluation(),
+    view: emptyView(),
     mode: { name: "idle" },
     selection: [],
     busy: false,
@@ -85,9 +86,11 @@ it("skips the tree when a busy flip renders its parent", () => {
 
 it("re-renders only the body row whose visibility changed", () => {
   const before = bodyRowProps();
-  const next = evaluation();
-  next.bodies[3].visible = false;
-  act(() => useStore.setState({ evaluation: next }));
+  act(() =>
+    useStore.setState({
+      view: { version: 1, hidden: { bodies: ["b3"], features: [] } },
+    }),
+  );
   expect(replaced(before)).toBe(1);
   expect(host.querySelectorAll(".dimmed")).toHaveLength(1);
 });

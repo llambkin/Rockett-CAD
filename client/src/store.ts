@@ -15,16 +15,20 @@ import type {
   Feature,
   MeasureResult,
   PlaneRef,
+  ProjectView,
   SketchConstraint,
   SketchEntity,
   SketchFeature,
   SketchImport,
+  Visibility,
 } from "@rockett/shared";
 import {
+  emptyView,
   newId,
   solveSketch,
   createSketchOffset,
   editSketchOffset,
+  withShown,
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
@@ -166,6 +170,7 @@ interface State {
   projectId: string | null;
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
+  view: ProjectView;
   busy: boolean;
   error: string | null;
   notSaved: string | null;
@@ -245,10 +250,8 @@ interface State {
   /** Rename the open project (display only — no regeneration, not an undo step). */
   renameProject: (name: string) => Promise<void>;
   rollTimeline: (position: number) => Promise<void>;
-  setBodyMeta: (
-    bodyId: string,
-    patch: { name?: string; visible?: boolean },
-  ) => Promise<void>;
+  setBodyMeta: (bodyId: string, patch: { name: string }) => Promise<void>;
+  setVisible: (shown: Visibility) => Promise<void>;
 
   runMeasure: () => Promise<void>;
 }
@@ -308,6 +311,7 @@ export function previewScene(s: {
   mode: Mode;
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
+  view: ProjectView;
 }): {
   bodies: BodyPayload[];
   tints: Map<string, PreviewTint>;
@@ -317,12 +321,13 @@ export function previewScene(s: {
   const tints = previewBodyTints(s);
   const shown = previewBodies(s);
   if (shown === bodies) return { bodies, tints, ghosts: [] };
+  const hidden = new Set(s.view.hidden.bodies);
   return {
     bodies: shown,
     tints: new Map(),
     ghosts: bodies.flatMap((body) => {
       const tint = tints.get(body.bodyId);
-      return tint && body.visible ? [{ body, ...tint }] : [];
+      return tint && !hidden.has(body.bodyId) ? [{ body, ...tint }] : [];
     }),
   };
 }
@@ -428,6 +433,7 @@ export const useStore = create<State>((set, get) => ({
   projectId: null,
   document: null,
   evaluation: null,
+  view: emptyView(),
   busy: false,
   error: null,
   notSaved: null,
@@ -447,12 +453,16 @@ export const useStore = create<State>((set, get) => ({
     void get().cancelPreview();
     set({ busy: true, error: null });
     try {
-      const { document } = await api.getProject(id);
+      const [{ document }, view] = await Promise.all([
+        api.getProject(id),
+        api.getView(id),
+      ]);
       const evaluation = await api.evaluate(id);
       set({
         projectId: id,
         document,
         evaluation,
+        view,
         undoStack: [],
         redoStack: [],
         selection: [],
@@ -483,6 +493,7 @@ export const useStore = create<State>((set, get) => ({
       projectId: null,
       document: null,
       evaluation: null,
+      view: emptyView(),
       selection: [],
       mode: { name: "idle" },
       undoStack: [],
@@ -1146,6 +1157,18 @@ export const useStore = create<State>((set, get) => ({
     const { document } = get();
     if (!document) return;
     await get().mutate(() => api.updateBody(document.id, bodyId, patch));
+  },
+
+  async setVisible(shown) {
+    const { projectId, view } = get();
+    if (!projectId) return;
+    const next = withShown(view, shown);
+    set({ view: next });
+    try {
+      await inTurn(() => api.putView(projectId, next));
+    } catch (e: any) {
+      if (get().projectId === projectId) set({ error: e.message });
+    }
   },
 
   async runMeasure() {

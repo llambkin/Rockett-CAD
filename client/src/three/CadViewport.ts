@@ -499,14 +499,14 @@ export class CadViewport {
   // Bodies
   // -------------------------------------------------------------------------
 
-  syncBodies(payloads: BodyPayload[]) {
+  syncBodies(payloads: BodyPayload[], hidden: ReadonlySet<string> = new Set()) {
     const seen = new Set<string>();
     for (const p of payloads) {
       seen.add(p.bodyId);
       const existing = this.bodies.get(p.bodyId);
       if (existing && existing.payload.meshKey === p.meshKey) {
         existing.payload = p;
-        existing.group.visible = p.visible;
+        existing.group.visible = !hidden.has(p.bodyId);
         continue;
       }
       if (existing) {
@@ -517,7 +517,7 @@ export class CadViewport {
       const objs = this.buildBody(p);
       this.bodies.set(p.bodyId, objs);
       this.bodyRoot.add(objs.group);
-      objs.group.visible = p.visible;
+      objs.group.visible = !hidden.has(p.bodyId);
     }
     for (const [id, objs] of Array.from(this.bodies)) {
       if (!seen.has(id)) {

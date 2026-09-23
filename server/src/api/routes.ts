@@ -9,6 +9,7 @@
 import { Router, json, type RequestHandler } from "express";
 import {
   DOCUMENT_EDITS,
+  emptyView,
   nextFeatureName,
   parse,
   projectEdge,
@@ -26,7 +27,7 @@ import {
   type Route,
 } from "@rockett/shared";
 import { build } from "../build.js";
-import { emptyView, type ProjectStore } from "../store/projectStore.js";
+import type { ProjectStore } from "../store/projectStore.js";
 import { splitView } from "../store/migrations.js";
 import type { FolderStore } from "../store/folderStore.js";
 import { StoreError } from "../store/projectStore.js";

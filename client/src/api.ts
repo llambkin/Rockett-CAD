@@ -17,6 +17,7 @@ import {
   type MeasureRequest,
   type MutationResponse,
   type PathParams,
+  type ProjectView,
   type Route,
   type TreeGroup,
   type WireEvaluateResult,
@@ -234,6 +235,11 @@ async function holding<P extends string, Req>(
   };
 }
 
+function viewless<T extends Partial<Feature>>(feature: T): T {
+  const { visible: _visible, ...rest } = feature as T & { visible?: boolean };
+  return rest as T;
+}
+
 function fileForm(name: string, file: File): FormData {
   const form = new FormData();
   form.append(name, file);
@@ -305,26 +311,37 @@ export const api = {
     send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 
   addFeature: (id: string, feature: Feature) =>
-    holding(ROUTES.addFeature, { id }, { feature }),
+    holding(ROUTES.addFeature, { id }, { feature: viewless(feature) }),
   updateFeature: (
     id: string,
     fid: string,
     feature: Partial<Feature>,
     position?: number,
-  ) => holding(ROUTES.updateFeature, { id, fid }, { feature }, position),
+  ) =>
+    holding(
+      ROUTES.updateFeature,
+      { id, fid },
+      { feature: viewless(feature) },
+      position,
+    ),
   deleteFeature: (id: string, fid: string) =>
     send(ROUTES.deleteFeature, { id, fid }),
   setTimeline: (id: string, position: number) =>
     holding(ROUTES.setTimeline, { id }, { position }),
   replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    holding(ROUTES.replaceDocument, { id }, { document }, position),
-  updateBody: (
-    id: string,
-    bodyId: string,
-    patch: { name?: string; visible?: boolean },
-  ) => holding(ROUTES.updateBody, { id, bodyId }, patch),
+    holding(
+      ROUTES.replaceDocument,
+      { id },
+      { document: { ...document, features: document.features.map(viewless) } },
+      position,
+    ),
+  updateBody: (id: string, bodyId: string, patch: { name: string }) =>
+    holding(ROUTES.updateBody, { id, bodyId }, patch),
   updateGroups: (id: string, groups: TreeGroup[]) =>
     holding(ROUTES.updateGroups, { id }, { groups }),
+  getView: (id: string) => send(ROUTES.getView, { id }),
+  putView: (id: string, view: ProjectView) =>
+    send(ROUTES.putView, { id }, { body: view }),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
     send(ROUTES.measure, { id }, { body: { refs } }),

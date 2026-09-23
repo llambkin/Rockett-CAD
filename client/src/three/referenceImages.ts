@@ -62,11 +62,12 @@ export function syncReferenceImages(
   vp: CadViewport,
   doc: CadDocument | null,
   evaluation: EvaluateResult,
+  hidden: ReadonlySet<string>,
 ) {
   const layer = layerFor(vp);
   clearGroup(layer.root);
   layer.used.clear();
-  if (doc) addImages(layer, doc, evaluation);
+  if (doc) addImages(layer, doc, evaluation, hidden);
   evictUnused(layer);
   vp.requestRender();
 }
@@ -75,10 +76,12 @@ function addImages(
   layer: ImageLayer,
   doc: CadDocument,
   evaluation: EvaluateResult,
+  hidden: ReadonlySet<string>,
 ) {
   const activeFeatures = doc.features.slice(0, doc.timelinePosition);
   for (const f of activeFeatures) {
-    if (f.type !== "referenceImage" || f.suppressed || !f.visible) continue;
+    if (f.type !== "referenceImage" || f.suppressed || hidden.has(f.id))
+      continue;
     const planeInfo = evaluation.planes.find((p) => p.featureId === f.id);
     if (!planeInfo) continue;
     const url = `/api/projects/${doc.id}/assets/${f.assetId}`;

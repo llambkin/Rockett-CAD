@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { createEmptyDocument } from "@rockett/shared";
+import { createEmptyDocument, emptyView } from "@rockett/shared";
 import { useStore } from "../src/store";
 import { followPath } from "../src/browserSession";
 import { api } from "../src/api";
@@ -12,7 +12,12 @@ import {
   projectIdFromPath,
 } from "../src/paths";
 vi.mock("../src/api", () => ({
-  api: { getProject: vi.fn(), evaluate: vi.fn(), listFolders: vi.fn() },
+  api: {
+    getProject: vi.fn(),
+    getView: vi.fn(),
+    evaluate: vi.fn(),
+    listFolders: vi.fn(),
+  },
 }));
 
 const location = { pathname: "/" };
@@ -37,6 +42,7 @@ beforeEach(() => {
   vi.mocked(api.getProject).mockImplementation(async (id) => ({
     document: createEmptyDocument(id, "Doc"),
   }));
+  vi.mocked(api.getView).mockResolvedValue(emptyView());
   vi.mocked(api.evaluate).mockResolvedValue({} as any);
   vi.mocked(api.listFolders).mockResolvedValue({
     folders: [{ id: "f 1", name: "Brackets", parentId: null }],

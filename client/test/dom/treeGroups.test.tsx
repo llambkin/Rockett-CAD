@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   createEmptyDocument,
+  emptyView,
   type CadDocument,
   type TreeGroup,
 } from "@rockett/shared";
@@ -13,7 +14,7 @@ import { useStore } from "../../src/store";
 vi.mock("../../src/api", () => ({
   api: {
     updateGroups: vi.fn(),
-    updateBody: vi.fn(),
+    putView: vi.fn(async (_id: string, view: unknown) => view),
     replaceDocument: vi.fn(),
   },
 }));
@@ -43,10 +44,6 @@ beforeEach(async () => {
     document: withGroups(groups),
     evaluation,
   }));
-  vi.mocked(api.updateBody).mockImplementation(async () => ({
-    document: useStore.getState().document!,
-    evaluation,
-  }));
   vi.mocked(api.replaceDocument).mockImplementation(async (_id, document) => ({
     document,
     evaluation,
@@ -55,6 +52,7 @@ beforeEach(async () => {
     projectId: "p1",
     document: createEmptyDocument("p1", "Part"),
     evaluation,
+    view: emptyView(),
     mode: { name: "idle" },
     selection: [],
     undoStack: [],
@@ -179,9 +177,8 @@ it("collapses a group and acts on its members from the group menu", async () => 
     { kind: "body", bodyId: "b2" },
   ]);
   await menu(row("Parts")!, "Show / Hide all");
-  expect(vi.mocked(api.updateBody).mock.calls).toEqual([
-    ["p1", "b1", { visible: false }],
-    ["p1", "b2", { visible: false }],
+  expect(vi.mocked(api.putView).mock.calls).toEqual([
+    ["p1", { version: 1, hidden: { bodies: ["b1", "b2"], features: [] } }],
   ]);
 });
 

@@ -1098,7 +1098,6 @@ function ReferenceImagePanel({
         fileName: file.name,
         transform: { u, v, rotation, scale },
         opacity,
-        visible: true,
         width: dims.w,
         height: dims.h,
       });
@@ -1219,6 +1218,7 @@ function ReferenceImagePanel({
 function ExportPanel({ onClose }: { onClose: () => void }) {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
+  const hiddenBodies = useStore((s) => s.view.hidden.bodies);
   const selection = useStore((s) => s.selection);
   const setError = useStore((s) => s.setError);
   const [format, setFormat] = useState<"stl" | "3mf">("stl");
@@ -1229,6 +1229,12 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
     () => selection.filter((s) => s.kind === "body").map((s: any) => s.bodyId),
     [selection],
   );
+  const shownBodies = useMemo(() => {
+    const hidden = new Set(hiddenBodies);
+    return (evaluation?.bodies ?? [])
+      .filter((b) => !hidden.has(b.bodyId))
+      .map((b) => b.bodyId);
+  }, [evaluation, hiddenBodies]);
 
   const doExport = async () => {
     if (!document_) return;
@@ -1237,7 +1243,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
       saveDownload(
         await api.exportModel(document_.id, {
           format,
-          bodyIds: selectedBodies,
+          bodyIds: selectedBodies.length > 0 ? selectedBodies : shownBodies,
           quality,
         }),
       );
@@ -1255,7 +1261,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
         <SelInfo
           label="Bodies"
           picks={selection.filter((s) => s.kind === "body")}
-          hint={`all visible (${evaluation?.bodies.filter((b) => b.visible).length ?? 0})`}
+          hint={`all visible (${shownBodies.length})`}
         />
         <label className="field">
           <span>Format</span>

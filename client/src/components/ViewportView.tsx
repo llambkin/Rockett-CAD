@@ -85,6 +85,8 @@ export function ViewportView() {
 
   const evaluation = useStore((s) => s.evaluation);
   const document_ = useStore((s) => s.document);
+  const hiddenBodies = useStore((s) => s.view.hidden.bodies);
+  const hiddenFeatures = useStore((s) => s.view.hidden.features);
   const mode = useStore((s) => s.mode);
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
@@ -314,12 +316,13 @@ export function ViewportView() {
     const vp = viewportRef.current;
     if (!vp || !evaluation) return;
     const scene = previewScene(useStore.getState());
-    vp.syncBodies(scene.bodies);
+    vp.syncBodies(scene.bodies, new Set(hiddenBodies));
     vp.setBodyTints(scene.tints);
     vp.setPreviewGhosts(scene.ghosts);
   }, [
     evaluation,
     document_,
+    hiddenBodies,
     previewBaseline,
     dialogOpen,
     editFeatureId,
@@ -336,8 +339,8 @@ export function ViewportView() {
       if (f.type === "constructionPlane" && !f.suppressed) visible.add(f.id);
     }
     vp.syncConstructionPlanes(evaluation.planes, names, visible);
-    syncReferenceImages(vp, document_, evaluation);
-  }, [evaluation, document_]);
+    syncReferenceImages(vp, document_, evaluation, new Set(hiddenFeatures));
+  }, [evaluation, document_, hiddenFeatures]);
 
   // ---- sync sketches / profiles / highlights ----
   useEffect(() => {
@@ -348,11 +351,7 @@ export function ViewportView() {
     // still be extruded or cut. Used regions shade faintly but stay pickable
     // (the body over them may be hidden); free ones shade normally.
     const usage = sketchUsage(document_);
-    const hiddenSketches = new Set(
-      document_.features
-        .filter((f) => f.type === "sketch" && f.visible === false)
-        .map((f) => f.id),
-    );
+    const hiddenSketches = new Set(hiddenFeatures);
 
     const activeSketchId = mode.name === "sketch" ? mode.sketchId : null;
     const needProfiles =
@@ -451,7 +450,16 @@ export function ViewportView() {
     vp.clearHighlights();
     for (const s of selection) vp.addHighlight(s, "select");
     if (hover) vp.addHighlight(hover, "hover");
-  }, [evaluation, document_, mode, selection, hover, draftSketch, baseLoads]);
+  }, [
+    evaluation,
+    document_,
+    hiddenFeatures,
+    mode,
+    selection,
+    hover,
+    draftSketch,
+    baseLoads,
+  ]);
 
   const [, setLabelTick] = useState(0);
   useEffect(() => {

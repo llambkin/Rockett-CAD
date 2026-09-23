@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import { sha256, StoreError } from "./jsonStore.js";
-import type { Visibility } from "./migrations.js";
+import type { Visibility } from "@rockett/shared";
 import type { Storage } from "./storage.js";
 
 export const HASH_RE = /^[0-9a-f]{64}$/;

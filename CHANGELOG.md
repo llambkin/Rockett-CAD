@@ -55,6 +55,9 @@ change gets a `Schema N` line in the section that ships it.
 
 ### Changed
 
+- Hiding and showing bodies, sketches and reference images is no longer an
+  undo step and never re-evaluates the model. The hidden set is saved with the
+  project and loads when it opens.
 - Schema 11: which bodies, sketches and reference images are hidden moves out
   of the document into the project's `view.json`, and the unused `camera` is
   dropped. The 10 to 11 migration writes `view.json` beside the new blobs,

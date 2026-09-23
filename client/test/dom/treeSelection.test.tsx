@@ -1,14 +1,14 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createEmptyDocument, type Feature } from "@rockett/shared";
+import { createEmptyDocument, emptyView, type Feature } from "@rockett/shared";
 import { api } from "../../src/api";
 import { ModelTree } from "../../src/components/ModelTree";
 import { useStore } from "../../src/store";
 
 vi.mock("../../src/api", () => ({
   api: {
-    updateBody: vi.fn(),
+    putView: vi.fn(async (_id: string, view: unknown) => view),
     deleteFeature: vi.fn(),
     updateFeature: vi.fn(),
   },
@@ -51,13 +51,13 @@ beforeEach(async () => {
     sketches: [{ featureId: "s1", profiles: [{ id: "r1" }] }],
   } as any;
   const response = { document: doc, evaluation };
-  vi.mocked(api.updateBody).mockResolvedValue(response);
   vi.mocked(api.deleteFeature).mockResolvedValue(response);
   vi.mocked(api.updateFeature).mockResolvedValue(response);
   useStore.setState({
     projectId: "p1",
     document: doc,
     evaluation,
+    view: emptyView(),
     mode: { name: "idle" },
     selection: [],
     undoStack: [],
@@ -159,7 +159,7 @@ it("keeps additive picking across kinds while a dialog is open", async () => {
   expect(selection().map((s) => s.kind)).toEqual(["body", "plane"]);
 });
 
-it("acts on every selected body from the multi-selection menu in one undo step", async () => {
+it("hides every selected body from the multi-selection menu in one view write", async () => {
   await click("Body1");
   await click("Body2", { ctrlKey: true });
   await rightClick("Body1");
@@ -171,11 +171,10 @@ it("acts on every selected body from the multi-selection menu in one undo step",
     "Show all bodies",
   ]);
   await choose("Show / Hide");
-  expect(vi.mocked(api.updateBody).mock.calls).toEqual([
-    ["p1", "b1", { visible: false }],
-    ["p1", "b2", { visible: false }],
+  expect(vi.mocked(api.putView).mock.calls).toEqual([
+    ["p1", { version: 1, hidden: { bodies: ["b1", "b2"], features: [] } }],
   ]);
-  expect(useStore.getState().undoStack).toHaveLength(1);
+  expect(useStore.getState().undoStack).toHaveLength(0);
 
   await rightClick("Body3");
   expect(labels()).toContain("Rename");

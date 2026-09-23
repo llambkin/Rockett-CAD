@@ -1,18 +1,22 @@
 # Last run
 
 Paused on request after the running rows finished. DOC-018 then ran alone,
-then BUG-041.
+then BUG-041, then DOC-019.
 No agents are running.
 
 - Done this run: CUST-030, CUST-031, CUST-032, BUG-038, BUG-039, BUG-040,
   PERF-041, REF-004, PERF-035, and DOC-010, DOC-011, DOC-012, DOC-015,
-  DOC-017 and DOC-018. `npm run check` passed on each: 961 tests, 20 browser
-  tests and the work order check on DOC-018.
+  DOC-017, DOC-018 and DOC-019. `npm run check` passed on each: 966
+  tests, 20 browser tests and the work order check on DOC-019.
 - DOC-018 moves visibility out of the document into `view.json` and bumps
   the schema to 11. A project migrates on its next write, and `view.json` is
   in its backup. Legacy `visible` patches still work until DOC-020.
-- Dev runs `ba3ac60`, schema 10. DOC-018 is not deployed. Deploying it
-  moves each dev project to schema 11 on its next write, after a backup.
+- Dev runs `ca82151`, schema 11, with DOC-018 and BUG-041. Each dev project
+  moves to schema 11 on its next write, after a backup. DOC-019 is not
+  deployed.
+- DOC-019: the client hides and shows through `PUT /view`. A toggle is no
+  undo step, sends no document edit and requests no evaluation. Undo and
+  feature edits no longer send `visible`, so they cannot overwrite the view.
 - Prod still runs schema 6. Deploying it migrates every project from schema
   6 to 11, which needs Mark's approval first.
 - A fillet drag on the 1,000-body model takes about 70 ms, down from about
@@ -21,12 +25,13 @@ No agents are running.
   OCCT's face unify, an infinite loop on one 18-face solid, which is what
   hung the dev instance on the 1,000-body project. The fixture now opens in
   1.4 s and edits in about 200 ms. The Docker health probe gives up after 5 s.
-  Not deployed.
+  Deployed to dev. The 1,000-body project there evaluates in 1.9 s cold and
+  0.15 s warm.
 
 ## Next
 
-DOC-019: the client hides and shows through the view API. CUST-033 (drag
-handles on every feature) is still queued and not started.
+DOC-020. CUST-033 (drag handles on every feature) is still queued and not
+started.
 
 ## Left open
 
@@ -45,6 +50,7 @@ handles on every feature) is still queued and not started.
 - When editing, BUG-040 counts bodies from later features as bodies to cut.
 - Project files, duplicates and browser projects no longer carry hidden
   bodies or sketches. See Proposed.
+- A construction plane's eye still suppresses the plane. See Proposed.
 - BUG-041 leaves a seam ring where a pushed-up fillet's cylinder meets one
   whose frame differs. A kernel call that never returns still blocks the
   server until the PERF-011 worker lands.

@@ -253,8 +253,8 @@ it("starts a sketch on an origin plane from its tree menu, only when idle", asyn
 
 it("deletes a construction plane and hides a canvas from their tree menus", async () => {
   const deleteFeature = vi.fn(async () => {});
-  const updateFeature = vi.fn(async () => {});
-  useStore.setState({ deleteFeature, updateFeature });
+  const setVisible = vi.fn(async () => {});
+  useStore.setState({ deleteFeature, setVisible });
   const doc = useStore.getState().document!;
   useStore.setState({
     document: {
@@ -267,7 +267,7 @@ it("deletes a construction plane and hides a canvas from their tree menus", asyn
           name: "Plane1",
           method: { kind: "offset", distance: 5 },
         },
-        { id: "r1", type: "referenceImage", name: "Canvas1", visible: true },
+        { id: "r1", type: "referenceImage", name: "Canvas1" },
       ] as unknown as Feature[],
     },
   });
@@ -281,7 +281,10 @@ it("deletes a construction plane and hides a canvas from their tree menus", asyn
   await rightClick(treeRow("Canvas1"));
   expect(labels()).toEqual(["Edit", "Show / Hide", "Delete"]);
   await choose("Show / Hide");
-  expect(updateFeature).toHaveBeenCalledWith("r1", { visible: false });
+  expect(setVisible).toHaveBeenCalledWith({
+    bodies: {},
+    features: { r1: false },
+  });
 });
 
 it("names the line dimension item Length and angle and offers it only while sketching", async () => {

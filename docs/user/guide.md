@@ -159,7 +159,8 @@ Every change saves automatically, and projects survive container recreation.
 
 ### Undo and redo
 
-Undo/redo is application-level and separate from the CAD timeline.
+Undo/redo is application-level and separate from the CAD timeline. Hiding
+or showing something is not an undo step.
 
 ### Panels and errors
 

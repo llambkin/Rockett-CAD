@@ -246,7 +246,7 @@ test("texture scene", async ({ bench }) => {
     "texture scene bytes",
     await bench("texture scene bytes", sync, () => {
       const { doc, evaluation } = imageScene(`perf-images-${scenes++}`);
-      syncReferenceImages(vp, doc, evaluation);
+      syncReferenceImages(vp, doc, evaluation, new Set());
       for (const load of pending.splice(0)) load();
     }).run(SAMPLES),
     SAMPLES.iterations,

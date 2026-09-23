@@ -2,21 +2,20 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {
   createEmptyDocument,
+  emptyView,
   parse,
   projectView,
   VIEW_VERSION,
+  withShown,
   type CadDocument,
   type ProjectSummary,
   type ProjectView,
+  type Visibility,
 } from "@rockett/shared";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
 import { JsonStore, sha256, StoreError, type Inventory } from "./jsonStore.js";
-import {
-  documentMigrations,
-  TooNewError,
-  type Visibility,
-} from "./migrations.js";
+import { documentMigrations, TooNewError } from "./migrations.js";
 import type { Storage } from "./storage.js";
 
 export { StoreError };
@@ -62,27 +61,6 @@ function imageMime(data: Buffer, label: string): string {
       `${label}unsupported image type (PNG, JPEG, WebP only)`,
     );
   return type.mime;
-}
-
-export function emptyView(): ProjectView {
-  return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
-}
-
-function withShown(view: ProjectView, shown: Visibility): ProjectView {
-  const apply = (ids: string[], flags: Record<string, boolean>) => {
-    const hidden = new Set(ids);
-    for (const [id, visible] of Object.entries(flags))
-      if (visible) hidden.delete(id);
-      else hidden.add(id);
-    return [...hidden];
-  };
-  return {
-    version: VIEW_VERSION,
-    hidden: {
-      bodies: apply(view.hidden.bodies, shown.bodies),
-      features: apply(view.hidden.features, shown.features),
-    },
-  };
 }
 
 function stepBlobs(doc: CadDocument): string[] {

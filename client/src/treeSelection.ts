@@ -81,20 +81,14 @@ function inOneStep(
   });
 }
 
-export const setBodiesVisible = (visible: Record<string, boolean>) => {
-  const bodies = useStore.getState().evaluation?.bodies ?? [];
-  return inOneStep(
-    bodies
-      .filter((b) => b.bodyId in visible && b.visible !== visible[b.bodyId])
-      .map(
-        (b) => (id) =>
-          api.updateBody(id, b.bodyId, { visible: visible[b.bodyId]! }),
-      ),
-  );
-};
+export const setBodiesVisible = (bodies: Record<string, boolean>) =>
+  useStore.getState().setVisible({ bodies, features: {} });
 
-export const setSketchesVisible = (ids: string[], visible: boolean) =>
-  inOneStep(ids.map((fid) => (id) => api.updateFeature(id, fid, { visible })));
+export const setFeaturesVisible = (ids: string[], visible: boolean) =>
+  useStore.getState().setVisible({
+    bodies: {},
+    features: Object.fromEntries(ids.map((id) => [id, visible])),
+  });
 
 export async function deleteFeatures(ids: string[]) {
   await inOneStep(ids.map((fid) => (id) => api.deleteFeature(id, fid)));

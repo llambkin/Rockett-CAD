@@ -30,7 +30,7 @@ import {
   bodySel,
   renameGroup,
   setBodiesVisible,
-  setSketchesVisible,
+  setFeaturesVisible,
   treeClick,
   treeIds,
   ungroup,
@@ -55,8 +55,11 @@ const deleteItem = (id: string): MenuItem => ({
 });
 const togglePlane = (f: Feature) =>
   void useStore.getState().suppressFeature(f.id, !f.suppressed);
-const toggleCanvas = (f: any) =>
-  void useStore.getState().updateFeature(f.id, { visible: !f.visible } as any);
+const toggleFeature = (f: Feature) =>
+  void setFeaturesVisible(
+    [f.id],
+    useStore.getState().view.hidden.features.includes(f.id),
+  );
 
 const constructionMenu = (f: Feature): MenuItem[] => [
   ...planeMenu({ kind: "construction", featureId: f.id }),
@@ -67,7 +70,7 @@ const constructionMenu = (f: Feature): MenuItem[] => [
 
 const canvasMenu = (f: Feature): MenuItem[] => [
   { label: "Edit", action: () => void openFeatureEditor(f) },
-  { label: "Show / Hide", action: () => toggleCanvas(f) },
+  { label: "Show / Hide", action: () => toggleFeature(f) },
   deleteItem(f.id),
 ];
 
@@ -130,6 +133,7 @@ const BodyRow = memo(function BodyRow({
 export const ModelTree = memo(function ModelTree() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
+  const view = useStore((s) => s.view);
   const selection = useStore((s) => s.selection);
   const toggleSelection = useStore((s) => s.toggleSelection);
   const setBodyMeta = useStore((s) => s.setBodyMeta);
@@ -271,6 +275,8 @@ export const ModelTree = memo(function ModelTree() {
     (f) => f.type === "referenceImage",
   );
   const bodies = evaluation?.bodies ?? [];
+  const hiddenBodies = new Set(view.hidden.bodies);
+  const hiddenFeatures = new Set(view.hidden.features);
 
   const sketchParts = groupParts(
     document_.groups,
@@ -289,15 +295,15 @@ export const ModelTree = memo(function ModelTree() {
 
   const shown = (kind: Kind, ids: string[]) =>
     kind === "body"
-      ? bodies.some((b) => ids.includes(b.bodyId) && b.visible)
-      : sketches.some(
-          (f) => ids.includes(f.id) && (f as any).visible !== false,
-        );
+      ? bodies.some(
+          (b) => ids.includes(b.bodyId) && !hiddenBodies.has(b.bodyId),
+        )
+      : sketches.some((f) => ids.includes(f.id) && !hiddenFeatures.has(f.id));
   const showHide = (kind: Kind, ids: string[]) => {
     const visible = !shown(kind, ids);
     void (kind === "body"
       ? setBodiesVisible(Object.fromEntries(ids.map((id) => [id, visible])))
-      : setSketchesVisible(ids, visible));
+      : setFeaturesVisible(ids, visible));
   };
   const groupItem = (kind: Kind, ids: string[]): MenuItem => ({
     label: "Group",
@@ -447,15 +453,13 @@ export const ModelTree = memo(function ModelTree() {
       >
         <span
           className="tree-icon eye"
-          title={(f as any).visible === false ? "Show sketch" : "Hide sketch"}
+          title={hiddenFeatures.has(f.id) ? "Show sketch" : "Hide sketch"}
           onClick={(e) => {
             e.stopPropagation();
-            void useStore.getState().updateFeature(f.id, {
-              visible: (f as any).visible === false,
-            } as any);
+            toggleFeature(f);
           }}
         >
-          {(f as any).visible === false ? "◌" : "👁"}
+          {hiddenFeatures.has(f.id) ? "◌" : "👁"}
         </span>
         <span className="tree-icon">✏</span>
         {named(
@@ -474,7 +478,7 @@ export const ModelTree = memo(function ModelTree() {
     },
     menu: (e, bodyId) => openMenu(e, bodyMenu(bodyId)),
     rename: (bodyId) => setRenaming(bodyId),
-    show: (bodyId, visible) => void setBodyMeta(bodyId, { visible }),
+    show: (bodyId, visible) => void setBodiesVisible({ [bodyId]: visible }),
     commit: (bodyId, name) => {
       setRenaming(null);
       void setBodyMeta(bodyId, { name });
@@ -489,7 +493,7 @@ export const ModelTree = memo(function ModelTree() {
       key={b.bodyId}
       bodyId={b.bodyId}
       name={b.name}
-      visible={b.visible}
+      visible={!hiddenBodies.has(b.bodyId)}
       selected={selectedBodies.has(b.bodyId)}
       renaming={renaming === b.bodyId}
       actions={bodyActions}
@@ -555,7 +559,7 @@ export const ModelTree = memo(function ModelTree() {
         section(
           "canvases",
           "Canvases",
-          canvases.map((f: any) => (
+          canvases.map((f) => (
             <div
               key={f.id}
               className="tree-item"
@@ -566,10 +570,10 @@ export const ModelTree = memo(function ModelTree() {
                 className="tree-icon eye"
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleCanvas(f);
+                  toggleFeature(f);
                 }}
               >
-                {f.visible ? "👁" : "◌"}
+                {hiddenFeatures.has(f.id) ? "◌" : "👁"}
               </span>
               {f.name}
             </div>

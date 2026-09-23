@@ -153,7 +153,8 @@ export function ViewportContextMenu({
     }
     items.push({
       label: "Hide body",
-      action: () => void s.setBodyMeta(sel.bodyId, { visible: false }),
+      action: () =>
+        void s.setVisible({ bodies: { [sel.bodyId]: false }, features: {} }),
     });
   } else if (sel.kind === "edge") {
     items.push({ label: "Fillet edge", action: () => openDialog("fillet") });

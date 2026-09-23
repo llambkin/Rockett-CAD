@@ -136,6 +136,33 @@ export interface ProjectView {
   hidden: { bodies: string[]; features: string[] };
 }
 
+export interface Visibility {
+  bodies: Record<string, boolean>;
+  features: Record<string, boolean>;
+}
+
+export function emptyView(): ProjectView {
+  return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
+}
+
+export function withShown(view: ProjectView, shown: Visibility): ProjectView {
+  const apply = (ids: string[], flags: Record<string, boolean>) => {
+    if (Object.keys(flags).length === 0) return ids;
+    const hidden = new Set(ids);
+    for (const [id, visible] of Object.entries(flags))
+      if (visible) hidden.delete(id);
+      else hidden.add(id);
+    return [...hidden];
+  };
+  return {
+    version: VIEW_VERSION,
+    hidden: {
+      bodies: apply(view.hidden.bodies, shown.bodies),
+      features: apply(view.hidden.features, shown.features),
+    },
+  };
+}
+
 export interface Folder {
   id: string;
   name: string;
