@@ -356,9 +356,16 @@ line projections are rejected. Direct face snapping remains position-only; use
 Project first when a persistent geometric relationship is required. Deleting a
 projection releases surviving shared endpoints as ordinary editable points.
 
-Trim and extend calculate analytic intersections of lines, arcs and circles.
-They retain unchanged endpoints, detach replaced endpoints, remove affected
-curve constraints with a user notice, and preserve unrelated geometry.
+Trim cuts at `curveHits` (`shared/src/profiles.ts`), the crossings, tangent
+contacts and T-junctions the region split uses, so construction curves never
+cut. Each hit names the curves through it: a new end gets `coincident` with a
+cutter's endpoint there, or `pointOnLine` or `pointOnCircle` on the cutter. A
+circle becomes an arc with the same id, the first kept piece of a line or arc
+keeps the id, and a second piece is tied back by `collinear` (line) or `equal`
+(arc, same centre). Hits are cached per entity array, so hovering does only a
+lookup. Extend calculates analytic intersections of lines, arcs and circles.
+Both retain unchanged endpoints, drop constraints on removed geometry with a
+user notice, and preserve unrelated geometry.
 
 ## Sketch offsets (schema 4)
 

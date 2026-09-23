@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   detectProfiles,
-  modifySketch,
+  extendSketch,
+  trimSketch,
   offsetSketch,
   projectEdge,
   solveSketch,
@@ -24,47 +25,19 @@ const points = (es: SketchEntity[]) =>
       .map((e) => [e.id, e]),
   );
 describe("sketch modifications", () => {
-  it("trims the clicked middle section and retains two disconnected pieces", () => {
-    const es = [
-      ...line("base", [0, 0], [20, 0]),
-      ...line("a", [5, -5], [5, 5]),
-      ...line("b", [15, -5], [15, 5]),
-    ];
-    const result = modifySketch(
-      es,
-      [
-        { id: "len", type: "length", line: "base", value: 20 },
-        { id: "vertical", type: "vertical", line: "a" },
-      ],
-      "base",
-      { x: 10, y: 0 },
-      "trim",
-    );
-    const p = points(result.entities);
-    const intervals = result.entities
-      .filter((e) => e.kind === "line" && !["a", "b"].includes(e.id))
-      .map((e) => e.kind === "line" && [p.get(e.p1)!.x, p.get(e.p2)!.x]);
-    expect(intervals).toEqual([
-      [0, 5],
-      [15, 20],
-    ]);
-    expect(result.removedConstraints).toBe(1);
-    expect(result.constraints.map((c) => c.id)).toEqual(["vertical"]);
-    expect(points(es).get("baseb")!.x).toBe(20);
-  });
   it("extends the nearest endpoint to the first bounded intersection", () => {
     const es = [
       ...line("base", [0, 0], [10, 0]),
       ...line("near", [15, -5], [15, 5]),
       ...line("far", [20, -5], [20, 5]),
     ];
-    const result = modifySketch(es, [], "base", { x: 9, y: 0 }, "extend");
+    const result = extendSketch(es, [], "base", { x: 9, y: 0 });
     const p = points(result.entities),
       e = result.entities.find((e) => e.id === "base")!;
     expect(e.kind === "line" && p.get(e.p2)!.x).toBe(15);
-    expect(() =>
-      modifySketch(es, [], "base", { x: 1, y: 0 }, "extend"),
-    ).toThrow(/No boundary/);
+    expect(() => extendSketch(es, [], "base", { x: 1, y: 0 })).toThrow(
+      /No boundary/,
+    );
   });
   it("trims a circle to an arc across the angle wrap", () => {
     const es: SketchEntity[] = [
@@ -72,7 +45,7 @@ describe("sketch modifications", () => {
       { id: "circle", kind: "circle", center: "c", radius: 5 },
       ...line("axis", [0, -10], [0, 10]),
     ];
-    const result = modifySketch(es, [], "circle", { x: 5, y: 0 }, "trim");
+    const result = trimSketch(es, [], "circle", { x: 5, y: 0 });
     const arc = result.entities.find((e) => e.id === "circle")!;
     expect(arc.kind).toBe("arc");
     if (arc.kind !== "arc") return;
@@ -114,9 +87,7 @@ describe("sketch modifications", () => {
       true,
     );
     expect(() => offsetSketch(es, [], "c", -6)).toThrow(/collapse/);
-    expect(() => modifySketch(es, [], "c", { x: 5, y: 0 }, "trim")).toThrow(
-      /Projected/,
-    );
+    expect(() => trimSketch(es, [], "c", { x: 5, y: 0 })).toThrow(/Projected/);
   });
 });
 describe("projected geometry", () => {

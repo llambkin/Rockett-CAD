@@ -34,6 +34,7 @@ export const SKETCH_SHORTCUTS: Array<{
   { key: "C", label: "Circle", tool: "circle" },
   { key: "D", label: "Dimension", tool: "dimension" },
   { key: "P", label: "Point", tool: "point" },
+  { key: "T", label: "Trim", tool: "trim" },
 ];
 
 export const ANGLE_LOCK_KEY = "A";

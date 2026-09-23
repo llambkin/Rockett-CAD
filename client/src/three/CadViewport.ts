@@ -701,6 +701,7 @@ export class CadViewport {
       constructionPlanes?: boolean | undefined;
       profiles?: boolean | undefined;
       sketchEntities?: boolean | undefined;
+      sketchPoints?: boolean | undefined;
       depth?: number; // alt-click cycling
     },
   ): PickResult | null {
@@ -836,7 +837,11 @@ export class CadViewport {
             point: h.point,
             area: ud.area as number | undefined,
           });
-        } else if (opts.sketchEntities && ud.sketchEntityId) {
+        } else if (
+          opts.sketchEntities &&
+          ud.sketchEntityId &&
+          (opts.sketchPoints !== false || !ud.isPoint)
+        ) {
           results.push({
             selection: {
               kind: ud.isPoint ? "sketchPoint" : "sketchEntity",

@@ -19,6 +19,7 @@ export interface CurveHit {
   x: number;
   y: number;
   t: number;
+  by: string[];
 }
 
 const MERGE_TOL = 1e-6;
@@ -341,11 +342,25 @@ function arrange(entities: SketchEntity[], mode: Detection): Arrangement {
 }
 
 export function curveHits(entities: SketchEntity[]): Map<string, CurveHit[]> {
-  const { nodes, curves, cuts } = arrange(entities, "current");
+  const { nodes, curves, ends, cuts } = arrange(entities, "current");
+  const through = new Map<number, string[]>();
+  curves.forEach((c, i) => {
+    for (const n of [...ends[i]!, ...cuts[i]!.map((cut) => cut.n)]) {
+      if (n < 0) continue;
+      const ids = through.get(n) ?? [];
+      ids.push(c.id);
+      through.set(n, ids);
+    }
+  });
   return new Map(
     curves.map((c, i) => [
       c.id,
-      cuts[i]!.map(({ n, t }) => ({ x: nodes[n]![0], y: nodes[n]![1], t })),
+      cuts[i]!.map(({ n, t }) => ({
+        x: nodes[n]![0],
+        y: nodes[n]![1],
+        t,
+        by: through.get(n)!.filter((id) => id !== c.id),
+      })),
     ]),
   );
 }

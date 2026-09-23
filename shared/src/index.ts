@@ -9,6 +9,7 @@ export * from "./schema/folders.js";
 export * from "./placement.js";
 export * from "./projection.js";
 export * from "./sketchModify.js";
+export * from "./sketchTrim.js";
 export * from "./sketchOffsets.js";
 export * from "./importDxf.js";
 export * from "./importSvg.js";

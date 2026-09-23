@@ -9,11 +9,11 @@ import {
 } from "../src/profiles.js";
 import {
   findOffsetConnector,
-  modifySketch,
   offsetSketch,
   offsetSketchSelection,
   offsetSourceIds,
 } from "../src/sketchModify.js";
+import { trimSketch } from "../src/sketchTrim.js";
 import type { SketchConstraint, SketchEntity } from "../src/model.js";
 
 const SAMPLES = { time: 200, warmupTime: 50 };
@@ -118,10 +118,7 @@ const cases: [string, () => unknown][] = [
     "profileIdFor plate with hole",
     call(profileIdFor, ["l1", "l2", "l3", "l4"], [["hole"]]),
   ],
-  [
-    "modifySketch trim middle",
-    call(modifySketch, crossed, [], "base", { x: 10, y: 0 }, "trim"),
-  ],
+  ["trimSketch middle", call(trimSketch, crossed, [], "base", { x: 10, y: 0 })],
   [
     "offsetSketch chained box",
     call(offsetSketch, branchedBox, [], "bottom", 1),

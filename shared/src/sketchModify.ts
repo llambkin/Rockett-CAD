@@ -95,26 +95,26 @@ export interface SketchModification {
   joinedGaps?: { count: number; maxDistance: number };
   offsetChain?: { closed: boolean; endGap: number; ends: [XY, XY] };
 }
-const refs = (c: SketchConstraint): string[] =>
+export const constraintEntityRefs = (c: SketchConstraint): string[] =>
   ["a", "b", "point", "line", "circle", "entity"]
     .map((k) => (c as unknown as Record<string, unknown>)[k])
     .filter((x): x is string => typeof x === "string");
 
-/** Trimming changes a curve's extent; preserve unrelated constraints and geometry. */
-export function modifySketch(
+export function extendSketch(
   entities: SketchEntity[],
   constraints: SketchConstraint[],
   entityId: string,
   click: XY,
-  tool: "trim" | "extend",
 ): SketchModification {
   const entity = entities.find((e) => e.id === entityId);
   if (!entity || entity.kind === "point")
     throw new Error("Choose a sketch curve.");
   if (entity.external)
     throw new Error(
-      "Projected references cannot be trimmed or extended. Draw a curve constrained to the reference instead.",
+      "Projected references cannot be extended. Draw a curve constrained to the reference instead.",
     );
+  if (entity.kind === "circle")
+    throw new Error("A full circle has no endpoint to extend.");
   const g = geometry(entity, entities);
   const hits: XY[] = [];
   for (const other of entities) {
@@ -124,123 +124,58 @@ export function modifySketch(
       if (h.contains(q) && !hits.some((p) => distance(p, q) < EPS))
         hits.push(q);
   }
-  const pieces: [number, number][] = [];
-  if (tool === "extend") {
-    if (entity.kind === "circle")
-      throw new Error("A full circle has no endpoint to extend.");
-    const start = distance(click, g.a) < distance(click, g.b);
-    const candidates = hits
-      .map((q) => g.parameter(q))
-      .filter((t) =>
-        entity.kind === "line"
-          ? start
-            ? t < -EPS
-            : t > 1 + EPS
-          : t > 1 + EPS && t < TAU / g.span - EPS,
-      );
-    if (!candidates.length)
-      throw new Error("No boundary intersects beyond this endpoint.");
-    if (entity.kind === "line")
-      pieces.push(
-        start ? [Math.max(...candidates), 1] : [0, Math.min(...candidates)],
-      );
-    else
-      pieces.push(
-        start
-          ? [Math.max(...candidates) - TAU / g.span, 1]
-          : [0, Math.min(...candidates)],
-      );
-  } else {
-    const params = hits
-      .filter((q) => g.contains(q))
-      .map((q) => g.parameter(q))
-      .sort((a, b) => a - b)
-      .filter((t, i, arr) => i === 0 || Math.abs(t - arr[i - 1]!) > EPS);
-    const t = g.parameter(click);
-    if (entity.kind === "circle") {
-      if (params.length < 2)
-        throw new Error("Trim a circle between at least two intersections.");
-      const upper = params.find((x) => x > t + EPS) ?? params[0]! + 1;
-      const lower =
-        [...params].reverse().find((x) => x <= t + EPS) ?? params.at(-1)! - 1;
-      pieces.push([upper, lower + 1]);
-    } else {
-      const inner = params.filter((t) => t > EPS && t < 1 - EPS);
-      if (!inner.length)
-        throw new Error(
-          "No intersections on this curve. Use Delete to remove the whole curve.",
-        );
-      const lower = [...inner].reverse().find((x) => x < t) ?? 0;
-      const upper = inner.find((x) => x >= t) ?? 1;
-      if (lower > EPS) pieces.push([0, lower]);
-      if (upper < 1 - EPS) pieces.push([upper, 1]);
-    }
-  }
+  const start = distance(click, g.a) < distance(click, g.b);
+  const candidates = hits
+    .map((q) => g.parameter(q))
+    .filter((t) =>
+      entity.kind === "line"
+        ? start
+          ? t < -EPS
+          : t > 1 + EPS
+        : t > 1 + EPS && t < TAU / g.span - EPS,
+    );
+  if (!candidates.length)
+    throw new Error("No boundary intersects beyond this endpoint.");
+  const [a, b]: [number, number] =
+    entity.kind === "line"
+      ? start
+        ? [Math.max(...candidates), 1]
+        : [0, Math.min(...candidates)]
+      : start
+        ? [Math.max(...candidates) - TAU / g.span, 1]
+        : [0, Math.min(...candidates)];
   const added: SketchEntity[] = [];
   const point = (q: XY) => {
     const id = newId("p");
     added.push({ id, kind: "point", x: q.x, y: q.y });
     return id;
   };
-  pieces.forEach(([a, b], i) => {
-    const id = i === 0 ? entity.id : newId("e");
-    // Reuse unchanged endpoints to preserve connections to neighbouring curves.
-    const pa =
-      entity.kind !== "circle" && Math.abs(a) < EPS
-        ? entity.kind === "line"
-          ? entity.p1
-          : entity.start
-        : point(g.at(a));
-    const pb =
-      entity.kind !== "circle" && Math.abs(b - 1) < EPS
-        ? entity.kind === "line"
-          ? entity.p2
-          : entity.end
-        : point(g.at(b));
-    added.push(
-      entity.kind === "line"
-        ? {
-            id,
-            kind: "line",
-            p1: pa,
-            p2: pb,
-            ...constructionOf(entity),
-          }
-        : {
-            id,
-            kind: "arc",
-            center: entity.center,
-            start: pa,
-            end: pb,
-            ...constructionOf(entity),
-          },
-    );
-  });
-  let next = [...entities.filter((e) => e.id !== entityId), ...added];
-  const oldEnds =
+  const [first, last] =
     entity.kind === "line"
       ? [entity.p1, entity.p2]
-      : entity.kind === "arc"
-        ? [entity.start, entity.end]
-        : [];
-  const used = new Set(
-    next.flatMap((e) =>
-      e.kind === "line"
-        ? [e.p1, e.p2]
-        : e.kind === "circle"
-          ? [e.center]
-          : e.kind === "arc"
-            ? [e.center, e.start, e.end]
-            : [],
-    ),
+      : [entity.start, entity.end];
+  const pa = Math.abs(a) < EPS ? first : point(g.at(a));
+  const pb = Math.abs(b - 1) < EPS ? last : point(g.at(b));
+  added.push(
+    entity.kind === "line"
+      ? { ...entity, p1: pa, p2: pb }
+      : { ...entity, start: pa, end: pb },
   );
-  const orphaned = new Set(oldEnds.filter((id) => !used.has(id)));
-  next = next.filter((e) => !orphaned.has(e.id));
+  const moved = start ? first : last;
+  const next = [...entities.filter((e) => e.id !== entityId), ...added];
+  const orphaned = next.some(
+    (e) =>
+      (e.kind === "line" && (e.p1 === moved || e.p2 === moved)) ||
+      (e.kind === "arc" && (e.start === moved || e.end === moved)),
+  )
+    ? null
+    : moved;
   const kept = constraints.filter(
-    (c) => !refs(c).some((id) => id === entityId || orphaned.has(id)),
+    (c) =>
+      !constraintEntityRefs(c).some((id) => id === entityId || id === orphaned),
   );
   return {
-    entities: next,
+    entities: next.filter((e) => e.id !== orphaned),
     constraints: kept,
     removedConstraints: constraints.length - kept.length,
   };

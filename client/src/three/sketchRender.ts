@@ -43,12 +43,13 @@ export function renderSketches(
   viewport.requestRender();
   const selKeys = new Set(selection.map(selectionKey));
   const hoverKey = hover ? selectionKey(hover) : null;
+  const piece = (hover?.kind === "sketchEntity" && hover.piece) || null;
 
   for (const sk of sketches) {
     const key = renderKey(sk, selection, hover);
     const kept = spare.get(key);
     spare.delete(key);
-    root.add(kept ?? buildSketch(sk, key, selKeys, hoverKey));
+    root.add(kept ?? buildSketch(sk, key, selKeys, hoverKey, piece));
   }
   const shown = new Set(root.children);
   for (const g of stale) if (!shown.has(g)) disposeGroup(g);
@@ -81,6 +82,9 @@ function renderKey(
     sk.curvesPickable ?? true,
     selection.filter(mine).map(selectionKey),
     hover && mine(hover) ? selectionKey(hover) : null,
+    hover?.kind === "sketchEntity" && mine(hover)
+      ? (hover.piece ?? null)
+      : null,
   ]);
 }
 
@@ -89,6 +93,7 @@ function buildSketch(
   groupKey: string,
   selKeys: Set<string>,
   hoverKey: string | null,
+  piece: number[] | null,
 ): THREE.Group {
   const group = new THREE.Group();
   group.userData.renderKey = groupKey;
@@ -175,7 +180,8 @@ function buildSketch(
     if (positions.length < 2) continue;
     const key = `se:${sk.sketchId}:${e.id}`;
     const isSel = selKeys.has(key);
-    const isHover = hoverKey === key;
+    const isHover = hoverKey === key && !piece;
+    if (hoverKey === key && piece) group.add(hoverPiece(sk.frame, piece));
     const color = themeColor(
       isSel
         ? "selection"
@@ -245,6 +251,21 @@ function buildSketch(
     }
   }
   return group;
+}
+
+function hoverPiece(frame: PlaneFrame, piece: number[]): THREE.Line {
+  const positions: THREE.Vector3[] = [];
+  for (let i = 0; i + 1 < piece.length; i += 2)
+    positions.push(uv3(frame, piece[i]!, piece[i + 1]!));
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(positions),
+    new THREE.LineBasicMaterial({
+      color: themeColor("hover"),
+      depthTest: false,
+    }),
+  );
+  line.renderOrder = 7;
+  return line;
 }
 
 function frameMatrix(frame: PlaneFrame): THREE.Matrix4 {

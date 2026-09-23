@@ -17,6 +17,10 @@ change gets a `Schema N` line in the section that ships it.
   Regions that share their bounding curves, such as the lens and crescents of
   two overlapping circles, get distinct ids. Saved region ids keep resolving
   to the region they named.
+- Sketch Trim (T) highlights the piece under the cursor and deletes it on
+  click. A curve that meets nothing is deleted whole, construction curves no
+  longer cut, tangent contacts do, new ends get coincident constraints on the
+  cutting curve, and constraints on the kept piece stay. Trim stays active.
 
 ### Fixed
 

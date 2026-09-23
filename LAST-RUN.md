@@ -1,7 +1,7 @@
 # Last run
 
 Paused on request after the running rows finished. DOC-018 then ran alone,
-then BUG-041, then DOC-019, then CUST-034 from Mark's request.
+then BUG-041, then DOC-019, then CUST-034 and CUST-035 from Mark's requests.
 No agents are running.
 
 - CUST-034: curves that touch tangentially now split sketch regions, so a
@@ -10,7 +10,15 @@ No agents are running.
   ids. Saved ids missing from the new split resolve through the previous
   detection, so no schema change. 200 curves take 67.5 ms median. Not
   deployed. `npm run check` passed: 976 tests and 20 browser tests.
-- CUST-035 (Trim reworked on CUST-034's `curveHits`) is filed and queued.
+- CUST-035: Trim (T) highlights the piece under the cursor and deletes it
+  on click, cutting at `curveHits`. A curve that meets nothing goes whole,
+  construction curves never cut, new ends get point-on-cutter or coincident
+  constraints, and kept-piece constraints stay. Trim stays active; each click
+  is one undo step. Hover lookup on 200 curves: 8 us median after a 34 ms
+  first call per sketch change. No control added: the existing Trim button,
+  hover colour and a T shortcut, under DEC-004. A browser test trims and
+  undoes in the built app. Not deployed. `npm run check` passed: 986 tests
+  and 26 browser tests.
 
 - Done this run: CUST-030, CUST-031, CUST-032, BUG-038, BUG-039, BUG-040,
   PERF-041, REF-004, PERF-035, and DOC-010, DOC-011, DOC-012, DOC-015,
@@ -38,8 +46,7 @@ No agents are running.
 
 ## Next
 
-DOC-020. CUST-033 (drag handles on every feature) and CUST-035 (Trim) are
-queued and not started.
+DOC-020. CUST-033 (drag handles on every feature) is queued and not started.
 
 ## Left open
 
@@ -49,6 +56,8 @@ queued and not started.
 - A view PUT overwrites `view.json` with no backup. Only a document
   migration backs it up.
 - Pick labels follow payload order.
+- Trim deletes one piece per click; trimming by drag waits on a gesture
+  approval. See Proposed.
 - A feature saved on a region id from before CUST-034 still builds, but its
   pick row shows no region number and the sketch does not tint that region
   as used. See Proposed.

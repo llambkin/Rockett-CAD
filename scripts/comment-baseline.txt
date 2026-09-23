@@ -14,7 +14,7 @@ client/src/panelPlacement.ts 1
 client/src/shortcuts.ts 5
 client/src/sketchTools.ts 85
 client/src/sketchUsage.ts 8
-client/src/store.ts 32
+client/src/store.ts 31
 client/src/three/CadViewport.ts 46
 client/src/three/ExtrudeGizmo.ts 23
 client/src/three/MoveGizmo.ts 13
@@ -54,7 +54,7 @@ server/test/unifyFaces.test.ts 3
 shared/src/api.ts 16
 shared/src/model.ts 84
 shared/src/projection.ts 1
-shared/src/sketchModify.ts 12
+shared/src/sketchModify.ts 10
 shared/src/sketchOffsets.ts 3
 shared/src/solver.ts 36
 shared/test/offsetSelection.test.ts 2

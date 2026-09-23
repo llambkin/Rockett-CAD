@@ -28,6 +28,8 @@ import {
   solveSketch,
   createSketchOffset,
   editSketchOffset,
+  constraintEntityRefs,
+  trimSketch,
   withShown,
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
@@ -49,7 +51,12 @@ export type Selection =
   | { kind: "plane"; ref: PlaneRef; label: string }
   | { kind: "profile"; sketchId: string; profileId: string }
   | { kind: "sketch"; sketchId: string }
-  | { kind: "sketchEntity"; sketchId: string; entityId: string }
+  | {
+      kind: "sketchEntity";
+      sketchId: string;
+      entityId: string;
+      piece?: number[];
+    }
   | { kind: "sketchPoint"; sketchId: string; entityId: string };
 
 export function selectionKey(s: Selection): string {
@@ -111,16 +118,6 @@ export type DialogType =
   | "emboss"
   | "move"
   | "export";
-
-/** All entity ids a constraint references. */
-export function constraintEntityRefs(c: SketchConstraint): string[] {
-  const anyC = c as any;
-  return (
-    [anyC.a, anyC.b, anyC.line, anyC.point, anyC.circle, anyC.entity] as (
-      string | undefined
-    )[]
-  ).filter((x): x is string => typeof x === "string");
-}
 
 export type Mode =
   | { name: "idle" }
@@ -235,6 +232,10 @@ interface State {
   deleteSketchEntities: (entityIds: string[]) => Promise<void>;
   /** Toggle the construction flag on draft sketch curves. */
   toggleSketchConstruction: (entityIds: string[]) => Promise<void>;
+  trimSketchCurve: (
+    entityId: string,
+    at: { x: number; y: number },
+  ) => Promise<void>;
   insertSketchImport: (format: string, imported: SketchImport) => Promise<void>;
 
   addFeature: (feature: Feature) => Promise<void>;
@@ -1040,6 +1041,30 @@ export const useStore = create<State>((set, get) => ({
     get().updateDraftSketch(entities, constraints);
     await get().commitDraftSketch();
     set({ selection: [] });
+  },
+
+  async trimSketchCurve(entityId, at) {
+    const { draftSketch, busy } = get();
+    if (!draftSketch || busy) return;
+    const result = trimSketch(
+      draftSketch.entities,
+      draftSketch.constraints,
+      entityId,
+      at,
+    );
+    get().updateDraftSketch(result.entities, result.constraints);
+    try {
+      await get().commitDraftSketch();
+    } catch (e) {
+      set({ draftSketch });
+      throw e;
+    }
+    set({
+      hover: null,
+      ...(result.removedConstraints && {
+        error: `${result.removedConstraints} constraint(s) on the trimmed piece were removed. Undo restores them.`,
+      }),
+    });
   },
 
   async toggleSketchConstruction(entityIds) {

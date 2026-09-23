@@ -5,6 +5,7 @@ import type {
   EvaluateResult,
   FolderTree,
   ProjectSummary,
+  SketchEntity,
 } from "@rockett/shared";
 import { startBuiltApp, type BuiltApp } from "./builtApp";
 
@@ -307,4 +308,75 @@ it("opens Move to at the right-click and inside a short window", async () => {
   await dialog.waitFor({ state: "detached" });
   await page.setViewportSize({ width: 1400, height: 900 });
   expect(failures).toEqual([]);
+});
+
+it("trims the hovered piece with T, one undo step per click", async () => {
+  await page.goto(app.origin);
+  await page.getByLabel("New project name").fill("Trim");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.locator(".tree-item", { hasText: "XY Plane" }).click();
+  await page.getByRole("button", { name: "Create Sketch" }).click();
+  await page.waitForTimeout(600);
+  const idle = () =>
+    page.locator(".busy-indicator").waitFor({ state: "detached" });
+  const box = (await page.locator(".viewport-container").boundingBox())!;
+  const cx = box.x + box.width / 2 + 7;
+  const cy = box.y + box.height / 2 + 7;
+  const id = (await api<ProjectSummary[]>("/projects")).find(
+    (p) => p.name === "Trim",
+  )!.id;
+  const lengths = async () => {
+    const [sketch] = (await api<EvaluateResult>(`/projects/${id}/evaluate`))
+      .sketches;
+    const entities = (sketch?.entities ?? []) as SketchEntity[];
+    const at = (pid: string) => entities.find((e) => e.id === pid)!;
+    return entities
+      .filter((e) => e.kind === "line")
+      .map((e) => {
+        if (e.kind !== "line") return 0;
+        const [a, b] = [at(e.p1), at(e.p2)] as { x: number; y: number }[];
+        return Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      });
+  };
+  for (const [x1, y1, x2, y2] of [
+    [cx - 120, cy, cx + 120, cy],
+    [cx, cy - 120, cx, cy + 120],
+  ] as const) {
+    const drawn = (await lengths()).length;
+    await page.keyboard.press("l");
+    await page.mouse.move(x1, y1, { steps: 3 });
+    await page.mouse.click(x1, y1);
+    await page.mouse.move(x2, y2, { steps: 4 });
+    await page.mouse.click(x2, y2);
+    await page.keyboard.press("Escape");
+    await expect
+      .poll(async () => (await lengths()).length, { timeout: 10_000 })
+      .toBe(drawn + 1);
+    await idle();
+  }
+  const [full] = await lengths();
+
+  await page.keyboard.press("t");
+  await expect
+    .poll(() => page.getByTitle("Trim (T)").getAttribute("class"))
+    .toContain("active");
+  await page.mouse.move(cx - 60, cy, { steps: 3 });
+  await page.mouse.click(cx - 60, cy);
+  await expect
+    .poll(async () => (await lengths()).toSorted((a, b) => a - b)[0]! / full!, {
+      timeout: 10_000,
+    })
+    .toBeCloseTo(0.5, 1);
+  expect(await lengths()).toHaveLength(2);
+
+  await idle();
+  await page.keyboard.press("Control+z");
+  await expect
+    .poll(async () => (await lengths()).map((l) => l / full!), {
+      timeout: 10_000,
+    })
+    .toEqual([expect.closeTo(1, 3), expect.closeTo(1, 3)]);
+
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
 });

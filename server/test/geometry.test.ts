@@ -10,7 +10,7 @@ import type {
 import {
   createEmptyDocument,
   projectEdge,
-  modifySketch,
+  trimSketch,
   offsetSketch,
 } from "@rockett/shared";
 import { initKernel, volumeOf } from "../src/geometry/kernel.js";
@@ -67,13 +67,7 @@ describe("geometry pipeline", () => {
       { id: "p2", kind: "point", x: 0, y: 10 },
       { id: "axis", kind: "line", p1: "p1", p2: "p2" },
     ];
-    const trimmed = modifySketch(
-      arcEntities,
-      [],
-      "circle",
-      { x: 5, y: 0 },
-      "trim",
-    );
+    const trimmed = trimSketch(arcEntities, [], "circle", { x: 5, y: 0 });
     const rectangle = rectSketch("rectangle", 20, 10);
     const offset = offsetSketch(
       rectangle.entities,

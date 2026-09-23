@@ -43,12 +43,20 @@ Construction geometry never splits a region.
   constrain new shapes to it to follow source edits. References are construction
   geometry by default; toggle Construction on a selected reference to use it in
   a profile.
-- Trim: click the portion of a curve between intersections to remove it.
+- Trim (T): hover a curve to highlight the piece between its nearest
+  intersections, then click to delete that piece. A line or arc gets shorter
+  or splits in two, a circle becomes an arc, and a curve that meets nothing is
+  deleted whole. Curves that touch tangentially cut; construction curves never
+  do. Each new end gets a coincident constraint on the curve that cut it,
+  constraints on the deleted piece go, and constraints on the rest stay. A
+  shortened line loses its length, midpoint and equal constraints. Trim stays
+  active, and each click is one undo step.
 - Extend: click near an endpoint to extend to the first intersecting boundary.
 - Offset: see [Sketch offsets](#sketch-offsets).
 
-Each operation returns to Select and can be undone. Unsupported projections and
-collapsing offsets show an error. Trim/extend reports removed curve constraints.
+Project and extend return to Select. Every operation can be undone.
+Unsupported projections and collapsing offsets show an error. Trim and extend
+report removed curve constraints.
 
 ### Editing a sketch
 

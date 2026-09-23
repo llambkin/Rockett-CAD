@@ -17,7 +17,8 @@ import {
   formatAngle,
   formatLength,
   newId,
-  modifySketch,
+  extendSketch,
+  trimPiece,
 } from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
@@ -1252,18 +1253,45 @@ export function ViewportView() {
     return data;
   }
 
-  function pointerToSketchUV(
-    e: { clientX: number; clientY: number },
-    alignFrom?: { x: number; y: number; pointId?: string | undefined },
-  ): tools.UV | null {
+  function planeUV(e: {
+    clientX: number;
+    clientY: number;
+  }): { x: number; y: number } | null {
     const vp = viewportRef.current;
     const frame = activeSketchFrame();
     if (!vp || !frame) return null;
     const hit = vp.screenToPlanePoint(e.clientX, e.clientY, frame);
     if (!hit) return null;
     const d = hit.clone().sub(new THREE.Vector3(...frame.origin));
-    let u = d.dot(new THREE.Vector3(...frame.xAxis));
-    let v = d.dot(new THREE.Vector3(...frame.yAxis));
+    return {
+      x: d.dot(new THREE.Vector3(...frame.xAxis)),
+      y: d.dot(new THREE.Vector3(...frame.yAxis)),
+    };
+  }
+
+  function trimTarget(e: PointerEvent) {
+    const draft = useStore.getState().draftSketch;
+    const picked = viewportRef.current?.pick(e.clientX, e.clientY, {
+      sketchEntities: true,
+      sketchPoints: false,
+    })?.selection;
+    const at = planeUV(e);
+    if (picked?.kind !== "sketchEntity" || picked.sketchId !== draft?.id)
+      return null;
+    const curve = draft.entities.find((x) => x.id === picked.entityId);
+    if (!at || !curve || curve.kind === "point") return null;
+    return { selection: picked, entities: draft.entities, at, curve };
+  }
+
+  function pointerToSketchUV(
+    e: { clientX: number; clientY: number },
+    alignFrom?: { x: number; y: number; pointId?: string | undefined },
+  ): tools.UV | null {
+    const vp = viewportRef.current;
+    const raw = planeUV(e);
+    if (!vp || !raw) return null;
+    let u = raw.x;
+    let v = raw.y;
     const s = useStore.getState();
     const tol = vp.worldPerPixel() * 10;
     const entities = s.draftSketch?.entities ?? [];
@@ -1509,9 +1537,18 @@ export function ViewportView() {
       if (tool === "project") {
         picked =
           vp.pick(e.clientX, e.clientY, { edges: true })?.selection ?? null;
-      } else if (
-        ["select", "dimension", "trim", "extend", "offset"].includes(tool)
-      ) {
+      } else if (tool === "trim") {
+        const target = trimTarget(e);
+        if (target && !target.curve.external)
+          picked = {
+            ...target.selection,
+            piece: trimPiece(
+              target.entities,
+              target.selection.entityId,
+              target.at,
+            ).samples,
+          };
+      } else if (["select", "dimension", "extend", "offset"].includes(tool)) {
         const r = vp.pick(e.clientX, e.clientY, {
           sketchEntities: true,
           profiles: false,
@@ -2236,7 +2273,17 @@ export function ViewportView() {
       }
       return;
     }
-    if (tool === "trim" || tool === "extend" || tool === "offset") {
+    if (tool === "trim") {
+      const target = trimTarget(e);
+      if (!target) return;
+      try {
+        await s.trimSketchCurve(target.selection.entityId, target.at);
+      } catch (error) {
+        s.setError((error as Error).message);
+      }
+      return;
+    }
+    if (tool === "extend" || tool === "offset") {
       const picked = viewportRef.current!.pick(e.clientX, e.clientY, {
         sketchEntities: true,
       })?.selection;
@@ -2271,12 +2318,11 @@ export function ViewportView() {
         return;
       }
       try {
-        const result = modifySketch(
+        const result = extendSketch(
           draft.entities,
           draft.constraints,
           entityId,
           uv,
-          tool,
         );
         s.updateDraftSketch(result.entities, result.constraints);
         await s.commitDraftSketch();
