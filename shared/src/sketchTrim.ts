@@ -166,6 +166,63 @@ const pointsOf = (e: SketchEntity): string[] =>
         ? [e.center]
         : [];
 
+function keptPieces(
+  curve: Curve,
+  from: CurveHit | null,
+  to: CurveHit | null,
+  end: (hit: CurveHit) => string,
+): Curve[] {
+  const flag =
+    curve.construction === undefined
+      ? {}
+      : { construction: curve.construction };
+  if (curve.kind === "circle")
+    return from && to
+      ? [
+          {
+            id: curve.id,
+            kind: "arc",
+            center: curve.center,
+            start: end(to),
+            end: end(from),
+            ...flag,
+          },
+        ]
+      : [];
+  const [first, last] =
+    curve.kind === "line" ? [curve.p1, curve.p2] : [curve.start, curve.end];
+  const spans: [string, string][] = [];
+  if (from) spans.push([first, end(from)]);
+  if (to) spans.push([end(to), last]);
+  const pieces: Curve[] = [];
+  spans.forEach(([p, q], i) => {
+    const id = i === 0 ? curve.id : newId("e");
+    pieces.push(
+      curve.kind === "line"
+        ? { id, kind: "line", p1: p, p2: q, ...flag }
+        : { id, kind: "arc", center: curve.center, start: p, end: q, ...flag },
+    );
+  });
+  return pieces;
+}
+
+function survivingConstraints(
+  constraints: SketchConstraint[],
+  curve: Curve,
+  gone: Set<string>,
+  shortened: boolean,
+): SketchConstraint[] {
+  return constraints.filter((c) => {
+    const refs = constraintEntityRefs(c);
+    if (refs.some((id) => gone.has(id))) return false;
+    return !(
+      shortened &&
+      refs.includes(curve.id) &&
+      (c.type === "length" || c.type === "midpoint" || c.type === "equal")
+    );
+  });
+}
+
 export function trimSketch(
   entities: SketchEntity[],
   constraints: SketchConstraint[],
@@ -192,50 +249,14 @@ export function trimSketch(
     added.push(...unique.values());
     return id;
   };
-  const flag =
-    curve.construction === undefined
-      ? {}
-      : { construction: curve.construction };
-  const pieces: Curve[] = [];
-  if (curve.kind === "circle") {
-    if (from && to)
-      pieces.push({
-        id: curve.id,
-        kind: "arc",
-        center: curve.center,
-        start: end(to),
-        end: end(from),
-        ...flag,
-      });
-  } else {
-    const [first, last] =
-      curve.kind === "line" ? [curve.p1, curve.p2] : [curve.start, curve.end];
-    const spans: [string, string][] = [];
-    if (from) spans.push([first, end(from)]);
-    if (to) spans.push([end(to), last]);
-    spans.forEach(([p, q], i) => {
-      const id = i === 0 ? curve.id : newId("e");
-      pieces.push(
-        curve.kind === "line"
-          ? { id, kind: "line", p1: p, p2: q, ...flag }
-          : {
-              id,
-              kind: "arc",
-              center: curve.center,
-              start: p,
-              end: q,
-              ...flag,
-            },
-      );
+  const pieces = keptPieces(curve, from, to, end);
+  if (pieces[1])
+    added.push({
+      id: newId("c"),
+      type: curve.kind === "line" ? "collinear" : "equal",
+      a: curve.id,
+      b: pieces[1].id,
     });
-    if (pieces[1])
-      added.push({
-        id: newId("c"),
-        type: curve.kind === "line" ? "collinear" : "equal",
-        a: curve.id,
-        b: pieces[1].id,
-      });
-  }
   const rest = entities.flatMap((e) =>
     e.id !== curve.id ? [e] : pieces.slice(0, 1),
   );
@@ -244,15 +265,7 @@ export function trimSketch(
   const gone = new Set(pointsOf(curve).filter((id) => !used.has(id)));
   if (!pieces.length) gone.add(curve.id);
   const shortened = pieces.length > 0 && curve.kind === "line";
-  const kept = constraints.filter((c) => {
-    const refs = constraintEntityRefs(c);
-    if (refs.some((id) => gone.has(id))) return false;
-    return !(
-      shortened &&
-      refs.includes(curve.id) &&
-      (c.type === "length" || c.type === "midpoint" || c.type === "equal")
-    );
-  });
+  const kept = survivingConstraints(constraints, curve, gone, shortened);
   return {
     entities: next.filter((e) => !gone.has(e.id)),
     constraints: [...kept, ...added],
