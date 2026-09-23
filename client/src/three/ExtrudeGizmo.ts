@@ -7,24 +7,13 @@
 import * as THREE from "three";
 import type { PlaneFrame, Profile } from "@rockett/shared";
 import { CadViewport } from "./CadViewport";
+import { snapStep } from "./Manipulator";
 
 const ARROW_COLOR = 0x4da3ff;
 const ARROW_HOVER = 0x8fd0ff;
 /** Preview tint: blue for material being added, red for a cut. */
 const PREVIEW_ADD = 0x4da3ff;
 const PREVIEW_CUT = 0xff5a5a;
-
-/** 1-2.5-5 series step chosen from how many mm one pixel covers. */
-export function snapStep(worldPerPixel: number): number {
-  const target = worldPerPixel * 6; // ~6px per increment feels right
-  const series = [
-    0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100,
-  ];
-  for (const s of series) {
-    if (s >= target) return s;
-  }
-  return 100;
-}
 
 export interface GizmoSource {
   /** Base plane frame; the arrow points along frame.normal. */

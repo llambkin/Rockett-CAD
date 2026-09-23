@@ -7,41 +7,39 @@
  */
 
 import * as THREE from "three";
-import { CadViewport } from "./CadViewport";
+import { Manipulator, type ManipulatorHost } from "./Manipulator";
 
 const RING_COLOR = 0x4da3ff;
 const RING_HOVER = 0x8fd0ff;
 const HANDLE_COLOR = 0xffd166;
 
-export class RevolveGizmo {
-  private group = new THREE.Group();
+export class RevolveGizmo extends Manipulator {
   private ring: THREE.Mesh;
   private handle: THREE.Mesh;
-  private raycaster = new THREE.Raycaster();
 
   /** Ring basis: center on the axis, u = zero-angle direction, v = 90°. */
   private u: THREE.Vector3;
   private v: THREE.Vector3;
 
   angleDeg: number;
-  private dragging = false;
   private prevRaw = 0;
   private cumulative = 0;
 
   constructor(
-    private viewport: CadViewport,
+    host: ManipulatorHost,
     private center: THREE.Vector3,
     private dir: THREE.Vector3,
     zeroDir: THREE.Vector3,
     private radius: number,
     initialDeg: number,
   ) {
+    super(host);
     this.dir = dir.clone().normalize();
     this.u = zeroDir.clone().normalize();
     this.v = new THREE.Vector3().crossVectors(this.dir, this.u).normalize();
     this.angleDeg = initialDeg;
 
-    const wpp = viewport.worldPerPixel();
+    const wpp = host.worldPerPixel();
     this.ring = new THREE.Mesh(
       new THREE.TorusGeometry(radius, wpp * 1.4, 8, 96),
       new THREE.MeshBasicMaterial({
@@ -66,16 +64,7 @@ export class RevolveGizmo {
     this.handle.renderOrder = 21;
 
     this.group.add(this.ring, this.handle);
-    viewport.scene.add(this.group);
     this.update(initialDeg);
-  }
-
-  dispose() {
-    this.viewport.scene.remove(this.group);
-    this.group.traverse((o: any) => {
-      o.geometry?.dispose?.();
-      o.material?.dispose?.();
-    });
   }
 
   private pointAt(deg: number): THREE.Vector3 {
@@ -92,51 +81,32 @@ export class RevolveGizmo {
   }
 
   setHover(hover: boolean) {
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(
-      hover ? RING_HOVER : RING_COLOR,
-    );
+    this.paint(hover ? RING_HOVER : RING_COLOR, this.ring);
   }
 
-  /** Raw angle (radians, unsnapped, -π..π) of the pointer on the ring plane,
-   * or null when the ray is parallel to the plane. */
-  private rawAngle(clientX: number, clientY: number): number | null {
-    const rect = this.viewport.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.viewport.camera);
-    const ray = this.raycaster.ray;
+  private ringPlaneHit(ray: THREE.Ray): THREE.Vector3 | null {
     const denom = ray.direction.dot(this.dir);
     if (Math.abs(denom) < 1e-6) return null;
     const t = this.center.clone().sub(ray.origin).dot(this.dir) / denom;
     if (t < 0) return null;
-    const hit = ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
+    return ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
+  }
+
+  private rawAngle(clientX: number, clientY: number): number | null {
+    const hit = this.ringPlaneHit(this.rayAt(clientX, clientY));
+    if (!hit) return null;
     const w = hit.sub(this.center);
     return Math.atan2(w.dot(this.v), w.dot(this.u));
   }
 
-  /** Is the pointer on the ring (within ~9px of its circle)? */
   hitTest(clientX: number, clientY: number): boolean {
-    const rect = this.viewport.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.viewport.camera);
-    // handle sphere: generous grab
-    const wpp = this.viewport.worldPerPixel();
-    const dHandle = this.raycaster.ray.distanceToPoint(this.handle.position);
-    if (dHandle < wpp * 12) return true;
-    // anywhere on the ring circle
-    const ray = this.raycaster.ray;
-    const denom = ray.direction.dot(this.dir);
-    if (Math.abs(denom) < 1e-6) return false;
-    const t = this.center.clone().sub(ray.origin).dot(this.dir) / denom;
-    if (t < 0) return false;
-    const hit = ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
+    const ray = this.rayAt(clientX, clientY);
+    const wpp = this.host.worldPerPixel();
+    if (ray.distanceToPoint(this.handle.position) < wpp * 12) return true;
+    const hit = this.ringPlaneHit(ray);
+    if (!hit) return false;
     const distToCircle = Math.abs(hit.distanceTo(this.center) - this.radius);
-    return distToCircle < wpp * 9;
+    return distToCircle < this.hitTolerance();
   }
 
   beginDrag(clientX: number, clientY: number) {
@@ -161,7 +131,7 @@ export class RevolveGizmo {
       Math.min(360, this.cumulative + THREE.MathUtils.radToDeg(delta)),
     );
     // zoom-adaptive snap: pick the finest of 1/5/15/45° that is ≥ ~4px of arc
-    const wpp = this.viewport.worldPerPixel();
+    const wpp = this.host.worldPerPixel();
     const pxPerDeg = (Math.PI * 2 * this.radius) / 360 / wpp;
     const step = [1, 5, 15, 45].find((s) => s * pxPerDeg >= 4) ?? 45;
     return Math.max(
@@ -170,21 +140,7 @@ export class RevolveGizmo {
     );
   }
 
-  endDrag() {
-    this.dragging = false;
-  }
-
-  get isDragging(): boolean {
-    return this.dragging;
-  }
-
-  /** Screen position of the handle (for the angle label). */
   handleScreenPosition(): { x: number; y: number } {
-    const p = this.handle.position.clone().project(this.viewport.camera);
-    const rect = this.viewport.renderer.domElement.getBoundingClientRect();
-    return {
-      x: rect.left + ((p.x + 1) / 2) * rect.width,
-      y: rect.top + ((1 - p.y) / 2) * rect.height,
-    };
+    return this.labelPosition(this.handle.position);
   }
 }

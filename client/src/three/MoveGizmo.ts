@@ -8,7 +8,7 @@
 
 import * as THREE from "three";
 import { CadViewport } from "./CadViewport";
-import { snapStep } from "./ExtrudeGizmo";
+import { snapStep } from "./Manipulator";
 
 const AXIS_COLORS = [0xe05c5c, 0x62c162, 0x4da3ff]; // X red, Y green, Z blue
 const AXIS_HOVER = 0xffd166;
