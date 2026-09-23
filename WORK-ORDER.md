@@ -83,6 +83,10 @@ Decisions ruled by Mark on 2026-09-23, each accepting its recommendation:
 - Asset misses: a missing `/assets/*` file gets the SPA fallback with 200 instead of 404 (found by OPS-004).
 - Kernel leak: `arcEdge` does not delete its three `gp_Pnt` objects.
 - Patch validation: BUG-014 checks the patch keys, not the merged feature (found by BUG-014).
+- AUTH-008: the row names no setting for allowed origins, its format or its unset behaviour, and a guessed variable would reject every write on a proxied instance. Recommended: `ROCKETT_ALLOWED_ORIGINS`, a comma-separated list of full origins normalised with `new URL(x).origin`; startup fails with one line when it is unset or holds a path or wildcard; the origin check never reads forwarded headers, so behind a proxy the operator lists the public origin and the trusted-proxy clause is dropped. Add `server/src/index.ts` and `server/test/helpers/testApp.ts` to AUTH-008's Scope, and extend AUTH-021 and AUTH-022 to document and set the variable.
+- Error bodies: unknown `/api` paths and Express JSON body errors (malformed JSON, bodies over 50 MB) still answer without `code` (found by KIT-021).
+- Distribution notices: the image carries no licence texts or `THIRD-PARTY-NOTICES.md`, the LGPL opencascade.js source offer is not written, and the Node and Debian packages from the base image are not inventoried; all three block distribution, not intranet use (found by OPS-022).
+- AUTH-002 timing: the hash was timed on the development desktop (70 ms median); the row asks for the dev host figure.
 
 ## Delivery and acceptance
 
