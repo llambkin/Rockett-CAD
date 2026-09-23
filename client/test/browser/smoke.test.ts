@@ -208,3 +208,30 @@ it("orbits on a right-drag and opens the view menu on a still right-click", asyn
   expect(failures).toEqual([]);
   expect(app.serverErrors).toEqual([]);
 });
+
+it("keeps every toolbar label inside its group", async () => {
+  const overflowing = () =>
+    page.locator(".tb-title").evaluateAll((titles) =>
+      titles.flatMap((title) => {
+        const group = title.closest(".tb-group")!;
+        const style = getComputedStyle(group);
+        const edge =
+          group.getBoundingClientRect().right -
+          parseFloat(style.paddingRight) -
+          parseFloat(style.borderRightWidth);
+        const over = title.getBoundingClientRect().right - edge;
+        return over > 0.5 ? [`${title.textContent} +${over.toFixed(1)}px`] : [];
+      }),
+    );
+
+  await page.goto(app.origin);
+  await page.getByLabel("New project name").fill("Ribbon");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.locator(".tb-title", { hasText: "CONSTRUCT" }).waitFor();
+  expect(await overflowing()).toEqual([]);
+
+  await page.locator(".tree-item", { hasText: "XY Plane" }).click();
+  await page.getByRole("button", { name: "Create Sketch" }).click();
+  await page.locator(".tb-title", { hasText: "CONSTRAIN" }).waitFor();
+  expect(await overflowing()).toEqual([]);
+});

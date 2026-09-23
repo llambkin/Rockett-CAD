@@ -120,8 +120,7 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <div className="tb-group">
-        <span className="tb-title">SKETCH</span>
+      <ToolGroup title="SKETCH">
         <button
           className="tb-btn primary"
           disabled={busy}
@@ -130,9 +129,8 @@ export function Toolbar() {
         >
           Create Sketch
         </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">CREATE</span>
+      </ToolGroup>
+      <ToolGroup title="CREATE">
         {CREATE.map((b) => (
           <button
             key={b.id}
@@ -144,9 +142,8 @@ export function Toolbar() {
             {b.label}
           </button>
         ))}
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">MODIFY</span>
+      </ToolGroup>
+      <ToolGroup title="MODIFY">
         {MODIFY.map((b) => (
           <button
             key={b.id}
@@ -158,9 +155,8 @@ export function Toolbar() {
             {b.label}
           </button>
         ))}
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">CONSTRUCT</span>
+      </ToolGroup>
+      <ToolGroup title="CONSTRUCT">
         <button
           className="tb-btn"
           title="Construction plane (offset / midplane)"
@@ -169,9 +165,8 @@ export function Toolbar() {
         >
           Plane
         </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">PATTERN</span>
+      </ToolGroup>
+      <ToolGroup title="PATTERN">
         {PATTERN.map((b) => (
           <button
             key={b.id}
@@ -183,9 +178,8 @@ export function Toolbar() {
             {b.label}
           </button>
         ))}
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">INSPECT</span>
+      </ToolGroup>
+      <ToolGroup title="INSPECT">
         <button
           className={`tb-btn ${mode.name === "measure" ? "active" : ""}`}
           title={withKey("Measure", "measure")}
@@ -197,9 +191,8 @@ export function Toolbar() {
         >
           Measure
         </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">INSERT</span>
+      </ToolGroup>
+      <ToolGroup title="INSERT">
         <StepImportButton />
         <button
           className="tb-btn"
@@ -209,9 +202,8 @@ export function Toolbar() {
         >
           Canvas
         </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">EXPORT</span>
+      </ToolGroup>
+      <ToolGroup title="EXPORT">
         <button
           className="tb-btn"
           disabled={busy}
@@ -219,7 +211,7 @@ export function Toolbar() {
         >
           STL / 3MF
         </button>
-      </div>
+      </ToolGroup>
       <div className="tb-spacer" />
       <ViewButtons />
     </div>
@@ -245,6 +237,21 @@ export function toggleProjection() {
   if (!vp) return;
   vp.setProjection(
     vp.projection === "orthographic" ? "perspective" : "orthographic",
+  );
+}
+
+function ToolGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="tb-group">
+      <span className="tb-title">{title}</span>
+      <div className="tb-row">{children}</div>
+    </div>
   );
 }
 
@@ -383,8 +390,7 @@ function SketchToolbar() {
 
   return (
     <div className="toolbar sketch">
-      <div className="tb-group">
-        <span className="tb-title">SKETCH</span>
+      <ToolGroup title="SKETCH">
         {SKETCH_TOOLS.map((t) => (
           <button
             key={t.id}
@@ -417,9 +423,8 @@ function SketchToolbar() {
         >
           Construction
         </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">CONSTRAIN</span>
+      </ToolGroup>
+      <ToolGroup title="CONSTRAIN">
         {CONSTRAINTS.map((c) => (
           <button
             key={c.type}
@@ -437,7 +442,7 @@ function SketchToolbar() {
         >
           Delete
         </button>
-      </div>
+      </ToolGroup>
       <div className="tb-spacer" />
       <div className="tb-group">
         <button className="tb-btn primary" onClick={() => void finishSketch()}>

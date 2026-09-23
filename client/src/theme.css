@@ -155,12 +155,19 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .tb-group {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
   align-items: center;
   gap: 2px;
   padding: 0 8px;
   border-right: 1px solid var(--border);
-  position: relative;
+}
+
+.tb-row {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .tb-group:last-child {
@@ -173,9 +180,11 @@ button.doc-name:hover .doc-name-pen {
   flex-shrink: 0;
 }
 .toolbar.sketch .tb-group {
-  flex-wrap: wrap;
   min-height: 40px;
   max-width: 100%;
+}
+.toolbar.sketch .tb-row {
+  flex-wrap: wrap;
 }
 .toolbar.sketch label {
   display: flex;
@@ -193,9 +202,11 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .tb-title {
-  position: absolute;
-  top: 1px;
-  left: 8px;
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: start;
+  z-index: 1;
+  margin-top: 1px;
   font-size: 8.5px;
   letter-spacing: 0.08em;
   color: var(--text-dim);
