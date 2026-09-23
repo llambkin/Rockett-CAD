@@ -15,6 +15,7 @@ import { viewportHandle } from "./viewportRef";
 import { versionLabel } from "./versionLabel";
 import {
   IDLE_SHORTCUTS,
+  LINE_SHORTCUTS,
   SKETCH_SHORTCUTS,
   idleActionFor,
   sketchToolFor,
@@ -443,6 +444,15 @@ function Workspace() {
               <p>
                 While drawing, type a size to lock it, <kbd>Tab</kbd> to move
                 between sizes, <kbd>Enter</kbd> to place the shape.
+              </p>
+              <p>
+                Line:{" "}
+                {LINE_SHORTCUTS.map((x, i) => (
+                  <span key={x.key}>
+                    {i > 0 && " · "}
+                    <kbd>{x.key}</kbd> {x.label}
+                  </span>
+                ))}
               </p>
               <p>
                 A line within 4° of a right angle to a line it starts from snaps

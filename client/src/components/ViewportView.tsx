@@ -30,6 +30,7 @@ import { useStore, type Selection } from "../store";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import * as tools from "../sketchTools";
+import { ANGLE_LOCK_KEY } from "../shortcuts";
 
 import { DIALOG_PICKS } from "../dialogPicks";
 import { dimensionLayout } from "../dimensionLayout";
@@ -1449,11 +1450,16 @@ export function ViewportView() {
         const ts = toolState.current;
         const last =
           ts.clicks.length > 0 ? ts.clicks[ts.clicks.length - 1] : undefined;
-        const uv = pointerToSketchUV(
+        const uv = angleSnapped(
           e,
-          tool === "line" && last
-            ? { x: last.x, y: last.y, pointId: last.snapPointId }
-            : undefined,
+          tool,
+          last,
+          pointerToSketchUV(
+            e,
+            tool === "line" && last
+              ? { x: last.x, y: last.y, pointId: last.snapPointId }
+              : undefined,
+          ),
         );
         updateSnapMarker(uv);
         const frame = activeSketchFrame();
@@ -1609,11 +1615,16 @@ export function ViewportView() {
     if (down && DRAW_TOOLS.includes(tool)) {
       const vp = viewportRef.current;
       const frame = activeSketchFrame();
-      const uv = pointerToSketchUV(
+      const uv = angleSnapped(
         e,
-        tool === "line"
-          ? { x: down.x, y: down.y, pointId: down.snapPointId }
-          : undefined,
+        tool,
+        down,
+        pointerToSketchUV(
+          e,
+          tool === "line"
+            ? { x: down.x, y: down.y, pointId: down.snapPointId }
+            : undefined,
+        ),
       );
       if (vp && frame && uv) {
         updateToolPreview(
@@ -1914,11 +1925,16 @@ export function ViewportView() {
       ts.downUV = null;
       const tool = (s.mode as any).tool as string;
       if (down && DRAW_TOOLS.includes(tool) && ts.clicks.length === 0) {
-        const upUV = pointerToSketchUV(
+        const upUV = angleSnapped(
           e,
-          tool === "line"
-            ? { x: down.x, y: down.y, pointId: down.snapPointId }
-            : undefined,
+          tool,
+          down,
+          pointerToSketchUV(
+            e,
+            tool === "line"
+              ? { x: down.x, y: down.y, pointId: down.snapPointId }
+              : undefined,
+          ),
         );
         if (
           upUV &&
@@ -2088,11 +2104,16 @@ export function ViewportView() {
     const construction = s.mode.constructionMode;
     const ts = toolState.current;
     const last = ts.clicks[ts.clicks.length - 1];
-    const uv = pointerToSketchUV(
+    const uv = angleSnapped(
       e,
-      tool === "line" && last
-        ? { x: last.x, y: last.y, pointId: last.snapPointId }
-        : undefined,
+      tool,
+      last,
+      pointerToSketchUV(
+        e,
+        tool === "line" && last
+          ? { x: last.x, y: last.y, pointId: last.snapPointId }
+          : undefined,
+      ),
     );
     if (!uv) return;
     const draft = s.draftSketch;
@@ -2488,6 +2509,20 @@ export function ViewportView() {
       } else if (e.key === "Enter") {
         swallow();
         void placeWithDims(ts.lastCursor ?? ts.clicks[0]!);
+      } else if (
+        d.tool === "line" &&
+        !e.repeat &&
+        e.key.toUpperCase() === ANGLE_LOCK_KEY
+      ) {
+        swallow();
+        const live = liveDimValues(
+          d.tool,
+          ts.clicks[0]!,
+          ts.lastCursor ?? ts.clicks[0]!,
+        );
+        tools.toggleAngleLock(d.fields, live.angle ?? 0);
+        refreshDim();
+        refreshGhost();
       } else if (e.key === "Backspace" && f.locked) {
         swallow();
         f.text = f.text.slice(0, -1);
@@ -3214,6 +3249,17 @@ function dimensionText(c: SketchConstraint): string {
     default:
       return "";
   }
+}
+
+function angleSnapped(
+  e: { shiftKey: boolean },
+  tool: string,
+  from: tools.UV | undefined,
+  uv: tools.UV | null,
+): tools.UV | null {
+  return uv && from && tool === "line" && e.shiftKey
+    ? tools.snapLineEnd(from, uv)
+    : uv;
 }
 
 function round3(v: number): number {

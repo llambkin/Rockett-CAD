@@ -646,19 +646,7 @@ export function resolveDimCursor(
         if (c.snapPerpLineId) out.snapPerpLineId = c.snapPerpLineId;
         return out;
       }
-      const quarter = Math.round(A / 90);
-      if (Math.abs(A - quarter * 90) < 1e-9) {
-        const k = ((quarter % 4) + 4) % 4;
-        return {
-          x: a.x + [length, 0, -length, 0][k]!,
-          y: a.y + [0, length, 0, -length][k]!,
-        };
-      }
-      const rad = (A * Math.PI) / 180;
-      return {
-        x: a.x + length * Math.cos(rad),
-        y: a.y + length * Math.sin(rad),
-      };
+      return pointAtAngle(a, length, A);
     }
     case "rect":
     case "centerRect": {
@@ -678,6 +666,41 @@ export function resolveDimCursor(
     default:
       return c;
   }
+}
+
+function pointAtAngle(a: UV, length: number, deg: number): UV {
+  const quarter = Math.round(deg / 90);
+  if (Math.abs(deg - quarter * 90) < 1e-9) {
+    const k = ((quarter % 4) + 4) % 4;
+    return {
+      x: a.x + [length, 0, -length, 0][k]!,
+      y: a.y + [0, length, 0, -length][k]!,
+    };
+  }
+  const rad = (deg * Math.PI) / 180;
+  return { x: a.x + length * Math.cos(rad), y: a.y + length * Math.sin(rad) };
+}
+
+export const ANGLE_SNAP_STEP = 15;
+
+export function snapAngle(deg: number, step: number): number {
+  return Math.round(deg / step) * step;
+}
+
+export function snapLineEnd(a: UV, c: UV): UV {
+  const dx = c.x - a.x;
+  const dy = c.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-9) return { x: c.x, y: c.y };
+  const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  return pointAtAngle(a, length, snapAngle(deg, ANGLE_SNAP_STEP));
+}
+
+export function toggleAngleLock(fields: DimField[], live: number): void {
+  const f = fields.find((x) => x.key === "angle");
+  if (!f) return;
+  f.locked = !f.locked;
+  f.text = fmt2(live);
 }
 
 /** Dimension constraints that pin the typed sizes onto the created geometry. */
