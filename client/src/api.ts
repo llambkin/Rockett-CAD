@@ -1,30 +1,23 @@
 /** Typed client for the Rockett CAD REST API. */
 
-import type {
-  ApiErrorBody,
-  ApiErrorCode,
-  CadDocument,
-  EvaluateResult,
-  ExportRequest,
-  Feature,
-  MeasureRequest,
-  MeasureResult,
-  ProjectSummary,
-  EdgeRef,
-  SketchEntity,
+import {
+  pathFor,
+  ROUTES,
+  type ApiErrorBody,
+  type ApiErrorCode,
+  type CadDocument,
+  type EdgeRef,
+  type ExportRequest,
+  type Feature,
+  type Health,
+  type MeasureRequest,
+  type PathParams,
+  type Route,
 } from "@rockett/shared";
 
-export interface MutationResponse {
-  document: CadDocument;
-  evaluation: EvaluateResult;
-}
+export type { Health, MutationResponse } from "@rockett/shared";
 
-export interface Health {
-  version: string;
-  schemaVersion: number;
-  commit: string | null;
-  describe: string | null;
-}
+const API = "/api";
 
 let health: Promise<Health> | undefined;
 
@@ -77,7 +70,7 @@ export async function request(
   { body, signal, response }: RequestOptions & { response?: "blob" } = {},
 ): Promise<unknown> {
   const form = body instanceof FormData;
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(API + path, {
     method,
     ...(body !== undefined &&
       !form && { headers: { "Content-Type": "application/json" } }),
@@ -93,6 +86,26 @@ export async function request(
   };
 }
 
+function send<P extends string, Req, Res>(
+  route: Route<P, Req, Res>,
+  params: PathParams<P>,
+  {
+    body,
+    signal,
+    position,
+  }: {
+    body?: Req;
+    signal?: AbortSignal | undefined;
+    position?: number | undefined;
+  } = {},
+): Promise<Res> {
+  const query = position === undefined ? "" : `?position=${position}`;
+  return request<Res>(route.method, pathFor(route, params) + query, {
+    body,
+    signal,
+  });
+}
+
 function fileForm(name: string, file: File): FormData {
   const form = new FormData();
   form.append(name, file);
@@ -100,109 +113,70 @@ function fileForm(name: string, file: File): FormData {
 }
 
 export const api = {
-  health: () => (health ??= request<Health>("GET", "/health")),
-  importStep: (file: File, projectId?: string, signal?: AbortSignal) =>
-    request<MutationResponse>(
-      "POST",
-      projectId
-        ? `/projects/${projectId}/import-step`
-        : "/projects/import-step",
-      { body: fileForm("file", file), signal },
-    ),
-  listProjects: () => request<ProjectSummary[]>("GET", "/projects"),
+  health: () => (health ??= send(ROUTES.health, {})),
+  importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
+    const options = { body: fileForm("file", file), signal };
+    return projectId
+      ? send(ROUTES.importStepInto, { id: projectId }, options)
+      : send(ROUTES.importStep, {}, options);
+  },
+  listProjects: () => send(ROUTES.listProjects, {}),
   createProject: (name: string) =>
-    request<{ document: CadDocument }>("POST", "/projects", { body: { name } }),
-  getProject: (id: string) =>
-    request<{ document: CadDocument }>("GET", `/projects/${id}`),
-  deleteProject: (id: string) =>
-    request<{ ok: true }>("DELETE", `/projects/${id}`),
+    send(ROUTES.createProject, {}, { body: { name } }),
+  getProject: (id: string) => send(ROUTES.getProject, { id }),
+  deleteProject: (id: string) => send(ROUTES.deleteProject, { id }),
   duplicateProject: (id: string, name?: string) =>
-    request<{ document: CadDocument }>("POST", `/projects/${id}/duplicate`, {
-      body: { name },
-    }),
+    send(ROUTES.duplicateProject, { id }, { body: { name } }),
   renameProject: (id: string, name: string) =>
-    request<{ document: CadDocument }>("POST", `/projects/${id}/rename`, {
-      body: { name },
-    }),
+    send(ROUTES.renameProject, { id }, { body: { name } }),
 
   evaluate: (id: string, position?: number) =>
-    request<EvaluateResult>(
-      "GET",
-      `/projects/${id}/evaluate${position === undefined ? "" : `?position=${position}`}`,
-    ),
+    send(ROUTES.evaluate, { id }, { position }),
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
-    request<{ edges: EdgeRef[] }>("POST", `/projects/${id}/tangent-edges`, {
-      body: { edge, beforeFeatureId },
-    }),
+    send(ROUTES.tangentEdges, { id }, { body: { edge, beforeFeatureId } }),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
-    request<{ entities: SketchEntity[] }>(
-      "POST",
-      `/projects/${id}/features/${fid}/project`,
-      { body: { edge, entityId } },
-    ),
+    send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 
   addFeature: (id: string, feature: Feature) =>
-    request<MutationResponse>("POST", `/projects/${id}/features`, {
-      body: { feature },
-    }),
+    send(ROUTES.addFeature, { id }, { body: { feature } }),
   updateFeature: (
     id: string,
     fid: string,
     feature: Partial<Feature>,
     position?: number,
-  ) =>
-    request<MutationResponse>(
-      "PUT",
-      `/projects/${id}/features/${fid}${position === undefined ? "" : `?position=${position}`}`,
-      { body: { feature } },
-    ),
+  ) => send(ROUTES.updateFeature, { id, fid }, { body: { feature }, position }),
   deleteFeature: (id: string, fid: string) =>
-    request<MutationResponse>("DELETE", `/projects/${id}/features/${fid}`),
+    send(ROUTES.deleteFeature, { id, fid }),
   setTimeline: (id: string, position: number) =>
-    request<MutationResponse>("POST", `/projects/${id}/timeline`, {
-      body: { position },
-    }),
+    send(ROUTES.setTimeline, { id }, { body: { position } }),
   replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    request<MutationResponse>(
-      "PUT",
-      `/projects/${id}/document${position === undefined ? "" : `?position=${position}`}`,
-      { body: { document } },
-    ),
+    send(ROUTES.replaceDocument, { id }, { body: { document }, position }),
   updateBody: (
     id: string,
     bodyId: string,
     patch: { name?: string; visible?: boolean },
-  ) =>
-    request<MutationResponse>(
-      "PUT",
-      `/projects/${id}/bodies/${encodeURIComponent(bodyId)}`,
-      { body: patch },
-    ),
+  ) => send(ROUTES.updateBody, { id, bodyId }, { body: patch }),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
-    request<MeasureResult>("POST", `/projects/${id}/measure`, {
-      body: { refs },
-    }),
+    send(ROUTES.measure, { id }, { body: { refs } }),
 
   async exportModel(
     id: string,
     exportRequest: ExportRequest,
     signal?: AbortSignal,
   ): Promise<{ blob: Blob; fileName: string }> {
-    const { blob, fileName } = await request("POST", `/projects/${id}/export`, {
-      body: exportRequest,
-      signal,
-      response: "blob",
-    });
+    const route = ROUTES.exportModel;
+    const { blob, fileName } = await request(
+      route.method,
+      pathFor(route, { id }),
+      { body: exportRequest, signal, response: "blob" },
+    );
     return { blob, fileName: fileName ?? `export.${exportRequest.format}` };
   },
 
   uploadImage: (id: string, file: File, signal?: AbortSignal) =>
-    request<{ assetId: string }>("POST", `/projects/${id}/assets`, {
-      body: fileForm("image", file),
-      signal,
-    }),
+    send(ROUTES.uploadImage, { id }, { body: fileForm("image", file), signal }),
 
   assetUrl: (id: string, assetId: string) =>
-    `/api/projects/${id}/assets/${assetId}`,
+    API + pathFor(ROUTES.asset, { id, assetId }),
 };

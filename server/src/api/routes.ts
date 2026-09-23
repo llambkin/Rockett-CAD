@@ -6,18 +6,21 @@
  * updated document plus a fresh incremental evaluation.
  */
 
-import { Router, json } from "express";
+import { Router, json, type RequestHandler } from "express";
 import multer from "multer";
 import {
   nextFeatureName,
   newId,
   projectEdge,
+  ROUTES,
   SCHEMA_VERSION,
   type ApiErrorBody,
   type ApiErrorCode,
   type CadDocument,
   type ExportRequest,
   type Feature,
+  type Method,
+  type Route,
 } from "@rockett/shared";
 import { version } from "../../../package.json";
 import type { ProjectStore } from "../store/projectStore.js";
@@ -128,6 +131,11 @@ const EXPORTERS: Record<
 export function createApiRouter(store: ProjectStore): Router {
   const router = Router();
   router.use(json({ limit: "50mb" }));
+  const on = (route: Route, ...handlers: RequestHandler[]) =>
+    router[route.method.toLowerCase() as Lowercase<Method>](
+      route.path,
+      ...handlers,
+    );
 
   // Serialize the whole load/edit/save/evaluate operation for each project.
   // Locking only save() would still allow two requests to edit stale copies.
@@ -187,7 +195,7 @@ export function createApiRouter(store: ProjectStore): Router {
     return evaluation;
   }
 
-  router.get("/health", (_req, res) => {
+  on(ROUTES.health, (_req, res) => {
     res.json({
       ok: true,
       version,
@@ -199,15 +207,15 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- projects -----
 
-  router.get(
-    "/projects",
+  on(
+    ROUTES.listProjects,
     wrap(async (_req, res) => {
       res.json(await store.list());
     }),
   );
 
-  router.post(
-    "/projects",
+  on(
+    ROUTES.createProject,
     wrap(async (req, res) => {
       const name = String(req.body?.name ?? "Untitled").slice(0, 200);
       const doc = await store.create(name);
@@ -215,16 +223,16 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.get(
-    "/projects/:id",
+  on(
+    ROUTES.getProject,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       res.json({ document: doc });
     }),
   );
 
-  router.delete(
-    "/projects/:id",
+  on(
+    ROUTES.deleteProject,
     wrap(async (req, res) => {
       await store.remove(req.params.id);
       dropEngine(req.params.id);
@@ -232,8 +240,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.post(
-    "/projects/:id/duplicate",
+  on(
+    ROUTES.duplicateProject,
     wrap(async (req, res) => {
       const copy = await store.duplicate(
         req.params.id,
@@ -243,8 +251,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.post(
-    "/projects/:id/rename",
+  on(
+    ROUTES.renameProject,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       doc.name = String(req.body?.name ?? doc.name).slice(0, 200);
@@ -255,8 +263,8 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- evaluation -----
 
-  router.get(
-    "/projects/:id/evaluate",
+  on(
+    ROUTES.evaluate,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       res.json(engineFor(doc.id).evaluate(doc, evaluationPosition(req, doc)));
@@ -265,8 +273,8 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- document-level replace (undo/redo restore) -----
 
-  router.put(
-    "/projects/:id/document",
+  on(
+    ROUTES.replaceDocument,
     wrap(async (req, res) => {
       const incoming = req.body?.document as CadDocument;
       if (!incoming || incoming.id !== req.params.id) {
@@ -330,11 +338,11 @@ export function createApiRouter(store: ProjectStore): Router {
       throw error;
     }
   });
-  router.post("/projects/import-step", receiveStep, importStep);
-  router.post("/projects/:id/import-step", receiveStep, importStep);
+  on(ROUTES.importStep, receiveStep, importStep);
+  on(ROUTES.importStepInto, receiveStep, importStep);
 
-  router.post(
-    "/projects/:id/features",
+  on(
+    ROUTES.addFeature,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const feature = req.body?.feature as Feature;
@@ -357,8 +365,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.put(
-    "/projects/:id/features/:fid",
+  on(
+    ROUTES.updateFeature,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const position = evaluationPosition(req, doc);
@@ -385,8 +393,8 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // Resolve against geometry BEFORE the sketch, so projections cannot depend
   // on their own extrude or another downstream feature. This is read-only.
-  router.post(
-    "/projects/:id/features/:fid/project",
+  on(
+    ROUTES.projectEdge,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const index = doc.features.findIndex((f) => f.id === req.params.fid);
@@ -420,8 +428,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.delete(
-    "/projects/:id/features/:fid",
+  on(
+    ROUTES.deleteFeature,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
@@ -434,8 +442,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.post(
-    "/projects/:id/timeline",
+  on(
+    ROUTES.setTimeline,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const position = Number(req.body?.position);
@@ -454,8 +462,8 @@ export function createApiRouter(store: ProjectStore): Router {
   );
 
   // ----- bodies -----
-  router.post(
-    "/projects/:id/tangent-edges",
+  on(
+    ROUTES.tangentEdges,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const { edge: value, beforeFeatureId } = req.body ?? {};
@@ -477,8 +485,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.put(
-    "/projects/:id/bodies/:bodyId",
+  on(
+    ROUTES.updateBody,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const meta = doc.bodyMeta[req.params.bodyId];
@@ -497,8 +505,8 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- measure -----
 
-  router.post(
-    "/projects/:id/measure",
+  on(
+    ROUTES.measure,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const refs = req.body?.refs;
@@ -513,8 +521,8 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- export -----
 
-  router.post(
-    "/projects/:id/export",
+  on(
+    ROUTES.exportModel,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const body = req.body ?? {};
@@ -572,8 +580,8 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // ----- assets (reference images) -----
 
-  router.post(
-    "/projects/:id/assets",
+  on(
+    ROUTES.uploadImage,
     receiveImage,
     wrap(async (req, res) => {
       await store.load(req.params.id); // ensure project exists
@@ -594,8 +602,8 @@ export function createApiRouter(store: ProjectStore): Router {
     }),
   );
 
-  router.get(
-    "/projects/:id/assets/:assetId",
+  on(
+    ROUTES.asset,
     wrap(async (req, res) => {
       const p = await store.assetPath(req.params.id, req.params.assetId);
       res.sendFile(p);
