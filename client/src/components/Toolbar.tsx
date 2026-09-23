@@ -3,8 +3,9 @@
  * sketch toolbar (drawing tools, constraints, finish sketch).
  */
 
+import { useRef } from "react";
 import { useStore, type DialogType, type SketchTool } from "../store";
-import { newId, type SketchConstraint } from "@rockett/shared";
+import { importDxf, newId, type SketchConstraint } from "@rockett/shared";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { filterSelectionFor } from "../dialogPicks";
 import { StepImportButton } from "./StepImportButton";
@@ -296,6 +297,42 @@ function ViewButtons() {
   );
 }
 
+function InsertDxfButton() {
+  const input = useRef<HTMLInputElement>(null);
+  const busy = useStore((s) => s.busy);
+  const load = async (file?: File) => {
+    if (!file) return;
+    const s = useStore.getState();
+    try {
+      await s.insertSketchImport("DXF", importDxf(await file.text()));
+    } catch (error) {
+      s.setError((error as Error).message);
+    } finally {
+      if (input.current) input.current.value = "";
+    }
+  };
+  return (
+    <>
+      <input
+        ref={input}
+        type="file"
+        accept=".dxf"
+        hidden
+        aria-label="DXF file"
+        onChange={(e) => void load(e.target.files?.[0])}
+      />
+      <button
+        className="tb-btn"
+        disabled={busy}
+        title="Insert lines, arcs, circles, points and polylines from an ASCII DXF file"
+        onClick={() => input.current?.click()}
+      >
+        Insert DXF
+      </button>
+    </>
+  );
+}
+
 function SketchToolbar() {
   const mode = useStore((s) => s.mode);
   const setSketchTool = useStore((s) => s.setSketchTool);
@@ -484,6 +521,9 @@ function SketchToolbar() {
         >
           Delete
         </button>
+      </ToolGroup>
+      <ToolGroup title="INSERT">
+        <InsertDxfButton />
       </ToolGroup>
       <div className="tb-spacer" />
       <div className="tb-group">

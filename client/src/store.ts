@@ -17,6 +17,7 @@ import type {
   SketchConstraint,
   SketchEntity,
   SketchFeature,
+  SketchImport,
 } from "@rockett/shared";
 import {
   newId,
@@ -214,6 +215,7 @@ interface State {
   deleteSketchEntities: (entityIds: string[]) => Promise<void>;
   /** Toggle the construction flag on draft sketch curves. */
   toggleSketchConstruction: (entityIds: string[]) => Promise<void>;
+  insertSketchImport: (format: string, imported: SketchImport) => Promise<void>;
 
   addFeature: (feature: Feature) => Promise<void>;
   updateFeature: (fid: string, patch: Partial<Feature>) => Promise<void>;
@@ -840,6 +842,33 @@ export const useStore = create<State>((set, get) => ({
       draftSketch.constraints,
     );
     await get().commitDraftSketch();
+  },
+
+  async insertSketchImport(format, imported) {
+    const { draftSketch, busy } = get();
+    if (!draftSketch || busy) return;
+    const skipped =
+      imported.skipped === 0
+        ? ""
+        : `Skipped ${imported.skipped} unsupported ${format} ${imported.skipped === 1 ? "entity" : "entities"}.`;
+    if (imported.entities.length === 0) {
+      set({
+        error:
+          `This ${format} file has no lines, arcs, circles or points to insert. ${skipped}`.trim(),
+      });
+      return;
+    }
+    get().updateDraftSketch(
+      [...draftSketch.entities, ...imported.entities],
+      draftSketch.constraints,
+    );
+    try {
+      await get().commitDraftSketch();
+    } catch {
+      set({ draftSketch });
+      return;
+    }
+    if (skipped) set({ error: skipped });
   },
 
   async addFeature(feature) {

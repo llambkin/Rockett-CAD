@@ -40,6 +40,7 @@ everything downstream against persistent topology references.
 - **Angle snap**: hold Shift to snap a line to 15 degree steps; press A to lock its angle.
 - **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
 - **Project, trim and extend**: link earlier model edges into a sketch, trim curves at intersections, extend them to boundaries.
+- **Insert DXF**: bring lines, arcs, circles, points and polylines from a DXF file into the open sketch as editable geometry.
 - **Edit in place**: editing a sketch rolls the model back to it; Finish Sketch returns to the saved position.
 
 ### Model
