@@ -36,6 +36,7 @@ everything downstream against persistent topology references.
 
 - **Sketcher**: draw lines, rectangles, circles, arcs, polygons, slots, points and construction geometry.
 - **Constraints and dimensions**: constrain shapes, drive them with editable dimensions and watch the remaining degrees of freedom.
+- **Line angles**: a typed angle is kept; double-click a line to edit its length and angle.
 - **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
 - **Project, trim and extend**: link earlier model edges into a sketch, trim curves at intersections, extend them to boundaries.
 - **Edit in place**: editing a sketch rolls the model back to it; Finish Sketch returns to the saved position.
