@@ -1,12 +1,16 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { act, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   AngleField,
   AxisField,
   LengthField,
   NumField,
 } from "../../src/components/form/fields";
+import { Toolbar } from "../../src/components/Toolbar";
+import { useStore } from "../../src/store";
 
 async function mount(element: ReactElement) {
   const host = document.body.appendChild(document.createElement("div"));
@@ -121,4 +125,44 @@ it("shows AngleField in degrees", async () => {
   await type(input, "45");
   expect(onChange.mock.calls).toEqual([[45]]);
   await unmount();
+});
+
+describe("raw number inputs", () => {
+  it("exist only in the form kit", () => {
+    const dir = join(import.meta.dirname, "../../src/components");
+    const hits = (readdirSync(dir, { recursive: true }) as string[]).filter(
+      (f) =>
+        f.endsWith(".tsx") &&
+        f !== "FeatureDialog.tsx" &&
+        readFileSync(join(dir, f), "utf8").includes('type="number"'),
+    );
+    expect(hits).toEqual([join("form", "fields.tsx")]);
+  });
+
+  it("leave polygon sides alone when the box is cleared", async () => {
+    useStore.setState({
+      mode: {
+        name: "sketch",
+        sketchId: "sk",
+        tool: "polygon",
+        constructionMode: false,
+      },
+      dialogParams: { polygonSides: 8 },
+    });
+    const { host, unmount } = await mount(<Toolbar />);
+    const input = host.querySelector<HTMLInputElement>(
+      'input[aria-label="Polygon sides"]',
+    )!;
+    expect([input.className, input.title, input.value]).toEqual([
+      "tb-input",
+      "Polygon sides",
+      "8",
+    ]);
+    await type(input, "");
+    await type(input, "30");
+    expect(useStore.getState().dialogParams.polygonSides).toBe(8);
+    await type(input, "5");
+    expect(useStore.getState().dialogParams.polygonSides).toBe(5);
+    await unmount();
+  });
 });

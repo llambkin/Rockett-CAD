@@ -12,6 +12,7 @@ import { uv3 } from "../three/CadViewport";
 import { disposeGroup } from "../three/dispose";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
+import { LengthField } from "./form/fields";
 
 export function SketchOffsetPanel() {
   const mode = useStore((s) => s.mode);
@@ -169,16 +170,14 @@ function OffsetBody() {
               ? `${ids.length} curve${ids.length === 1 ? "" : "s"} selected · Ctrl-click to add or remove curves`
               : "Select a curve. Hold Ctrl to choose the lines and arcs that make your chain."}
         </p>
-        <label className="field">
-          Distance (mm)
-          <input
-            type="number"
-            step="0.5"
-            aria-label="Offset distance"
-            value={params.sketchOffset ?? 2}
-            onChange={(e) => setParams({ sketchOffset: e.target.value })}
-          />
-        </label>
+        <LengthField
+          label="Distance"
+          units="mm"
+          step={0.5}
+          ariaLabel="Offset distance"
+          value={amount}
+          onChange={(v) => setParams({ sketchOffset: v })}
+        />
         <button
           className="btn"
           onClick={() => setParams({ sketchOffset: -amount })}
@@ -202,20 +201,16 @@ function OffsetBody() {
             </label>
           ))}
         {!editing && manual && (
-          <label className="field">
-            Join gaps up to (mm)
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.001"
-              aria-label="Offset join tolerance"
-              value={params.offsetJoinTolerance ?? 0.01}
-              onChange={(e) =>
-                setParams({ offsetJoinTolerance: e.target.value })
-              }
-            />
-          </label>
+          <LengthField
+            label="Join gaps up to"
+            units="mm"
+            min={0}
+            max={1}
+            step={0.001}
+            ariaLabel="Offset join tolerance"
+            value={joinTolerance}
+            onChange={(v) => setParams({ offsetJoinTolerance: v })}
+          />
         )}
         {preview.result?.joinedGaps && (
           <p className="field-hint">

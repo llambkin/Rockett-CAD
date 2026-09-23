@@ -12,6 +12,7 @@ import { StepImportButton } from "./StepImportButton";
 import { SketchInsertButtons } from "./SketchInsertButtons";
 import { withKey } from "../shortcuts";
 import { ToolButton } from "./ToolButton";
+import { NumField } from "./form/fields";
 import type { IconId } from "../icons";
 
 type DialogButton = { id: DialogType & IconId; label: string; title: string };
@@ -427,16 +428,15 @@ function SketchToolbar() {
           />
         ))}
         {tool === "polygon" && (
-          <input
+          <NumField
             className="tb-input"
-            type="number"
+            title="Polygon sides"
+            ariaLabel="Polygon sides"
+            int
             min={3}
             max={24}
-            value={dialogParams.polygonSides ?? 6}
-            onChange={(e) =>
-              setDialogParams({ polygonSides: Number(e.target.value) })
-            }
-            title="Polygon sides"
+            value={Number(dialogParams.polygonSides ?? 6)}
+            onChange={(v) => setDialogParams({ polygonSides: v })}
           />
         )}
         <ToolButton

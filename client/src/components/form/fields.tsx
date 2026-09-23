@@ -10,48 +10,59 @@ export function NumField({
   max,
   step,
   ariaLabel,
+  className,
+  title,
 }: {
-  label: string;
+  label?: string;
   value: number;
   onChange: (v: number) => void;
   int?: boolean;
-  min?: number;
-  max?: number;
-  step?: number;
-  ariaLabel?: string;
+  min?: number | undefined;
+  max?: number | undefined;
+  step?: number | undefined;
+  ariaLabel?: string | undefined;
+  className?: string;
+  title?: string;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
   useEffect(() => {
     if (!focused) setText(Number.isFinite(value) ? String(value) : "");
   }, [value, focused]);
-  return (
+  const input = (
+    <input
+      type="number"
+      className={className}
+      title={title}
+      min={min}
+      max={max}
+      step={step ?? (int ? 1 : "any")}
+      aria-label={ariaLabel}
+      value={focused ? text : Number.isFinite(value) ? String(value) : ""}
+      onFocus={() => {
+        setText(Number.isFinite(value) ? String(value) : "");
+        setFocused(true);
+      }}
+      onBlur={() => setFocused(false)}
+      onChange={(e) => {
+        setText(e.target.value);
+        const v = Number(e.target.value);
+        if (
+          e.target.value.trim() !== "" &&
+          Number.isFinite(v) &&
+          (min === undefined || v >= min) &&
+          (max === undefined || v <= max)
+        )
+          onChange(v);
+      }}
+    />
+  );
+  return label === undefined ? (
+    input
+  ) : (
     <label className="field">
       <span>{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step ?? (int ? 1 : "any")}
-        aria-label={ariaLabel}
-        value={focused ? text : Number.isFinite(value) ? String(value) : ""}
-        onFocus={() => {
-          setText(Number.isFinite(value) ? String(value) : "");
-          setFocused(true);
-        }}
-        onBlur={() => setFocused(false)}
-        onChange={(e) => {
-          setText(e.target.value);
-          const v = Number(e.target.value);
-          if (
-            e.target.value.trim() !== "" &&
-            Number.isFinite(v) &&
-            (min === undefined || v >= min) &&
-            (max === undefined || v <= max)
-          )
-            onChange(v);
-        }}
-      />
+      {input}
     </label>
   );
 }
@@ -61,17 +72,31 @@ export function LengthField({
   value,
   units,
   onChange,
+  min,
+  max,
+  step,
+  ariaLabel,
 }: {
   label: string;
   value: number;
   units: Units;
   onChange: (mm: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  ariaLabel?: string;
 }) {
+  const shown = (mm: number | undefined) =>
+    mm === undefined ? undefined : fromMm(mm, units);
   return (
     <NumField
       label={`${label} (${units})`}
       value={fromMm(value, units)}
       onChange={(v) => onChange(toMm(v, units))}
+      min={shown(min)}
+      max={shown(max)}
+      step={shown(step)}
+      ariaLabel={ariaLabel}
     />
   );
 }
