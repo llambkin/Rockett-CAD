@@ -6,6 +6,7 @@
 import { useStore, type DialogType, type SketchTool } from "../store";
 import { newId, type SketchConstraint } from "@rockett/shared";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { NAMED_VIEWS } from "../three/camera";
 import { filterSelectionFor } from "../dialogPicks";
 import { StepImportButton } from "./StepImportButton";
 import { SketchInsertButtons } from "./SketchInsertButtons";
@@ -194,20 +195,6 @@ export function Toolbar() {
     </div>
   );
 }
-
-export const NAMED_VIEWS: Array<{
-  label: string;
-  dir: [number, number, number];
-  up: [number, number, number];
-}> = [
-  { label: "Front", dir: [0, -1, 0], up: [0, 0, 1] },
-  { label: "Back", dir: [0, 1, 0], up: [0, 0, 1] },
-  { label: "Left", dir: [-1, 0, 0], up: [0, 0, 1] },
-  { label: "Right", dir: [1, 0, 0], up: [0, 0, 1] },
-  { label: "Top", dir: [0, 0, 1], up: [0, 1, 0] },
-  { label: "Bottom", dir: [0, 0, -1], up: [0, -1, 0] },
-  { label: "Iso", dir: [1, -1, 0.8], up: [0, 0, 1] },
-];
 
 export function toggleProjection() {
   const vp = viewportHandle.current;

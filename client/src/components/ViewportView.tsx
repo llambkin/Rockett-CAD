@@ -822,8 +822,14 @@ export function ViewportView() {
     let lastX = 0,
       lastY = 0;
     let orbiting = false;
+    let pivot: THREE.Vector3 | undefined;
     let panning = false;
     let dragMoved = false;
+
+    const startOrbit = (e: PointerEvent) => {
+      orbiting = true;
+      pivot = vp.pick(e.clientX, e.clientY, { bodies: true })?.point;
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       button = e.button;
@@ -832,13 +838,13 @@ export function ViewportView() {
       dragMoved = false;
       el.setPointerCapture(e.pointerId);
       if (e.button === 1) {
-        if (e.shiftKey) orbiting = true;
+        if (e.shiftKey) startOrbit(e);
         else panning = true;
         e.preventDefault();
         return;
       }
       if (e.button === 2) {
-        orbiting = true;
+        startOrbit(e);
         return;
       }
       if (e.button === 0) {
@@ -966,7 +972,7 @@ export function ViewportView() {
           }
         }
       } else if (orbiting) {
-        vp.orbit(dx, dy);
+        vp.orbitTrackball(dx, dy, pivot);
       } else if (panning) {
         vp.pan(dx, dy);
       } else if (button === 0) {

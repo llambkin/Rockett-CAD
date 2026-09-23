@@ -120,14 +120,14 @@ Every change saves automatically, and projects survive container recreation.
 
 ### Viewport controls
 
-| Action                             | Input                                                      |
-| ---------------------------------- | ---------------------------------------------------------- |
-| Select                             | Left click (Ctrl adds; Alt+click cycles overlapping picks) |
-| Context menu                       | Right click on geometry                                    |
-| Orbit                              | Right-drag, Shift+middle-drag, or drag the ViewCube        |
-| Pan                                | Middle-drag                                                |
-| Zoom                               | Scroll wheel (to cursor)                                   |
-| Named views / fit / ortho or persp | Toolbar (right side) and ViewCube                          |
+| Action                             | Input                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| Select                             | Left click (Ctrl adds; Alt+click cycles overlapping picks)                              |
+| Context menu                       | Right click on geometry                                                                 |
+| Orbit                              | Right-drag or Shift+middle-drag, about the point under the cursor; or drag the ViewCube |
+| Pan                                | Middle-drag                                                                             |
+| Zoom                               | Scroll wheel (to cursor)                                                                |
+| Named views / fit / ortho or persp | Toolbar (right side) and ViewCube                                                       |
 
 ### Shortcuts
 

@@ -18,6 +18,9 @@ import type { Selection } from "../store";
 import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 import { themeColor } from "../theme/tokens";
+import { cameraTween, orbitAbout, type CameraPose } from "./camera";
+
+const VIEW_TURN_MS = 300;
 
 export interface PickResult {
   selection: Selection;
@@ -107,15 +110,8 @@ export class CadViewport {
   private raycaster = new THREE.Raycaster();
   private animFrame = 0;
   private animating: null | {
-    t: number;
-    fromPos: THREE.Vector3;
-    toPos: THREE.Vector3;
-    fromUp: THREE.Vector3;
-    toUp: THREE.Vector3;
-    fromTarget: THREE.Vector3;
-    toTarget: THREE.Vector3;
-    fromZoom: number;
-    toZoom: number;
+    start: number;
+    poseAt: (t: number) => CameraPose;
   } = null;
 
   originPlanesVisible = true;
@@ -158,12 +154,12 @@ export class CadViewport {
     this.buildOriginDisplay();
     this.resize();
 
-    const loop = () => {
+    const loop = (now: number) => {
       this.animFrame = requestAnimationFrame(loop);
-      this.stepAnimation();
+      this.stepAnimation(now);
       this.render();
     };
-    loop();
+    loop(performance.now());
   }
 
   dispose() {
@@ -221,54 +217,18 @@ export class CadViewport {
     this.orthoCam.updateProjectionMatrix();
   }
 
-  /**
-   * Trackball-style orbit ("grab the model"): horizontal drag rotates the
-   * model around the screen-vertical axis, vertical drag around the
-   * screen-horizontal axis, so the geometry under the cursor follows it from
-   * ANY orientation (the turntable orbit degenerates near top/bottom views).
-   * Used by the ViewCube drag.
-   */
-  orbitTrackball(dx: number, dy: number) {
+  orbitTrackball(dx: number, dy: number, pivot = this.target) {
     const cam = this.camera;
-    const offset = cam.position.clone().sub(this.target);
-    const forward = offset.clone().normalize().negate();
-    const right = new THREE.Vector3().crossVectors(forward, cam.up).normalize();
-    const screenUp = new THREE.Vector3()
-      .crossVectors(right, forward)
-      .normalize();
-    // model follows the cursor → camera rotates by the inverse
-    const q = new THREE.Quaternion()
-      .setFromAxisAngle(screenUp, dx * 0.014)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(right, dy * 0.014))
-      .invert();
-    offset.applyQuaternion(q);
-    const newUp = cam.up.clone().applyQuaternion(q).normalize();
-    for (const c of [this.orthoCam, this.perspCam]) {
-      c.up.copy(newUp);
-      c.position.copy(this.target).add(offset);
-      c.lookAt(this.target);
-    }
-  }
-
-  orbit(dx: number, dy: number) {
-    const cam = this.camera;
-    const offset = cam.position.clone().sub(this.target);
-    const quat = new THREE.Quaternion().setFromUnitVectors(
-      cam.up.clone().normalize(),
-      new THREE.Vector3(0, 0, 1),
+    const view = orbitAbout(
+      { position: cam.position, up: cam.up, target: this.target },
+      pivot,
+      dx,
+      dy,
     );
-    // Use spherical around current up
-    const spherical = new THREE.Spherical().setFromVector3(
-      offset.clone().applyQuaternion(quat),
-    );
-    spherical.theta -= dx * 0.008;
-    spherical.phi -= dy * 0.008;
-    spherical.phi = Math.max(0.02, Math.min(Math.PI - 0.02, spherical.phi));
-    const newOffset = new THREE.Vector3()
-      .setFromSpherical(spherical)
-      .applyQuaternion(quat.clone().invert());
+    this.target.copy(view.target);
     for (const c of [this.orthoCam, this.perspCam]) {
-      c.position.copy(this.target).add(newOffset);
+      c.up.copy(view.up);
+      c.position.copy(view.position);
       c.lookAt(this.target);
     }
   }
@@ -391,46 +351,42 @@ export class CadViewport {
     toZoom: number,
     animate = true,
   ) {
+    const to = { position: toPos, up: toUp, target: toTarget, zoom: toZoom };
     if (!animate) {
-      this.target.copy(toTarget);
-      this.zoom = toZoom;
-      this.applyZoom();
-      for (const c of [this.orthoCam, this.perspCam]) {
-        c.up.copy(toUp);
-        c.position.copy(toPos);
-        c.lookAt(this.target);
-      }
+      this.animating = null;
+      this.applyPose(to);
       return;
     }
     this.animating = {
-      t: 0,
-      fromPos: this.camera.position.clone(),
-      toPos,
-      fromUp: this.camera.up.clone(),
-      toUp,
-      fromTarget: this.target.clone(),
-      toTarget,
-      fromZoom: this.zoom,
-      toZoom,
+      start: performance.now(),
+      poseAt: cameraTween(
+        {
+          position: this.camera.position.clone(),
+          up: this.camera.up.clone(),
+          target: this.target.clone(),
+          zoom: this.zoom,
+        },
+        to,
+      ),
     };
   }
 
-  private stepAnimation() {
+  private stepAnimation(now: number) {
     if (!this.animating) return;
-    const a = this.animating;
-    a.t = Math.min(1, a.t + 0.08);
-    const e = 1 - Math.pow(1 - a.t, 3);
-    this.target.lerpVectors(a.fromTarget, a.toTarget, e);
-    this.zoom = a.fromZoom + (a.toZoom - a.fromZoom) * e;
+    const t = (now - this.animating.start) / VIEW_TURN_MS;
+    this.applyPose(this.animating.poseAt(t));
+    if (t >= 1) this.animating = null;
+  }
+
+  private applyPose(pose: CameraPose) {
+    this.target.copy(pose.target);
+    this.zoom = pose.zoom;
     this.applyZoom();
-    const pos = new THREE.Vector3().lerpVectors(a.fromPos, a.toPos, e);
-    const up = new THREE.Vector3().lerpVectors(a.fromUp, a.toUp, e).normalize();
     for (const c of [this.orthoCam, this.perspCam]) {
-      c.up.copy(up);
-      c.position.copy(pos);
+      c.up.copy(pose.up);
+      c.position.copy(pose.position);
       c.lookAt(this.target);
     }
-    if (a.t >= 1) this.animating = null;
   }
 
   setProjection(p: "orthographic" | "perspective") {

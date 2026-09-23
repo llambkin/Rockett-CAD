@@ -1,7 +1,8 @@
 import { useStore, type Selection } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import { NAMED_VIEWS, toggleProjection } from "./Toolbar";
+import { NAMED_VIEWS } from "../three/camera";
+import { toggleProjection } from "./Toolbar";
 
 async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   const s = useStore.getState();
