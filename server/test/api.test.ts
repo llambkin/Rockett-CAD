@@ -537,6 +537,41 @@ describe("REST API MVP workflow", () => {
     ).rejects.toThrow(/400.*supported: stl, 3mf/);
   });
 
+  it("accepts a PNG and rejects malformed or oversized uploads", async () => {
+    const { document } = await api("POST", "/projects", { name: "Uploads" });
+    const post = async (url: string, field: string, bytes: Buffer) => {
+      const form = new FormData();
+      form.append(field, new Blob([new Uint8Array(bytes)]), "upload");
+      return fetch(base + url, { method: "POST", body: form });
+    };
+    const assets = `/projects/${document.id}/assets`;
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const accepted = await post(assets, "image", png);
+    expect(accepted.status).toBe(200);
+    const { assetId } = await accepted.json();
+    const stored = await fetch(`${base}${assets}/${assetId}`);
+    expect(Buffer.from(await stored.arrayBuffer())).toEqual(png);
+    const malformed = Buffer.concat([
+      png.subarray(0, 8),
+      Buffer.from("not a PNG chunk stream at all"),
+    ]);
+    expect((await post(assets, "image", malformed)).status).toBe(400);
+    const image = Buffer.alloc(25 * 1024 * 1024 + 1);
+    png.copy(image);
+    const tooLarge = await post(assets, "image", image);
+    expect(tooLarge.status).toBe(413);
+    expect((await tooLarge.json()).error).toMatch(/25 MB/);
+    const before = await api("GET", "/projects");
+    const step = Buffer.alloc(10 * 1024 * 1024 + 1, " ");
+    const stepTooLarge = await post("/projects/import-step", "file", step);
+    expect(stepTooLarge.status).toBe(413);
+    expect((await stepTooLarge.json()).error).toMatch(/10 MB/);
+    expect(await api("GET", "/projects")).toEqual(before);
+  });
+
   it("accepts only known feature keys", async () => {
     const { document } = await api("POST", "/projects", { name: "Keys" });
     const url = `/projects/${document.id}`;

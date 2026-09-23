@@ -38,15 +38,35 @@ import {
   ValidationError,
 } from "./validate.js";
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
-});
+function multipart(field: string, megabytes: number, error: string) {
+  const receive = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: megabytes * 1024 * 1024, files: 1 },
+  }).single(field);
+  return (req: any, res: any, next: any) =>
+    receive(req, res, (err: any) => {
+      if (!err) return next();
+      res.status(err.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error });
+    });
+}
+
+const receiveImage = multipart(
+  "image",
+  25,
+  "Upload one PNG, JPEG or WebP image, up to 25 MB.",
+);
+const receiveStep = multipart(
+  "file",
+  10,
+  "Upload one STEP file (.step or .stp), up to 10 MB.",
+);
+
+const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
 const IMAGE_MAGIC: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
   {
     mime: "image/png",
-    test: (b) => b.length > 8 && b.readUInt32BE(0) === 0x89504e47,
+    test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
   },
   {
     mime: "image/jpeg",
@@ -242,18 +262,6 @@ export function createApiRouter(store: ProjectStore): Router {
   );
 
   // ----- features -----
-  const stepUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
-  }).single("file");
-  const receiveStep = (req: any, res: any, next: any) =>
-    stepUpload(req, res, (error: any) => {
-      if (error)
-        res.status(400).json({
-          error: "Upload one STEP file (.step or .stp), up to 10 MB.",
-        });
-      else next();
-    });
   const importStep = wrap(async (req, res) => {
     if (!req.file || !/\.(step|stp)$/i.test(req.file.originalname))
       throw new ValidationError("Choose a .step or .stp file");
@@ -557,7 +565,7 @@ export function createApiRouter(store: ProjectStore): Router {
 
   router.post(
     "/projects/:id/assets",
-    upload.single("image"),
+    receiveImage,
     wrap(async (req, res) => {
       await store.load(req.params.id); // ensure project exists
       const file = req.file;
