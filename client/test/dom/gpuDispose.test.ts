@@ -1,9 +1,16 @@
 import * as THREE from "three";
-import { afterEach, expect, it, vi } from "vitest";
-import type { SketchEntity } from "@rockett/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  CadDocument,
+  EvaluateResult,
+  PlaneFrame,
+  ReferenceImageFeature,
+  SketchEntity,
+} from "@rockett/shared";
 import type { Selection } from "../../src/store";
 import type { CadViewport } from "../../src/three/CadViewport";
 import { clearGroup, disposeGroup } from "../../src/three/dispose";
+import { syncReferenceImages } from "../../src/three/referenceImages";
 import {
   renderSketches,
   type SketchRenderInput,
@@ -123,4 +130,102 @@ it("disposeGroup releases a material array entry once", () => {
   disposeGroup(group);
 
   expect(materialDispose).toHaveBeenCalledTimes(1);
+});
+
+type ImageMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+
+const frame: PlaneFrame = {
+  origin: [0, 0, 0],
+  xAxis: [1, 0, 0],
+  yAxis: [0, 1, 0],
+  normal: [0, 0, 1],
+};
+
+function image(id: string, assetId: string): ReferenceImageFeature {
+  return {
+    id,
+    name: id,
+    suppressed: false,
+    type: "referenceImage",
+    plane: { kind: "origin", plane: "XY" },
+    assetId,
+    fileName: `${assetId}.png`,
+    transform: { u: 0, v: 0, rotation: 0, scale: 1 },
+    opacity: 0.5,
+    visible: true,
+    width: 4,
+    height: 3,
+  };
+}
+
+function sync(viewport: CadViewport, features: ReferenceImageFeature[]) {
+  const doc = {
+    id: "p1",
+    features,
+    timelinePosition: features.length,
+  } as unknown as CadDocument;
+  const evaluation = {
+    planes: features.map((f) => ({ featureId: f.id, frame, size: 10 })),
+  } as unknown as EvaluateResult;
+  syncReferenceImages(viewport, doc, evaluation);
+}
+
+function stubImageLoads() {
+  const pending: (() => void)[] = [];
+  vi.spyOn(THREE.ImageLoader.prototype, "load").mockImplementation(
+    (_url, onLoad) => {
+      const img = document.createElement("img");
+      pending.push(() => onLoad?.(img));
+      return img;
+    },
+  );
+  return () => {
+    for (const finish of pending.splice(0)) finish();
+  };
+}
+
+function meshes(viewport: CadViewport): ImageMesh[] {
+  return (viewport.scene.children[0]?.children ?? []) as ImageMesh[];
+}
+
+describe("reference images", () => {
+  it("reference image removed disposes its texture, geometry and material", () => {
+    const finishLoads = stubImageLoads();
+    const viewport = { scene: new THREE.Scene() } as unknown as CadViewport;
+    const a = image("a", "asset-a");
+    const b = image("b", "asset-b");
+    sync(viewport, [a, b]);
+    finishLoads();
+    const [removed, kept] = meshes(viewport);
+    if (!removed || !kept) throw new Error("expected two image meshes");
+    const geometryDispose = vi.spyOn(removed.geometry, "dispose");
+    const materialDispose = vi.spyOn(removed.material, "dispose");
+    const textureDispose = vi.spyOn(removed.material.map!, "dispose");
+    const keptTextureDispose = vi.spyOn(kept.material.map!, "dispose");
+
+    sync(viewport, [{ ...a, visible: false }, b]);
+
+    expect(geometryDispose).toHaveBeenCalledTimes(1);
+    expect(materialDispose).toHaveBeenCalledTimes(1);
+    expect(textureDispose).toHaveBeenCalledTimes(1);
+    expect(keptTextureDispose).not.toHaveBeenCalled();
+    expect(meshes(viewport)).toHaveLength(1);
+    expect(meshes(viewport)[0]?.material.map).toBe(kept.material.map);
+  });
+
+  it("an image hidden while loading keeps its texture until the load settles", () => {
+    const finishLoads = stubImageLoads();
+    const viewport = { scene: new THREE.Scene() } as unknown as CadViewport;
+    const a = image("a", "asset-a");
+    sync(viewport, [a]);
+    const texture = meshes(viewport)[0]?.material.map;
+    if (!texture) throw new Error("expected a textured image mesh");
+    const textureDispose = vi.spyOn(texture, "dispose");
+
+    sync(viewport, [{ ...a, visible: false }]);
+    expect(textureDispose).not.toHaveBeenCalled();
+
+    finishLoads();
+    expect(textureDispose).toHaveBeenCalledTimes(1);
+  });
 });

@@ -15,6 +15,7 @@ import { newId, modifySketch } from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
 import { worldToClient } from "../three/screen";
+import { syncReferenceImages } from "../three/referenceImages";
 import { renderSketches, type SketchRenderInput } from "../three/sketchRender";
 import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
@@ -3187,61 +3188,4 @@ function measureCurrent(c: SketchConstraint, entities: SketchEntity[]): number {
     return (Math.atan2(Math.abs(cross), dot) * 180) / Math.PI;
   }
   return 0;
-}
-
-// ---------------------------------------------------------------------------
-// Reference images
-// ---------------------------------------------------------------------------
-
-const textureCache = new Map<string, THREE.Texture>();
-// per-viewport image group — a module-global group stayed attached to the
-// FIRST viewport's scene, so canvases never showed after switching projects
-const imageRoots = new WeakMap<CadViewport, THREE.Group>();
-
-function syncReferenceImages(vp: CadViewport, doc: any, evaluation: any) {
-  let imageRoot = imageRoots.get(vp);
-  if (!imageRoot) {
-    imageRoot = new THREE.Group();
-    vp.scene.add(imageRoot);
-    imageRoots.set(vp, imageRoot);
-  }
-  imageRoot.clear();
-  if (!doc) return;
-  const activeFeatures = doc.features.slice(0, doc.timelinePosition);
-  for (const f of activeFeatures) {
-    if (f.type !== "referenceImage" || f.suppressed || !f.visible) continue;
-    const planeInfo = evaluation.planes.find((p: any) => p.featureId === f.id);
-    if (!planeInfo) continue;
-    const url = `/api/projects/${doc.id}/assets/${f.assetId}`;
-    let tex = textureCache.get(url);
-    if (!tex) {
-      tex = new THREE.TextureLoader().load(url);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      textureCache.set(url, tex);
-    }
-    const w = f.width * f.transform.scale;
-    const h = f.height * f.transform.scale;
-    const geom = new THREE.PlaneGeometry(w, h);
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      opacity: f.opacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geom, mat);
-    const frame = planeInfo.frame;
-    const m = new THREE.Matrix4().makeBasis(
-      new THREE.Vector3(...frame.xAxis),
-      new THREE.Vector3(...frame.yAxis),
-      new THREE.Vector3(...frame.normal),
-    );
-    m.setPosition(uv3(frame, f.transform.u, f.transform.v));
-    const rot = new THREE.Matrix4().makeRotationZ(
-      (f.transform.rotation * Math.PI) / 180,
-    );
-    mesh.applyMatrix4(new THREE.Matrix4().multiplyMatrices(m, rot));
-    mesh.renderOrder = -2;
-    imageRoot.add(mesh);
-  }
 }
