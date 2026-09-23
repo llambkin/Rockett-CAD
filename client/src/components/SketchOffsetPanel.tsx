@@ -175,6 +175,7 @@ function OffsetBody() {
           units="mm"
           step={0.5}
           ariaLabel="Offset distance"
+          autoFocus
           value={amount}
           onChange={(v) => setParams({ sketchOffset: v })}
         />

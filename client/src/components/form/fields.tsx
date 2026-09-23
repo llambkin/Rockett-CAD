@@ -1,5 +1,5 @@
 import { fromMm, toMm, type Units } from "@rockett/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function NumField({
   label,
@@ -12,6 +12,7 @@ export function NumField({
   ariaLabel,
   className,
   title,
+  autoFocus,
 }: {
   label?: string;
   value: number;
@@ -23,14 +24,25 @@ export function NumField({
   ariaLabel?: string | undefined;
   className?: string;
   title?: string;
+  autoFocus?: boolean | undefined;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!focused) setText(Number.isFinite(value) ? String(value) : "");
   }, [value, focused]);
+  useEffect(() => {
+    if (!autoFocus) return;
+    const t = window.setTimeout(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
+    return () => window.clearTimeout(t);
+  }, []);
   const input = (
     <input
+      ref={ref}
       type="number"
       className={className}
       title={title}
@@ -76,6 +88,7 @@ export function LengthField({
   max,
   step,
   ariaLabel,
+  autoFocus,
 }: {
   label: string;
   value: number;
@@ -85,6 +98,7 @@ export function LengthField({
   max?: number;
   step?: number;
   ariaLabel?: string;
+  autoFocus?: boolean;
 }) {
   const shown = (mm: number | undefined) =>
     mm === undefined ? undefined : fromMm(mm, units);
@@ -97,6 +111,7 @@ export function LengthField({
       max={shown(max)}
       step={shown(step)}
       ariaLabel={ariaLabel}
+      autoFocus={autoFocus}
     />
   );
 }

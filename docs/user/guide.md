@@ -156,9 +156,12 @@ Undo/redo is application-level and separate from the CAD timeline.
 ### Panels and errors
 
 Tool panels keep their action buttons within the window; the arrow in the title
-bar restores their docked position. Enter in a panel field presses its confirm
-button and Escape inside a panel presses Cancel. Escape from anywhere cancels an
-open feature dialog, reverts its live preview and clears the selection.
+bar restores their docked position. A feature dialog or the sketch offset
+panel opens with its main number selected, so typing replaces it; picks in the
+viewport still work while it has focus. Enter in a panel field presses its
+confirm button and Escape inside a panel presses Cancel. Escape from anywhere
+cancels an open feature dialog, reverts its live preview and clears the
+selection.
 
 Errors remain visible until dismissed or the next operation starts, and their
 text can be selected and copied.

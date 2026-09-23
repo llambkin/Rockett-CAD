@@ -262,6 +262,7 @@ function DialogBody({
           </div>
           <NumField
             label="Distance (mm)"
+            autoFocus
             value={p("distance", 10)}
             onChange={(v) => setParams({ distance: v })}
           />
@@ -360,6 +361,7 @@ function DialogBody({
           />
           <NumField
             label="Angle (°)"
+            autoFocus
             value={p("angle", 360)}
             onChange={(v) => setParams({ angle: v })}
           />
@@ -399,6 +401,7 @@ function DialogBody({
           <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
           <NumField
             label="X (mm)"
+            autoFocus
             value={p("tx", 0)}
             onChange={(v) => setParams({ tx: v })}
           />
@@ -527,6 +530,7 @@ function DialogBody({
           />
           <NumField
             label="Depth (mm)"
+            autoFocus
             value={p("depth", 1)}
             onChange={(v) => setParams({ depth: v })}
           />
@@ -577,6 +581,7 @@ function DialogBody({
           </small>
           <NumField
             label="Radius (mm)"
+            autoFocus
             value={p("radius", 2)}
             onChange={(v) => setParams({ radius: v })}
           />
@@ -618,6 +623,7 @@ function DialogBody({
           </small>
           <NumField
             label="Distance (mm)"
+            autoFocus
             value={p("distance", 1)}
             onChange={(v) => setParams({ distance: v })}
           />
@@ -648,6 +654,7 @@ function DialogBody({
           />
           <NumField
             label="Thickness (mm)"
+            autoFocus
             value={p("thickness", 2)}
             onChange={(v) => setParams({ thickness: v })}
           />
@@ -754,6 +761,7 @@ function DialogBody({
           />
           <NumField
             label="Distance (mm, − = inward)"
+            autoFocus
             value={p("distance", 5)}
             onChange={(v) => setParams({ distance: v })}
           />
@@ -835,6 +843,7 @@ function DialogBody({
           />
           <NumField
             label="Spacing (mm)"
+            autoFocus
             value={p("spacing", 20)}
             onChange={(v) => setParams({ spacing: v })}
           />
@@ -877,6 +886,7 @@ function DialogBody({
           />
           <NumField
             label="Quantity"
+            autoFocus
             value={p("count", 6)}
             onChange={(v) => setParams({ count: v })}
             int
@@ -930,6 +940,7 @@ function DialogBody({
           {p("method", "offset") === "offset" && (
             <NumField
               label="Offset (mm)"
+              autoFocus
               value={p("distance", 10)}
               onChange={(v) => setParams({ distance: v })}
             />
@@ -1175,6 +1186,7 @@ function ReferenceImagePanel({
         )}
         <NumField
           label="Scale (mm / pixel)"
+          autoFocus
           value={scale}
           onChange={setScale}
         />
