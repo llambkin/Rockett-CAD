@@ -1,6 +1,6 @@
 # Projects kept in the browser
 
-Status: proposal awaiting Mark's approval under DEC-407. The implementation
+Status: approved by Mark under DEC-407. The implementation
 rows are written from the approved design. Colours are the SET-023 graded
 greys in `design-settings.md`. It sits beside the DEC-406 folders in
 `design-projects.md` and reuses their folder row, breadcrumb, Move to and drag,
