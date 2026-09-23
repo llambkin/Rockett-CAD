@@ -687,7 +687,12 @@ describe("built app", () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-built-"));
     const proc = spawn(process.execPath, ["server/dist/server.js"], {
       cwd: root,
-      env: { ...process.env, ROCKETT_PORT: "0", DATA_DIR: dataDir },
+      env: {
+        ...process.env,
+        ROCKETT_PORT: "0",
+        DATA_DIR: dataDir,
+        ROCKETT_ALLOWED_ORIGINS: "http://127.0.0.1",
+      },
       stdio: ["ignore", "pipe", "inherit"],
     });
     child = proc;

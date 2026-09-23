@@ -13,11 +13,20 @@ import type { AddressInfo } from "node:net";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { createApp } from "./app.js";
+import { parseAllowedOrigins } from "./auth/origin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.ROCKETT_PORT || 8788);
 const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, "../../data");
+
+let allowedOrigins: string[];
+try {
+  allowedOrigins = parseAllowedOrigins(process.env.ROCKETT_ALLOWED_ORIGINS);
+} catch (err) {
+  console.error(`[rockett] ${(err as Error).message}`);
+  process.exit(1);
+}
 
 async function main() {
   console.log("[rockett] loading OCCT kernel…");
@@ -38,7 +47,7 @@ async function main() {
   const clientDir = candidates.find((c) =>
     fs.existsSync(path.join(c, "index.html")),
   );
-  const app = createApp({ store, clientDir });
+  const app = createApp({ store, clientDir, allowedOrigins });
   if (clientDir) {
     console.log(`[rockett] serving client from ${clientDir}`);
   } else {
