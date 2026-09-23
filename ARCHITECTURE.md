@@ -93,6 +93,8 @@ selected when the dialog opens, so typing replaces it.
 ## Performance notes
 
 - Regeneration is incremental (feature-snapshot cache keyed by feature JSON).
+- The server keeps engines for the 8 most recently used projects. Evicting one
+  releases its snapshot shapes; its next evaluation rebuilds from scratch.
 - Tessellations are cached per body id and shape hash, bounded at 256 MB per
   engine; only changed bodies re-mesh. A rename or visibility change does not.
 - Viewport work (orbit/pan/zoom, hover, drag previews) never invokes the

@@ -231,13 +231,16 @@ class DocumentEngine {
   }
 }
 
+const MAX_ENGINES = 8;
 const engines = new Map<string, DocumentEngine>();
 
 export function engineFor(docId: string): DocumentEngine {
-  let e = engines.get(docId);
-  if (!e) {
-    e = new DocumentEngine();
-    engines.set(docId, e);
+  const e = engines.get(docId) ?? new DocumentEngine();
+  engines.delete(docId);
+  engines.set(docId, e);
+  for (const [id] of engines) {
+    if (engines.size <= MAX_ENGINES) break;
+    dropEngine(id);
   }
   return e;
 }

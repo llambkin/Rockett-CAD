@@ -1,11 +1,16 @@
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import {
   createEmptyDocument,
+  detectProfiles,
   type ExtrudeFeature,
   type SketchFeature,
 } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
-import { engineFor, dropEngine } from "../src/geometry/engine.js";
+import {
+  engineFor,
+  dropEngine,
+  type DocumentEngine,
+} from "../src/geometry/engine.js";
 import { evaluateFeature } from "../src/geometry/features.js";
 import { tessellateBody } from "../src/geometry/tessellate.js";
 import { manyBodyPart } from "./helpers/perfFixtures.js";
@@ -149,6 +154,55 @@ it("move ignores later features", () => {
   expect(origin("s0")).toEqual([0, 0, 5]);
   expect(origin("free")).toEqual([0, 0, 0]);
   dropEngine(id);
+});
+
+function boxDoc(id: string) {
+  const doc = createEmptyDocument(id, id),
+    sketch = square("s0", 2);
+  doc.features = [
+    sketch,
+    {
+      id: "box",
+      name: "box",
+      type: "extrude",
+      suppressed: false,
+      profiles: [
+        { sketchId: "s0", profileId: detectProfiles(sketch.entities)[0]!.id },
+      ],
+      distance: 1,
+      direction: "normal",
+      operation: "newBody",
+    },
+  ];
+  doc.timelinePosition = doc.features.length;
+  return doc;
+}
+
+it("keeps the 8 most recently used engines and releases the one it evicts", () => {
+  const docs = Array.from({ length: 20 }, (_, i) => boxDoc(`lru-${i}`));
+  const engines: DocumentEngine[] = [];
+  const shapes = docs.map((doc, i) => {
+    const engine = engineFor(doc.id);
+    engines[i] = engine;
+    engine.evaluate(doc);
+    if (i === 15) expect(engineFor(docs[8]!.id)).toBe(engines[8]);
+    return engine.stateAt(doc).bodies.get("b:box")!.shape;
+  });
+
+  const kept = [8, 13, 14, 15, 16, 17, 18, 19];
+  const evicted = [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12];
+  for (const i of kept) expect(shapes[i]!.isDeleted()).toBe(false);
+  for (const i of evicted) expect(shapes[i]!.isDeleted()).toBe(true);
+  for (const i of kept) expect(engineFor(docs[i]!.id)).toBe(engines[i]);
+
+  evaluated.mockClear();
+  const again = engineFor(docs[0]!.id);
+  expect(again).not.toBe(engines[0]);
+  expect(again.evaluate(docs[0]!).bodies).toHaveLength(1);
+  expect(evaluatedIds()).toEqual(["s0", "box"]);
+  expect(shapes[8]!.isDeleted()).toBe(true);
+  expect(shapes[13]!.isDeleted()).toBe(false);
+  for (const doc of docs) dropEngine(doc.id);
 });
 
 it(
