@@ -1,15 +1,29 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import * as THREE from "three";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { EvaluateResult, SketchFeature } from "@rockett/shared";
+import {
+  createEmptyDocument,
+  type BodyPayload,
+  type EvaluateResult,
+  type SketchFeature,
+} from "@rockett/shared";
 import { SketchOffsetIndicators } from "../../src/components/SketchOffsetIndicators";
+import { ViewportView } from "../../src/components/ViewportView";
 import { useStore } from "../../src/store";
 import type { CadViewport } from "../../src/three/CadViewport";
+import { MoveGizmo } from "../../src/three/MoveGizmo";
 import { viewportHandle } from "../../src/viewportRef";
+import { manyBodyPayloads } from "../helpers/perfFixtures";
 
 vi.mock("three", async (importOriginal) => ({
   ...(await importOriginal<typeof import("three")>()),
   WebGLRenderer: (await import("../helpers/fakeRenderer")).FakeWebGLRenderer,
+}));
+vi.mock("../../src/three/ViewCube", () => ({
+  ViewCube: class {
+    dispose() {}
+  },
 }));
 
 const queued = new Map<number, FrameRequestCallback>();
@@ -182,4 +196,71 @@ it("canvasRect reads the layout once until a resize or scroll", async () => {
   scroller.remove();
   vp.dispose();
   window.dispatchEvent(new Event("scroll"));
+});
+
+async function mountView(bodies: BodyPayload[]) {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1280);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(800);
+  useStore.setState({
+    projectId: "p",
+    document: createEmptyDocument("p", "d"),
+    evaluation: {
+      bodies,
+      planes: [],
+      sketches: [],
+      featureStatuses: [],
+      kernelMs: 0,
+    },
+    mode: { name: "idle" },
+    selection: [],
+    hover: null,
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  await act(async () => root.render(createElement(ViewportView)));
+  runFrames(5);
+  const vp = viewportHandle.current!;
+  const move = (clientX: number, clientY: number) => {
+    vp.renderer.domElement.dispatchEvent(
+      new PointerEvent("pointermove", { bubbles: true, clientX, clientY }),
+    );
+    runFrames(1);
+  };
+  const unmount = async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  };
+  return { vp, renders: vi.spyOn(vp.renderer, "render"), move, unmount };
+}
+
+it("pointer moves over empty space render nothing", async () => {
+  const { renders, move, unmount } = await mountView(manyBodyPayloads(1, 1));
+  for (let i = 0; i < 60; i++) move(5 + (i % 2), 5);
+  expect(useStore.getState().hover).toBeNull();
+  expect(renders).toHaveBeenCalledTimes(0);
+  await unmount();
+});
+
+it("a pointer move onto a body renders once", async () => {
+  const { renders, move, unmount } = await mountView(manyBodyPayloads(1, 1));
+  move(5, 5);
+  move(640, 400);
+  move(641, 400);
+  expect(useStore.getState().hover).not.toBeNull();
+  expect(renders).toHaveBeenCalledTimes(1);
+  await unmount();
+});
+
+it("pointer hover on one gizmo axis renders once", async () => {
+  const { vp, renders } = await mountIdle();
+  const gizmo = new MoveGizmo(vp, new THREE.Vector3(), [0, 0, 0], []);
+  runFrames(1);
+  renders.mockClear();
+  for (let i = 0; i < 10; i++) {
+    gizmo.setHover(0);
+    runFrames(1);
+  }
+  expect(renders).toHaveBeenCalledTimes(1);
+  gizmo.dispose();
+  vp.dispose();
 });

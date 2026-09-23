@@ -67,10 +67,15 @@ export abstract class Manipulator {
   }
 
   protected paint(color: THREE.ColorRepresentation, ...meshes: THREE.Mesh[]) {
+    const next = new THREE.Color(color);
+    let changed = false;
     for (const m of meshes) {
-      (m.material as THREE.MeshBasicMaterial).color.set(color);
+      const current = (m.material as THREE.MeshBasicMaterial).color;
+      if (current.equals(next)) continue;
+      current.copy(next);
+      changed = true;
     }
-    this.host.requestRender();
+    if (changed) this.host.requestRender();
   }
 
   protected labelPosition(point: THREE.Vector3): { x: number; y: number } {

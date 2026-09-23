@@ -65,7 +65,7 @@ interface DimLabel {
   reference?: [THREE.Vector3, THREE.Vector3];
 }
 
-const NUDGE_EVENTS = ["pointerdown", "pointermove", "pointerup", "wheel"];
+const NUDGE_EVENTS = ["pointerdown", "pointerup", "wheel"];
 
 const livePreview = createLivePreview({
   intervalMs: 250,
