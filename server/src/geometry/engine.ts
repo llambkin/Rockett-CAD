@@ -80,7 +80,7 @@ class DocumentEngine {
         status = { featureId: feature.id, status: "suppressed" };
       } else {
         try {
-          evaluateFeature(next, feature, doc);
+          evaluateFeature(next, feature, doc.features.slice(0, i));
           status = { featureId: feature.id, status: "ok" };
         } catch (err: any) {
           status = {

@@ -8,7 +8,6 @@ import {
   solveSketch,
   projectEdge,
   type AxisRef,
-  type CadDocument,
   type ChamferFeature,
   type CombineFeature,
   type ConstructionPlaneFeature,
@@ -1630,7 +1629,7 @@ function evalMirror(state: EvalState, f: MirrorFeature): void {
  * body (drawn on its faces, or consumed by the feature that created it) have
  * their frames translated too, so they stay attached visually and any later
  * features built from them land at the moved position. */
-function evalMove(state: EvalState, f: MoveFeature, doc: CadDocument): void {
+function evalMove(state: EvalState, f: MoveFeature, earlier: Feature[]): void {
   if (f.bodies.length === 0)
     throw new Error("select at least one body to move");
   const [tx, ty, tz] = f.translation;
@@ -1658,14 +1657,13 @@ function evalMove(state: EvalState, f: MoveFeature, doc: CadDocument): void {
       (id) => id === `b:${g.id}` || id.startsWith(`b:${g.id}:`),
     );
   for (const [skId, sk] of state.sketches) {
-    const feat = doc.features.find(
-      (g) => g.id === skId && g.type === "sketch",
-    ) as SketchFeature | undefined;
+    const feat = earlier.find((g) => g.id === skId && g.type === "sketch") as
+      SketchFeature | undefined;
     if (!feat) continue;
     let follows =
       feat.plane.kind === "face" && movedIds.has(feat.plane.face.bodyId);
     if (!follows) {
-      for (const g of doc.features) {
+      for (const g of earlier) {
         const anyG = g as any;
         const consumes =
           [...(anyG.profiles ?? []), ...(anyG.sections ?? [])].some(
@@ -1883,7 +1881,7 @@ function evalEmboss(state: EvalState, f: EmbossFeature): void {
 export function evaluateFeature(
   state: EvalState,
   feature: Feature,
-  doc: CadDocument,
+  earlier: Feature[],
 ): void {
   switch (feature.type) {
     case "importStep": {
@@ -1936,7 +1934,7 @@ export function evaluateFeature(
     case "emboss":
       return evalEmboss(state, feature);
     case "move":
-      return evalMove(state, feature, doc);
+      return evalMove(state, feature, earlier);
     default: {
       const t: never = feature;
       throw new Error(`unknown feature type ${(t as any).type}`);

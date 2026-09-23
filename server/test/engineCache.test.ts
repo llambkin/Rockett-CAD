@@ -1,5 +1,9 @@
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { createEmptyDocument, type SketchFeature } from "@rockett/shared";
+import {
+  createEmptyDocument,
+  type ExtrudeFeature,
+  type SketchFeature,
+} from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
 import { evaluateFeature } from "../src/geometry/features.js";
@@ -89,5 +93,51 @@ it("still re-evaluates from an edited feature onward", () => {
   expect(evaluatedIds()).toEqual([]);
   engine.evaluate(doc);
   expect(evaluatedIds()).toEqual(["s1", "s2", "s3"]);
+  dropEngine(id);
+});
+
+it("move ignores later features", () => {
+  const id = "cache-move-later",
+    doc = createEmptyDocument(id, id),
+    engine = engineFor(id);
+  doc.features = [square("s0", 1), square("free", 3)];
+  doc.timelinePosition = doc.features.length;
+  const sketchesOf = () => engine.evaluate(doc).sketches;
+  const [p0, pFree] = ["s0", "free"].map(
+    (skId) => sketchesOf().find((s) => s.featureId === skId)!.profiles[0]!.id,
+  );
+  const extrude = (
+    fid: string,
+    sketchId: string,
+    profileId: string,
+  ): ExtrudeFeature => ({
+    id: fid,
+    name: fid,
+    type: "extrude",
+    suppressed: false,
+    profiles: [{ sketchId, profileId }],
+    distance: 1,
+    direction: "normal",
+    operation: "newBody",
+  });
+  doc.features = [
+    square("s0", 1),
+    extrude("box:s2", "s0", p0!),
+    square("free", 3),
+    {
+      id: "mv",
+      name: "mv",
+      type: "move",
+      suppressed: false,
+      bodies: ["b:box:s2"],
+      translation: [0, 0, 5],
+    },
+    extrude("box", "free", pFree!),
+  ];
+  doc.timelinePosition = doc.features.length;
+  const origin = (skId: string) =>
+    sketchesOf().find((s) => s.featureId === skId)!.frame.origin;
+  expect(origin("s0")).toEqual([0, 0, 5]);
+  expect(origin("free")).toEqual([0, 0, 0]);
   dropEngine(id);
 });
