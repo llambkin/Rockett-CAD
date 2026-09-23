@@ -45,14 +45,29 @@ change gets a `Schema N` line in the section that ships it.
   a newer preview, a cancel or a commit.
 - Sketch rebuilds, construction plane updates, reference image changes and
   closing the viewport free their GPU geometry, materials and unused textures.
+- An upload over its limit returns 413. Before, an oversized image gave 500
+  and an oversized STEP file 400. An image stored as PNG must carry the full
+  PNG signature and header chunk; anything else returns 400.
+- The container no longer owns its own code: `/app` stays root-owned and
+  `/data` is the only path the app writes.
+- The container healthcheck tolerates a long regeneration: a busy container
+  turns unhealthy after about five minutes of failed probes, not 1.5.
 
 ### Changed
 
 - Schema 5: a sketch line can keep its angle from the sketch +X axis
   (`lineAngle`). A typed ∠ is stored, and double-click edits a line's
   length and angle. The 4 to 5 migration only bumps the version.
-- `/api/health` returns `version`, `schemaVersion` and `commit`.
-- `npm test` runs `tsc` on all workspaces first.
+- `/api/health` returns `version`, `schemaVersion`, `commit` and `describe`.
+  The bottom-right corner of the project list and the workspace shows the
+  running build.
+- `THIRD-PARTY-NOTICES.md` lists every package in the image and the client
+  bundle with its version, licence and upstream URL.
+- `npm test` runs `tsc` on all workspaces first. Every workspace compiles
+  with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+- `npm run check` is the ship command: lint, format, the comment and cost
+  ratchets, writing, README, pin and notice checks, build, tests, a
+  real-browser smoke test and the work order check.
 - Docker: base image pinned by digest; build and runtime installs use `npm ci`
   from the lockfile. `docker/runtime-package.json` is removed.
 - Dependencies at their latest releases, pinned exactly: Express 5, multer 2,
@@ -80,6 +95,12 @@ change gets a `Schema N` line in the section that ships it.
 - Each sketch arc edge leaks three kernel `gp_Pnt` objects.
 - Feature updates check the patch keys, not the merged feature, so an unknown
   key saved before this release survives an edit.
+- `docker stop` waits 10 s and then kills the container (exit 137): Node runs
+  as PID 1 with no SIGTERM handler. With `--init` it stops in under a second.
+- The image carries neither `THIRD-PARTY-NOTICES.md` nor the licence texts
+  of the packages bundled into the client, the base image's Node and Debian
+  packages are not inventoried, and the opencascade.js LGPL source offer is
+  not written. This blocks distribution, not intranet use.
 
 ## 0.1.0 (2026-09-23)
 

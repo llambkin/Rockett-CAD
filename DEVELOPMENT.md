@@ -39,11 +39,16 @@ transpile it); the server production build bundles it via esbuild.
 ## Testing
 
 ```bash
-npm test          # typecheck, then shared, server and client suites
-npm run check     # ship command: lint, format, comments, writing, pins, build, test, work order
+npm test              # typecheck, then shared, server and client suites
+npm run test:browser  # real-browser smoke test against a disposable built app
+npm run check         # ship command: lint, format, comments, cost, writing, README,
+                      # pins, notices, build, test, browser smoke, work order
 ```
 
 Run `npm run check` before every commit. It stops at the first failure.
+
+`playwright-core` ships no browser. Install the pinned headless shell once
+with `npx playwright-core install chromium-headless-shell`.
 
 The suites map to the layers the brief requires:
 
