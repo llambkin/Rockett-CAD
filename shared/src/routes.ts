@@ -15,7 +15,9 @@ import type {
   MeasureResult,
   ProjectResponse,
   ProjectSummary,
+  ProjectView,
 } from "./api.js";
+import { VIEW_VERSION } from "./api.js";
 import { edgeRef, faceRef, groupsSchema } from "./schema/features.js";
 import {
   createFolderBody,
@@ -110,6 +112,21 @@ const topoRef = Type.Union([
     vertexName: Type.String(),
   }),
 ]);
+
+const viewIds = Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+  maxItems: 10000,
+});
+
+export const projectView = Type.Object(
+  {
+    version: Type.Literal(VIEW_VERSION),
+    hidden: Type.Object(
+      { bodies: viewIds, features: viewIds },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
 
 export const ROUTES = {
   health: route<never, Health>()("GET", "/health"),
@@ -208,6 +225,12 @@ export const ROUTES = {
     "PUT",
     "/projects/:id/groups",
     Type.Object({ groups: groupsSchema }),
+  ),
+  getView: route<never, ProjectView>()("GET", "/projects/:id/view"),
+  putView: route<ProjectView, ProjectView>()(
+    "PUT",
+    "/projects/:id/view",
+    projectView,
   ),
   measure: route<MeasureRequest, MeasureResult>()(
     "POST",

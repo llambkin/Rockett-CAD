@@ -60,6 +60,10 @@ const wrongTyped: Partial<
     body: { groups: [{ id: 5, name: "G", kind: "body", members: [] }] },
     detail: "/groups/0/id",
   },
+  putView: {
+    body: { version: 1, hidden: { bodies: [5], features: [] } },
+    detail: "/hidden/bodies/0",
+  },
 };
 
 let server: Server;

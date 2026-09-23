@@ -562,6 +562,21 @@ export function createApiRouter(
     }),
   );
 
+  on(
+    ROUTES.getView,
+    wrap(async (req, res) => {
+      res.json(await store.view(req.params.id));
+    }),
+  );
+
+  on(
+    ROUTES.putView,
+    wrap(async (req, res) => {
+      await store.setView(req.params.id, req.body);
+      res.json(req.body);
+    }),
+  );
+
   // ----- measure -----
 
   on(

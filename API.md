@@ -68,9 +68,10 @@ with the stored document:
   error body, nothing written.
 
 Creating, duplicating, uploading and deleting a project, placing it in a
-folder, uploading an image and retaining an export do not edit the document
-and take no `If-Match`. `client/src/api.ts` remembers the highest revision it
-has received per project and sends it on every document edit.
+folder, saving its view state, uploading an image and retaining an export do
+not edit the document and take no `If-Match`. `client/src/api.ts` remembers
+the highest revision it has received per project and sends it on every
+document edit.
 
 ## Projects
 
@@ -190,6 +191,19 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 | `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
 | `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Body display metadata                                                        |
 | `PUT /projects/:id/groups`           | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
+
+### View state
+
+`GET /projects/:id/view` returns the project's view state from
+`projects/<id>/view.json`:
+`{ version: 1, hidden: { bodies: string[], features: string[] } }`. A project
+with no saved view returns empty lists. `PUT /projects/:id/view` replaces it
+with a body of the same shape and echoes it back. The body is validated, with
+unknown fields rejected, and a bad one is 400 with nothing written. The PUT
+never writes the document, never evaluates and never raises the revision, so
+it takes no `If-Match`; the last write wins. A missing project is 404. The
+view stays with the project and is shared by everyone who opens it. Nothing
+reads it yet: visibility still comes from the document.
 
 ## Inspection & output
 

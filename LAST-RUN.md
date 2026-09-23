@@ -1,21 +1,22 @@
 # Last run
 
-- KIT-CP is done. Each of its 25 dependencies passed its own check again at
-  `936f58b`, and `npm run check` passed: 93 files and 725 tests, 7 browser
-  tests, work order OK.
-- KIT-025, KIT-026 and KIT-027 sit outside the checkpoint. The done file lists
-  them at `745bf80`, `ccfda02` and `1d1887f`; their checks pass, but the
-  checkpoint does not vouch for them.
-- ARCHITECTURE.md now names the shared units, tolerance, placement and route
-  modules and the dialog form kit. API.md names the route table and the client
-  `request`. CAD_MODEL.md adds placements, `meshShape` and the `~n` order.
-- 165 rows are done. OPS, BUG and KIT have passed their checkpoints. DOC,
-  AUTH, SET, CUST, PERF and EXCH are part done. No row is in flight.
-- This run deployed nothing. Prod is unchanged.
+- DOC-010, DOC-011, DOC-012, DOC-015 and DOC-017 are done on `lane/design`,
+  one commit each. `npm run check` passed before every commit: 911 tests, 20
+  browser tests and the work order check on the last one.
+- Document edits need `If-Match: "<revision>"`. A stale edit gets 409, and
+  the client keeps it until the user reapplies or discards it.
+- Schema is 10: `extensions` holds module data. A deploy migrates each
+  project below 10 on its next save and backs it up first.
+- Model imports stream to `uploads/` and move into the blob store. Both
+  limits stay at 10 MB. An 8.3 MB STEP peaks at about 1.1 GB RSS in the test
+  process, and the WASM heap stays at 100 MB.
+- `GET` and `PUT /projects/:id/view` store hidden bodies and features in
+  `view.json`. Nothing reads it yet; DOC-018 moves visibility there. Nothing
+  was pushed or deployed.
 
 ## Next
 
-DOC-007
+DOC-018
 
 ## Stuck
 

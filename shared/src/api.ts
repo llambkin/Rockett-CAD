@@ -116,6 +116,13 @@ export interface ProjectSummary {
   schemaVersion?: number;
 }
 
+export const VIEW_VERSION = 1;
+
+export interface ProjectView {
+  version: typeof VIEW_VERSION;
+  hidden: { bodies: string[]; features: string[] };
+}
+
 export interface Folder {
   id: string;
   name: string;

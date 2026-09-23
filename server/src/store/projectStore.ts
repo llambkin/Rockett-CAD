@@ -2,8 +2,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {
   createEmptyDocument,
+  parse,
+  projectView,
+  VIEW_VERSION,
   type CadDocument,
   type ProjectSummary,
+  type ProjectView,
 } from "@rockett/shared";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
@@ -68,6 +72,7 @@ function imageBlobs(doc: CadDocument): string[] {
 
 export class ProjectStore {
   private documents: JsonStore<CadDocument, PendingBlobs>;
+  private views: JsonStore<ProjectView>;
   readonly uploads: Uploads;
 
   constructor(
@@ -76,6 +81,21 @@ export class ProjectStore {
     private readonly now: () => number = Date.now,
   ) {
     this.uploads = new Uploads(storage);
+    this.views = new JsonStore({
+      storage,
+      root: "projects",
+      name: "project",
+      key: ID_RE,
+      file: "view.json",
+      migrations: {
+        namespace: "view",
+        current: VIEW_VERSION,
+        field: "version",
+        steps: {},
+      },
+      unbacked: async () => true,
+      validate: (view) => parse(projectView, view),
+    });
     this.documents = new JsonStore({
       storage,
       root: "projects",
@@ -168,6 +188,28 @@ export class ProjectStore {
     doc.modifiedAt = snapshot.modifiedAt;
     doc.revision = snapshot.revision;
     doc.savedWith = snapshot.savedWith;
+  }
+
+  async view(id: string): Promise<ProjectView> {
+    await this.exists(id);
+    return this.views.read(id).catch((err) => {
+      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
+      return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
+    });
+  }
+
+  async setView(id: string, view: ProjectView): Promise<void> {
+    await this.exists(id);
+    await this.views.write(id, view);
+  }
+
+  private async exists(id: string): Promise<void> {
+    if (
+      !(await this.storage.list(this.documents.dir(id))).includes(
+        "document.json",
+      )
+    )
+      throw new StoreError(`project ${id} not found`, "not_found");
   }
 
   async duplicate(id: string, newName?: string): Promise<CadDocument> {
