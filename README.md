@@ -1,15 +1,17 @@
-# Rockett CAD -
-
-Tean Rockett!
+# Rockett CAD - Tean Rockett!
 
 Prepare for trouble!
 And make it double!
+
 To protect the world from devastation!
 To unite all peoples within our nation!
+
 To denounce the evils of truth and love!
 To extend our reach to the stars above!
+
 Liam
 Mark
+
 Team Rocket blasts off at the speed of light!
 Surrender now, or prepare to fight!
 
