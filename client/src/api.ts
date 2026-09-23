@@ -53,7 +53,7 @@ async function toApiError(res: Response): Promise<ApiError> {
 
 interface RequestOptions {
   body?: unknown;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 export interface Download {
@@ -79,12 +79,10 @@ export async function request(
   const form = body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     method,
-    headers:
-      body !== undefined && !form
-        ? { "Content-Type": "application/json" }
-        : undefined,
-    body: form ? body : body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
+    ...(body !== undefined &&
+      !form && { headers: { "Content-Type": "application/json" } }),
+    ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
+    ...(signal && { signal }),
   });
   if (!res.ok) throw await toApiError(res);
   if (response !== "blob") return res.json();

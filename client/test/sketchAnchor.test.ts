@@ -28,8 +28,8 @@ function resize(
     constraints: [
       ...constraints,
       ...created.constraints,
-      { id: "width", type: "length", line: sides[0].id, value: width },
-      { id: "height", type: "length", line: sides[1].id, value: height },
+      { id: "width", type: "length", line: sides[0]!.id, value: width },
+      { id: "height", type: "length", line: sides[1]!.id, value: height },
     ],
   });
   expect(result.converged).toBe(true);
@@ -57,7 +57,7 @@ describe("rectangle starting anchors", () => {
         [40, 15],
         [7, 30],
         [23, 9],
-      ]) {
+      ] as const) {
         rect.entities = resize(JSON.parse(JSON.stringify(rect)), w, h);
         expect(point(rect.entities, side.p1).x).toBeCloseTo(anchor.x, 7);
         expect(point(rect.entities, side.p1).y).toBeCloseTo(anchor.y, 7);
@@ -81,13 +81,13 @@ describe("rectangle starting anchors", () => {
     for (const endX of [50, 70]) {
       (source[1] as { x: number }).x = endX;
       const solved = resize(rect, 30, 12, source);
-      const a = point(solved, sides[0].p1),
-        c = point(solved, sides[1].p2);
+      const a = point(solved, sides[0]!.p1),
+        c = point(solved, sides[1]!.p2);
       expect((a.x + c.x) / 2).toBeCloseTo(endX / 2, 7);
       expect((a.y + c.y) / 2).toBeCloseTo(10, 7);
       const profiles = detectProfiles(solved);
       expect(profiles).toHaveLength(1);
-      expect(profiles[0].area).toBeCloseTo(360, 5);
+      expect(profiles[0]!.area).toBeCloseTo(360, 5);
     }
   });
 
@@ -100,8 +100,8 @@ describe("rectangle starting anchors", () => {
     const outline = rect.entities.filter(
       (e): e is SketchLine => e.kind === "line" && !e.construction,
     );
-    const corner = point(solved, outline[0].p1);
-    const opposite = point(solved, outline[1].p2);
+    const corner = point(solved, outline[0]!.p1);
+    const opposite = point(solved, outline[1]!.p2);
     expect(corner.x).toBeCloseTo(10, 7);
     expect(corner.y).toBeCloseTo(4, 7);
     expect(opposite.x).toBeCloseTo(40, 7);
@@ -125,6 +125,6 @@ describe("rectangle starting anchors", () => {
     );
     const lines = rect.entities.filter((e) => e.kind === "line");
     const solved = resize(rect, 12, 5, source);
-    expect(point(solved, lines[1].p2).y).toBeCloseTo(0, 8);
+    expect(point(solved, lines[1]!.p2).y).toBeCloseTo(0, 8);
   });
 });

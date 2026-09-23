@@ -159,9 +159,10 @@ export class ViewCube {
     );
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObject(this.cube, false);
-    if (hits.length === 0) return;
+    const hit = hits[0];
+    if (!hit) return;
     // local hit point → snap direction (face / edge / corner)
-    const local = this.cube.worldToLocal(hits[0].point.clone());
+    const local = this.cube.worldToLocal(hit.point.clone());
     const half = 0.7;
     const t = 0.42; // threshold for edge/corner detection
     const sx = Math.abs(local.x) / half > t ? Math.sign(local.x) : 0;
@@ -169,7 +170,7 @@ export class ViewCube {
     const sz = Math.abs(local.z) / half > t ? Math.sign(local.z) : 0;
     let dir = new THREE.Vector3(sx, sy, sz);
     if (dir.lengthSq() === 0) {
-      dir = hits[0].face?.normal.clone() ?? new THREE.Vector3(0, 0, 1);
+      dir = hit.face?.normal.clone() ?? new THREE.Vector3(0, 0, 1);
     }
     dir.normalize();
     const up =

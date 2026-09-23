@@ -129,7 +129,7 @@ it("keeps the draft editable when finishing fails", async () => {
 it("saves offset metadata and distance edits as undoable changes while rolled back", async () => {
   await useStore.getState().editSketch("sk");
   await useStore.getState().createOffset(["circle"], 2, true, 0.01);
-  const offset = useStore.getState().draftSketch!.offsets![0];
+  const offset = useStore.getState().draftSketch!.offsets![0]!;
   await useStore.getState().editOffset(offset.id, 4);
   expect(useStore.getState().document!.features[0]).toMatchObject({
     offsets: [{ distance: 4 }],

@@ -107,8 +107,8 @@ function OffsetBody() {
         coords = sampleArc(c.x, c.y, a.x, a.y, b.x, b.y, 64);
       }
       const positions: THREE.Vector3[] = [];
-      for (let i = 0; i < coords.length; i += 2)
-        positions.push(uv3(frame, coords[i], coords[i + 1]));
+      for (let i = 0; i + 1 < coords.length; i += 2)
+        positions.push(uv3(frame, coords[i]!, coords[i + 1]!));
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(positions),
         new THREE.LineBasicMaterial({

@@ -25,12 +25,12 @@ function polyTo3d(frame: PlaneFrame, poly: number[]): THREE.Vector3[] {
   const xa = new THREE.Vector3(...frame.xAxis);
   const ya = new THREE.Vector3(...frame.yAxis);
   const out: THREE.Vector3[] = [];
-  for (let i = 0; i < poly.length; i += 2) {
+  for (let i = 0; i + 1 < poly.length; i += 2) {
     out.push(
       o
         .clone()
-        .add(xa.clone().multiplyScalar(poly[i]))
-        .add(ya.clone().multiplyScalar(poly[i + 1])),
+        .add(xa.clone().multiplyScalar(poly[i]!))
+        .add(ya.clone().multiplyScalar(poly[i + 1]!)),
     );
   }
   return out;
@@ -94,15 +94,15 @@ export function buildRevolveGhost(
   // start/end caps for partial revolves
   if (!full) {
     const shape = new THREE.Shape();
-    for (let i = 0; i < polygon.length; i += 2) {
-      if (i === 0) shape.moveTo(polygon[0], polygon[1]);
-      else shape.lineTo(polygon[i], polygon[i + 1]);
+    for (let i = 0; i + 1 < polygon.length; i += 2) {
+      if (i === 0) shape.moveTo(polygon[0]!, polygon[1]!);
+      else shape.lineTo(polygon[i]!, polygon[i + 1]!);
     }
     for (const hp of holePolygons) {
       const hole = new THREE.Path();
-      for (let i = 0; i < hp.length; i += 2) {
-        if (i === 0) hole.moveTo(hp[0], hp[1]);
-        else hole.lineTo(hp[i], hp[i + 1]);
+      for (let i = 0; i + 1 < hp.length; i += 2) {
+        if (i === 0) hole.moveTo(hp[0]!, hp[1]!);
+        else hole.lineTo(hp[i]!, hp[i + 1]!);
       }
       shape.holes.push(hole);
     }

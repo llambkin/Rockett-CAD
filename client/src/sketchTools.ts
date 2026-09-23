@@ -17,15 +17,15 @@ export interface UV {
   x: number;
   y: number;
   /** id of an existing point snapped to, if any */
-  snapPointId?: string;
+  snapPointId?: string | undefined;
   /** id of a line the click snapped onto (adds pointOnLine) */
-  snapLineId?: string;
+  snapLineId?: string | undefined;
   /** id of a circle/arc the click snapped onto (adds pointOnCircle) */
-  snapCircleId?: string;
+  snapCircleId?: string | undefined;
   /** id of a line whose midpoint the click snapped to (adds midpoint) */
-  snapMidLineId?: string;
+  snapMidLineId?: string | undefined;
   /** id of a connected line the new line snapped perpendicular to (adds perpendicular) */
-  snapPerpLineId?: string;
+  snapPerpLineId?: string | undefined;
   /** what kind of snap engaged (drives the on-screen snap glyph) */
   snapKind?: "point" | "midpoint" | "curve" | "origin" | "perpendicular";
 }
@@ -146,7 +146,13 @@ function pointOrExisting(
 ): string {
   if (uv.snapPointId) return uv.snapPointId;
   const id = newId("pt");
-  out.push({ id, kind: "point", x: uv.x, y: uv.y, construction });
+  out.push({
+    id,
+    kind: "point",
+    x: uv.x,
+    y: uv.y,
+    ...(construction === undefined ? {} : { construction }),
+  });
   if (constraints) {
     if (uv.snapMidLineId) {
       constraints.push({
@@ -189,7 +195,13 @@ export function createLine(a: UV, b: UV, construction?: boolean): Created {
   const p1 = pointOrExisting(a, construction, entities, constraints);
   const p2 = pointOrExisting(b, construction, entities, constraints);
   const lineId = newId("ln");
-  entities.push({ id: lineId, kind: "line", p1, p2, construction });
+  entities.push({
+    id: lineId,
+    kind: "line",
+    p1,
+    p2,
+    ...(construction === undefined ? {} : { construction }),
+  });
   // Auto-constrain lines drawn exactly axis-aligned (alignment snapping
   // produces exact coordinates; freehand clicks never coincide exactly).
   if (a.x === b.x && a.y !== b.y) {
@@ -249,8 +261,8 @@ export function createCenterRect(center: UV, corner: UV): Created {
   rect.entities.push({
     id: diagonalId,
     kind: "line",
-    p1: sides[0].p1,
-    p2: sides[1].p2,
+    p1: sides[0]!.p1,
+    p2: sides[1]!.p2,
     construction: true,
   });
   rect.constraints.push({
@@ -344,8 +356,8 @@ export function createPolygon(center: UV, vertex: UV, sides: number): Created {
     entities.push({
       id,
       kind: "line",
-      p1: pointIds[i],
-      p2: pointIds[(i + 1) % sides],
+      p1: pointIds[i]!,
+      p2: pointIds[(i + 1) % sides]!,
     });
     lineIds.push(id);
   }
@@ -353,8 +365,8 @@ export function createPolygon(center: UV, vertex: UV, sides: number): Created {
     constraints.push({
       id: newId("c"),
       type: "equal",
-      a: lineIds[0],
-      b: lineIds[i],
+      a: lineIds[0]!,
+      b: lineIds[i]!,
     });
   }
   return { entities, constraints };
@@ -429,7 +441,7 @@ export function dimensionFor(
   value: number,
 ): SketchConstraint | null {
   if (targets.length === 1) {
-    const t = targets[0];
+    const t = targets[0]!;
     if (t.kind === "line") {
       return { id: newId("c"), type: "length", line: t.id, value };
     }
@@ -439,7 +451,8 @@ export function dimensionFor(
     return null;
   }
   if (targets.length === 2) {
-    const [a, b] = targets;
+    const a = targets[0]!;
+    const b = targets[1]!;
     if (a.kind === "point" && b.kind === "point") {
       return {
         id: newId("c"),
@@ -617,7 +630,7 @@ export function resolveDimCursor(
   const dx = c.x - a.x;
   const dy = c.y - a.y;
   const len = Math.hypot(dx, dy);
-  const dir = len > 1e-9 ? [dx / len, dy / len] : [1, 0];
+  const dir: [number, number] = len > 1e-9 ? [dx / len, dy / len] : [1, 0];
   const sgn = (v: number) => (v < 0 ? -1 : 1);
   switch (tool) {
     case "line": {
@@ -635,8 +648,8 @@ export function resolveDimCursor(
       if (Math.abs(A - quarter * 90) < 1e-9) {
         const k = ((quarter % 4) + 4) % 4;
         return {
-          x: a.x + [length, 0, -length, 0][k],
-          y: a.y + [0, length, 0, -length][k],
+          x: a.x + [length, 0, -length, 0][k]!,
+          y: a.y + [0, length, 0, -length][k]!,
         };
       }
       const rad = (A * Math.PI) / 180;
@@ -682,9 +695,19 @@ export function dimConstraintsFor(
     const W = lockedValue(fields, "width");
     const H = lockedValue(fields, "height");
     if (W !== null)
-      out.push({ id: newId("c"), type: "length", line: lines[0].id, value: W });
+      out.push({
+        id: newId("c"),
+        type: "length",
+        line: lines[0]!.id,
+        value: W,
+      });
     if (H !== null)
-      out.push({ id: newId("c"), type: "length", line: lines[1].id, value: H });
+      out.push({
+        id: newId("c"),
+        type: "length",
+        line: lines[1]!.id,
+        value: H,
+      });
   }
   const D = lockedValue(fields, "diameter");
   const circle = created.entities.find((e) => e.kind === "circle");

@@ -52,7 +52,7 @@ describe("duplicate dimensions", () => {
     expect(findExistingDimension(cs, len("new", "l1", 0))?.id).toBe("a");
     expect(findExistingDimension(cs, len("new", "l2", 0))).toBeUndefined();
     // a constraint never matches itself
-    expect(findExistingDimension(cs, cs[1])).toBeUndefined();
+    expect(findExistingDimension(cs, cs[1]!)).toBeUndefined();
   });
 
   it("collapses stacked dimensions, keeping the edited one and everything else", () => {

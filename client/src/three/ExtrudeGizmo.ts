@@ -21,14 +21,16 @@ export interface GizmoSource {
   /** Anchor point (u,v) on the plane. */
   anchorUV: [number, number];
   /** Profile outline for the drag preview (sketch-profile extrudes). */
-  profile?: Profile;
+  profile?: Profile | undefined;
   /** Face triangles + boundary polylines for face-extrude previews. */
-  faceGhost?: {
-    positions: number[];
-    indices: number[];
-    /** world-space boundary polylines [x,y,z,...] */
-    boundary: number[][];
-  };
+  faceGhost?:
+    | {
+        positions: number[];
+        indices: number[];
+        /** world-space boundary polylines [x,y,z,...] */
+        boundary: number[][];
+      }
+    | undefined;
 }
 
 export class ExtrudeGizmo extends Manipulator {
@@ -170,15 +172,15 @@ export class ExtrudeGizmo extends Manipulator {
     }
     const p = this.source.profile;
     const shape = new THREE.Shape();
-    for (let i = 0; i < p.polygon.length; i += 2) {
-      if (i === 0) shape.moveTo(p.polygon[0], p.polygon[1]);
-      else shape.lineTo(p.polygon[i], p.polygon[i + 1]);
+    for (let i = 0; i + 1 < p.polygon.length; i += 2) {
+      if (i === 0) shape.moveTo(p.polygon[0]!, p.polygon[1]!);
+      else shape.lineTo(p.polygon[i]!, p.polygon[i + 1]!);
     }
     for (const hp of p.holePolygons) {
       const hole = new THREE.Path();
-      for (let i = 0; i < hp.length; i += 2) {
-        if (i === 0) hole.moveTo(hp[0], hp[1]);
-        else hole.lineTo(hp[i], hp[i + 1]);
+      for (let i = 0; i + 1 < hp.length; i += 2) {
+        if (i === 0) hole.moveTo(hp[0]!, hp[1]!);
+        else hole.lineTo(hp[i]!, hp[i + 1]!);
       }
       shape.holes.push(hole);
     }
@@ -219,11 +221,11 @@ export class ExtrudeGizmo extends Manipulator {
     const indices: number[] = [];
 
     // cap: the face's triangles offset along the extrude axis
-    for (let i = 0; i < ghost.positions.length; i += 3) {
+    for (let i = 0; i + 2 < ghost.positions.length; i += 3) {
       positions.push(
-        ghost.positions[i] + off.x,
-        ghost.positions[i + 1] + off.y,
-        ghost.positions[i + 2] + off.z,
+        ghost.positions[i]! + off.x,
+        ghost.positions[i + 1]! + off.y,
+        ghost.positions[i + 2]! + off.z,
       );
     }
     indices.push(...ghost.indices);
@@ -233,16 +235,16 @@ export class ExtrudeGizmo extends Manipulator {
     for (const poly of ghost.boundary) {
       const base = positions.length / 3;
       const n = poly.length / 3;
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i * 3 + 2 < poly.length; i++) {
         positions.push(
-          poly[i * 3] + start.x,
-          poly[i * 3 + 1] + start.y,
-          poly[i * 3 + 2] + start.z,
+          poly[i * 3]! + start.x,
+          poly[i * 3 + 1]! + start.y,
+          poly[i * 3 + 2]! + start.z,
         );
         positions.push(
-          poly[i * 3] + off.x,
-          poly[i * 3 + 1] + off.y,
-          poly[i * 3 + 2] + off.z,
+          poly[i * 3]! + off.x,
+          poly[i * 3 + 1]! + off.y,
+          poly[i * 3 + 2]! + off.z,
         );
       }
       for (let i = 0; i < n - 1; i++) {

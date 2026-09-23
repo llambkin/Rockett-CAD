@@ -55,15 +55,15 @@ export function renderSketches(
       const profiles = sk.profiles ?? detectProfiles(sk.entities);
       for (const p of profiles) {
         const shape = new THREE.Shape();
-        for (let i = 0; i < p.polygon.length; i += 2) {
-          if (i === 0) shape.moveTo(p.polygon[0], p.polygon[1]);
-          else shape.lineTo(p.polygon[i], p.polygon[i + 1]);
+        for (let i = 0; i + 1 < p.polygon.length; i += 2) {
+          if (i === 0) shape.moveTo(p.polygon[0]!, p.polygon[1]!);
+          else shape.lineTo(p.polygon[i]!, p.polygon[i + 1]!);
         }
         for (const hp of p.holePolygons) {
           const hole = new THREE.Path();
-          for (let i = 0; i < hp.length; i += 2) {
-            if (i === 0) hole.moveTo(hp[0], hp[1]);
-            else hole.lineTo(hp[i], hp[i + 1]);
+          for (let i = 0; i + 1 < hp.length; i += 2) {
+            if (i === 0) hole.moveTo(hp[0]!, hp[1]!);
+            else hole.lineTo(hp[i]!, hp[i + 1]!);
           }
           shape.holes.push(hole);
         }
@@ -121,8 +121,8 @@ export function renderSketches(
         const en = pts.get(e.end);
         if (!c || !s || !en) continue;
         const samples = sampleArc(c.x, c.y, s.x, s.y, en.x, en.y, 32);
-        for (let i = 0; i < samples.length; i += 2) {
-          positions.push(to3(samples[i], samples[i + 1]));
+        for (let i = 0; i + 1 < samples.length; i += 2) {
+          positions.push(to3(samples[i]!, samples[i + 1]!));
         }
       }
       if (positions.length < 2) continue;

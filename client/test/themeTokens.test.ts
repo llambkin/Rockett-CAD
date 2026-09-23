@@ -16,7 +16,7 @@ it("keeps every colour literal out of theme.css", () => {
 });
 
 it("defines every custom property theme.css reads", () => {
-  const used = [...css.matchAll(/var\(--([\w-]+)/g)].map((m) => m[1]);
+  const used = [...css.matchAll(/var\(--([\w-]+)/g)].map((m) => m[1]!);
   expect(used.length).toBeGreaterThan(0);
   expect(used.filter((name) => !(name in THEME_TOKENS))).toEqual([]);
 });

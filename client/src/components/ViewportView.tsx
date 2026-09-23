@@ -1167,7 +1167,7 @@ export function ViewportView() {
 
   function pointerToSketchUV(
     e: { clientX: number; clientY: number },
-    alignFrom?: { x: number; y: number; pointId?: string },
+    alignFrom?: { x: number; y: number; pointId?: string | undefined },
   ): tools.UV | null {
     const vp = viewportRef.current;
     const frame = activeSketchFrame();

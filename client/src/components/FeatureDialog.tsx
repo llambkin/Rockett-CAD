@@ -36,7 +36,7 @@ function DialogBody({
   editId,
 }: {
   dialog: DialogType;
-  editId?: string;
+  editId?: string | undefined;
 }) {
   const selection = useStore((s) => s.selection);
   const params = useStore((s) => s.dialogParams);
@@ -116,8 +116,8 @@ function DialogBody({
       faceName: x.faceName,
     }));
   const planeRef = (): PlaneRef | null => {
-    if (planes.length > 0) return planes[0].ref;
-    if (faces.length > 0) return { kind: "face", face: faceRefs()[0] };
+    if (planes.length > 0) return planes[0]!.ref;
+    if (faces.length > 0) return { kind: "face", face: faceRefs()[0]! };
     return null;
   };
   const axisRef = (): AxisRef => {
@@ -125,11 +125,11 @@ function DialogBody({
       if (sketchLines.length > 0) {
         return {
           kind: "sketchLine",
-          sketchId: sketchLines[0].sketchId,
-          entityId: sketchLines[0].entityId,
+          sketchId: sketchLines[0]!.sketchId,
+          entityId: sketchLines[0]!.entityId,
         };
       }
-      if (edges.length > 0) return { kind: "edge", edge: edgeRefs()[0] };
+      if (edges.length > 0) return { kind: "edge", edge: edgeRefs()[0]! };
     }
     return { kind: "originAxis", axis: p("axis", "Z") };
   };
@@ -717,7 +717,7 @@ function DialogBody({
           name: p("name", ""),
           suppressed: false,
           operation: p("operation", "join"),
-          targetBody: bodies[0].bodyId,
+          targetBody: bodies[0]!.bodyId,
           toolBodies: bodies.slice(1).map((b) => b.bodyId),
           keepTools: !!p("keepTools", false),
         });
@@ -749,7 +749,7 @@ function DialogBody({
           type: "splitBody",
           name: p("name", ""),
           suppressed: false,
-          body: bodies[0].bodyId,
+          body: bodies[0]!.bodyId,
           tool: tool!,
         });
       };
@@ -861,7 +861,7 @@ function DialogBody({
         if (!requireSel(bodies.length > 0, "Select bodies to pattern")) return;
         const direction =
           p("axisSource", "origin") === "edge" && edges.length > 0
-            ? ({ kind: "edge", edge: edgeRefs()[0] } as const)
+            ? ({ kind: "edge", edge: edgeRefs()[0]! } as const)
             : ({ kind: "axis", axis: p("axis", "X") } as const);
         await commit({
           id: editId ?? newId("lpat"),
@@ -985,7 +985,7 @@ function DialogBody({
             type: "constructionPlane",
             name: p("name", ""),
             suppressed: false,
-            method: { kind: "midplane", a: refs[0], b: refs[1] },
+            method: { kind: "midplane", a: refs[0]!, b: refs[1]! },
           });
         } else {
           if (!requireSel(refs.length >= 1, "Select a base plane or face"))
@@ -997,7 +997,7 @@ function DialogBody({
             suppressed: false,
             method: {
               kind: "offset",
-              base: refs[0],
+              base: refs[0]!,
               distance: num("distance", 10),
             },
           });
@@ -1159,7 +1159,7 @@ function ReferenceImagePanel({
   planeRef,
   onClose,
 }: {
-  editId?: string;
+  editId?: string | undefined;
   planeRef: () => PlaneRef | null;
   onClose: () => void;
 }) {
@@ -1274,11 +1274,9 @@ function ReferenceImagePanel({
       clicks.push({ x: pt.x, y: pt.y, z: pt.z });
       if (clicks.length === 2) {
         el.removeEventListener("pointerdown", handler, true);
-        const d = Math.hypot(
-          clicks[1].x - clicks[0].x,
-          clicks[1].y - clicks[0].y,
-          clicks[1].z - clicks[0].z,
-        );
+        const a = clicks[0]!;
+        const b = clicks[1]!;
+        const d = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
         const desired = Number(
           window.prompt("Real distance between the two points (mm):", "100"),
         );

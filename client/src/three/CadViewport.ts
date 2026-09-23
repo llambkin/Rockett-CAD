@@ -40,7 +40,7 @@ export interface PickResult {
   distance: number;
   point: THREE.Vector3;
   /** sketch-region area — the tie-break when coplanar regions overlap */
-  area?: number;
+  area?: number | undefined;
 }
 
 const ORIGIN_PLANE_DEFS: { name: "XY" | "XZ" | "YZ"; frame: PlaneFrame }[] = [
@@ -572,12 +572,12 @@ export class CadViewport {
     for (const e of p.edges) {
       for (let i = 0; i + 5 < e.polyline.length; i += 3) {
         edgePts.push(
-          e.polyline[i],
-          e.polyline[i + 1],
-          e.polyline[i + 2],
-          e.polyline[i + 3],
-          e.polyline[i + 4],
-          e.polyline[i + 5],
+          e.polyline[i]!,
+          e.polyline[i + 1]!,
+          e.polyline[i + 2]!,
+          e.polyline[i + 3]!,
+          e.polyline[i + 4]!,
+          e.polyline[i + 5]!,
         );
         edgeSegments.push(e.name);
       }
@@ -650,14 +650,14 @@ export class CadViewport {
     clientX: number,
     clientY: number,
     opts: {
-      bodies?: boolean;
-      faces?: boolean;
-      edges?: boolean;
-      vertices?: boolean;
-      originPlanes?: boolean;
-      constructionPlanes?: boolean;
-      profiles?: boolean;
-      sketchEntities?: boolean;
+      bodies?: boolean | undefined;
+      faces?: boolean | undefined;
+      edges?: boolean | undefined;
+      vertices?: boolean | undefined;
+      originPlanes?: boolean | undefined;
+      constructionPlanes?: boolean | undefined;
+      profiles?: boolean | undefined;
+      sketchEntities?: boolean | undefined;
       depth?: number; // alt-click cycling
     },
   ): PickResult | null {
@@ -677,11 +677,13 @@ export class CadViewport {
         b.vertices.visible = false;
         for (const h of hits) {
           if (h.index === undefined) continue;
+          const vertexName = b.vertexNames[h.index];
+          if (vertexName === undefined) continue;
           results.push({
             selection: {
               kind: "vertex",
               bodyId: b.payload.bodyId,
-              vertexName: b.vertexNames[h.index],
+              vertexName,
             },
             distance: h.distance - pxTol * 2.2,
             point: h.point,
@@ -811,6 +813,7 @@ export class CadViewport {
     results.sort((a, b) => a.distance - b.distance);
     const depth = opts.depth ?? 0;
     const chosen = results[Math.min(depth, results.length - 1)];
+    if (!chosen) return null;
     // Coplanar regions can overlap (a disc drawn over a quadrant); the
     // smallest one under the cursor is the one the user means.
     if (chosen.selection.kind === "profile") {
@@ -821,7 +824,7 @@ export class CadViewport {
       );
       if (tied.length > 1) {
         tied.sort((a, b) => (a.area ?? Infinity) - (b.area ?? Infinity));
-        return tied[0];
+        return tied[0]!;
       }
     }
     return chosen;
@@ -906,9 +909,8 @@ export class CadViewport {
     } else if (sel.kind === "vertex") {
       const b = this.bodies.get(sel.bodyId);
       if (!b) return;
-      const idx = b.vertexNames.indexOf(sel.vertexName);
-      if (idx < 0) return;
-      const v = b.payload.vertices[idx];
+      const v = b.payload.vertices[b.vertexNames.indexOf(sel.vertexName)];
+      if (!v) return;
       const pt = new THREE.Points(
         new THREE.BufferGeometry().setFromPoints([
           new THREE.Vector3(...v.position),

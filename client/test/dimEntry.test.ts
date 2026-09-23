@@ -148,12 +148,12 @@ describe("typed sizes while drawing", () => {
     expect(rc).toEqual([
       expect.objectContaining({
         type: "length",
-        line: rectLines[0].id,
+        line: rectLines[0]!.id,
         value: 10,
       }),
       expect.objectContaining({
         type: "length",
-        line: rectLines[1].id,
+        line: rectLines[1]!.id,
         value: 5,
       }),
     ]);

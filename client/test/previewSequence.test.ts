@@ -69,7 +69,7 @@ it("keeps one preview in flight and applies only the newest", async () => {
   expect(api.updateFeature).toHaveBeenCalledTimes(1);
   await settleNewestFirst();
   expect(api.updateFeature).toHaveBeenCalledTimes(2);
-  expect(vi.mocked(api.updateFeature).mock.calls[1][2]).toEqual({
+  expect(vi.mocked(api.updateFeature).mock.calls[1]![2]).toEqual({
     distance: 2,
     taper: 5,
   });

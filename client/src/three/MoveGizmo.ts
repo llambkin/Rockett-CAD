@@ -23,7 +23,12 @@ export interface MoveGhostSource {
 }
 
 export class MoveGizmo extends Manipulator {
-  private arrows: { shaft: THREE.Mesh; cone: THREE.Mesh }[] = [];
+  private arrows: {
+    shaft: THREE.Mesh;
+    cone: THREE.Mesh;
+    dir: THREE.Vector3;
+    color: number;
+  }[] = [];
   private ghosts: THREE.Mesh[] = [];
 
   /** Base point (bodies' center before the move). */
@@ -44,8 +49,9 @@ export class MoveGizmo extends Manipulator {
     this.offset.set(...initial);
 
     for (let i = 0; i < 3; i++) {
+      const color = AXIS_COLORS[i]!;
       const mat = new THREE.MeshBasicMaterial({
-        color: AXIS_COLORS[i],
+        color,
         depthTest: false,
         transparent: true,
         opacity: 0.95,
@@ -61,7 +67,7 @@ export class MoveGizmo extends Manipulator {
       shaft.renderOrder = 20;
       cone.renderOrder = 20;
       this.group.add(shaft, cone);
-      this.arrows.push({ shaft, cone });
+      this.arrows.push({ shaft, cone, dir: AXES[i]!, color });
     }
 
     for (const src of ghostSources) {
@@ -98,9 +104,7 @@ export class MoveGizmo extends Manipulator {
     const shaftR = wpp * 1.6;
     const coneH = wpp * 14;
     const coneR = wpp * 4.5;
-    for (let i = 0; i < 3; i++) {
-      const { shaft, cone } = this.arrows[i];
-      const dir = AXES[i];
+    for (const { shaft, cone, dir } of this.arrows) {
       const quat = new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 1, 0),
         dir,
@@ -130,8 +134,8 @@ export class MoveGizmo extends Manipulator {
     const len = this.host.worldPerPixel() * 76;
     let best = -1;
     let bestD = this.hitTolerance() ** 2;
-    for (let i = 0; i < 3; i++) {
-      const tip = base.clone().addScaledVector(AXES[i], len);
+    for (const [i, dir] of AXES.entries()) {
+      const tip = base.clone().addScaledVector(dir, len);
       const d = ray.distanceSqToSegment(base, tip);
       if (d < bestD) {
         bestD = d;
@@ -142,8 +146,8 @@ export class MoveGizmo extends Manipulator {
   }
 
   setHover(axis: number) {
-    this.arrows.forEach(({ shaft, cone }, i) =>
-      this.paint(i === axis ? AXIS_HOVER : AXIS_COLORS[i], shaft, cone),
+    this.arrows.forEach(({ shaft, cone, color }, i) =>
+      this.paint(i === axis ? AXIS_HOVER : color, shaft, cone),
     );
   }
 
@@ -158,6 +162,7 @@ export class MoveGizmo extends Manipulator {
   private rawParam(axis: number, clientX: number, clientY: number): number {
     const ray = this.rayAt(clientX, clientY);
     const a = AXES[axis];
+    if (!a) return this.offset.getComponent(axis);
     const w0 = this.origin.clone().sub(ray.origin);
     const b = a.dot(ray.direction);
     const d = a.dot(w0);
@@ -184,12 +189,13 @@ export class MoveGizmo extends Manipulator {
   }
 
   tipScreenPosition(): { x: number; y: number } | null {
-    if (!this.dragging) return null;
+    const dir = AXES[this.dragAxis];
+    if (!this.dragging || !dir) return null;
     return this.labelPosition(
       this.origin
         .clone()
         .add(this.offset)
-        .addScaledVector(AXES[this.dragAxis], this.host.worldPerPixel() * 60),
+        .addScaledVector(dir, this.host.worldPerPixel() * 60),
     );
   }
 }

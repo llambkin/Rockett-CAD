@@ -389,7 +389,7 @@ export const useStore = create<State>((set, get) => ({
   async undo() {
     const { undoStack, document, projectId, mode, busy } = get();
     if (busy || !projectId || !document || undoStack.length === 0) return;
-    const prev = undoStack[undoStack.length - 1];
+    const prev = undoStack[undoStack.length - 1]!;
     set({ busy: true });
     try {
       const m = await api.replaceDocument(
@@ -413,7 +413,7 @@ export const useStore = create<State>((set, get) => ({
   async redo() {
     const { redoStack, document, projectId, mode, busy } = get();
     if (busy || !projectId || !document || redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
+    const next = redoStack[redoStack.length - 1]!;
     set({ busy: true });
     try {
       const m = await api.replaceDocument(
@@ -565,17 +565,18 @@ export const useStore = create<State>((set, get) => ({
     const owned = new Set((next.offsets ?? []).flatMap((o) => o.entityIds));
     if (
       !solved.converged ||
-      solved.entities.some(
-        (e, i) =>
+      solved.entities.some((e, i) => {
+        const before = next.entities[i];
+        return (
           owned.has(e.id) &&
           ((e.kind === "point" &&
-            next.entities[i].kind === "point" &&
-            Math.hypot(e.x - next.entities[i].x, e.y - next.entities[i].y) >
-              1e-5) ||
+            before?.kind === "point" &&
+            Math.hypot(e.x - before.x, e.y - before.y) > 1e-5) ||
             (e.kind === "circle" &&
-              next.entities[i].kind === "circle" &&
-              Math.abs(e.radius - next.entities[i].radius) > 1e-5)),
-      )
+              before?.kind === "circle" &&
+              Math.abs(e.radius - before.radius) > 1e-5))
+        );
+      })
     )
       throw new Error(
         "Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.",
@@ -624,7 +625,7 @@ export const useStore = create<State>((set, get) => ({
     const solved = solveSketch({
       entities: draftSketch.entities,
       constraints: draftSketch.constraints,
-      drag,
+      ...(drag === undefined ? {} : { drag }),
     });
     set({ draftSketch: { ...draftSketch, entities: solved.entities } });
   },
