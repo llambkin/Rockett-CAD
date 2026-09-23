@@ -38,8 +38,8 @@ client/src/three/ViewCube.ts constructor 102
 client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts renderSketches 168
 client/src/three/toolPreview.ts updateToolPreview 158
-server/src/api/routes.ts 579
-server/src/api/routes.ts createApiRouter 435
+server/src/api/routes.ts 591
+server/src/api/routes.ts createApiRouter 433
 server/src/geometry/engine.ts evaluate 110
 server/src/geometry/features.ts 1914
 server/src/geometry/features.ts applyToolOperation 89
