@@ -218,20 +218,20 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .tb-btn {
-  padding: 14px 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 14px 6px 3px;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   color: var(--text);
 }
 
-.tb-btn:hover {
-  background: var(--bg3);
-}
-
-.tb-btn.active {
-  background: var(--accent-dim);
-  color: var(--on-accent);
+.tb-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .tb-btn.primary {
@@ -240,13 +240,25 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .tb-btn.icon {
-  font-size: 14px;
-  min-width: 26px;
+  padding-inline: 3px;
+}
+
+.tb-btn:hover {
+  background: var(--bg3);
+  color: var(--hover);
+}
+
+.tb-btn.active {
+  background: var(--bg3);
+  color: var(--accent);
+  box-shadow: inset 0 -2px var(--accent);
 }
 
 .tb-btn:disabled {
   opacity: 0.45;
   cursor: default;
+  background: none;
+  color: var(--text);
 }
 
 .tb-spacer {

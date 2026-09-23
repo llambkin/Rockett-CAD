@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
 import { viewportHandle } from "../viewportRef";
+import { ToolButton } from "./ToolButton";
 
 export function StepImportButton({
   newProject = false,
@@ -41,6 +42,11 @@ export function StepImportButton({
       if (input.current) input.current.value = "";
     }
   };
+  const button = {
+    disabled: pending || busy,
+    title: "Import STEP, IGES or BREP solid bodies, up to 10 MB",
+    onClick: () => input.current?.click(),
+  };
   return (
     <>
       <input
@@ -51,18 +57,17 @@ export function StepImportButton({
         aria-label="STEP, IGES or BREP file"
         onChange={(e) => void load(e.target.files?.[0])}
       />
-      <button
-        className={newProject ? "btn" : "tb-btn"}
-        disabled={pending || busy}
-        title="Import solid bodies from a STEP, IGES or BREP file, up to 10 MB"
-        onClick={() => input.current?.click()}
-      >
-        {pending
-          ? "Importing STEP…"
-          : newProject
-            ? "New project from STEP"
-            : "Import STEP"}
-      </button>
+      {newProject ? (
+        <button className="btn" {...button}>
+          {pending ? "Importing STEP…" : "New project from STEP"}
+        </button>
+      ) : (
+        <ToolButton
+          icon="importStep"
+          label={pending ? "Importing STEP…" : "Import STEP"}
+          {...button}
+        />
+      )}
     </>
   );
 }

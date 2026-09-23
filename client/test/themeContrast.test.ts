@@ -120,6 +120,8 @@ const buttonStates: [string, number, string[]][] = [
     7,
     [".btn", ".btn:hover", ".btn.primary", ".btn.primary:hover"],
   ],
+  [".tb-btn:hover", 7, [".tb-btn", ".tb-btn.primary", ".tb-btn:hover"]],
+  [".tb-btn.active", 7, [".tb-btn", ".tb-btn:hover", ".tb-btn.active"]],
 ];
 
 it.each(buttonStates)("%s text meets %d:1", (_, target, cascade) => {

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -72,6 +74,54 @@ it.each([
     useStore.setState({ mode: { name: "idle" }, insertSketchImport: original });
   },
 );
+
+const docs = join(import.meta.dirname, "../../../docs/internals");
+const design = readFileSync(join(docs, "design-icons.md"), "utf8");
+const approved = [
+  ...design.matchAll(/^\| (\S.*?) +\| `(icons\/[\w-]+\.svg)`/gm),
+].map(([, label, file]) => ({
+  label: label!,
+  svg: readFileSync(join(docs, file!), "utf8")
+    .trim()
+    .replace(/<(\w+)([^<>]*)\/>/g, "<$1$2></$1>"),
+}));
+const UNDRAWN = ["Insert DXF", "Insert SVG"];
+
+it("shows every approved icon on its toolbar button, named by its label", async () => {
+  const shown = new Map<string, HTMLButtonElement>();
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  for (const mode of [
+    { name: "idle" as const },
+    {
+      name: "sketch" as const,
+      sketchId: "sk",
+      tool: "line" as const,
+      constructionMode: false,
+    },
+  ]) {
+    useStore.setState({ mode });
+    await act(async () => root.render(<Toolbar />));
+    for (const b of host.querySelectorAll<HTMLButtonElement>(".tb-btn"))
+      if (!UNDRAWN.includes(b.textContent!))
+        shown.set(b.getAttribute("aria-label") ?? b.textContent!, b);
+  }
+  await act(async () => root.unmount());
+  useStore.setState({ mode: { name: "idle" } });
+
+  expect([...shown.keys()].toSorted()).toEqual(
+    approved.map((a) => a.label).toSorted(),
+  );
+  for (const { label, svg } of approved) {
+    const button = shown.get(label)!;
+    const icon = button.querySelector("svg")!;
+    expect(icon.getAttribute("aria-hidden")).toBe("true");
+    icon.removeAttribute("aria-hidden");
+    expect(icon.outerHTML, label).toBe(svg);
+    expect(button.title.toLowerCase(), label).toContain(label.toLowerCase());
+    expect(button.querySelector(".tb-label")?.textContent ?? label).toBe(label);
+  }
+});
 
 it("offers no WebGL context", () => {
   const canvas = document.createElement("canvas");

@@ -10,8 +10,12 @@ import { filterSelectionFor } from "../dialogPicks";
 import { StepImportButton } from "./StepImportButton";
 import { SketchInsertButtons } from "./SketchInsertButtons";
 import { withKey } from "../shortcuts";
+import { ToolButton } from "./ToolButton";
+import type { IconId } from "../icons";
 
-const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
+type DialogButton = { id: DialogType & IconId; label: string; title: string };
+
+const CREATE: DialogButton[] = [
   {
     id: "extrude",
     label: "Extrude",
@@ -23,24 +27,28 @@ const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
   { id: "emboss", label: "Emboss", title: "Emboss/deboss sketch onto a face" },
 ];
 
-const MODIFY: Array<{ id: DialogType; label: string; title: string }> = [
+const MODIFY: DialogButton[] = [
   { id: "fillet", label: "Fillet", title: withKey("Fillet edges", "fillet") },
   { id: "chamfer", label: "Chamfer", title: "Chamfer edges" },
-  { id: "shell", label: "Shell", title: "Hollow the body" },
-  {
-    id: "combine",
-    label: "Combine",
-    title: "Boolean join/cut/intersect bodies",
-  },
+  { id: "shell", label: "Shell", title: "Shell: hollow the body" },
+  { id: "combine", label: "Combine", title: "Combine: join, cut or intersect" },
   { id: "splitBody", label: "Split", title: "Split a body with a plane" },
-  { id: "offsetFace", label: "Press/Pull", title: "Offset a planar face" },
+  { id: "offsetFace", label: "Press/Pull", title: "Press/Pull a planar face" },
   { id: "move", label: "Move", title: withKey("Move bodies", "move") },
 ];
 
-const PATTERN: Array<{ id: DialogType; label: string; title: string }> = [
+const PATTERN: DialogButton[] = [
   { id: "mirror", label: "Mirror", title: "Mirror bodies across a plane" },
-  { id: "linearPattern", label: "Rect Pattern", title: "Rectangular pattern" },
-  { id: "circularPattern", label: "Circ Pattern", title: "Circular pattern" },
+  {
+    id: "linearPattern",
+    label: "Rect Pattern",
+    title: "Rect Pattern: repeat in rows and columns",
+  },
+  {
+    id: "circularPattern",
+    label: "Circ Pattern",
+    title: "Circ Pattern: repeat around an axis",
+  },
 ];
 
 const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
@@ -60,26 +68,30 @@ const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
   { id: "offset", label: "Offset" },
 ];
 
-const CONSTRAINTS: Array<{
-  type: string;
-  label: string;
-  title: string;
-}> = [
-  { type: "horizontal", label: "―", title: "Horizontal" },
-  { type: "vertical", label: "|", title: "Vertical" },
+const CONSTRAINTS: Array<{ type: IconId; label: string; title: string }> = [
+  { type: "horizontal", label: "Horizontal", title: "Horizontal" },
+  { type: "vertical", label: "Vertical", title: "Vertical" },
   {
     type: "coincident",
-    label: "⊙",
+    label: "Coincident",
     title: "Coincident (2 points, or a point on a line, circle or arc)",
   },
-  { type: "parallel", label: "∥", title: "Parallel (2 lines)" },
-  { type: "perpendicular", label: "⊥", title: "Perpendicular (2 lines)" },
-  { type: "tangent", label: "⌒", title: "Tangent (line + circle)" },
-  { type: "equal", label: "=", title: "Equal (2 lines / 2 circles)" },
-  { type: "concentric", label: "◎", title: "Concentric (2 circles/arcs)" },
-  { type: "midpoint", label: "⋈", title: "Midpoint (point + line)" },
-  { type: "collinear", label: "≡", title: "Collinear (2 lines)" },
-  { type: "fix", label: "🔒", title: "Fix point" },
+  { type: "parallel", label: "Parallel", title: "Parallel (2 lines)" },
+  {
+    type: "perpendicular",
+    label: "Perpendicular",
+    title: "Perpendicular (2 lines)",
+  },
+  { type: "tangent", label: "Tangent", title: "Tangent (line + circle)" },
+  { type: "equal", label: "Equal", title: "Equal (2 lines / 2 circles)" },
+  {
+    type: "concentric",
+    label: "Concentric",
+    title: "Concentric (2 circles/arcs)",
+  },
+  { type: "midpoint", label: "Midpoint", title: "Midpoint (point + line)" },
+  { type: "collinear", label: "Collinear", title: "Collinear (2 lines)" },
+  { type: "fix", label: "Fix", title: "Fix point" },
 ];
 
 /** Opens a feature dialog, keeping any pre-selected geometry it can use (select-then-command). */
@@ -126,96 +138,56 @@ export function Toolbar() {
   return (
     <div className="toolbar">
       <ToolGroup title="SKETCH">
-        <button
-          className="tb-btn primary"
+        <ToolButton
+          icon="sketch"
+          label="Create Sketch"
+          className="primary"
           disabled={busy}
           onClick={() => void createSketch()}
-          title={withKey("Create a sketch on a plane or planar face", "sketch")}
-        >
-          Create Sketch
-        </button>
+          title={withKey("Create Sketch on a plane or planar face", "sketch")}
+        />
       </ToolGroup>
-      <ToolGroup title="CREATE">
-        {CREATE.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            title={b.title}
-            disabled={busy}
-            onClick={() => openDialog(b.id)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </ToolGroup>
-      <ToolGroup title="MODIFY">
-        {MODIFY.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            title={b.title}
-            disabled={busy}
-            onClick={() => openDialog(b.id)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </ToolGroup>
+      <DialogGroup title="CREATE" buttons={CREATE} busy={busy} />
+      <DialogGroup title="MODIFY" buttons={MODIFY} busy={busy} />
       <ToolGroup title="CONSTRUCT">
-        <button
-          className="tb-btn"
+        <ToolButton
+          icon="constructionPlane"
+          label="Plane"
           title="Construction plane (offset / midplane)"
           disabled={busy}
           onClick={() => openDialog("constructionPlane")}
-        >
-          Plane
-        </button>
+        />
       </ToolGroup>
-      <ToolGroup title="PATTERN">
-        {PATTERN.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            title={b.title}
-            disabled={busy}
-            onClick={() => openDialog(b.id)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </ToolGroup>
+      <DialogGroup title="PATTERN" buttons={PATTERN} busy={busy} />
       <ToolGroup title="INSPECT">
-        <button
-          className={`tb-btn ${mode.name === "measure" ? "active" : ""}`}
+        <ToolButton
+          icon="measure"
+          label="Measure"
+          className={mode.name === "measure" ? "active" : ""}
           title={withKey("Measure", "measure")}
           onClick={() =>
-            mode.name === "measure"
-              ? setMode({ name: "idle" })
-              : setMode({ name: "measure" })
+            setMode({ name: mode.name === "measure" ? "idle" : "measure" })
           }
-        >
-          Measure
-        </button>
+        />
       </ToolGroup>
       <ToolGroup title="INSERT">
         <StepImportButton />
-        <button
-          className="tb-btn"
-          title="Insert reference image"
+        <ToolButton
+          icon="referenceImage"
+          label="Canvas"
+          title="Canvas: insert a reference image"
           disabled={busy}
           onClick={() => openDialog("referenceImage")}
-        >
-          Canvas
-        </button>
+        />
       </ToolGroup>
       <ToolGroup title="EXPORT">
-        <button
-          className="tb-btn"
+        <ToolButton
+          icon="export"
+          label="STL / 3MF"
+          title="STL / 3MF export"
           disabled={busy}
           onClick={() => openDialog("export")}
-        >
-          STL / 3MF
-        </button>
+        />
       </ToolGroup>
       <div className="tb-spacer" />
       <ViewButtons />
@@ -260,6 +232,31 @@ function ToolGroup({
   );
 }
 
+function DialogGroup({
+  title,
+  buttons,
+  busy,
+}: {
+  title: string;
+  buttons: DialogButton[];
+  busy: boolean;
+}) {
+  return (
+    <ToolGroup title={title}>
+      {buttons.map((b) => (
+        <ToolButton
+          key={b.id}
+          icon={b.id}
+          label={b.label}
+          title={b.title}
+          disabled={busy}
+          onClick={() => openDialog(b.id)}
+        />
+      ))}
+    </ToolGroup>
+  );
+}
+
 function ViewButtons() {
   return (
     <div className="tb-group views">
@@ -279,20 +276,18 @@ function ViewButtons() {
           <option key={v.label}>{v.label}</option>
         ))}
       </select>
-      <button
-        className="tb-btn"
+      <ToolButton
+        icon="fit"
+        label="Fit"
         title="Zoom to fit (Shift+F)"
         onClick={() => viewportHandle.current?.zoomToFit()}
-      >
-        Fit
-      </button>
-      <button
-        className="tb-btn"
-        title="Toggle orthographic / perspective"
+      />
+      <ToolButton
+        icon="projection"
+        label="Ortho/Persp"
+        title="Ortho/Persp: toggle orthographic or perspective"
         onClick={toggleProjection}
-      >
-        Ortho/Persp
-      </button>
+      />
     </div>
   );
 }
@@ -435,14 +430,14 @@ function SketchToolbar() {
     <div className="toolbar sketch">
       <ToolGroup title="SKETCH">
         {SKETCH_TOOLS.map((t) => (
-          <button
+          <ToolButton
             key={t.id}
-            className={`tb-btn ${tool === t.id ? "active" : ""}`}
+            icon={t.id}
+            label={t.label}
+            className={tool === t.id ? "active" : ""}
             title={withKey(t.label, t.id)}
             onClick={() => setSketchTool(t.id)}
-          >
-            {t.label}
-          </button>
+          />
         ))}
         {tool === "polygon" && (
           <input
@@ -457,43 +452,45 @@ function SketchToolbar() {
             title="Polygon sides"
           />
         )}
-        <button
-          className={`tb-btn ${mode.constructionMode ? "active" : ""}`}
+        <ToolButton
+          icon="construction"
+          label="Construction"
+          className={mode.constructionMode ? "active" : ""}
           title="Toggle construction geometry (X)"
           onClick={() =>
             setMode({ ...mode, constructionMode: !mode.constructionMode })
           }
-        >
-          Construction
-        </button>
+        />
       </ToolGroup>
       <ToolGroup title="CONSTRAIN">
         {CONSTRAINTS.map((c) => (
-          <button
+          <ToolButton
             key={c.type}
-            className="tb-btn icon"
+            icon={c.type}
+            label={c.label}
+            iconOnly
             title={c.title}
             onClick={() => void applyConstraint(c.type)}
-          >
-            {c.label}
-          </button>
+          />
         ))}
-        <button
-          className="tb-btn"
+        <ToolButton
+          icon="delete"
+          label="Delete"
           title="Delete selected (Del)"
           onClick={() => void deleteSelected()}
-        >
-          Delete
-        </button>
+        />
       </ToolGroup>
       <ToolGroup title="INSERT">
         <SketchInsertButtons />
       </ToolGroup>
       <div className="tb-spacer" />
       <div className="tb-group">
-        <button className="tb-btn primary" onClick={() => void finishSketch()}>
-          Finish Sketch
-        </button>
+        <ToolButton
+          icon="finishSketch"
+          label="Finish Sketch"
+          className="primary"
+          onClick={() => void finishSketch()}
+        />
       </div>
     </div>
   );
