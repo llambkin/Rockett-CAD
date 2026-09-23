@@ -31,6 +31,8 @@ import { readStep } from "../geometry/stepImport.js";
 import { write3mf, writeStl } from "../geometry/exporters.js";
 import type { NamedBody } from "../geometry/naming.js";
 import {
+  knownKeys,
+  record,
   validateDocument,
   validateFeature,
   ValidationError,
@@ -312,7 +314,8 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const feature = req.body?.feature as Feature;
-      if (!feature) throw new ValidationError("feature required");
+      record(feature, "feature");
+      knownKeys(feature, feature.type);
       if (!feature.name) {
         feature.name = nextFeatureName(doc, feature.type);
       }
@@ -338,10 +341,11 @@ export function createApiRouter(store: ProjectStore): Router {
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
       if (idx < 0) throw new StoreError("feature not found", 404);
       const patch = req.body?.feature as Partial<Feature>;
-      if (!patch) throw new ValidationError("feature required");
+      record(patch, "feature");
       if (patch.type !== undefined && patch.type !== doc.features[idx].type) {
         throw new ValidationError("feature type cannot change");
       }
+      knownKeys(patch, doc.features[idx].type);
       const updated = {
         ...doc.features[idx],
         ...patch,

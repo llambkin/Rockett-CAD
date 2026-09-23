@@ -67,7 +67,7 @@ function bool(v: unknown, label: string): void {
 
 const OPERATIONS = ["newBody", "join", "cut", "intersect"] as const;
 
-function record(v: unknown, label: string): void {
+export function record(v: unknown, label: string): void {
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
     throw new ValidationError(`${label} must be an object`);
   }
@@ -139,6 +139,100 @@ function directionRef(v: unknown, label: string): void {
   if (ref.kind === "axis") oneOf(ref.axis, `${label} axis`, AXES);
   else if (ref.kind === "edge") edgeRef(ref.edge, `${label} edge`);
   else throw new ValidationError(`${label} must be an axis or edge`);
+}
+
+type FeatureKeys = {
+  [T in Feature["type"]]: Record<keyof Extract<Feature, { type: T }>, true>;
+};
+
+const BASE_KEYS = {
+  id: true,
+  type: true,
+  name: true,
+  suppressed: true,
+} as const;
+
+const FEATURE_KEYS: FeatureKeys = {
+  importStep: { ...BASE_KEYS, filename: true, data: true },
+  sketch: {
+    ...BASE_KEYS,
+    plane: true,
+    entities: true,
+    constraints: true,
+    offsets: true,
+    visible: true,
+  },
+  extrude: {
+    ...BASE_KEYS,
+    profiles: true,
+    faces: true,
+    distance: true,
+    distance2: true,
+    startOffset: true,
+    direction: true,
+    operation: true,
+  },
+  revolve: {
+    ...BASE_KEYS,
+    profiles: true,
+    axis: true,
+    angle: true,
+    operation: true,
+  },
+  sweep: { ...BASE_KEYS, profiles: true, pathSketchId: true, operation: true },
+  loft: { ...BASE_KEYS, sections: true, operation: true },
+  fillet: { ...BASE_KEYS, tangentChain: true, edges: true, radius: true },
+  chamfer: { ...BASE_KEYS, tangentChain: true, edges: true, distance: true },
+  shell: { ...BASE_KEYS, openFaces: true, thickness: true },
+  combine: {
+    ...BASE_KEYS,
+    operation: true,
+    targetBody: true,
+    toolBodies: true,
+    keepTools: true,
+  },
+  splitBody: { ...BASE_KEYS, body: true, tool: true },
+  offsetFace: { ...BASE_KEYS, faces: true, distance: true },
+  mirror: { ...BASE_KEYS, bodies: true, plane: true, combine: true },
+  linearPattern: {
+    ...BASE_KEYS,
+    bodies: true,
+    direction: true,
+    count: true,
+    spacing: true,
+    combine: true,
+  },
+  circularPattern: {
+    ...BASE_KEYS,
+    bodies: true,
+    axis: true,
+    count: true,
+    totalAngle: true,
+    combine: true,
+  },
+  constructionPlane: { ...BASE_KEYS, method: true },
+  referenceImage: {
+    ...BASE_KEYS,
+    plane: true,
+    assetId: true,
+    fileName: true,
+    transform: true,
+    opacity: true,
+    visible: true,
+    width: true,
+    height: true,
+  },
+  emboss: { ...BASE_KEYS, profiles: true, depth: true, mode: true },
+  move: { ...BASE_KEYS, bodies: true, translation: true },
+};
+
+export function knownKeys(v: object, type: unknown): void {
+  if (typeof type !== "string" || !Object.hasOwn(FEATURE_KEYS, type))
+    throw new ValidationError(`unknown feature type ${String(type)}`);
+  const known = FEATURE_KEYS[type as Feature["type"]];
+  const unknown = Object.keys(v).filter((key) => !Object.hasOwn(known, key));
+  if (unknown.length)
+    throw new ValidationError(`unknown ${type} key ${unknown.join(", ")}`);
 }
 
 const MAX_DIM = 100_000; // 100 m in mm — sanity bound

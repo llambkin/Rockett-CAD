@@ -27,11 +27,12 @@ import { stepFixture } from "./helpers/stepFixture.js";
 let base = "";
 let server: any;
 let store: ProjectStore;
+let storeDir = "";
 
 beforeAll(async () => {
   await initKernel();
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-api-"));
-  store = new ProjectStore(dir);
+  storeDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-api-"));
+  store = new ProjectStore(storeDir);
   await store.init();
   const app = express();
   app.use("/api", createApiRouter(store));
@@ -511,6 +512,38 @@ describe("REST API MVP workflow", () => {
     await expect(
       api("POST", `${url}/export`, { format: "step", bodyIds: [] }),
     ).rejects.toThrow(/400.*supported: stl, 3mf/);
+  });
+
+  it("accepts only known feature keys", async () => {
+    const { document } = await api("POST", "/projects", { name: "Keys" });
+    const url = `/projects/${document.id}`;
+    const sketch = {
+      id: "sk",
+      type: "sketch",
+      name: "Sketch",
+      suppressed: false,
+      plane: { kind: "origin", plane: "XY" },
+      entities: [],
+      constraints: [],
+    };
+    await api("POST", `${url}/features`, { feature: sketch });
+    const file = path.join(storeDir, "projects", document.id, "document.json");
+    const before = await fs.readFile(file);
+    await expect(
+      api("PUT", `${url}/features/sk`, { feature: "abc" }),
+    ).rejects.toThrow(/400.*feature must be an object/);
+    await expect(
+      api("PUT", `${url}/features/sk`, { feature: { bogus: 1 } }),
+    ).rejects.toThrow(/400.*unknown sketch key bogus/);
+    await expect(
+      api("POST", `${url}/features`, { feature: "abc" }),
+    ).rejects.toThrow(/400.*feature must be an object/);
+    await expect(
+      api("POST", `${url}/features`, {
+        feature: { ...sketch, id: "sk2", bogus: 1 },
+      }),
+    ).rejects.toThrow(/400.*unknown sketch key bogus/);
+    expect((await fs.readFile(file)).equals(before)).toBe(true);
   });
 
   it("reports version, schema version, commit and describe on health", async () => {
