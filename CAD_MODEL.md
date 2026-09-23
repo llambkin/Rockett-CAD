@@ -241,9 +241,29 @@ projection releases surviving shared endpoints as ordinary editable points.
 
 Trim and extend calculate analytic intersections of lines, arcs and circles.
 They retain unchanged endpoints, detach replaced endpoints, remove affected
-curve constraints with a user notice, and preserve unrelated geometry. Offset
-creates independent editable curves or a mitered closed line loop, rejecting
-collapsed/crossing results. It does not yet create a persistent offset relation.
+curve constraints with a user notice, and preserve unrelated geometry.
+
+## Sketch offsets (schema 4)
+
+Schema version 4 adds an optional `offsets` list to a sketch. Each
+`SketchOffset` stores its signed `distance`, the `sourceIds` it offsets, the
+`entityIds` it generated and the `joinTolerance` for small gaps. The 3 to 4
+migration only bumps the version. Offset curves drawn before schema 4 have no
+record and stay plain geometry.
+
+An offset takes one line, circle or arc, or a connected chain of lines and
+arcs. Auto-chaining from one curve stops at branches and is resolved once, when
+the offset is created. Adjacent offset curves meet at their intersection.
+Collapsed and self-crossing results are rejected. Generated curves are marked
+`external`, so the solver holds them and trim and extend refuse them.
+
+Editing a distance (`editSketchOffset` in `shared/src/sketchOffsets.ts`)
+rebuilds that offset and every later one from the stored sources. It keeps the
+generated entity IDs, so profiles and downstream features keep their
+references. The edit fails if generated geometry was deleted or trimmed, or if
+the rebuild yields a different number or kind of curves. Editing a source curve
+does not rebuild its offsets: they keep their positions until the next
+distance edit.
 
 ## Tangent edge chains
 

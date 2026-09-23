@@ -21,15 +21,20 @@ everything downstream against persistent topology references.
   concentric, equal, midpoint, collinear, fix) and editable dimensions
   (length, distance, radius, diameter, angle) with live DOF / constrained-state
   feedback.
-- **Sketch offsets**: select a curve, preview the distance, and reverse the
-  direction before applying. Chain connected lines and rounded arc corners,
-  or offset a single line, circle, or arc. Ctrl-click adds/removes curves to
-  choose an explicit chain; curves can be selected in any order.
+- **Sketch offsets**: the Offset tool previews the result in yellow. Select a
+  curve, set the distance, and use Reverse direction to switch sides; positive
+  is left of a line or outside a circle or arc. Connected lines and rounded arc
+  corners chain automatically; Ctrl-click picks the chain yourself, in any
+  order. While editing the sketch, click an offset's **↔ Offset N: d mm** badge
+  to change its distance. Entity IDs stay the same, so downstream profile
+  references hold. Offset curves follow their distance and cannot be dragged.
+  Offsets made before schema 4 are plain geometry; recreate them to get a badge.
 - **Solid features**: extrude (new body / join / cut / intersect, symmetric,
   two-sided, from sketch profiles _or_ planar faces), revolve, sweep, loft,
   emboss/deboss.
 - **Modify**: fillet, chamfer, shell, boolean combine, split body,
-  press/pull (offset face).
+  press/pull (offset face), move (translate whole bodies along X, Y and Z by
+  typed values or the arrow gizmo).
 - **Replicate**: mirror, rectangular pattern, circular pattern.
 - **Construction**: offset planes, midplanes; sketch on any planar face.
 - **Reference images**: attach PNG/JPEG/WebP canvases to planes, with
@@ -85,13 +90,6 @@ See [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Viewport controls
 
-While editing a sketch, click its **↔ Offset … mm** badge to change a saved
-offset distance. New offsets retain their source curves and generated entity
-IDs, so distance edits preserve downstream profile references. Offsets created
-before this feature were stored as plain geometry and need to be recreated once
-to get an editable badge. Offset geometry is driven by its distance; edit the
-badge instead of dragging its points.
-
 Editing an existing sketch temporarily rolls the viewport and timeline marker
 back to that sketch. **Finish Sketch** regenerates the model at the previously
 saved timeline position. Entering edit mode does not change the saved marker or
@@ -107,26 +105,19 @@ create an undo step.
 | Named views / fit / ortho or persp | Toolbar (right side) and ViewCube                                                                                                                                                       |
 | Shortcuts                          | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
 
-## License note
-
-Rockett CAD bundles [opencascade.js](https://github.com/donalffons/opencascade.js)
-(LGPL-2.1), the WASM build of Open CASCADE Technology.
-
-### Sketch modification tools
+## Sketch modification tools
 
 - Project: click an earlier model edge to add a purple linked reference. Snap or
   constrain new shapes to it to follow source edits. References are construction
   geometry by default; toggle Construction on a selected reference to use it in a profile.
 - Trim: click the portion of a curve between intersections to remove it.
 - Extend: click near an endpoint to extend to the first intersecting boundary.
-- Offset: enter a signed mm distance, then click a curve. Positive means left of
-  a line or outside a circle/arc; negative reverses the side. Closed loop follows
-  simple connected line loops. The copy remains independently editable.
+- Offset: see Sketch offsets under Features.
 
 Each operation returns to Select and can be undone. Unsupported projections and
 collapsing offsets show an error. Trim/extend reports removed curve constraints.
 
-### Workspace usability
+## Workspace usability
 
 Undo/redo stays inside an existing sketch and returns to Select. Opening a sketch
 from the model tree or timeline faces its plane automatically. Shift+F fits the
@@ -140,3 +131,8 @@ selects smooth connected edges (including line/arc joins); sharp corners and
 ambiguous branches stop the chain. Clicking a fully selected chain deselects it.
 Uncheck the option to pick edges individually. OCCT may still propagate a fillet
 or chamfer along a smooth contour as required by its native operation.
+
+## License note
+
+Rockett CAD bundles [opencascade.js](https://github.com/donalffons/opencascade.js)
+(LGPL-2.1), the WASM build of Open CASCADE Technology.
