@@ -123,6 +123,9 @@ before migration and its backups directory is never created; the server
 deletes it after 24 hours without a request. Backups are never pruned. To
 restore one by hand, stop the container, run `sha256sum -c ../SHA256SUMS`
 inside its `files/` directory, and copy `files/` over the project directory.
+Any other namespace under `/data`, such as `folders/`, follows the same rule
+when its format changes: its directory is backed up to
+`backups/<namespace>/v{version}-{hash}/` and restored the same way.
 
 Every project is validated when it is opened. One that fails, or one saved by
 a newer schema, stays in the project list with its reason and is never

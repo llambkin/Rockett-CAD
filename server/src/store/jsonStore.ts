@@ -8,7 +8,7 @@ import {
   type Migrations,
 } from "./migrations.js";
 import { ProjectQueue } from "./projectQueue.js";
-import type { Storage } from "./storage.js";
+import { storagePath, type Storage } from "./storage.js";
 
 export class StoreError extends Error {
   constructor(
@@ -47,6 +47,117 @@ export function sha256(data: string | Uint8Array): string {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
+export class NamespaceBackup {
+  private readonly dir: string;
+  private readonly root: string;
+  private readonly record: string;
+
+  constructor(
+    private readonly storage: Storage,
+    namespace: string,
+  ) {
+    this.dir = storagePath(namespace);
+    this.root = path.posix.join("backups", this.dir);
+    this.record = path.posix.join(this.root, "migrating.json");
+  }
+
+  async backup(version: string): Promise<string> {
+    const name = await this.write(version);
+    await this.verify(name);
+    return name;
+  }
+
+  async migrate(version: string, apply: () => Promise<void>): Promise<void> {
+    const backup = await this.backup(version);
+    await this.storage.writeAtomic(this.record, JSON.stringify({ backup }));
+    await apply();
+    await this.storage.remove(this.record);
+  }
+
+  async recover(): Promise<boolean> {
+    const raw = await this.storage.read(this.record).catch(() => undefined);
+    if (!raw) return false;
+    const { backup } = JSON.parse(raw.toString("utf8")) as { backup: string };
+    await this.restore(backup);
+    await this.storage.remove(this.record);
+    return true;
+  }
+
+  async restore(backup: string): Promise<void> {
+    for (const [name, sum] of await this.verify(backup))
+      await this.storage.writeAtomic(
+        path.posix.join(this.dir, name),
+        await this.verified(backup, name, sum),
+      );
+  }
+
+  private async verify(backup: string): Promise<Array<[string, string]>> {
+    if (!/^[\w.]+-[0-9a-f]{16}$/.test(backup))
+      throw new StoreError(`invalid backup name ${backup}`);
+    const text = await this.storage.read(
+      path.posix.join(this.root, backup, "SHA256SUMS"),
+    );
+    const entries = text
+      .toString("utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line): [string, string] => [line.slice(66), line.slice(0, 64)]);
+    for (const [name, sum] of entries) await this.verified(backup, name, sum);
+    return entries;
+  }
+
+  private async verified(
+    backup: string,
+    name: string,
+    sum: string,
+  ): Promise<Buffer> {
+    const data = await this.storage.read(
+      path.posix.join(this.root, backup, "files", name),
+    );
+    if (sha256(data) !== sum)
+      throw new StoreError(
+        `${this.dir} backup ${backup} is damaged`,
+        "internal",
+      );
+    return data;
+  }
+
+  private async write(version: string): Promise<string> {
+    const { storage, dir } = this;
+    const names = await storage.files(dir);
+    names.sort();
+    const sums = new Map<string, string>();
+    for (const name of names)
+      sums.set(name, sha256(await storage.read(path.posix.join(dir, name))));
+    const manifest = names
+      .map((name) => `${sums.get(name)}  ${name}\n`)
+      .join("");
+    const backup = `${version}-${sha256(manifest).slice(0, 16)}`;
+    const target = path.posix.join(this.root, backup);
+    const existing = await storage
+      .read(path.posix.join(target, "SHA256SUMS"))
+      .catch(() => undefined);
+    if (existing?.toString("utf8") === manifest) return backup;
+    if (existing)
+      throw new StoreError(`${dir} backup ${backup} differs`, "internal");
+    for (const name of names) {
+      const data = await storage.read(path.posix.join(dir, name));
+      if (sha256(data) !== sums.get(name))
+        throw new StoreError(`${dir} changed during backup`, "internal");
+      await storage.writeAtomic(path.posix.join(target, "files", name), data);
+    }
+    await storage.writeAtomic(path.posix.join(target, "SHA256SUMS"), manifest);
+    return backup;
+  }
+}
+
+export function backupNamespace(
+  storage: Storage,
+  namespace: string,
+): NamespaceBackup {
+  return new NamespaceBackup(storage, namespace);
+}
+
 export class JsonStore<T, C extends MigrationContext = MigrationContext> {
   private writes = new ProjectQueue();
 
@@ -60,14 +171,6 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
 
   private file(key: string): string {
     return path.posix.join(this.dir(key), this.options.file);
-  }
-
-  private backups(key: string): string {
-    return path.posix.join("backups", this.dir(key));
-  }
-
-  private record(key: string): string {
-    return path.posix.join(this.backups(key), "migrating.json");
   }
 
   async stored(key: string): Promise<unknown> {
@@ -157,85 +260,17 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     const from = (value as Record<string, unknown>)[
       this.options.migrations.field
     ];
-    const backup = await this.backup(key, `v${String(from)}`);
-    await this.eachBackupFile(key, backup, async () => {});
-    const { storage } = this.options;
-    await storage.writeAtomic(this.record(key), JSON.stringify({ backup }));
-    await storage.writeAtomic(this.file(key), staged);
-    await this.options.effects?.retire(key, context);
-    await storage.remove(this.record(key));
-  }
-
-  private async backup(key: string, version: string): Promise<string> {
-    const { storage } = this.options;
-    const dir = this.dir(key);
-    const names = await storage.files(dir);
-    names.sort();
-    const sums = new Map<string, string>();
-    for (const name of names)
-      sums.set(name, sha256(await storage.read(path.posix.join(dir, name))));
-    const manifest = names
-      .map((name) => `${sums.get(name)}  ${name}\n`)
-      .join("");
-    const backup = `${version}-${sha256(manifest).slice(0, 16)}`;
-    const target = path.posix.join(this.backups(key), backup);
-    const existing = await storage
-      .read(path.posix.join(target, "SHA256SUMS"))
-      .catch(() => undefined);
-    if (existing?.toString("utf8") === manifest) return backup;
-    if (existing)
-      throw new StoreError(
-        `${this.options.name} ${key} backup ${backup} differs`,
-        "internal",
-      );
-    for (const name of names) {
-      const data = await storage.read(path.posix.join(dir, name));
-      if (sha256(data) !== sums.get(name))
-        throw new StoreError(
-          `${this.options.name} ${key} changed during backup`,
-          "internal",
-        );
-      await storage.writeAtomic(path.posix.join(target, "files", name), data);
-    }
-    await storage.writeAtomic(path.posix.join(target, "SHA256SUMS"), manifest);
-    return backup;
+    await backupNamespace(this.options.storage, this.dir(key)).migrate(
+      `v${String(from)}`,
+      async () => {
+        await this.options.storage.writeAtomic(this.file(key), staged);
+        await this.options.effects?.retire(key, context);
+      },
+    );
   }
 
   private async recover(key: string): Promise<boolean> {
-    const { storage } = this.options;
-    const record = await storage.read(this.record(key)).catch(() => undefined);
-    if (!record) return false;
-    const { backup } = JSON.parse(record.toString("utf8")) as {
-      backup: string;
-    };
-    await this.eachBackupFile(key, backup, (name, data) =>
-      storage.writeAtomic(path.posix.join(this.dir(key), name), data),
-    );
-    await storage.remove(this.record(key));
-    return true;
-  }
-
-  private async eachBackupFile(
-    key: string,
-    backup: string,
-    visit: (name: string, data: Buffer) => Promise<void>,
-  ): Promise<void> {
-    const { storage } = this.options;
-    const source = path.posix.join(this.backups(key), backup);
-    const manifest = (
-      await storage.read(path.posix.join(source, "SHA256SUMS"))
-    ).toString("utf8");
-    for (const line of manifest.split("\n").filter(Boolean)) {
-      const sum = line.slice(0, 64);
-      const name = line.slice(66);
-      const data = await storage.read(path.posix.join(source, "files", name));
-      if (sha256(data) !== sum)
-        throw new StoreError(
-          `${this.options.name} ${key} backup ${backup} is damaged`,
-          "internal",
-        );
-      await visit(name, data);
-    }
+    return backupNamespace(this.options.storage, this.dir(key)).recover();
   }
 
   async inventory(): Promise<Inventory> {
