@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, promises as fs } from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -20,10 +21,17 @@ export async function startBuiltApp(): Promise<BuiltApp> {
       throw new Error(
         `${path.relative(root, file)} is missing; run npm run build`,
       );
+  const port = await freePort();
+  const origin = `http://127.0.0.1:${port}`;
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-browser-"));
   const child = spawn(process.execPath, [serverEntry], {
     cwd: root,
-    env: { PATH: process.env.PATH, ROCKETT_PORT: "0", DATA_DIR: dataDir },
+    env: {
+      PATH: process.env.PATH,
+      ROCKETT_PORT: String(port),
+      ROCKETT_ALLOWED_ORIGINS: origin,
+      DATA_DIR: dataDir,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const exited = new Promise<void>((resolve) =>
@@ -42,7 +50,7 @@ export async function startBuiltApp(): Promise<BuiltApp> {
   };
 
   try {
-    const port = await new Promise<string>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       let out = "";
       const timer = setTimeout(
         () =>
@@ -53,10 +61,9 @@ export async function startBuiltApp(): Promise<BuiltApp> {
       );
       child.stdout.setEncoding("utf8").on("data", (s: string) => {
         out += s;
-        const found = /listening on http:\/\/[^:]+:(\d+)/.exec(out)?.[1];
-        if (found) {
+        if (/listening on http:\/\/[^:]+:\d+/.test(out)) {
           clearTimeout(timer);
-          resolve(found);
+          resolve();
         }
       });
       void exited.then(() => {
@@ -66,9 +73,20 @@ export async function startBuiltApp(): Promise<BuiltApp> {
         );
       });
     });
-    return { origin: `http://127.0.0.1:${port}`, serverErrors, close };
+    return { origin, serverErrors, close };
   } catch (err) {
     await close();
     throw err;
   }
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address() as net.AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
 }
