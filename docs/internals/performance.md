@@ -72,6 +72,10 @@ under `npm test` and proves both evaluate with no error status.
 - `fillet-drag` is `filletDragPart()`: `many-body` plus a 0.5 mm fillet on
   one top edge of one pattern copy, `b:py:b:px:b:box:12:8`. Six features,
   1,000 bodies.
+- `push-pull` is `pushPullPart()`: `many-body` plus a 10 mm join extrude of
+  the top face of that same copy. Six features, 1,000 bodies.
+  `pushPull.test.ts` evaluates it in a child process, so a kernel call that
+  never returns fails at the timeout instead of hanging the run.
 
 Benches over them:
 

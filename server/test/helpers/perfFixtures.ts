@@ -174,9 +174,11 @@ export function manyBodyPart(): CadDocument {
 
 export const DRAG_BODY = "b:py:b:px:b:box:12:8";
 
+const DRAG_PREFIX = "p8:py:p12:px:f:box";
+
 export function filletDragPart(): CadDocument {
   const doc = manyBodyPart();
-  const prefix = "p8:py:p12:px:f:box";
+  const prefix = DRAG_PREFIX;
   const edge: EdgeRef = {
     kind: "edge",
     bodyId: DRAG_BODY,
@@ -186,4 +188,19 @@ export function filletDragPart(): CadDocument {
     ...doc.features,
     fillet("drag", [edge], 0.5),
   ]);
+}
+
+export function pushPullPart(): CadDocument {
+  const push: ExtrudeFeature = {
+    ...meta("push"),
+    type: "extrude",
+    profiles: [],
+    faces: [
+      { kind: "face", bodyId: DRAG_BODY, faceName: `${DRAG_PREFIX}:cap:end` },
+    ],
+    distance: 10,
+    direction: "normal",
+    operation: "join",
+  };
+  return document("perf-push-pull", [...manyBodyPart().features, push]);
 }

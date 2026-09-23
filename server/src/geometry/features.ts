@@ -54,6 +54,7 @@ import {
   pnt,
   progress,
   release,
+  scoped,
   shapeHash,
   solids,
   vec,
@@ -280,6 +281,43 @@ interface ToolResult {
   names: NameMap;
 }
 
+function cylinderAxes(face: Shape): Vec3[] | null {
+  const k = getKernel();
+  return scoped((own) => {
+    const surf = own(
+      new k.BRepAdaptor_Surface_2(own(k.TopoDS.Face_1(face)), false),
+    );
+    if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Cylinder) return null;
+    const frame = own(own(surf.Cylinder()).Position());
+    return [own(frame.XDirection()), own(frame.YDirection())].map((d): Vec3 => [
+      d.X(),
+      d.Y(),
+      d.Z(),
+    ]);
+  });
+}
+
+function reparametrisedCylinderEdges(shape: Shape): Shape[] {
+  const k = getKernel();
+  const map = new k.TopTools_IndexedDataMapOfShapeListOfShape_1();
+  k.TopExp.MapShapesAndAncestors(
+    shape,
+    k.TopAbs_ShapeEnum.TopAbs_EDGE,
+    k.TopAbs_ShapeEnum.TopAbs_FACE,
+    map,
+  );
+  const keep: Shape[] = [];
+  for (let i = 1; i <= map.Extent(); i++) {
+    const adjacent = listToArray(map.FindFromIndex(i));
+    const [a, b] = adjacent.map(cylinderAxes);
+    release(adjacent);
+    if (a && b && a.some((d, j) => V.dot(d, b[j]!) < 1 - UNIT_DOT_TOL))
+      keep.push(map.FindKey(i));
+  }
+  map.delete();
+  return keep;
+}
+
 /**
  * Merge coplanar faces and collinear edges of a tool solid, so a body made
  * from several adjacent sketch regions reads as one solid instead of showing
@@ -295,6 +333,9 @@ function unifyTool(tool: ToolResult, featureId: string): ToolResult {
       true,
       false,
     );
+    const seams = reparametrisedCylinderEdges(tool.shape);
+    for (const edge of seams) uni.KeepShape(edge);
+    release(seams);
     uni.Build();
     const merged = uni.Shape();
     if (facesOf(merged).length === 0) {

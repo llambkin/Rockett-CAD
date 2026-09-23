@@ -1,6 +1,7 @@
 # Last run
 
-Paused on request after the running rows finished. DOC-018 then ran alone.
+Paused on request after the running rows finished. DOC-018 then ran alone,
+then BUG-041.
 No agents are running.
 
 - Done this run: CUST-030, CUST-031, CUST-032, BUG-038, BUG-039, BUG-040,
@@ -16,6 +17,11 @@ No agents are running.
   6 to 11, which needs Mark's approval first.
 - A fillet drag on the 1,000-body model takes about 70 ms, down from about
   500 ms, because edits now send only the meshes the client lacks.
+- BUG-041: pushing up the top face of a filleted body hung the server in
+  OCCT's face unify, an infinite loop on one 18-face solid, which is what
+  hung the dev instance on the 1,000-body project. The fixture now opens in
+  1.4 s and edits in about 200 ms. The Docker health probe gives up after 5 s.
+  Not deployed.
 
 ## Next
 
@@ -39,6 +45,9 @@ handles on every feature) is still queued and not started.
 - When editing, BUG-040 counts bodies from later features as bodies to cut.
 - Project files, duplicates and browser projects no longer carry hidden
   bodies or sketches. See Proposed.
+- BUG-041 leaves a seam ring where a pushed-up fillet's cylinder meets one
+  whose frame differs. A kernel call that never returns still blocks the
+  server until the PERF-011 worker lands.
 
 ## Waiting on Mark
 
