@@ -1,5 +1,11 @@
 import { Type, type Static, type TSchema } from "typebox";
-import type { CadDocument, EdgeRef, Feature, SketchEntity } from "./model.js";
+import type {
+  CadDocument,
+  EdgeRef,
+  Feature,
+  SketchEntity,
+  TreeGroup,
+} from "./model.js";
 import type {
   EvaluateResult,
   ExportRequest,
@@ -10,7 +16,7 @@ import type {
   ProjectResponse,
   ProjectSummary,
 } from "./api.js";
-import { edgeRef, faceRef } from "./schema/features.js";
+import { edgeRef, faceRef, groupsSchema } from "./schema/features.js";
 import {
   createFolderBody,
   folderId,
@@ -184,6 +190,11 @@ export const ROUTES = {
       name: Type.Optional(Type.String()),
       visible: Type.Optional(Type.Boolean()),
     }),
+  ),
+  updateGroups: route<{ groups: TreeGroup[] }, MutationResponse>()(
+    "PUT",
+    "/projects/:id/groups",
+    Type.Object({ groups: groupsSchema }),
   ),
   measure: route<MeasureRequest, MeasureResult>()(
     "POST",

@@ -145,6 +145,7 @@ document beyond 40 MB are rejected.
 | `DELETE /projects/:id/features/:fid` | none                    | Marker adjusts if needed                                                     |
 | `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
 | `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Body display metadata                                                        |
+| `PUT /projects/:id/groups`           | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
 
 ## Inspection & output
 
@@ -194,6 +195,8 @@ feature in `detail`, such as `/transform/scale`.
 `documentSchema` in the same file: `schemaVersion` equals the current version,
 `units` is `mm`, `cm`, `m` or `in`, `bodyMeta` values are
 `{ name: string, visible: boolean }`, `counters` are non-negative integers,
+`groups` have unique ids, a name of 1 to 200 characters, `kind` `body` or
+`sketch`, and no member in two groups,
 `createdAt` and `modifiedAt` are non-empty strings, `timelinePosition` is an
 integer no greater than the feature count and `camera` has its shape when
 present. Loading a saved project migrates it without validating.

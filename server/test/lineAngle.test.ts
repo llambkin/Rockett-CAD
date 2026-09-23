@@ -64,14 +64,13 @@ describe("line angle constraint", () => {
     );
 
     const loaded = await store.load(legacy.id);
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(loaded.schemaVersion).toBe(5);
+    expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
     expect(loaded.features).toEqual(legacy.features);
 
     loaded.features = [sketch(30)];
     await store.save(loaded);
     const reloaded = await store.load(legacy.id);
-    expect(reloaded.schemaVersion).toBe(5);
+    expect(reloaded.schemaVersion).toBe(SCHEMA_VERSION);
     expect(reloaded.features).toEqual([sketch(30)]);
   });
 });

@@ -165,6 +165,7 @@ it("acts on every selected body from the multi-selection menu in one undo step",
   await rightClick("Body1");
   expect(labels()).toEqual([
     "Move…",
+    "Group",
     "Show / Hide",
     "Isolate",
     "Show all bodies",
@@ -184,7 +185,7 @@ it("deletes every selected sketch in one undo step", async () => {
   await click("Sketch1", { ctrlKey: true });
   await click("Sketch3", { ctrlKey: true });
   await rightClick("Sketch3");
-  expect(labels()).toEqual(["Show / Hide", "Delete"]);
+  expect(labels()).toEqual(["Show / Hide", "Group", "Delete"]);
   await choose("Delete");
   expect(vi.mocked(api.deleteFeature).mock.calls).toEqual([
     ["p1", "s1"],

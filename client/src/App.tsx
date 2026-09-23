@@ -226,7 +226,9 @@ function Workspace() {
               <p>
                 In the model tree, <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds
                 or removes a body or sketch and <kbd>Shift</kbd> + click selects
-                a range; right-click a selected row to act on all of them.
+                a range; right-click a selected row to act on all of them.{" "}
+                <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>G</kbd> groups the
+                selected rows.
               </p>
               <p>
                 <b>Modelling</b>

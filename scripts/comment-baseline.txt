@@ -3,7 +3,7 @@ client/src/api.ts 1
 client/src/components/DraggablePanel.tsx 8
 client/src/components/FeatureDialog.tsx 24
 client/src/components/MeasurePanel.tsx 1
-client/src/components/ModelTree.tsx 5
+client/src/components/ModelTree.tsx 4
 client/src/components/SketchOffsetIndicators.tsx 1
 client/src/components/Timeline.tsx 7
 client/src/components/Toolbar.tsx 7

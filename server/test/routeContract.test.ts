@@ -55,6 +55,10 @@ const wrongTyped: Partial<
     detail: "/bodyIds/0",
   },
   updateBody: { body: { visible: "yes" }, detail: "/visible" },
+  updateGroups: {
+    body: { groups: [{ id: 5, name: "G", kind: "body", members: [] }] },
+    detail: "/groups/0/id",
+  },
 };
 
 let server: Server;

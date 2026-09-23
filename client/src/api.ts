@@ -13,6 +13,7 @@ import {
   type MeasureRequest,
   type PathParams,
   type Route,
+  type TreeGroup,
 } from "@rockett/shared";
 
 export type { Health, MutationResponse } from "@rockett/shared";
@@ -188,6 +189,8 @@ export const api = {
     bodyId: string,
     patch: { name?: string; visible?: boolean },
   ) => send(ROUTES.updateBody, { id, bodyId }, { body: patch }),
+  updateGroups: (id: string, groups: TreeGroup[]) =>
+    send(ROUTES.updateGroups, { id }, { body: { groups } }),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
     send(ROUTES.measure, { id }, { body: { refs } }),

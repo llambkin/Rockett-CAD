@@ -9,7 +9,7 @@ import { LocalStorage } from "../src/store/storage.js";
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 
 describe("schema fixtures", () => {
-  it.each([1, 2, 3, 4])(
+  it.each([1, 2, 3, 4, 5])(
     "loads v%i at the current schema with features unchanged",
     async (version) => {
       const raw = await fs.readFile(
@@ -31,6 +31,7 @@ describe("schema fixtures", () => {
       expect(loaded.features).toEqual(fixture.features);
       expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
       expect(loaded.timelinePosition).toBe(fixture.timelinePosition);
+      expect(loaded.groups).toEqual([]);
       await fs.rm(dir, { recursive: true, force: true });
     },
   );

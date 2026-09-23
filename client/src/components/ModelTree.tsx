@@ -3,26 +3,33 @@
  * Bodies — with visibility toggles, rename, isolate and selection sync.
  */
 
-import { useRef, useState } from "react";
-import type { Feature, PlaneRef } from "@rockett/shared";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import type { Feature, PlaneRef, TreeGroup } from "@rockett/shared";
 import { useStore, selectionKey, type Selection } from "../store";
 import {
   viewportHandle,
   alignCameraToActiveSketch as alignToSketch,
 } from "../viewportRef";
 import { openFeatureEditor } from "./Timeline";
-import { freeProfileIds, sketchUsage } from "../sketchUsage";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { RenameInput } from "./RenameInput";
 import {
   deleteFeatures,
+  groupItems,
+  groupParts,
+  selectSketchRegions,
+  sketchSel,
+  bodySel,
+  renameGroup,
   setBodiesVisible,
   setSketchesVisible,
   treeClick,
   treeIds,
+  ungroup,
 } from "../treeSelection";
 
 type PlaneSelection = Extract<Selection, { kind: "plane" }>;
-type BodySelection = Extract<Selection, { kind: "body" }>;
+type Kind = TreeGroup["kind"];
 
 const sketchOn = (ref: PlaneRef) =>
   void useStore
@@ -56,23 +63,6 @@ const canvasMenu = (f: Feature): MenuItem[] => [
   deleteItem(f.id),
 ];
 
-/** Select a sketch's free regions (all of them when every one is used). */
-const selectSketchRegions = (sketchId: string) => {
-  const s = useStore.getState();
-  const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
-  const profiles = sk?.profiles ?? [];
-  const free = s.document
-    ? freeProfileIds(sketchUsage(s.document), sketchId, profiles)
-    : [];
-  const ids = free.length > 0 ? free : profiles.map((p) => p.id);
-  const sels: Selection[] = ids.map((id) => ({
-    kind: "profile" as const,
-    sketchId,
-    profileId: id,
-  }));
-  s.setSelection(sels);
-};
-
 export function ModelTree() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
@@ -81,22 +71,42 @@ export function ModelTree() {
   const setBodyMeta = useStore((s) => s.setBodyMeta);
   const anchor = useRef<Selection | null>(null);
   const [originVisible, setOriginVisible] = useState(true);
-  const [renaming, setRenaming] = useState<{
-    id: string;
-    value: string;
-  } | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [treeMenu, setTreeMenu] = useState<{
     x: number;
     y: number;
     items: MenuItem[];
   } | null>(null);
+  const startGroup = async (kind: Kind, ids: string[]) => {
+    const group = await groupItems(kind, ids);
+    if (group) setRenaming(group.id);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "g") return;
+      const tag = (e.target as HTMLElement).tagName;
+      const s = useStore.getState();
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || s.busy) return;
+      if (s.mode.name !== "idle") return;
+      const kind = treeIds(s.selection, "body").length > 0 ? "body" : "sketch";
+      const ids = treeIds(s.selection, kind);
+      if (ids.length === 0) return;
+      e.preventDefault();
+      void startGroup(kind, ids);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (!document_) return null;
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
     if (items.length > 0) setTreeMenu({ x: e.clientX, y: e.clientY, items });
   };
+  const toggle = (key: string) =>
+    setCollapsed({ ...collapsed, [key]: !collapsed[key] });
   const selKeys = new Set(selection.map(selectionKey));
   const pick = (
     e: React.MouseEvent,
@@ -105,7 +115,7 @@ export function ModelTree() {
     plain: () => void,
   ) => {
     const range = e.shiftKey;
-    const toggle = e.ctrlKey || e.metaKey;
+    const additive = e.ctrlKey || e.metaKey;
     const current = anchor.current;
     const from =
       range &&
@@ -115,21 +125,31 @@ export function ModelTree() {
         : sel;
     anchor.current = from;
     const s = useStore.getState();
-    if (!range && !toggle) plain();
+    if (!range && !additive) plain();
     else if (!range && s.mode.name === "dialog") toggleSelection(sel, true);
     else s.setSelection(treeClick(s.selection, sel, order, from, range));
   };
-  const chosen = (kind: "body" | "sketch", id: string) => {
+  const chosen = (kind: Kind, id: string) => {
     const ids = treeIds(selection, kind);
     return ids.includes(id) ? ids : [id];
   };
+  const named = (id: string, name: string, commit: (name: string) => void) =>
+    renaming === id ? (
+      <RenameInput
+        value={name}
+        className="tree-rename"
+        label="Name"
+        onCommit={(next) => {
+          setRenaming(null);
+          commit(next);
+        }}
+        onCancel={() => setRenaming(null)}
+      />
+    ) : null;
 
-  const section = (key: string, label: string, children: React.ReactNode) => (
+  const section = (key: string, label: string, children: ReactNode) => (
     <div className="tree-section">
-      <div
-        className="tree-header"
-        onClick={() => setCollapsed({ ...collapsed, [key]: !collapsed[key] })}
-      >
+      <div className="tree-header" onClick={() => toggle(key)}>
         <span className="tree-caret">{collapsed[key] ? "▸" : "▾"}</span>
         {label}
       </div>
@@ -163,7 +183,6 @@ export function ModelTree() {
   );
 
   const sketches = document_.features.filter((f) => f.type === "sketch");
-
   const planes = document_.features.filter(
     (f) => f.type === "constructionPlane",
   );
@@ -172,33 +191,49 @@ export function ModelTree() {
     ref: { kind: "construction", featureId: f.id },
     label: f.name,
   }));
-  const sketchSels = sketches.map((f): Selection => ({
-    kind: "sketch",
-    sketchId: f.id,
-  }));
   const canvases = document_.features.filter(
     (f) => f.type === "referenceImage",
   );
   const bodies = evaluation?.bodies ?? [];
-  const bodySels = bodies.map((b): BodySelection => ({
-    kind: "body",
-    bodyId: b.bodyId,
-  }));
+
+  const sketchParts = groupParts(
+    document_.groups,
+    collapsed,
+    "sketch",
+    sketches,
+    sketchSel,
+  );
+  const bodyParts = groupParts(
+    document_.groups,
+    collapsed,
+    "body",
+    bodies,
+    bodySel,
+  );
+
+  const shown = (kind: Kind, ids: string[]) =>
+    kind === "body"
+      ? bodies.some((b) => ids.includes(b.bodyId) && b.visible)
+      : sketches.some(
+          (f) => ids.includes(f.id) && (f as any).visible !== false,
+        );
+  const showHide = (kind: Kind, ids: string[]) => {
+    const visible = !shown(kind, ids);
+    void (kind === "body"
+      ? setBodiesVisible(Object.fromEntries(ids.map((id) => [id, visible])))
+      : setSketchesVisible(ids, visible));
+  };
+  const groupItem = (kind: Kind, ids: string[]): MenuItem => ({
+    label: "Group",
+    action: () => void startGroup(kind, ids),
+  });
 
   const sketchMenu = (f: Feature): MenuItem[] => {
     const ids = chosen("sketch", f.id);
     if (ids.length > 1)
       return [
-        {
-          label: "Show / Hide",
-          action: () =>
-            void setSketchesVisible(
-              ids,
-              !sketches.some(
-                (x) => ids.includes(x.id) && (x as any).visible !== false,
-              ),
-            ),
-        },
+        { label: "Show / Hide", action: () => showHide("sketch", ids) },
+        groupItem("sketch", ids),
         {
           label: "Delete",
           danger: true,
@@ -225,10 +260,7 @@ export function ModelTree() {
           useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
         },
       },
-      {
-        label: "Rename",
-        action: () => setRenaming({ id: f.id, value: f.name }),
-      },
+      { label: "Rename", action: () => setRenaming(f.id) },
       deleteItem(f.id),
     ];
   };
@@ -239,38 +271,158 @@ export function ModelTree() {
       void setBodiesVisible(
         Object.fromEntries(bodies.map((x) => [x.bodyId, visible(x.bodyId)])),
       );
-    const shown = bodies.some((x) => ids.includes(x.bodyId) && x.visible);
     return [
       {
         label: "Move…",
         action: () => {
           const s = useStore.getState();
           s.setMode({ name: "dialog", dialog: "move" });
-          s.setSelection(bodySels.filter((x) => ids.includes(x.bodyId)));
+          s.setSelection(ids.map((bodyId) => ({ kind: "body", bodyId })));
           s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
         },
       },
-      ...(ids.length > 1
-        ? []
-        : [
-            {
-              label: "Rename",
-              action: () => setRenaming({ id: b.bodyId, value: b.name }),
-            },
-          ]),
-      {
-        label: "Show / Hide",
-        action: () =>
-          void setBodiesVisible(
-            Object.fromEntries(ids.map((id) => [id, !shown])),
-          ),
-      },
+      ids.length > 1
+        ? groupItem("body", ids)
+        : { label: "Rename", action: () => setRenaming(b.bodyId) },
+      { label: "Show / Hide", action: () => showHide("body", ids) },
       {
         label: "Isolate",
         action: () => visibility((id) => ids.includes(id)),
       },
       { label: "Show all bodies", action: () => visibility(() => true) },
     ];
+  };
+
+  const groupMenu = (g: TreeGroup, members: Selection[]): MenuItem[] => [
+    { label: "Rename", action: () => setRenaming(g.id) },
+    { label: "Show / Hide all", action: () => showHide(g.kind, g.members) },
+    {
+      label: "Select members",
+      action: () => useStore.getState().setSelection(members),
+    },
+    { label: "Ungroup", action: () => void ungroup(g.id) },
+  ];
+
+  const groupedRows = <T,>(
+    { parts }: { parts: { group: TreeGroup | null; items: T[] }[] },
+    selOf: (t: T) => Selection,
+    row: (t: T) => ReactNode,
+  ) =>
+    parts.map(({ group, items }) =>
+      group ? (
+        <Fragment key={group.id}>
+          <div
+            className="tree-item"
+            onClick={() => toggle(group.id)}
+            onContextMenu={(e) =>
+              openMenu(e, groupMenu(group, items.map(selOf)))
+            }
+          >
+            <span className="tree-caret">
+              {collapsed[group.id] ? "▸" : "▾"}
+            </span>
+            <span
+              className="tree-icon eye"
+              onClick={(e) => {
+                e.stopPropagation();
+                showHide(group.kind, group.members);
+              }}
+            >
+              {shown(group.kind, group.members) ? "👁" : "◌"}
+            </span>
+            {named(
+              group.id,
+              group.name,
+              (name) => void renameGroup(group.id, name),
+            ) ?? group.name}
+          </div>
+          {!collapsed[group.id] && (
+            <div className="tree-children">
+              {items.length > 0 ? (
+                items.map(row)
+              ) : (
+                <div className="tree-empty">No members</div>
+              )}
+            </div>
+          )}
+        </Fragment>
+      ) : (
+        items.map(row)
+      ),
+    );
+
+  const sketchRow = (f: Feature) => {
+    const sel = sketchSel(f);
+    const isSel =
+      selKeys.has(selectionKey(sel)) ||
+      selection.some((s) => s.kind === "profile" && s.sketchId === f.id);
+    return (
+      <div
+        key={f.id}
+        className={`tree-item ${isSel ? "selected" : ""}`}
+        onClick={(e) =>
+          pick(e, sel, sketchParts.order, () => selectSketchRegions(f.id))
+        }
+        onDoubleClick={() => {
+          void useStore.getState().editSketch(f.id).then(alignToSketch);
+        }}
+        onContextMenu={(e) => openMenu(e, sketchMenu(f))}
+        title="Click to select regions · double-click to edit"
+      >
+        <span
+          className="tree-icon eye"
+          title={(f as any).visible === false ? "Show sketch" : "Hide sketch"}
+          onClick={(e) => {
+            e.stopPropagation();
+            void useStore.getState().updateFeature(f.id, {
+              visible: (f as any).visible === false,
+            } as any);
+          }}
+        >
+          {(f as any).visible === false ? "◌" : "👁"}
+        </span>
+        <span className="tree-icon">✏</span>
+        {named(
+          f.id,
+          f.name,
+          (name) => void useStore.getState().renameFeature(f.id, name),
+        ) ?? f.name}
+      </div>
+    );
+  };
+
+  const bodyRow = (b: (typeof bodies)[number]) => {
+    const sel = bodySel(b);
+    const isSel =
+      selKeys.has(selectionKey(sel)) ||
+      selection.some((s) => "bodyId" in s && (s as any).bodyId === b.bodyId);
+    return (
+      <div
+        key={b.bodyId}
+        className={`tree-item ${isSel ? "selected" : ""}`}
+        onClick={(e) =>
+          pick(e, sel, bodyParts.order, () => toggleSelection(sel, false))
+        }
+        onDoubleClick={() => setRenaming(b.bodyId)}
+        onContextMenu={(e) => openMenu(e, bodyMenu(b))}
+        title="Click to select · right-click for actions"
+      >
+        <span
+          className="tree-icon eye"
+          onClick={(e) => {
+            e.stopPropagation();
+            void setBodyMeta(b.bodyId, { visible: !b.visible });
+          }}
+        >
+          {b.visible ? "👁" : "◌"}
+        </span>
+        {named(
+          b.bodyId,
+          b.name,
+          (name) => void setBodyMeta(b.bodyId, { name }),
+        ) ?? <span className={b.visible ? "" : "dimmed"}>{b.name}</span>}
+      </div>
+    );
   };
 
   return (
@@ -353,128 +505,20 @@ export function ModelTree() {
           )),
         )}
 
-      {sketches.length > 0 &&
+      {sketchParts.parts.length + sketches.length > 1 &&
         section(
           "sketches",
           "Sketches",
-          sketches.map((f, i) => (
-            <div
-              key={f.id}
-              className={`tree-item ${selKeys.has(selectionKey(sketchSels[i]!)) || selection.some((s) => s.kind === "profile" && s.sketchId === f.id) ? "selected" : ""}`}
-              onClick={(e) =>
-                pick(e, sketchSels[i]!, sketchSels, () =>
-                  selectSketchRegions(f.id),
-                )
-              }
-              onDoubleClick={() => {
-                void useStore.getState().editSketch(f.id).then(alignToSketch);
-              }}
-              onContextMenu={(e) => openMenu(e, sketchMenu(f))}
-              title="Click to select regions · double-click to edit"
-            >
-              <span
-                className="tree-icon eye"
-                title={
-                  (f as any).visible === false ? "Show sketch" : "Hide sketch"
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void useStore.getState().updateFeature(f.id, {
-                    visible: (f as any).visible === false,
-                  } as any);
-                }}
-              >
-                {(f as any).visible === false ? "◌" : "👁"}
-              </span>
-              <span className="tree-icon">✏</span>
-              {renaming?.id === f.id ? (
-                <input
-                  autoFocus
-                  className="tree-rename"
-                  value={renaming.value}
-                  onChange={(e) =>
-                    setRenaming({ id: f.id, value: e.target.value })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void useStore
-                        .getState()
-                        .renameFeature(f.id, renaming.value || f.name);
-                      setRenaming(null);
-                    }
-                    if (e.key === "Escape") setRenaming(null);
-                  }}
-                  onBlur={() => setRenaming(null)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                f.name
-              )}
-            </div>
-          )),
+          groupedRows(sketchParts, sketchSel, sketchRow),
         )}
 
       {section(
         "bodies",
         `Bodies (${bodies.length})`,
-        bodies.length === 0 ? (
+        bodyParts.parts.length + bodies.length === 1 ? (
           <div className="tree-empty">No bodies yet</div>
         ) : (
-          bodies.map((b, i) => {
-            const sel = bodySels[i]!;
-            const isSel =
-              selKeys.has(selectionKey(sel)) ||
-              selection.some(
-                (s) => "bodyId" in s && (s as any).bodyId === b.bodyId,
-              );
-            return (
-              <div
-                key={b.bodyId}
-                className={`tree-item ${isSel ? "selected" : ""}`}
-                onClick={(e) =>
-                  pick(e, sel, bodySels, () => toggleSelection(sel, false))
-                }
-                onDoubleClick={() =>
-                  setRenaming({ id: b.bodyId, value: b.name })
-                }
-                onContextMenu={(e) => openMenu(e, bodyMenu(b))}
-                title="Click to select · right-click for actions"
-              >
-                <span
-                  className="tree-icon eye"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void setBodyMeta(b.bodyId, { visible: !b.visible });
-                  }}
-                >
-                  {b.visible ? "👁" : "◌"}
-                </span>
-                {renaming?.id === b.bodyId ? (
-                  <input
-                    autoFocus
-                    className="tree-rename"
-                    value={renaming.value}
-                    onChange={(e) =>
-                      setRenaming({ id: b.bodyId, value: e.target.value })
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        void setBodyMeta(b.bodyId, {
-                          name: renaming.value || b.name,
-                        });
-                        setRenaming(null);
-                      }
-                      if (e.key === "Escape") setRenaming(null);
-                    }}
-                    onBlur={() => setRenaming(null)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className={b.visible ? "" : "dimmed"}>{b.name}</span>
-                )}
-              </div>
-            );
-          })
+          groupedRows(bodyParts, bodySel, bodyRow)
         ),
       )}
 

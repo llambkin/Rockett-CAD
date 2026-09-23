@@ -84,6 +84,14 @@ Bodies get stable ids derived from the feature that created them:
 Display metadata (name, visibility) lives in `document.bodyMeta[bodyId]` and
 is assigned server-side the first time a body id appears (`Body1`, `Body2`, …).
 
+`document.groups` holds model tree folders: `{ id, name, kind, members }`,
+where `kind` is `body` or `sketch` and `members` are body ids or sketch feature
+ids, each in at most one group. Groups never reach evaluation or export. After
+an evaluation the server drops sketch members whose feature is gone and, when
+the evaluation reaches the end of the timeline, body members it did not
+produce. A rolled back timeline keeps them; an empty group stays until
+ungrouped. Components with their own coordinate systems belong to assemblies.
+
 ## Topological naming (persistent references)
 
 The classic CAD problem: "Fillet the third face" breaks the moment an

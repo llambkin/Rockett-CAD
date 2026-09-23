@@ -58,5 +58,6 @@ export const documentMigrations: Migrations<CadDocument> = {
     2: (doc) => doc,
     3: (doc) => doc,
     4: (doc) => doc,
+    5: (doc) => ({ ...doc, groups: [] }),
   },
 };

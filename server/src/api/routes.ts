@@ -18,6 +18,7 @@ import {
   type ApiErrorBody,
   type ApiErrorCode,
   type CadDocument,
+  type EvaluateResult,
   type ExportRequest,
   type Feature,
   type Method,
@@ -156,6 +157,29 @@ function evaluationPosition(req: any, doc: CadDocument): number | undefined {
   return position;
 }
 
+function pruneGroups(
+  doc: CadDocument,
+  evaluation: EvaluateResult,
+  position: number | undefined,
+): boolean {
+  const sketches = new Set(
+    doc.features.filter((f) => f.type === "sketch").map((f) => f.id),
+  );
+  const bodies =
+    position === undefined && doc.timelinePosition === doc.features.length
+      ? new Set(evaluation.bodies.map((b) => b.bodyId))
+      : null;
+  let changed = false;
+  for (const group of doc.groups) {
+    const kept = group.members.filter((id) =>
+      group.kind === "sketch" ? sketches.has(id) : (bodies?.has(id) ?? true),
+    );
+    changed ||= kept.length !== group.members.length;
+    group.members = kept;
+  }
+  return changed;
+}
+
 export function createApiRouter(
   store: ProjectStore,
   folders: FolderStore,
@@ -185,7 +209,7 @@ export function createApiRouter(
   async function evaluateAndSync(doc: CadDocument, position?: number) {
     const engine = engineFor(doc.id);
     const evaluation = engine.evaluate(doc, position);
-    let metaChanged = false;
+    let metaChanged = pruneGroups(doc, evaluation, position);
     for (const body of evaluation.bodies) {
       if (!doc.bodyMeta[body.bodyId]) {
         const n = (doc.counters["body"] ?? 0) + 1;
@@ -490,6 +514,17 @@ export function createApiRouter(
       } catch (error) {
         throw new ValidationError((error as Error).message);
       }
+    }),
+  );
+
+  on(
+    ROUTES.updateGroups,
+    wrap(async (req, res) => {
+      const doc = await store.load(req.params.id);
+      doc.groups = req.body.groups;
+      await store.save(doc);
+      const evaluation = await evaluateAndSync(doc);
+      res.json({ document: doc, evaluation });
     }),
   );
 

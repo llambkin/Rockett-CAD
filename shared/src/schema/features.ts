@@ -337,6 +337,27 @@ export const FEATURE_SCHEMAS = {
 const vector = Type.Tuple([Type.Number(), Type.Number(), Type.Number()]);
 const text = Type.String({ minLength: 1, maxLength: 200 });
 
+export const groupsSchema = Type.Refine(
+  Type.Array(
+    Type.Object({
+      id,
+      name: text,
+      kind: Type.Enum(["body", "sketch"]),
+      members: Type.Array(text, { maxItems: 10000 }),
+    }),
+    { maxItems: 2000 },
+  ),
+  (groups) => {
+    const ids = groups.map((g) => g.id);
+    const members = groups.flatMap((g) => g.members);
+    return (
+      new Set(ids).size === ids.length &&
+      new Set(members).size === members.length
+    );
+  },
+  () => "has a repeated group id or a member in more than one group",
+);
+
 export const documentSchema = Type.Refine(
   Type.Object({
     schemaVersion: Type.Literal(SCHEMA_VERSION),
@@ -352,6 +373,7 @@ export const documentSchema = Type.Refine(
       Type.Object({ name: Type.String(), visible: Type.Boolean() }),
     ),
     counters: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
+    groups: groupsSchema,
     camera: Type.Optional(
       Type.Object({
         position: vector,
