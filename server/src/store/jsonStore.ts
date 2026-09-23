@@ -82,6 +82,10 @@ export class JsonStore<T> {
     return migrate(this.options.migrations, await this.stored(key));
   }
 
+  exclusive<R>(key: string, operation: () => Promise<R>): Promise<R> {
+    return this.writes.run(key, operation);
+  }
+
   write(key: string, value: T): Promise<void> {
     return this.writes.run(key, async () => {
       this.options.validate?.(value);

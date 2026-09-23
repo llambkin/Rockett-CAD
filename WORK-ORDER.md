@@ -111,6 +111,7 @@ Decisions ruled by Mark on 2026-09-23, each accepting its recommendation:
 - EXCH-026: projects kept in this browser before sign-in sit in the `rockett` database, and EXCH-026 opens `rockett-<userId>`, so once AUTH lands they drop out of view although nothing deletes them. The design does not say who gets them. Recommended: the first user to sign in on that browser takes them over, and the list says so once (found by DEC-407).
 - Workbench Download: the workbench top bar has no Download, since EXCH-014 found no menu there to hold it. Browser projects work without it: the list row downloads, and the not-saved banner downloads the server copy. Add it with the first top bar menu (found by EXCH-015).
 - Views of browser projects: SET-018 keys saved views by project id, and each open of a browser project gets a new temporary id, so it always opens zoomed to fit and SET-021 leaves one view file per open. Keep the view in the browser record, or key it by the record, when SET-021 runs (found by EXCH-015).
+- Backup retention: DOC-006 backups under `backups/projects/{id}/` are never pruned and survive project deletion, so a deleted project's document, assets and exports stay on disk. Proposed: deleting a project also deletes its backups after a stated grace period, and the remaining backups get a per-project count cap or an age limit. Mark to rule on the grace period and the limit (found by DOC-006).
 
 ## Delivery and acceptance
 

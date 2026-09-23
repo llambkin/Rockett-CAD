@@ -301,6 +301,43 @@ describe.each(backends)("project migration on %s", (_, make) => {
     },
   );
 
+  it("keeps a migrating save and a retained export written during its backup", async () => {
+    const { clean } = await make(0, "before");
+    await seed(clean);
+    const stl = Buffer.from("solid newer\nendsolid newer\n");
+    let exported: Promise<void> | undefined;
+    const storage: Storage = {
+      read: (file) => clean.read(file),
+      list: (dir) => clean.list(dir),
+      files: (dir) => clean.files(dir),
+      remove: (target) => clean.remove(target),
+      writeAtomic: async (file, data) => {
+        if (file.startsWith("backups/") && !exported) {
+          exported = store.saveExport(id, "part.stl", stl);
+          for (let i = 0; i < 20; i++)
+            await new Promise((resolve) => setImmediate(resolve));
+        }
+        await clean.writeAtomic(file, data);
+      },
+    };
+    const store = new ProjectStore(storage);
+
+    await store.save(await edit(store));
+    await exported;
+
+    const [backup] = await backups(clean);
+    const dir = `backups/${project}/${backup}`;
+    const copied = await snapshot(clean, `${dir}/files`);
+    expect(copied).toEqual(original);
+    for (const line of (await clean.read(`${dir}/SHA256SUMS`))
+      .toString()
+      .split("\n")
+      .filter(Boolean))
+      expect(sha(copied.get(line.slice(66))!)).toBe(line.slice(0, 64));
+    expect(await clean.read(`${project}/exports/part.stl`)).toEqual(stl);
+    expect((await store.load(id)).name).toBe("Edited");
+  });
+
   it("inventories outdated projects at boot without migrating them", async () => {
     const { clean: storage } = await make(0, "before");
     await seed(storage);

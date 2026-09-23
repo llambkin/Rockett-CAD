@@ -193,9 +193,13 @@ export class ProjectStore {
     data: Buffer,
   ): Promise<void> {
     if (!/^[\w.-]{1,120}$/.test(fileName)) return;
-    await this.storage.writeAtomic(
-      path.posix.join(this.documents.dir(projectId), "exports", fileName),
-      data,
+    const file = path.posix.join(
+      this.documents.dir(projectId),
+      "exports",
+      fileName,
+    );
+    await this.documents.exclusive(projectId, () =>
+      this.storage.writeAtomic(file, data),
     );
   }
 }
