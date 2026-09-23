@@ -50,7 +50,7 @@
 ## Verification
 
 - Write the row's rejecting check first and watch it fail, then pass.
-- Then `npm test`, `git diff --check`, and read the diff.
+- Then `npm run check`, `git diff --check`, and read the diff.
 - `scripts/check-work-order.sh` passes before and after every row. A change
   to the checker or the row statuses it knows also passes
   `scripts/test-work-order.sh`.
