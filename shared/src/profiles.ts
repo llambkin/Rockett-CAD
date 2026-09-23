@@ -98,7 +98,7 @@ function polygonArea(poly: number[]): number {
   const n = poly.length / 2;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    s += poly[i * 2] * poly[j * 2 + 1] - poly[j * 2] * poly[i * 2 + 1];
+    s += poly[i * 2]! * poly[j * 2 + 1]! - poly[j * 2]! * poly[i * 2 + 1]!;
   }
   return s / 2;
 }
@@ -107,10 +107,10 @@ export function pointInPolygon(x: number, y: number, poly: number[]): boolean {
   let inside = false;
   const n = poly.length / 2;
   for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = poly[i * 2],
-      yi = poly[i * 2 + 1];
-    const xj = poly[j * 2],
-      yj = poly[j * 2 + 1];
+    const xi = poly[i * 2]!,
+      yi = poly[i * 2 + 1]!;
+    const xj = poly[j * 2]!,
+      yj = poly[j * 2 + 1]!;
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
       inside = !inside;
     }
@@ -235,9 +235,9 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
   const pointNode = new Map<string, number>();
   const nodeFor = (x: number, y: number, pid?: string): number => {
     for (let i = 0; i < nodes.length; i++) {
-      if (Math.hypot(nodes[i].x - x, nodes[i].y - y) < MERGE_TOL) {
+      if (Math.hypot(nodes[i]!.x - x, nodes[i]!.y - y) < MERGE_TOL) {
         if (pid) {
-          nodes[i].pointIds.push(pid);
+          nodes[i]!.pointIds.push(pid);
           pointNode.set(pid, i);
         }
         return i;
@@ -316,7 +316,7 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
     nodes.some((n) => Math.hypot(n.x - x, n.y - y) < SPLIT_TOL);
   for (let i = 0; i < raw.length; i++) {
     for (let j = i + 1; j < raw.length; j++) {
-      for (const [x, y] of curveCrossings(raw[i], raw[j])) {
+      for (const [x, y] of curveCrossings(raw[i]!, raw[j]!)) {
         if (!nearNode(x, y)) nodeFor(x, y);
       }
     }
@@ -340,26 +340,28 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       for (let i = 0; i < nodes.length; i++) {
         if (i === from || i === to) continue;
         const t =
-          ((nodes[i].x - p1.x) * abx + (nodes[i].y - p1.y) * aby) / len2;
+          ((nodes[i]!.x - p1.x) * abx + (nodes[i]!.y - p1.y) * aby) / len2;
         if (t <= 1e-9 || t >= 1 - 1e-9) continue;
         const px = p1.x + t * abx;
         const py = p1.y + t * aby;
-        if (Math.hypot(nodes[i].x - px, nodes[i].y - py) < SPLIT_TOL) {
+        if (Math.hypot(nodes[i]!.x - px, nodes[i]!.y - py) < SPLIT_TOL) {
           cuts.push({ n: i, t });
         }
       }
       cuts.sort((a, b) => a.t - b.t);
       const chain = [from, ...cuts.map((c) => c.n), to];
       for (let i = 0; i < chain.length - 1; i++) {
-        if (chain[i] === chain[i + 1]) continue;
-        const a = nodes[chain[i]];
-        const b = nodes[chain[i + 1]];
+        const na = chain[i]!;
+        const nb = chain[i + 1]!;
+        if (na === nb) continue;
+        const a = nodes[na]!;
+        const b = nodes[nb]!;
         curves.push({
           entityId: e.id,
-          from: chain[i],
-          to: chain[i + 1],
+          from: na,
+          to: nb,
           samples: [a.x, a.y, b.x, b.y],
-          trim: chain.length > 2 ? [a.x, a.y, b.x, b.y] : undefined,
+          ...(chain.length > 2 && { trim: [a.x, a.y, b.x, b.y] }),
         });
       }
     } else if (e.kind === "arc") {
@@ -381,24 +383,26 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       const cuts: { n: number; ang: number }[] = [];
       for (let i = 0; i < nodes.length; i++) {
         if (i === from || i === to) continue;
-        const dc = Math.hypot(nodes[i].x - c.x, nodes[i].y - c.y);
+        const dc = Math.hypot(nodes[i]!.x - c.x, nodes[i]!.y - c.y);
         if (Math.abs(dc - r) >= SPLIT_TOL) continue;
-        let ang = Math.atan2(nodes[i].y - c.y, nodes[i].x - c.x);
+        let ang = Math.atan2(nodes[i]!.y - c.y, nodes[i]!.x - c.x);
         while (ang <= a0 + 1e-9) ang += Math.PI * 2;
         if (ang < a1 - 1e-9) cuts.push({ n: i, ang });
       }
       cuts.sort((a, b) => a.ang - b.ang);
       const chain = [from, ...cuts.map((x) => x.n), to];
       for (let i = 0; i < chain.length - 1; i++) {
-        if (chain[i] === chain[i + 1]) continue;
-        const a = nodes[chain[i]];
-        const b = nodes[chain[i + 1]];
+        const na = chain[i]!;
+        const nb = chain[i + 1]!;
+        if (na === nb) continue;
+        const a = nodes[na]!;
+        const b = nodes[nb]!;
         curves.push({
           entityId: e.id,
-          from: chain[i],
-          to: chain[i + 1],
+          from: na,
+          to: nb,
           samples: sampleArc(c.x, c.y, a.x, a.y, b.x, b.y),
-          trim: chain.length > 2 ? [a.x, a.y, b.x, b.y] : undefined,
+          ...(chain.length > 2 && { trim: [a.x, a.y, b.x, b.y] }),
         });
       }
     } else if (e.kind === "circle") {
@@ -410,11 +414,11 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       // loop (a single touching curve can't divide anything).
       const onCircle: { n: number; ang: number }[] = [];
       for (let i = 0; i < nodes.length; i++) {
-        const d = Math.hypot(nodes[i].x - c.x, nodes[i].y - c.y);
+        const d = Math.hypot(nodes[i]!.x - c.x, nodes[i]!.y - c.y);
         if (Math.abs(d - e.radius) < SPLIT_TOL) {
           onCircle.push({
             n: i,
-            ang: Math.atan2(nodes[i].y - c.y, nodes[i].x - c.x),
+            ang: Math.atan2(nodes[i]!.y - c.y, nodes[i]!.x - c.x),
           });
         }
       }
@@ -424,11 +428,11 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       }
       onCircle.sort((a, b) => a.ang - b.ang);
       for (let i = 0; i < onCircle.length; i++) {
-        const from = onCircle[i].n;
-        const to = onCircle[(i + 1) % onCircle.length].n;
+        const from = onCircle[i]!.n;
+        const to = onCircle[(i + 1) % onCircle.length]!.n;
         if (from === to) continue;
-        const a = nodes[from];
-        const b = nodes[to];
+        const a = nodes[from]!;
+        const b = nodes[to]!;
         curves.push({
           entityId: e.id,
           from,
@@ -446,17 +450,17 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
     const n = c.samples.length;
     const rev: number[] = [];
     for (let i = n - 2; i >= 0; i -= 2)
-      rev.push(c.samples[i], c.samples[i + 1]);
+      rev.push(c.samples[i]!, c.samples[i + 1]!);
     const fwdIdx = halfEdges.length;
     const angle = (samples: number[]) =>
-      Math.atan2(samples[3] - samples[1], samples[2] - samples[0]);
+      Math.atan2(samples[3]! - samples[1]!, samples[2]! - samples[0]!);
     halfEdges.push({
       from: c.from,
       to: c.to,
       samples: c.samples,
       entityId: c.entityId,
       reversed: false,
-      trim: c.trim,
+      ...(c.trim && { trim: c.trim }),
       twin: fwdIdx + 1,
       angleOut: angle(c.samples),
       angleInRev: angle(rev),
@@ -468,7 +472,7 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       samples: rev,
       entityId: c.entityId,
       reversed: true,
-      trim: c.trim,
+      ...(c.trim && { trim: c.trim }),
       twin: fwdIdx,
       angleOut: angle(rev),
       angleInRev: angle(c.samples),
@@ -484,7 +488,7 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
     outgoing.set(he.from, arr);
   });
   for (const arr of outgoing.values()) {
-    arr.sort((a, b) => halfEdges[a].angleOut - halfEdges[b].angleOut);
+    arr.sort((a, b) => halfEdges[a]!.angleOut - halfEdges[b]!.angleOut);
   }
 
   interface RawLoop {
@@ -495,14 +499,14 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
   const loops: RawLoop[] = [];
 
   for (let start = 0; start < halfEdges.length; start++) {
-    if (halfEdges[start].visited) continue;
+    if (halfEdges[start]!.visited) continue;
     const loopCurves: OrientedCurve[] = [];
     const poly: number[] = [];
     let cur = start;
     let guard = 0;
     let ok = true;
     while (guard++ < halfEdges.length + 1) {
-      const he = halfEdges[cur];
+      const he = halfEdges[cur]!;
       if (he.visited) {
         ok = false;
         break;
@@ -511,10 +515,10 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       loopCurves.push({
         entityId: he.entityId,
         reversed: he.reversed,
-        trim: he.trim,
+        ...(he.trim && { trim: he.trim }),
       });
       for (let i = 0; i < he.samples.length - 2; i += 2) {
-        poly.push(he.samples[i], he.samples[i + 1]);
+        poly.push(he.samples[i]!, he.samples[i + 1]!);
       }
       // next: among edges leaving he.to, pick the one making the sharpest
       // clockwise turn relative to arrival direction (standard face walk).
@@ -524,7 +528,7 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       let bestDelta = Infinity;
       for (const cand of cands) {
         if (cand === he.twin && cands.length > 1) continue;
-        let delta = arrive - halfEdges[cand].angleOut;
+        let delta = arrive - halfEdges[cand]!.angleOut;
         while (delta <= 1e-12) delta += Math.PI * 2;
         while (delta > Math.PI * 2) delta -= Math.PI * 2;
         if (delta < bestDelta) {
@@ -593,7 +597,9 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
     const n = b.polygon.length / 2;
     const step = Math.max(1, Math.floor(n / 5));
     for (let i = 0; i < n; i += step) {
-      if (!pointInPolygon(b.polygon[i * 2], b.polygon[i * 2 + 1], a.polygon)) {
+      if (
+        !pointInPolygon(b.polygon[i * 2]!, b.polygon[i * 2 + 1]!, a.polygon)
+      ) {
         return false;
       }
     }

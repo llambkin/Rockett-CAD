@@ -45,8 +45,8 @@ describe("profile detection", () => {
   it("finds a rectangle region", () => {
     const profiles = detectProfiles(rect("r", 0, 0, 100, 50));
     expect(profiles).toHaveLength(1);
-    expect(profiles[0].outer).toHaveLength(4);
-    expect(profiles[0].area).toBeCloseTo(5000, 3);
+    expect(profiles[0]!.outer).toHaveLength(4);
+    expect(profiles[0]!.area).toBeCloseTo(5000, 3);
   });
 
   it("finds circle region and treats inner circle as hole", () => {
@@ -100,7 +100,7 @@ describe("profile detection", () => {
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(2);
-    expect(profiles[0].area + profiles[1].area).toBeCloseTo(4000, 3);
+    expect(profiles[0]!.area + profiles[1]!.area).toBeCloseTo(4000, 3);
   });
 
   it("ignores construction geometry", () => {
@@ -119,7 +119,7 @@ describe("profile detection", () => {
     const p1 = detectProfiles(e1);
     const e2 = rect("r", 0, 0, 120, 50); // same entities, different size
     const p2 = detectProfiles(e2);
-    expect(p1[0].id).toBe(p2[0].id);
+    expect(p1[0]!.id).toBe(p2[0]!.id);
   });
 });
 
@@ -256,7 +256,7 @@ describe("crossing curves (X-junctions)", () => {
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(1);
     const lens = 200 * Math.acos(0.5) - 5 * Math.sqrt(300);
-    expect(Math.abs(profiles[0].area - lens)).toBeLessThan(1);
+    expect(Math.abs(profiles[0]!.area - lens)).toBeLessThan(1);
   });
 
   it("ninja star: radial guide lines carve the square into quadrants and each point in half", () => {
@@ -280,10 +280,10 @@ describe("crossing curves (X-junctions)", () => {
     expect(profiles).toHaveLength(4);
     const areas = profiles.map((p) => p.area).sort((a, b) => a - b);
     const half = (Math.PI * 25) / 2;
-    expect(Math.abs(areas[0] - half)).toBeLessThan(0.3);
-    expect(Math.abs(areas[1] - half)).toBeLessThan(0.3);
-    expect(Math.abs(areas[2] - (400 - half))).toBeLessThan(0.3);
-    expect(Math.abs(areas[3] - (400 - half))).toBeLessThan(0.3);
+    expect(Math.abs(areas[0]! - half)).toBeLessThan(0.3);
+    expect(Math.abs(areas[1]! - half)).toBeLessThan(0.3);
+    expect(Math.abs(areas[2]! - (400 - half))).toBeLessThan(0.3);
+    expect(Math.abs(areas[3]! - (400 - half))).toBeLessThan(0.3);
     // the circle pieces carry trim so the server can build them as arcs
     const arcs = profiles.flatMap((p) =>
       p.outer.filter((c) => c.entityId === "ci"),
@@ -302,7 +302,7 @@ describe("crossing curves (X-junctions)", () => {
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(1);
-    expect(Math.abs(profiles[0].area - Math.PI * 25)).toBeLessThan(0.3);
+    expect(Math.abs(profiles[0]!.area - Math.PI * 25)).toBeLessThan(0.3);
   });
 
   it("ninja star with a centre circle: four quarter discs and four notched quadrants", () => {

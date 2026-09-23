@@ -14,6 +14,8 @@ const cross = (a: XY, b: XY) => a.x * b.y - a.y * b.x;
 const dot = (a: XY, b: XY) => a.x * b.x + a.y * b.y;
 const mod = (a: number) => ((a % TAU) + TAU) % TAU;
 const distance = (a: XY, b: XY) => Math.hypot(a.x - b.x, a.y - b.y);
+const constructionOf = (e: Curve) =>
+  e.construction === undefined ? {} : { construction: e.construction };
 
 function geometry(e: Curve, entities: SketchEntity[]) {
   const p = (id: string) => {
@@ -202,7 +204,7 @@ export function modifySketch(
             kind: "line",
             p1: pa,
             p2: pb,
-            construction: entity.construction,
+            ...constructionOf(entity),
           }
         : {
             id,
@@ -210,7 +212,7 @@ export function modifySketch(
             center: entity.center,
             start: pa,
             end: pb,
-            construction: entity.construction,
+            ...constructionOf(entity),
           },
     );
   });
@@ -520,7 +522,7 @@ export function offsetSketch(
       kind: "line",
       p1: a,
       p2: b,
-      construction: entity.construction,
+      ...constructionOf(entity),
     });
   if (entity.kind === "line") {
     // Follow a simple closed line loop, stopping at branches/open ends.
@@ -615,7 +617,7 @@ export function offsetSketch(
         kind: "circle",
         center,
         radius,
-        construction: entity.construction,
+        ...constructionOf(entity),
       });
     else {
       const scaled = (p: XY) => ({
@@ -628,7 +630,7 @@ export function offsetSketch(
         center,
         start: point(scaled(g.a)),
         end: point(scaled(g.b)),
-        construction: entity.construction,
+        ...constructionOf(entity),
       });
     }
   }
@@ -781,14 +783,14 @@ function offsetRoundedChain(
   };
   shifted.forEach((s, i) => {
     const id = newId("e"),
-      construction = chain[i]!.g.e.construction;
+      construction = constructionOf(chain[i]!.g.e);
     if (chain[i]!.g.e.kind === "line")
       added.push({
         id,
         kind: "line",
         p1: point(s.a),
         p2: point(s.b),
-        construction,
+        ...construction,
       });
     else
       added.push({
@@ -797,7 +799,7 @@ function offsetRoundedChain(
         center: point(s.c),
         start: point(s.a),
         end: point(s.b),
-        construction,
+        ...construction,
       });
   });
   return added;

@@ -30,7 +30,7 @@ it("joins a box selected out of order without including an unselected branch", (
   expect(added.filter((e) => e.kind === "line")).toHaveLength(4);
   const profiles = detectProfiles(added);
   expect(profiles).toHaveLength(1);
-  expect(profiles[0].area).toBeCloseTo(18 * 8, 6);
+  expect(profiles[0]!.area).toBeCloseTo(18 * 8, 6);
 });
 
 it("waits for connecting curves instead of offsetting part of a disconnected selection", () => {
@@ -75,7 +75,7 @@ it("rejects a selected branching path and invalid inputs", () => {
 function segmentedOutline(): SketchEntity[] {
   // Same dimensions and small mismatch as the reported outline. Endpoints
   // are separate sketch points, as when adjoining rectangles are drawn.
-  const segments = [
+  const segments: [[number, number], [number, number]][] = [
     [
       [9.7, 0],
       [9.7, 16],
@@ -133,7 +133,7 @@ it("offsets the reported segmented outline across its tiny endpoint gap without 
   expect(result.joinedGaps?.maxDistance).toBeCloseTo(0.001079261604345, 10);
   const profiles = detectProfiles(result.entities.slice(source.length));
   expect(profiles).toHaveLength(1);
-  expect(profiles[0].area).toBeCloseTo(21.4 * 36.475, 5);
+  expect(profiles[0]!.area).toBeCloseTo(21.4 * 36.475, 5);
   expect(JSON.stringify(source)).toBe(before);
   expect(result.entities.slice(0, source.length)).toEqual(source);
   expect(

@@ -4,7 +4,7 @@ import { offsetSketch, offsetSketchSelection } from "../src/sketchModify.js";
 import type { SketchEntity } from "../src/model.js";
 
 export function roundedRectangle(): SketchEntity[] {
-  const points = [
+  const points: [number, number][] = [
     [2, 0],
     [18, 0],
     [20, 2],
@@ -55,7 +55,7 @@ it.each([
     expect(result.filter((e) => e.kind === "arc")).toHaveLength(4);
     const profiles = detectProfiles(result);
     expect(profiles).toHaveLength(1);
-    const xs = profiles[0].polygon.filter((_, i) => i % 2 === 0);
+    const xs = profiles[0]!.polygon.filter((_, i) => i % 2 === 0);
     expect(Math.min(...xs)).toBeCloseTo(minX, 5);
     expect(Math.max(...xs)).toBeCloseTo(maxX, 5);
     const points = new Map(
@@ -84,7 +84,7 @@ it("can start chaining on an arc, and respects reversed line orientation", () =>
   const result = offsetSketch(source, [], "a3", 1).entities.slice(
     source.length,
   );
-  const profile = detectProfiles(result)[0];
+  const profile = detectProfiles(result)[0]!;
   expect(
     Math.min(...profile.polygon.filter((_, i) => i % 2 === 0)),
   ).toBeCloseTo(-1, 5);
