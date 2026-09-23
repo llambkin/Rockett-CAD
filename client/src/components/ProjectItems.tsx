@@ -1,13 +1,16 @@
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import type { Folder, FolderTree, ProjectSummary } from "@rockett/shared";
 import { api, saveDownload, type Download } from "../api";
 import {
   deleteBrowserProject,
   downloadBrowserProject,
   duplicateBrowserProject,
+  formatSize,
   moveToBrowser,
   renameBrowserProject,
+  storageLine,
   type BrowserProject,
+  type StorageLine,
 } from "../browserProjects";
 import { openBrowserProject } from "../browserSession";
 import { ICONS } from "../icons";
@@ -205,14 +208,6 @@ const features = (p: Pick<ProjectSummary, "featureCount" | "modifiedAt">) =>
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-function size(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB"];
-  let n = bytes;
-  let unit = 0;
-  for (; n >= 1024 && unit < units.length - 1; unit++) n /= 1024;
-  return unit === 0 ? `${n} B` : `${n.toFixed(1)} ${units[unit]}`;
-}
-
 type Run = (work: Promise<unknown>) => void;
 
 function projectActions(
@@ -400,6 +395,18 @@ export function ProjectItems({
   );
 }
 
+function StorageStatus({ records }: { records: BrowserProject[] }) {
+  const [line, setLine] = useState<StorageLine>();
+  useEffect(() => void storageLine().then(setLine), [records]);
+  return (
+    line && (
+      <div className={line.warn ? "storage-line warn" : "storage-line"}>
+        {line.text}
+      </div>
+    )
+  );
+}
+
 export function BrowserItems({
   records,
   tree,
@@ -426,6 +433,7 @@ export function BrowserItems({
         onOpen={onOpenFolder}
         target={() => ({ active: false })}
       />
+      <StorageStatus records={records} />
       {records.map((r) => {
         const item: Item = {
           kind: "project",
@@ -437,7 +445,7 @@ export function BrowserItems({
           <ItemRow
             key={r.key}
             item={item}
-            meta={`${features(r)} · ${size(r.size)}`}
+            meta={`${features(r)} · ${formatSize(r.size)}`}
             renaming={renaming?.kind === "project" && renaming.id === r.key}
             actions={projectActions(
               r.name,

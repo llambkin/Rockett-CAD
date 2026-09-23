@@ -615,3 +615,126 @@ it("moves a project dropped on This browser", async () => {
   expect(failures).toEqual([]);
   expect(app.serverErrors).toEqual([]);
 });
+
+async function storagePage(mode: "granted" | "refused" | "insecure") {
+  const p = watch(await context.newPage());
+  await p.addInitScript((m) => {
+    if (m === "insecure") {
+      Object.defineProperty(window, "isSecureContext", { value: false });
+      delete (Navigator.prototype as any).storage;
+      return;
+    }
+    let persisted = false;
+    const storage = {
+      persisted: async () => persisted,
+      persist: async () => (persisted = m === "granted"),
+      estimate: async () => ({ usage: 3_565_158, quota: 1e9 }),
+    };
+    Object.defineProperty(Navigator.prototype, "storage", {
+      get: () => storage,
+      configurable: true,
+    });
+  }, mode);
+  return p;
+}
+
+const storageLine = (p: Page) => p.locator(".storage-line");
+
+it("asks to keep browser projects on a move and shows their usage once kept", async () => {
+  await serverProject("Gear ring");
+  const p = await storagePage("granted");
+  await p.goto(`${app.origin}/browser`);
+  await storageLine(p)
+    .getByText(
+      "The browser may delete these when space runs low. Download a copy.",
+    )
+    .waitFor();
+  await p.goto(app.origin);
+  answer(p, true);
+  await moveTo(p, "Gear ring", "This browser");
+  await poll(() => stored(p)).toContain("Gear ring");
+  await row(p, "This browser").locator(".project-open").click();
+  const line = storageLine(p);
+  await line
+    .getByText("Kept until you clear this site's data. 3.4 MB used.")
+    .waitFor();
+  expect(await line.getAttribute("class")).toBe("storage-line");
+  await p.close();
+  expect(failures).toEqual([]);
+});
+
+it("warns that a refused browser may delete browser projects", async () => {
+  const p = await storagePage("refused");
+  await p.goto(app.origin);
+  const id = await serverProject("Gear rim");
+  await p.reload();
+  answer(p, true);
+  await moveTo(p, "Gear rim", "This browser");
+  await poll(serverNames).not.toContain("Gear rim");
+  expect((await fetch(`${app.origin}/api/projects/${id}`)).status).toBe(404);
+  await p.goto(`${app.origin}/browser`);
+  const line = storageLine(p);
+  await line
+    .getByText(
+      "The browser may delete these when space runs low. Download a copy.",
+    )
+    .waitFor();
+  expect(await line.getAttribute("class")).toBe("storage-line warn");
+  await p.close();
+  expect(failures).toEqual([]);
+});
+
+it("warns over plain HTTP that this browser cannot keep projects safe", async () => {
+  const p = await storagePage("insecure");
+  await p.goto(`${app.origin}/browser`);
+  await storageLine(p)
+    .getByText("This browser cannot keep these safe. Download a copy.")
+    .waitFor();
+  await p.close();
+  expect(failures).toEqual([]);
+});
+
+it("keeps editing when the record cannot be written and retries on the next edit", async () => {
+  const p = watch(await context.newPage());
+  await p.addInitScript(() => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args: Parameters<typeof put>) {
+      if ((window as any).fullDisk)
+        throw new DOMException("Quota exceeded", "QuotaExceededError");
+      return put.apply(this, args);
+    };
+  });
+  const opened = copied(p);
+  await p.goto(`${app.origin}/browser/k1`);
+  await opened;
+  await poll(() => chips(p)).toEqual(["Photo", "Sketch1", "Extrude1"]);
+  await p.evaluate(() => ((window as any).fullDisk = true));
+  await renameOpen(p, "Unsaved cover");
+  const banner = p.locator(".error-banner", {
+    hasText: "Not saved in this browser: Quota exceeded.",
+  });
+  await banner.waitFor();
+  expect((await kept(p, "k1")).name).toBe("Motor cover");
+
+  const [download] = await Promise.all([
+    p.waitForEvent("download"),
+    banner.getByRole("button", { name: "Download" }).click(),
+  ]);
+  const file = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(file.document.name).toBe("Unsaved cover");
+
+  const prompts = answer(p, false);
+  await p.getByTitle("Back to projects").click();
+  await poll(async () => prompts).toEqual([
+    "Changes not saved in this browser will be lost.",
+  ]);
+  expect(new URL(p.url()).pathname).toBe("/browser/k1");
+
+  await p.evaluate(() => ((window as any).fullDisk = false));
+  await renameOpen(p, "Motor ring");
+  await poll(async () => (await kept(p, "k1")).name).toBe("Motor ring");
+  await banner.waitFor({ state: "detached" });
+  await p.close();
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
+});

@@ -1,5 +1,6 @@
 import {
   PROJECT_FILE_FORMAT,
+  PROJECT_FILE_LIMIT_MB,
   PROJECT_FILE_VERSION,
   referencedAssets,
   type CadDocument,
@@ -19,6 +20,8 @@ export interface BrowserProject {
 }
 
 const STORE = "projects";
+const FILE_LIMIT = PROJECT_FILE_LIMIT_MB * 1024 * 1024;
+const IMAGE_FEATURE_BYTES = 1024;
 
 export class StaleRecord extends Error {
   constructor() {
@@ -44,14 +47,28 @@ function open(): Promise<IDBDatabase> {
 
 async function transact<T>(
   mode: IDBTransactionMode,
-  work: (store: IDBObjectStore, done: (value: T) => void) => void,
+  work: (
+    store: IDBObjectStore,
+    done: (value: T) => void,
+    abort: (reason?: unknown) => void,
+  ) => void,
 ): Promise<T> {
   const tx = (await open()).transaction(STORE, mode);
   return new Promise<T>((resolve, reject) => {
     let result: T;
+    let failure: unknown;
     tx.oncomplete = () => resolve(result);
-    tx.addEventListener("abort", () => reject(tx.error ?? new StaleRecord()));
-    work(tx.objectStore(STORE), (value) => (result = value));
+    tx.addEventListener("abort", () =>
+      reject(tx.error ?? failure ?? new StaleRecord()),
+    );
+    work(
+      tx.objectStore(STORE),
+      (value) => (result = value),
+      (reason) => {
+        failure = reason;
+        tx.abort();
+      },
+    );
   });
 }
 
@@ -82,6 +99,40 @@ function record(
   };
 }
 
+export function formatSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB"];
+  let n = bytes;
+  let unit = 0;
+  for (; n >= 1024 && unit < units.length - 1; unit++) n /= 1024;
+  return unit === 0 ? `${n} B` : `${n.toFixed(1)} ${units[unit]}`;
+}
+
+export interface StorageLine {
+  text: string;
+  warn: boolean;
+}
+
+export async function storageLine(): Promise<StorageLine> {
+  if (!window.isSecureContext || !navigator.storage)
+    return {
+      text: "This browser cannot keep these safe. Download a copy.",
+      warn: true,
+    };
+  const [persisted, { usage = 0 }] = await Promise.all([
+    navigator.storage.persisted().catch(() => false),
+    navigator.storage.estimate().catch(() => ({ usage: 0 })),
+  ]);
+  return persisted
+    ? {
+        text: `Kept until you clear this site's data. ${formatSize(usage)} used.`,
+        warn: false,
+      }
+    : {
+        text: "The browser may delete these when space runs low. Download a copy.",
+        warn: true,
+      };
+}
+
 export function listBrowserProjects(): Promise<BrowserProject[]> {
   return transact<BrowserProject[]>("readonly", (store, done) => {
     const req = store.getAll();
@@ -105,13 +156,17 @@ function rewrite(
   key: string,
   change: (r: BrowserProject, now: string) => BrowserProject | null,
 ): Promise<BrowserProject> {
-  return transact<BrowserProject>("readwrite", (store, done) => {
+  return transact<BrowserProject>("readwrite", (store, done, abort) => {
     const req = store.get(key);
     req.onsuccess = () => {
       const next = req.result && change(req.result, new Date().toISOString());
-      if (!next) return store.transaction.abort();
-      store.put(next);
-      done(next);
+      if (!next) return abort();
+      try {
+        store.put(next);
+        done(next);
+      } catch (e) {
+        abort(e);
+      }
     };
   });
 }
@@ -176,6 +231,30 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+const base64Size = (bytes: number) => 4 * Math.ceil(bytes / 3);
+
+export function projectFileSize(
+  r: Pick<BrowserProject, "document" | "assets">,
+): number {
+  const envelope: ProjectFile = {
+    format: PROJECT_FILE_FORMAT,
+    version: PROJECT_FILE_VERSION,
+    document: r.document,
+    assets: Object.fromEntries(Object.keys(r.assets).map((n) => [n, ""])),
+  };
+  return Object.values(r.assets).reduce(
+    (sum, blob) => sum + base64Size(blob.size),
+    new Blob([JSON.stringify(envelope)]).size,
+  );
+}
+
+export const fitsWithImage = (
+  r: Pick<BrowserProject, "document" | "assets">,
+  imageBytes: number,
+) =>
+  projectFileSize(r) + base64Size(imageBytes) + IMAGE_FEATURE_BYTES <=
+  FILE_LIMIT;
+
 export async function toProjectFile(r: BrowserProject): Promise<ProjectFile> {
   const assets: Record<string, string> = {};
   for (const [name, blob] of Object.entries(r.assets))
@@ -212,7 +291,12 @@ export async function browserProjectFile(r: BrowserProject): Promise<File> {
 }
 
 export async function moveToBrowser(id: string, name: string): Promise<void> {
+  void navigator.storage?.persist().catch(() => false);
   const { blob } = await api.downloadProjectFile(id);
+  if (blob.size > FILE_LIMIT)
+    throw new Error(
+      `"${name}" is over the ${PROJECT_FILE_LIMIT_MB} MB project file limit, so it could not open from this browser.`,
+    );
   await keepBrowserProject(fromProjectFile(JSON.parse(await blob.text())));
   await api.deleteProject(id).catch(() => {
     throw new Error(

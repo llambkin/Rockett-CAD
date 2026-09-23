@@ -164,6 +164,7 @@ interface State {
   evaluation: EvaluateResult | null;
   busy: boolean;
   error: string | null;
+  notSaved: string | null;
 
   mode: Mode;
   dialogParams: Record<string, any>;
@@ -343,6 +344,7 @@ export const useStore = create<State>((set, get) => ({
   evaluation: null,
   busy: false,
   error: null,
+  notSaved: null,
   mode: { name: "idle" },
   dialogParams: {},
   selection: [],

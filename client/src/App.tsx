@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
+import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
 import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
@@ -91,6 +92,34 @@ function UndoRedoButtons() {
         ↷
       </button>
     </span>
+  );
+}
+
+function NotSavedBanner() {
+  const notSaved = useStore((s) => s.notSaved);
+  const projectId = useStore((s) => s.projectId);
+  const setError = useStore((s) => s.setError);
+  useEffect(() => {
+    if (!notSaved) return;
+    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", hold);
+    return () => window.removeEventListener("beforeunload", hold);
+  }, [notSaved]);
+  if (!notSaved || !projectId) return null;
+  return (
+    <div className="error-banner" role="alert">
+      {notSaved}{" "}
+      <button
+        className="btn"
+        onClick={() =>
+          void api
+            .downloadProjectFile(projectId)
+            .then(saveDownload, (e) => setError(e.message))
+        }
+      >
+        Download
+      </button>
+    </div>
   );
 }
 
@@ -205,6 +234,7 @@ function Workspace() {
         </button>
       </div>
       <Toolbar />
+      <NotSavedBanner />
       <div className="main-row">
         <ModelTree />
         <ViewportView />

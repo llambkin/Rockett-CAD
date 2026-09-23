@@ -11,6 +11,7 @@ import multer from "multer";
 import {
   nextFeatureName,
   parse,
+  PROJECT_FILE_LIMIT_MB,
   projectEdge,
   ROUTES,
   SCHEMA_VERSION,
@@ -118,8 +119,8 @@ const receiveStep = multipart(
 );
 const receiveProjectFile = multipart(
   "file",
-  64,
-  "Upload one .rockett project file, up to 64 MB.",
+  PROJECT_FILE_LIMIT_MB,
+  `Upload one .rockett project file, up to ${PROJECT_FILE_LIMIT_MB} MB.`,
 );
 
 const EXPORTERS: Record<

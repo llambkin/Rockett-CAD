@@ -1,7 +1,12 @@
-import { referencedAssets, type CadDocument } from "@rockett/shared";
+import {
+  PROJECT_FILE_LIMIT_MB,
+  referencedAssets,
+  type CadDocument,
+} from "@rockett/shared";
 import { api, watchProject } from "./api";
 import {
   browserProjectFile,
+  fitsWithImage,
   getBrowserProject,
   saveBrowserDocument,
   StaleRecord,
@@ -47,11 +52,15 @@ async function save(session: Session): Promise<void> {
       );
       session.revision = saved.revision;
       session.assets = new Set(Object.keys(saved.assets));
+      if (open === session) useStore.setState({ notSaved: null });
     } catch (e: any) {
       session.stopped = e instanceof StaleRecord;
-      useStore.setState({
-        error: session.stopped ? changedElsewhere(document.name) : e.message,
-      });
+      if (session.stopped)
+        useStore.setState({ error: changedElsewhere(document.name) });
+      else if (open === session)
+        useStore.setState({
+          notSaved: `Not saved in this browser: ${String(e.message).replace(/\.$/, "")}.`,
+        });
     }
   }
   session.saving = null;
@@ -70,6 +79,7 @@ export function leaveBrowserProject(): boolean {
   ticket++;
   pending = null;
   if (!open) return false;
+  useStore.setState({ notSaved: null });
   watchProject(null);
   void api.deleteProject(open.id).catch(() => {});
   open = null;
@@ -78,6 +88,13 @@ export function leaveBrowserProject(): boolean {
 
 export function dropBrowserCopy(): void {
   if (open) void api.deleteProject(open.id, true).catch(() => {});
+}
+
+async function refuseOversizeImage(key: string, image: File): Promise<void> {
+  if (!fitsWithImage(await getBrowserProject(key), image.size))
+    throw new Error(
+      `This image would take the project file past ${PROJECT_FILE_LIMIT_MB} MB, and a browser project that large could not open again.`,
+    );
 }
 
 function fail(message: string) {
@@ -123,6 +140,7 @@ export async function openBrowserProject(
   watchProject({
     id: session.id,
     onDocument: (document) => keep(session, document),
+    checkImage: (image) => refuseOversizeImage(key, image),
     onMissing: () => {
       if (!session.opened || open !== session || recreated) return;
       session.opened = false;

@@ -55,6 +55,7 @@ export interface ProjectWatch {
   id: string;
   onDocument: (document: CadDocument) => void;
   onMissing: () => void;
+  checkImage: (image: File) => Promise<void>;
 }
 
 let watched: ProjectWatch | null = null;
@@ -257,8 +258,14 @@ export const api = {
     return { blob, fileName: fileName ?? `export.${exportRequest.format}` };
   },
 
-  uploadImage: (id: string, file: File, signal?: AbortSignal) =>
-    send(ROUTES.uploadImage, { id }, { body: fileForm("image", file), signal }),
+  uploadImage: async (id: string, file: File, signal?: AbortSignal) => {
+    if (watched?.id === id) await watched.checkImage(file);
+    return send(
+      ROUTES.uploadImage,
+      { id },
+      { body: fileForm("image", file), signal },
+    );
+  },
 
   readAsset: (id: string, assetId: string) =>
     request(ROUTES.asset.method, pathFor(ROUTES.asset, { id, assetId }), {

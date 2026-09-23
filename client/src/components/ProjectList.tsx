@@ -17,7 +17,12 @@ import { StepImportButton } from "./StepImportButton";
 import { VersionLabel } from "./VersionLabel";
 
 export async function backToProjects(): Promise<void> {
-  const { projectId, closeProject } = useStore.getState();
+  const { projectId, closeProject, notSaved } = useStore.getState();
+  if (
+    notSaved &&
+    !window.confirm("Changes not saved in this browser will be lost.")
+  )
+    return;
   if (leaveBrowserProject()) showPath(BROWSER_PATH);
   else
     showPath(

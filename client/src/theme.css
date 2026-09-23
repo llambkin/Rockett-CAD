@@ -1112,6 +1112,16 @@ kbd {
   color: var(--err);
 }
 
+.storage-line {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.storage-line.warn {
+  color: var(--warn);
+}
+
 .breadcrumb {
   display: flex;
   flex-wrap: wrap;

@@ -1,4 +1,4 @@
-client/src/App.tsx Workspace 254
+client/src/App.tsx Workspace 255
 client/src/components/DraggablePanel.tsx DraggablePanel 125
 client/src/components/FeatureDialog.tsx 1288
 client/src/components/FeatureDialog.tsx DialogBody 923
@@ -26,9 +26,9 @@ client/src/components/ViewportView.tsx pointerToSketchUV 224
 client/src/components/ViewportView.tsx useEffect() 112
 client/src/components/ViewportView.tsx useEffect()#2 274
 client/src/sketchTools.ts 827
-client/src/store.ts 1024
+client/src/store.ts 1026
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 685
+client/src/store.ts useStore 686
 client/src/three/CadViewport.ts 989
 client/src/three/CadViewport.ts addHighlight 104
 client/src/three/CadViewport.ts buildBody 85
@@ -37,7 +37,7 @@ client/src/three/ViewCube.ts constructor 95
 client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts renderSketches 169
 client/src/three/toolPreview.ts updateToolPreview 158
-server/src/api/routes.ts 627
+server/src/api/routes.ts 628
 server/src/api/routes.ts createApiRouter 444
 server/src/geometry/engine.ts evaluate 111
 server/src/geometry/features.ts 1924
