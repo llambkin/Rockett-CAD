@@ -3,6 +3,8 @@ set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 file=${ROCKETT_WORK_ORDER:-"$root/WORK-ORDER.md"}
+done_file=${ROCKETT_WORK_ORDER_DONE:-"$root/docs/internals/work-order-done.md"}
+later=${ROCKETT_WORK_ORDER_LATER:-"$root/docs/internals/work-order-later.md"}
 mode=${1:-check}
 
 fail() {
@@ -12,17 +14,39 @@ fail() {
 
 case "$mode" in
 check | --complete | --next) ;;
-*) fail "usage: scripts/check-work-order.sh [--complete|--next]" ;;
+--row) printf '%s\n' "${2:-}" | grep -Eqx '[A-Z]+-([0-9]{3}|CP)' || fail "usage: scripts/check-work-order.sh --row ID" ;;
+*) fail "usage: scripts/check-work-order.sh [--complete|--next|--row ID]" ;;
 esac
 
 [ -f "$file" ] || fail "WORK-ORDER.md is missing"
+[ -f "$done_file" ] || fail "work-order-done.md is missing"
+[ -f "$later" ] || fail "work-order-later.md is missing"
 [ -f "$root/AGENTS.md" ] || fail "AGENTS.md is missing"
 [ -f "$root/LAST-RUN.md" ] || fail "LAST-RUN.md is missing"
 head -n 1 "$root/LAST-RUN.md" | grep -qx '# Last run' || fail "LAST-RUN.md must start with # Last run"
+[ "$(grep -c '^Later phases: ' "$file")" = 1 ] || fail "WORK-ORDER.md needs one line starting with Later phases:"
 
-result=$(awk -F '|' -v mode="$mode" '
+if [ "$mode" = --row ]; then
+    grep -h "^| $2 |" "$done_file" "$file" "$later" || fail "no row $2"
+    exit 0
+fi
+
+result=$(awk -v later="$later" '{ print } /^Later phases: / { while ((getline line < later) > 0) print line }' "$file" | awk -F '|' -v mode="$mode" -v done_file="$done_file" '
 function trim(value) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", value); return value }
 function reject(message) { print "ERROR " message; bad = 1 }
+FILENAME == done_file {
+    if (!/^\|/) next
+    if (NF != 5) { reject("done row has " NF - 2 " cells, expected 3: " substr($0, 1, 60)); next }
+    id = trim($2); commit = trim($3)
+    if (id ~ /^:?-+:?$/) next
+    if (id == "ID") { if (commit != "Commit" || trim($4) != "Outcome") reject("bad done table header"); next }
+    if (id !~ /^[A-Z]+-([0-9][0-9][0-9]|CP)$/) reject("invalid ID " id)
+    if (id in state) reject("duplicate ID " id)
+    if (commit != "-" && (commit !~ /^[0-9a-f]+$/ || length(commit) < 7)) reject(id " has invalid commit " commit)
+    if (trim($4) == "") reject(id " has an empty cell")
+    state[id] = "done"; deps[id] = "-"; archived[id] = 1; order[++count] = id
+    next
+}
 /^## / { section = substr($0, 4) }
 section == "Rulings" && /^- Deferred / {
     line = substr($0, 12)
@@ -96,7 +120,7 @@ END {
     }
     for (k = 1; k <= count; k++) {
         cp = order[k]
-        if (cp !~ /-CP$/) continue
+        if (cp !~ /-CP$/ || cp in archived) continue
         prefix = substr(cp, 1, length(cp) - 2)
         n = excluded[cp] == "" ? 0 : split(excluded[cp], list, /,[[:space:]]*/)
         for (i = 1; i <= n; i++) {
@@ -130,6 +154,6 @@ END {
     }
     if (mode == "--next") { print (active != "" ? active : next_id); exit 0 }
     printf "OK %d rows, %d open, %d waiting on decisions, operators, deferrals or proposals, next %s\n", count, open, waiting + 0, (active != "" ? active : (next_id != "" ? next_id : "none"))
-}' "$file") || { printf '%s\n' "$result" | sed 's/^ERROR /work order check failed: /' >&2; exit 1; }
+}' "$done_file" -) || { printf '%s\n' "$result" | sed 's/^ERROR /work order check failed: /' >&2; exit 1; }
 
 printf '%s\n' "$result"
