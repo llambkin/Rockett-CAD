@@ -90,7 +90,7 @@ export function ViewportView() {
   const [ctxMenu, setCtxMenu] = useState<{
     x: number;
     y: number;
-    sel: Selection;
+    sel: Selection | null;
   } | null>(null);
 
   const [extrudeSlot] = useState(() => new GizmoSlot<ExtrudeGizmo>());
@@ -2356,7 +2356,7 @@ export function ViewportView() {
         if (!already) s.setSelection([r.selection]);
         setCtxMenu({ x: e.clientX, y: e.clientY, sel: r.selection });
       } else {
-        setCtxMenu(null);
+        setCtxMenu({ x: e.clientX, y: e.clientY, sel: null });
       }
       return;
     }
@@ -2375,7 +2375,7 @@ export function ViewportView() {
         s.setSelection([r.selection]);
       setCtxMenu({ x: e.clientX, y: e.clientY, sel: r.selection });
     } else {
-      setCtxMenu(null);
+      setCtxMenu({ x: e.clientX, y: e.clientY, sel: null });
     }
   }
 

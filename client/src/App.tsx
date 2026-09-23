@@ -11,6 +11,7 @@ import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { StepImportButton } from "./components/StepImportButton";
 import { DraggablePanel } from "./components/DraggablePanel";
+import { ContextMenu, type MenuItem } from "./components/ContextMenu";
 import { viewportHandle } from "./viewportRef";
 import { versionLabel } from "./versionLabel";
 import {
@@ -40,6 +41,11 @@ function ProjectList() {
   /** id of the project whose name is being edited in place */
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const openProject = useStore((s) => s.openProject);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    items: MenuItem[];
+  } | null>(null);
 
   const refresh = () => {
     api
@@ -48,6 +54,13 @@ function ProjectList() {
       .catch((e) => setError(e.message));
   };
   useEffect(refresh, []);
+
+  const duplicate = (p: ProjectSummary) =>
+    void api.duplicateProject(p.id).then(refresh);
+  const remove = (p: ProjectSummary) => {
+    if (window.confirm(`Delete project "${p.name}"?`))
+      void api.deleteProject(p.id).then(refresh);
+  };
 
   const create = async () => {
     try {
@@ -81,7 +94,23 @@ function ProjectList() {
         <div className="projects">
           <StepImportButton newProject onError={setError} />
           {projects.map((p) => (
-            <div key={p.id} className="project-row">
+            <div
+              key={p.id}
+              className="project-row"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  items: [
+                    { label: "Open", action: () => void openProject(p.id) },
+                    { label: "Rename", action: () => setRenamingId(p.id) },
+                    { label: "Duplicate", action: () => duplicate(p) },
+                    { label: "Delete", danger: true, action: () => remove(p) },
+                  ],
+                });
+              }}
+            >
               {renamingId === p.id ? (
                 <div className="project-open project-renaming">
                   <RenameInput
@@ -125,20 +154,14 @@ function ProjectList() {
               <button
                 className="icon-btn"
                 title="Duplicate"
-                onClick={() => {
-                  void api.duplicateProject(p.id).then(refresh);
-                }}
+                onClick={() => duplicate(p)}
               >
                 ⎘
               </button>
               <button
                 className="icon-btn danger"
                 title="Delete"
-                onClick={() => {
-                  if (window.confirm(`Delete project "${p.name}"?`)) {
-                    void api.deleteProject(p.id).then(refresh);
-                  }
-                }}
+                onClick={() => remove(p)}
               >
                 ✕
               </button>
@@ -148,6 +171,7 @@ function ProjectList() {
             <div className="tree-empty">No projects yet</div>
           )}
         </div>
+        {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       </div>
       <VersionLabel />
     </div>

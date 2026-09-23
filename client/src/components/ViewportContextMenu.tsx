@@ -1,5 +1,7 @@
 import { useStore, type Selection } from "../store";
+import { viewportHandle } from "../viewportRef";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { NAMED_VIEWS, toggleProjection } from "./Toolbar";
 
 async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   const s = useStore.getState();
@@ -16,6 +18,23 @@ async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   await s.updateFeature(sketchId, { entities } as any);
 }
 
+function viewItems(): MenuItem[] {
+  return [
+    { label: "Fit", action: () => viewportHandle.current?.zoomToFit() },
+    ...NAMED_VIEWS.map((v) => ({
+      label: v.label,
+      action: () => viewportHandle.current?.setView(v.dir, v.up),
+    })),
+    {
+      label:
+        viewportHandle.current?.projection === "orthographic"
+          ? "Perspective"
+          : "Orthographic",
+      action: toggleProjection,
+    },
+  ];
+}
+
 export function ViewportContextMenu({
   menu,
   onClose,
@@ -23,7 +42,7 @@ export function ViewportContextMenu({
   alignToSketch,
   onDimension,
 }: {
-  menu: { x: number; y: number; sel: Selection };
+  menu: { x: number; y: number; sel: Selection | null };
   onClose: () => void;
   isPlanarFace: (sel: Selection) => boolean;
   alignToSketch: () => void;
@@ -38,6 +57,11 @@ export function ViewportContextMenu({
   const shown = () => (
     <ContextMenu x={menu.x} y={menu.y} items={items} onClose={onClose} />
   );
+
+  if (!sel) {
+    items.push(...viewItems());
+    return shown();
+  }
 
   const openDialog = (dialog: any, selection: Selection[] = [sel]) => {
     s.setMode({ name: "dialog", dialog });
@@ -74,11 +98,15 @@ export function ViewportContextMenu({
         label: many ? "Toggle construction (selection)" : "Toggle construction",
         action: () => void s.toggleSketchConstruction(selectedIds),
       });
-      items.push({
-        label: "Dimension…",
-        action: () =>
-          onDimension(sel.entityId, { clientX: menu.x, clientY: menu.y }),
-      });
+      const kind = s.draftSketch?.entities.find(
+        (x) => x.id === sel.entityId,
+      )?.kind;
+      if (kind)
+        items.push({
+          label: kind === "line" ? "Length and angle…" : "Dimension…",
+          action: () =>
+            onDimension(sel.entityId, { clientX: menu.x, clientY: menu.y }),
+        });
     }
     return shown();
   }

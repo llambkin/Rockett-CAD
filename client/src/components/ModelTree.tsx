@@ -4,7 +4,7 @@
  */
 
 import { useState } from "react";
-import type { Feature } from "@rockett/shared";
+import type { Feature, PlaneRef } from "@rockett/shared";
 import { useStore, selectionKey, type Selection } from "../store";
 import {
   viewportHandle,
@@ -13,6 +13,38 @@ import {
 import { openFeatureEditor } from "./Timeline";
 import { freeProfileIds, sketchUsage } from "../sketchUsage";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+
+const sketchOn = (ref: PlaneRef) =>
+  void useStore
+    .getState()
+    .startSketchOnPlane(ref)
+    .then(() => alignToSketch());
+const planeMenu = (ref: PlaneRef): MenuItem[] =>
+  ["idle", "pickPlane"].includes(useStore.getState().mode.name)
+    ? [{ label: "Create sketch", action: () => sketchOn(ref) }]
+    : [];
+const deleteItem = (id: string): MenuItem => ({
+  label: "Delete",
+  danger: true,
+  action: () => void useStore.getState().deleteFeature(id),
+});
+const togglePlane = (f: Feature) =>
+  void useStore.getState().suppressFeature(f.id, !f.suppressed);
+const toggleCanvas = (f: any) =>
+  void useStore.getState().updateFeature(f.id, { visible: !f.visible } as any);
+
+const constructionMenu = (f: Feature): MenuItem[] => [
+  ...planeMenu({ kind: "construction", featureId: f.id }),
+  { label: "Edit", action: () => void openFeatureEditor(f) },
+  { label: "Show / Hide", action: () => togglePlane(f) },
+  deleteItem(f.id),
+];
+
+const canvasMenu = (f: Feature): MenuItem[] => [
+  { label: "Edit", action: () => void openFeatureEditor(f) },
+  { label: "Show / Hide", action: () => toggleCanvas(f) },
+  deleteItem(f.id),
+];
 
 export function ModelTree() {
   const document_ = useStore((s) => s.document);
@@ -35,7 +67,7 @@ export function ModelTree() {
   if (!document_) return null;
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
-    setTreeMenu({ x: e.clientX, y: e.clientY, items });
+    if (items.length > 0) setTreeMenu({ x: e.clientX, y: e.clientY, items });
   };
   const selKeys = new Set(selection.map(selectionKey));
 
@@ -52,18 +84,21 @@ export function ModelTree() {
     </div>
   );
 
-  const planeRow = (label: string, sel: Selection) => (
+  const planeRow = (
+    label: string,
+    sel: Extract<Selection, { kind: "plane" }>,
+  ) => (
     <div
       key={label}
       className={`tree-item ${selKeys.has(selectionKey(sel)) ? "selected" : ""}`}
       onClick={(e) => {
-        const s = useStore.getState();
-        if (s.mode.name === "pickPlane" && sel.kind === "plane") {
-          void s.startSketchOnPlane(sel.ref).then(() => alignToSketch());
+        if (useStore.getState().mode.name === "pickPlane") {
+          sketchOn(sel.ref);
           return;
         }
         toggleSelection(sel, e.ctrlKey || e.metaKey);
       }}
+      onContextMenu={(e) => openMenu(e, planeMenu(sel.ref))}
     >
       <span className="tree-icon">▱</span>
       {label}
@@ -120,11 +155,7 @@ export function ModelTree() {
       label: "Rename",
       action: () => setRenaming({ id: f.id, value: f.name }),
     },
-    {
-      label: "Delete",
-      danger: true,
-      action: () => void useStore.getState().deleteFeature(f.id),
-    },
+    deleteItem(f.id),
   ];
 
   const bodyMenu = (b: (typeof bodies)[number]): MenuItem[] => [
@@ -220,13 +251,14 @@ export function ModelTree() {
                 )
               }
               onDoubleClick={() => openFeatureEditor(f)}
+              onContextMenu={(e) => openMenu(e, constructionMenu(f))}
             >
               <span
                 className="tree-icon eye"
                 title={f.suppressed ? "Show" : "Hide"}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void useStore.getState().suppressFeature(f.id, !f.suppressed);
+                  togglePlane(f);
                 }}
               >
                 {f.suppressed ? "◌" : "👁"}
@@ -245,14 +277,13 @@ export function ModelTree() {
               key={f.id}
               className="tree-item"
               onDoubleClick={() => openFeatureEditor(f)}
+              onContextMenu={(e) => openMenu(e, canvasMenu(f))}
             >
               <span
                 className="tree-icon eye"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void useStore
-                    .getState()
-                    .updateFeature(f.id, { visible: !f.visible } as any);
+                  toggleCanvas(f);
                 }}
               >
                 {f.visible ? "👁" : "◌"}

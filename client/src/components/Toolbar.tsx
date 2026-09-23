@@ -226,20 +226,29 @@ export function Toolbar() {
   );
 }
 
+export const NAMED_VIEWS: Array<{
+  label: string;
+  dir: [number, number, number];
+  up: [number, number, number];
+}> = [
+  { label: "Front", dir: [0, -1, 0], up: [0, 0, 1] },
+  { label: "Back", dir: [0, 1, 0], up: [0, 0, 1] },
+  { label: "Left", dir: [-1, 0, 0], up: [0, 0, 1] },
+  { label: "Right", dir: [1, 0, 0], up: [0, 0, 1] },
+  { label: "Top", dir: [0, 0, 1], up: [0, 1, 0] },
+  { label: "Bottom", dir: [0, 0, -1], up: [0, -1, 0] },
+  { label: "Iso", dir: [1, -1, 0.8], up: [0, 0, 1] },
+];
+
+export function toggleProjection() {
+  const vp = viewportHandle.current;
+  if (!vp) return;
+  vp.setProjection(
+    vp.projection === "orthographic" ? "perspective" : "orthographic",
+  );
+}
+
 function ViewButtons() {
-  const views: Array<{
-    label: string;
-    dir: [number, number, number];
-    up: [number, number, number];
-  }> = [
-    { label: "Front", dir: [0, -1, 0], up: [0, 0, 1] },
-    { label: "Back", dir: [0, 1, 0], up: [0, 0, 1] },
-    { label: "Left", dir: [-1, 0, 0], up: [0, 0, 1] },
-    { label: "Right", dir: [1, 0, 0], up: [0, 0, 1] },
-    { label: "Top", dir: [0, 0, 1], up: [0, 1, 0] },
-    { label: "Bottom", dir: [0, 0, -1], up: [0, -1, 0] },
-    { label: "Iso", dir: [1, -1, 0.8], up: [0, 0, 1] },
-  ];
   return (
     <div className="tb-group views">
       <select
@@ -247,14 +256,14 @@ function ViewButtons() {
         title="Named views"
         value=""
         onChange={(e) => {
-          const v = views.find((x) => x.label === e.target.value);
+          const v = NAMED_VIEWS.find((x) => x.label === e.target.value);
           if (v) viewportHandle.current?.setView(v.dir, v.up);
         }}
       >
         <option value="" disabled>
           View
         </option>
-        {views.map((v) => (
+        {NAMED_VIEWS.map((v) => (
           <option key={v.label}>{v.label}</option>
         ))}
       </select>
@@ -268,13 +277,7 @@ function ViewButtons() {
       <button
         className="tb-btn"
         title="Toggle orthographic / perspective"
-        onClick={() => {
-          const vp = viewportHandle.current;
-          if (!vp) return;
-          vp.setProjection(
-            vp.projection === "orthographic" ? "perspective" : "orthographic",
-          );
-        }}
+        onClick={toggleProjection}
       >
         Ortho/Persp
       </button>

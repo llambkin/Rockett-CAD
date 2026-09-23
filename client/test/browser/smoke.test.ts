@@ -175,3 +175,36 @@ it("creates, edits, extrudes, rolls back, exports and reopens a project", async 
   expect(failures).toEqual([]);
   expect(app.serverErrors).toEqual([]);
 });
+
+it("orbits on a right-drag and opens the view menu on a still right-click", async () => {
+  await page.goto(app.origin);
+  await page.getByLabel("New project name").fill("Menu check");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  const canvas = page.locator(".viewport-container > canvas");
+  await canvas.waitFor();
+  const box = (await canvas.boundingBox())!;
+  const x = box.x + box.width * 0.3;
+  const y = box.y + box.height * 0.7;
+  const menu = page.locator(".context-menu");
+
+  await page.waitForTimeout(300);
+  const before = await canvas.screenshot();
+  await page.waitForTimeout(300);
+  expect((await canvas.screenshot()).equals(before)).toBe(true);
+  await page.mouse.move(x, y);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(x + 80, y - 40, { steps: 5 });
+  await page.mouse.up({ button: "right" });
+  await page.waitForTimeout(100);
+  expect(await menu.count()).toBe(0);
+  expect((await canvas.screenshot()).equals(before)).toBe(false);
+
+  await page.mouse.down({ button: "right" });
+  await page.mouse.up({ button: "right" });
+  await menu.getByRole("button", { name: "Fit" }).waitFor();
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "detached" });
+
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
+});
