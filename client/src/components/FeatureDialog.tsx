@@ -19,8 +19,10 @@ import { api, saveDownload } from "../api";
 import { viewportHandle } from "../viewportRef";
 import { DraggablePanel } from "./DraggablePanel";
 import {
+  AngleField,
   AxisField,
   CheckField,
+  LengthField,
   NumField,
   SelInfo,
   SelectField,
@@ -1171,42 +1173,14 @@ function ReferenceImagePanel({
             </label>
           </>
         )}
-        <label className="field">
-          <span>Scale (mm / pixel)</span>
-          <input
-            type="number"
-            step="any"
-            value={scale}
-            onChange={(e) => setScale(Number(e.target.value))}
-          />
-        </label>
-        <label className="field">
-          <span>Rotation (°)</span>
-          <input
-            type="number"
-            step="any"
-            value={rotation}
-            onChange={(e) => setRotation(Number(e.target.value))}
-          />
-        </label>
-        <label className="field">
-          <span>Position U (mm)</span>
-          <input
-            type="number"
-            step="any"
-            value={u}
-            onChange={(e) => setU(Number(e.target.value))}
-          />
-        </label>
-        <label className="field">
-          <span>Position V (mm)</span>
-          <input
-            type="number"
-            step="any"
-            value={v}
-            onChange={(e) => setV(Number(e.target.value))}
-          />
-        </label>
+        <NumField
+          label="Scale (mm / pixel)"
+          value={scale}
+          onChange={setScale}
+        />
+        <AngleField label="Rotation" value={rotation} onChange={setRotation} />
+        <LengthField label="Position U" units="mm" value={u} onChange={setU} />
+        <LengthField label="Position V" units="mm" value={v} onChange={setV} />
         <label className="field">
           <span>Opacity</span>
           <input

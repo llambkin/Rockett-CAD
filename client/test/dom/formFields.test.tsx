@@ -133,7 +133,6 @@ describe("raw number inputs", () => {
     const hits = (readdirSync(dir, { recursive: true }) as string[]).filter(
       (f) =>
         f.endsWith(".tsx") &&
-        f !== "FeatureDialog.tsx" &&
         readFileSync(join(dir, f), "utf8").includes('type="number"'),
     );
     expect(hits).toEqual([join("form", "fields.tsx")]);
