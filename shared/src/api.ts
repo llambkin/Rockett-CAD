@@ -112,6 +112,7 @@ export interface ProjectSummary {
   featureCount: number;
   status: "ok" | "invalid" | "tooNew";
   error?: string;
+  schemaVersion?: number;
 }
 
 export interface Folder {

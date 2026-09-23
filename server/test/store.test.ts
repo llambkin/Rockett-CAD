@@ -46,6 +46,7 @@ describe("project store", () => {
         id: doc.id,
         name: "Future",
         status: "tooNew",
+        schemaVersion: 99,
         error: expect.stringMatching(/version 99 is newer/),
       }),
     ]);

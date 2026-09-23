@@ -5,8 +5,9 @@ client/src/components/FeatureDialog.tsx DialogBody 923
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 190
 client/src/components/ModelTree.tsx 535
 client/src/components/ModelTree.tsx ModelTree 470
-client/src/components/ProjectItems.tsx ItemRow 87
-client/src/components/ProjectItems.tsx ProjectItems 139
+client/src/components/ProjectItems.tsx 517
+client/src/components/ProjectItems.tsx ItemRow 89
+client/src/components/ProjectItems.tsx ProjectItems 153
 client/src/components/ProjectList.tsx ProjectList 109
 client/src/components/SketchOffsetPanel.tsx OffsetBody 244
 client/src/components/Timeline.tsx Timeline 178

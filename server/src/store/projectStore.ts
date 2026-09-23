@@ -42,6 +42,9 @@ const IMAGE_TYPES: Array<{ ext: string; test: (b: Buffer) => boolean }> = [
 
 const newId = () => crypto.randomBytes(6).toString("hex");
 
+const text = (v: unknown, fallback: string) =>
+  typeof v === "string" ? v : fallback;
+
 function imageExt(data: Buffer, label: string): string {
   if (data.length > IMAGE_LIMIT_MB * 1024 * 1024)
     throw new StoreError(`${label}image is over ${IMAGE_LIMIT_MB} MB`);
@@ -96,8 +99,6 @@ export class ProjectStore {
         const raw = (await this.documents
           .stored(id)
           .catch(() => ({}))) as Partial<Record<keyof CadDocument, unknown>>;
-        const text = (v: unknown, fallback: string) =>
-          typeof v === "string" ? v : fallback;
         out.push({
           id,
           name: text(raw.name, id),
@@ -106,6 +107,7 @@ export class ProjectStore {
           featureCount: Array.isArray(raw.features) ? raw.features.length : 0,
           status: err instanceof TooNewError ? "tooNew" : "invalid",
           error: (err as Error).message,
+          ...(err instanceof TooNewError && { schemaVersion: err.version }),
         });
       }
     }

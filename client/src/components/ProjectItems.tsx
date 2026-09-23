@@ -119,6 +119,7 @@ function ItemRow({
   item,
   meta,
   glyph,
+  dimmed = false,
   renaming = false,
   actions,
   drop = { active: false },
@@ -130,6 +131,7 @@ function ItemRow({
   item: Item;
   meta: ReactNode;
   glyph?: ReactNode;
+  dimmed?: boolean;
   renaming?: boolean;
   actions: RowAction[];
   drop?: DropTarget;
@@ -141,7 +143,7 @@ function ItemRow({
   const { active, ...dropHandlers } = drop;
   return (
     <div
-      className={active ? "project-row drop-target" : "project-row"}
+      className={`project-row${active ? " drop-target" : ""}${dimmed ? " dimmed" : ""}`}
       draggable={drag !== undefined && !renaming}
       {...drag}
       {...dropHandlers}
@@ -206,9 +208,29 @@ function ItemRow({
 const features = (p: Pick<ProjectSummary, "featureCount" | "modifiedAt">) =>
   `${p.featureCount} features · ${new Date(p.modifiedAt).toLocaleString()}`;
 
+const unreadable = (p: ProjectSummary) =>
+  p.status === "tooNew"
+    ? `Saved by a newer Rockett (schema ${p.schemaVersion})`
+    : p.status === "invalid"
+      ? (p.error ?? "This project could not be read.")
+      : null;
+
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 type Run = (work: Promise<unknown>) => void;
+
+const deleteAction = (
+  name: string,
+  run: Run,
+  remove: () => Promise<unknown>,
+): RowAction => ({
+  label: "Delete",
+  glyph: "✕",
+  danger: true,
+  run: () => {
+    if (window.confirm(`Delete project "${name}"?`)) run(remove());
+  },
+});
 
 function projectActions(
   name: string,
@@ -231,14 +253,7 @@ function projectActions(
       run: () => run(ops.download().then(saveDownload)),
     },
     ...moveTo,
-    {
-      label: "Delete",
-      glyph: "✕",
-      danger: true,
-      run: () => {
-        if (window.confirm(`Delete project "${name}"?`)) run(ops.remove());
-      },
-    },
+    deleteAction(name, run, ops.remove),
   ];
 }
 
@@ -356,6 +371,20 @@ export function ProjectItems({
       })}
       {here.map((p) => {
         const item: Item = { kind: "project", ...p };
+        const reason = unreadable(p);
+        if (reason !== null)
+          return (
+            <ItemRow
+              key={`project:${p.id}`}
+              item={item}
+              meta={reason}
+              dimmed
+              actions={[
+                deleteAction(p.name, run, () => api.deleteProject(p.id)),
+              ]}
+              onMenu={setMenu}
+            />
+          );
         return row(
           item,
           features(p),

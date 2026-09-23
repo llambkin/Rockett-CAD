@@ -63,8 +63,9 @@ snapshots sent by different clients.
 | `POST /projects/:id/rename`    | `{ name }`             | `{ document }`                                                                                                                                  |
 
 Every stored project is listed. `status` is `ok`, `invalid` or `tooNew`, and
-the last two carry `error`. Loading a project validates it after migration;
-an invalid one is 422 naming the first failure.
+the last two carry `error`. A `tooNew` project also carries the
+`schemaVersion` it was saved with. Loading a project validates it after
+migration; an invalid one is 422 naming the first failure.
 
 ### Project file
 
