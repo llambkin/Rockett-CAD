@@ -105,10 +105,10 @@ and BREP (`.brep`) files up to 10 MB containing solid bodies. Imported solids
 support further modelling; the source application's sketches and feature
 history are not imported.
 
-It also accepts STL (`.stl`, binary or ASCII) and OBJ (`.obj`) meshes of up to
-200,000 triangles. Each triangle becomes a flat face. A closed mesh becomes a
-solid; an open one becomes a shell with a warning on its timeline chip. Meshes
-are not parametric.
+It also accepts STL (`.stl`, binary or ASCII), OBJ (`.obj`) and 3MF (`.3mf`)
+meshes of up to 200,000 triangles. Each triangle becomes a flat face and each
+3MF object its own body. A closed mesh becomes a solid; an open one becomes a
+shell with a warning on its timeline chip. Meshes are not parametric.
 
 ### Export
 

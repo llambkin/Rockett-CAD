@@ -15,6 +15,7 @@ import {
   volumeOf,
   type Shape,
 } from "./kernel.js";
+import { read3mf } from "./read3mf.js";
 
 type Format = NonNullable<ImportStepFeature["format"]> | "step";
 
@@ -93,40 +94,100 @@ export const MAX_MESH_TRIANGLES = 200_000;
 
 type MeshFormat = ImportMeshFeature["format"];
 
-const MESH_READERS: Record<
-  MeshFormat,
-  { label: string; read(file: string): any }
-> = {
-  stl: {
-    label: "STL",
-    read: (file) => getKernel().RWStl.ReadFile_2(file, progress()),
-  },
-  obj: {
-    label: "OBJ",
-    read: (file) => getKernel().RWObj.ReadFile(file, progress()),
-  },
-};
+export interface MeshPart {
+  nodes: ArrayLike<number>;
+  triangles: ArrayLike<number>;
+  transform?: number[];
+}
+
+function triangulation(handle: any): MeshPart {
+  const mesh = handle.IsNull() ? undefined : handle.get(),
+    nodes: number[] = [],
+    triangles: number[] = [];
+  try {
+    for (let i = 1; i <= (mesh?.NbNodes() ?? 0); i++) {
+      const p = mesh.Node(i);
+      nodes.push(p.X(), p.Y(), p.Z());
+      p.delete();
+    }
+    for (let i = 1; i <= (mesh?.NbTriangles() ?? 0); i++) {
+      const t = mesh.Triangle(i);
+      triangles.push(t.Value(1) - 1, t.Value(2) - 1, t.Value(3) - 1);
+      t.delete();
+    }
+    return { nodes, triangles };
+  } finally {
+    handle.delete();
+  }
+}
 
 function markBinaryStl(bytes: Buffer) {
   if (bytes.length >= 84 && bytes.length === 84 + 50 * bytes.readUInt32LE(80))
     bytes[0] = 0xff;
 }
 
-function sewTriangles(mesh: any): { shape: Shape; openEdges: number } {
+const MESH_READERS: Record<
+  MeshFormat,
+  { label: string; read(bytes: Buffer): MeshPart[] }
+> = {
+  stl: {
+    label: "STL",
+    read(bytes) {
+      markBinaryStl(bytes);
+      return [
+        withFile(bytes, "stl", (file) =>
+          triangulation(getKernel().RWStl.ReadFile_2(file, progress())),
+        ),
+      ];
+    },
+  },
+  obj: {
+    label: "OBJ",
+    read: (bytes) => [
+      withFile(bytes, "obj", (file) =>
+        triangulation(getKernel().RWObj.ReadFile(file, progress())),
+      ),
+    ],
+  },
+  "3mf": { label: "3MF", read: read3mf },
+};
+
+function sewTriangles({ nodes, triangles, transform: m }: MeshPart): {
+  shape: Shape;
+  openEdges: number;
+} {
   const k = getKernel(),
     builder = new k.BRep_Builder(),
     sewing = new k.BRepBuilderAPI_Sewing(LINEAR_TOL, true, false, false, false),
-    nodes: number[][] = [],
     owned: any[] = [builder, sewing],
-    vertices: Shape[] = [],
+    vertices = new Map<number, Shape>(),
     edges = new Map<number, Shape | null>(),
-    count = mesh.NbNodes();
+    count = nodes.length / 3;
+  const point = (i: number): number[] => {
+    const [x, y, z] = [nodes[3 * i]!, nodes[3 * i + 1]!, nodes[3 * i + 2]!];
+    if (!m) return [x, y, z];
+    return [0, 1, 2].map(
+      (axis) =>
+        x * m[axis]! + y * m[3 + axis]! + z * m[6 + axis]! + m[9 + axis]!,
+    );
+  };
+  const vertex = (i: number): Shape => {
+    if (!vertices.has(i)) {
+      const p = point(i),
+        at = new k.gp_Pnt_3(p[0], p[1], p[2]),
+        make = new k.BRepBuilderAPI_MakeVertex(at);
+      vertices.set(i, make.Vertex());
+      make.delete();
+      at.delete();
+    }
+    return vertices.get(i)!;
+  };
   const edge = (a: number, b: number): Shape | null => {
-    const key = Math.min(a, b) * (count + 1) + Math.max(a, b);
+    const key = Math.min(a, b) * count + Math.max(a, b);
     if (!edges.has(key)) {
       const make = new k.BRepBuilderAPI_MakeEdge_2(
-        vertices[Math.min(a, b) - 1],
-        vertices[Math.max(a, b) - 1],
+        vertex(Math.min(a, b)),
+        vertex(Math.max(a, b)),
       );
       edges.set(key, make.IsDone() ? make.Edge() : null);
       make.delete();
@@ -138,19 +199,9 @@ function sewTriangles(mesh: any): { shape: Shape; openEdges: number } {
     return reversed;
   };
   try {
-    for (let i = 1; i <= count; i++) {
-      const p = mesh.Node(i),
-        vertex = new k.BRepBuilderAPI_MakeVertex(p);
-      nodes.push([p.X(), p.Y(), p.Z()]);
-      vertices.push(vertex.Vertex());
-      vertex.delete();
-      p.delete();
-    }
-    for (let i = 1; i <= mesh.NbTriangles(); i++) {
-      const t = mesh.Triangle(i),
-        [a, b, c] = [t.Value(1), t.Value(2), t.Value(3)];
-      t.delete();
-      const [p, q, r] = [nodes[a - 1]!, nodes[b - 1]!, nodes[c - 1]!],
+    for (let i = 0; i < triangles.length; i += 3) {
+      const [a, b, c] = [triangles[i]!, triangles[i + 1]!, triangles[i + 2]!],
+        [p, q, r] = [point(a), point(b), point(c)],
         u = [q[0]! - p[0]!, q[1]! - p[1]!, q[2]! - p[2]!],
         v = [r[0]! - p[0]!, r[1]! - p[1]!, r[2]! - p[2]!],
         n = [
@@ -174,7 +225,7 @@ function sewTriangles(mesh: any): { shape: Shape; openEdges: number } {
     sewing.Perform(progress());
     return { shape: sewing.SewedShape(), openEdges: sewing.NbFreeEdges() };
   } finally {
-    for (const shape of [...owned, ...vertices, ...edges.values()])
+    for (const shape of [...owned, ...vertices.values(), ...edges.values()])
       shape?.delete();
   }
 }
@@ -185,38 +236,44 @@ export function readMesh(feature: ImportMeshFeature): {
 } {
   const k = getKernel(),
     { label, read } = MESH_READERS[feature.format],
-    bytes = Buffer.from(feature.data, "base64");
-  if (feature.format === "stl") markBinaryStl(bytes);
-  const handle = withFile(bytes, feature.format, read);
+    parts = read(Buffer.from(feature.data, "base64")).filter(
+      (part) => part.triangles.length > 0,
+    ),
+    triangles = parts.reduce((sum, part) => sum + part.triangles.length / 3, 0);
+  if (triangles === 0) throw new Error(`No mesh found in the ${label} file.`);
+  if (triangles > MAX_MESH_TRIANGLES)
+    throw new Error(
+      `The ${label} mesh has ${triangles.toLocaleString("en-US")} triangles; the limit is ${MAX_MESH_TRIANGLES.toLocaleString("en-US")}.`,
+    );
+  const builder = new k.BRep_Builder(),
+    sewn = new k.TopoDS_Compound();
+  let openEdges = 0;
   try {
-    const mesh = handle.IsNull() ? undefined : handle.get(),
-      triangles: number = mesh?.NbTriangles() ?? 0;
-    if (triangles === 0) throw new Error(`No mesh found in the ${label} file.`);
-    if (triangles > MAX_MESH_TRIANGLES)
-      throw new Error(
-        `The ${label} mesh has ${triangles.toLocaleString("en-US")} triangles; the limit is ${MAX_MESH_TRIANGLES.toLocaleString("en-US")}.`,
-      );
-    const { shape, openEdges } = sewTriangles(mesh);
+    builder.MakeCompound(sewn);
+    for (const part of parts) {
+      const result = sewTriangles(part);
+      builder.Add(sewn, result.shape);
+      result.shape.delete();
+      openEdges += result.openEdges;
+    }
     if (openEdges > 0)
       return {
-        shape,
+        shape: sewn,
         warning: `The ${label} mesh is open at ${openEdges} edges, so it imported as a shell, not a solid.`,
       };
-    const builder = new k.BRep_Builder(),
-      compound = new k.TopoDS_Compound();
+    const compound = new k.TopoDS_Compound();
     builder.MakeCompound(compound);
-    for (const shell of explore(shape, "shell")) {
+    for (const shell of explore(sewn, "shell")) {
       const make = new k.BRepBuilderAPI_MakeSolid_3(k.TopoDS.Shell_1(shell)),
         solid = make.Solid();
       if (volumeOf(solid) < 0) solid.Reverse();
       builder.Add(compound, solid);
       make.delete();
     }
-    builder.delete();
-    shape.delete();
+    sewn.delete();
     return { shape: compound };
   } finally {
-    handle.delete();
+    builder.delete();
   }
 }
 
@@ -272,6 +329,7 @@ export const IMPORTERS = [
   importer("brep", [".brep"]),
   meshImporter("stl"),
   meshImporter("obj"),
+  meshImporter("3mf"),
 ];
 
 export const importerFor = (filename: string) =>

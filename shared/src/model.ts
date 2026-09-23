@@ -367,7 +367,7 @@ export interface ImportStepFeature extends FeatureBase {
 export interface ImportMeshFeature extends FeatureBase {
   type: "importMesh";
   filename: string;
-  format: "stl" | "obj";
+  format: "stl" | "obj" | "3mf";
   data: string;
 }
 

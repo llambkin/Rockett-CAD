@@ -36,12 +36,12 @@ The field needs no schema step: documents saved before it have no `format`
 and still read as STEP, so schema 5 stands. A build older than this one reads
 an IGES or BREP import as STEP and reports that feature as failed.
 
-### STL and OBJ imports
+### STL, OBJ and 3MF imports
 
-An `importMesh` feature holds `filename`, `format` (`stl` or `obj`) and the
-original file as base64 in `data`, so binary STL survives JSON. Regeneration
-reads it with `RWStl` or `RWObj`, which merge coincident nodes. Each triangle
-becomes a planar face over shared vertices and edges, and
+An `importMesh` feature holds `filename`, `format` (`stl`, `obj` or `3mf`) and
+the original file as base64 in `data`, so binary STL survives JSON.
+Regeneration reads STL and OBJ with `RWStl` or `RWObj`, which merge coincident
+nodes. Each triangle becomes a planar face over shared vertices and edges, and
 `BRepBuilderAPI_Sewing` joins them. With no free edges each shell becomes a
 solid, reversed if its volume is negative. Otherwise the sewn shell is the body
 and the feature status is `warning`, naming the open edge count. Meshes over
@@ -53,6 +53,14 @@ printable, which misreads a binary cube with small coordinates. When the size
 is exactly 84 bytes plus 50 per declared facet, the reader's copy gets a
 non-ASCII first header byte, forcing the binary path. The stored data is not
 changed.
+
+A 3MF is read in TypeScript: a central-directory zip reader over `node:zlib`
+finds the model part named by `_rels/.rels` (else `3D/3dmodel.model`) and
+inflates it with a 256 MB output cap. Each build item's mesh object is scaled
+from the model `unit` to millimetres, moved by the item transform and sewn on
+its own, so touching objects stay separate bodies. If any object is open, the
+whole file is one shell body with the warning. Objects built from `components`
+are rejected.
 
 The feature needs no schema step: no saved document changes meaning, so
 schema 5 stands. A build older than this one loads such a project, reports the

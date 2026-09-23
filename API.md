@@ -103,14 +103,15 @@ its placement.
 `POST /projects/import-step` creates a project named from the filename.
 `POST /projects/:id/import-step` inserts into an existing project's timeline
 at the current marker. Both accept multipart field `file` (`.step`/`.stp`,
-`.igs`/`.iges`, `.brep`, `.stl` or `.obj`, maximum 10 MB) and return
+`.igs`/`.iges`, `.brep`, `.stl`, `.obj` or `.3mf`, maximum 10 MB) and return
 `{ document, evaluation }`. Exact files must contain solid bodies. A file with
 none is 400 naming its format, for example `No solid found in the IGES file.`
 A mesh over 200,000 triangles is 400 with its count, for example
 `The STL mesh has 200,001 triangles; the limit is 200,000.` An open mesh
-imports with feature status `warning` and a `warning` message. Invalid files
-are rejected before a new project is kept. The source is embedded in the
-document; uploads that take the document beyond 40 MB are rejected.
+imports with feature status `warning` and a `warning` message. A 3MF zip entry
+that expands past 256 MB is 400. Invalid files are rejected before a new
+project is kept. The source is embedded in the document; uploads that take the
+document beyond 40 MB are rejected.
 
 | Method & path                        | Body                    | Notes                                                                        |
 | ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |

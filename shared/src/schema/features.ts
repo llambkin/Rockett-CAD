@@ -201,7 +201,7 @@ const importStep = Type.Refine(
 
 const importMesh = feature("importMesh", {
   filename: Type.String({ minLength: 1, maxLength: 255 }),
-  format: Type.Enum(["stl", "obj"]),
+  format: Type.Enum(["stl", "obj", "3mf"]),
   data: Type.String({
     maxLength: Math.ceil(MAX_IMPORT_BYTES / 3) * 4,
     pattern: "^[A-Za-z0-9+/]*={0,2}$",

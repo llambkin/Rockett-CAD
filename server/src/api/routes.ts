@@ -112,7 +112,7 @@ const receiveImage = multipart(
 const receiveStep = multipart(
   "file",
   10,
-  "Upload one STEP, IGES, BREP, STL or OBJ file, up to 10 MB.",
+  "Upload one STEP, IGES, BREP, STL, OBJ or 3MF file, up to 10 MB.",
 );
 const receiveProjectFile = multipart(
   "file",

@@ -59,7 +59,7 @@ everything downstream against persistent topology references.
 
 ### Files
 
-- **Import**: start or extend a project from a STEP, IGES, BREP, STL or OBJ file. Meshes are not parametric.
+- **Import**: start or extend a project from a STEP, IGES, BREP, STL, OBJ or 3MF file. Meshes are not parametric.
 - **Export**: download binary STL or multi-body 3MF with named bodies and a quality setting.
 - **Autosave**: every change saves to a readable JSON file that keeps the full feature history.
 
