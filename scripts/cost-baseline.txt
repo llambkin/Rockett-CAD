@@ -35,7 +35,7 @@ client/src/three/CadViewport.ts buildBody 85
 client/src/three/CadViewport.ts pick 183
 client/src/three/ViewCube.ts constructor 95
 client/src/three/revolveGhost.ts buildRevolveGhost 99
-client/src/three/sketchRender.ts renderSketches 169
+client/src/three/sketchRender.ts buildSketch 162
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 638
 server/src/api/routes.ts createApiRouter 454

@@ -231,7 +231,7 @@ Rows are ordered by measured benefit.
 | `pointermove` render nudge and gizmo repaint                                  | 60 moves over empty space render 60 frames for 1 hover change; a many-body frame costs a median 5 ms (PERF-027)     | new row                                                                                                                     | PERF-036           |
 | model tree re-renders every row                                               | 1,000 bodies: 15 to 21 ms per evaluation, 15 to 19 ms per selection, two renders per edit                           | new row                                                                                                                     | PERF-037           |
 | preview tints compare mesh arrays                                             | 1,000 unchanged bodies: 23 ms per preview evaluation, 0.08 ms by `meshKey`                                          | done: `preview tints many-body` median 20.4 to 20.7 ms, now 0.10 to 0.11 ms                                                 | PERF-038           |
-| sketches rebuilt on every evaluation                                          | 11.3 ms for one 2,000-entity sketch, 10.2 ms for 50 sketches of 32 entities                                         | new row                                                                                                                     | PERF-039           |
+| sketches rebuilt on every evaluation                                          | 11.3 ms for one 2,000-entity sketch, 10.2 ms for 50 sketches of 32 entities                                         | done: `sketch rerender` medians 10.3 to 12.6 ms and 6.9 to 8.4 ms, now 0.48 to 0.63 ms                                      | PERF-039           |
 | static client assets raw and revalidated                                      | JS 1,114,913 bytes, 307,258 gzipped; CSS 14,563, 3,507 gzipped; `max-age=0` on both                                 | done: JS 1,118,034 to 309,454 bytes on the wire, CSS 14,669 to 3,482, both `immutable`; `index.html` `no-cache`             | PERF-040           |
 | every response re-serialises every mesh, including renames and timeline peeks | many-body: 120 to 140 ms `JSON.stringify` and 88 ms gzip per response                                               | covered                                                                                                                     | PERF-021, PERF-024 |
 | hover picks per pointer event                                                 | 0.6 to 1.1 ms a pick                                                                                                | covered                                                                                                                     | PERF-029           |
@@ -308,6 +308,11 @@ Benches:
 - `preview tints many-body`: `previewTints` for the many-body payloads
   against a JSON round trip of the same bodies, as after a live preview
   that changes no mesh.
+- `sketch rerender 2000 entities`: `renderSketches` for the square sketch as
+  an inactive evaluated sketch with its profiles shown, alternating between
+  two JSON round trips of it, as after an evaluation that changes no sketch.
+- `sketch rerender 50 sketches`: the same for 50 sketches of four squares,
+  32 entities each.
 - `tree rerender many-body`: `ModelTree` with the many-body payloads, then a
   new evaluation of copies of the same bodies each sample.
 - `tree select many-body`: the same tree, selecting one of two bodies in
@@ -322,7 +327,10 @@ on 2026-09-23 at a load average of 22 to 24, interleaved with three runs of the
 tree before PERF-037: 18.6 to 20.1 ms a new evaluation and 14.3 to 14.9 ms a
 selection. The PERF-038 row spans three runs on 2026-09-23 at a load average
 of 18 to 20, after three runs comparing mesh arrays: a median of 20.4 to
-20.7 ms, p95 21.6 to 22.7 ms.
+20.7 ms, p95 21.6 to 22.7 ms. The PERF-039 rows span three runs on
+2026-09-23 at a load average of 15 to 19, interleaved with three runs
+rebuilding every sketch: a median of 10.3 to 12.6 ms for 2,000 entities and
+6.9 to 8.4 ms for 50 sketches.
 
 | metric                          | fixture               | hardware class | runtime                         | warm-up | repetitions | median              | p95                 | budget                      | row      |
 | ------------------------------- | --------------------- | -------------- | ------------------------------- | ------- | ----------- | ------------------- | ------------------- | --------------------------- | -------- |
@@ -333,6 +341,8 @@ of 18 to 20, after three runs comparing mesh arrays: a median of 20.4 to
 | sketch hover 2000 entities      | square sketch         | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 54.7 to 59.7 ms     | 62.3 to 71.9 ms     | median 16 ms, p95 50 ms     | PERF-004 |
 | texture scene bytes             | 50 images 4096 x 4096 | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 4,473,924,200 bytes | 4,473,924,200 bytes | at most 4,473,924,200 bytes | PERF-004 |
 | preview tints many-body         | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.102 to 0.111 ms   | 0.117 to 0.133 ms   | median 1 ms, p95 1 ms       | PERF-038 |
+| sketch rerender 2000 entities   | square sketch         | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.475 to 0.543 ms   | 0.513 to 0.715 ms   | median 16 ms, p95 50 ms     | PERF-039 |
+| sketch rerender 50 sketches     | 50 square sketches    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.540 to 0.626 ms   | 0.561 to 0.948 ms   | median 16 ms, p95 50 ms     | PERF-039 |
 | tree rerender many-body         | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 8.0 to 10.3 ms      | 19.1 to 23.0 ms     | median 16 ms, p95 50 ms     | PERF-037 |
 | tree select many-body           | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 3.4 to 4.5 ms       | 4.5 to 22.9 ms      | median 16 ms, p95 50 ms     | PERF-037 |
 

@@ -1,12 +1,19 @@
 import * as THREE from "three";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import type { BodyPayload, Feature } from "@rockett/shared";
+import {
+  detectProfiles,
+  type BodyPayload,
+  type Feature,
+} from "@rockett/shared";
 import { previewTints } from "../src/livePreview";
 import type { Selection } from "../src/store";
 import { CadViewport } from "../src/three/CadViewport";
 import { syncReferenceImages } from "../src/three/referenceImages";
 import { worldToClient } from "../src/three/screen";
-import { renderSketches } from "../src/three/sketchRender";
+import {
+  renderSketches,
+  type SketchRenderInput,
+} from "../src/three/sketchRender";
 import {
   IMAGE_PIXELS,
   imageScene,
@@ -145,6 +152,52 @@ test("sketch hover 2000 entities", async ({ bench }) => {
     entityId,
   }));
   expect(hovered).toEqual(hovered.map((_, i) => expected[i % 2]));
+  renderSketches(vp, [], [], null);
+});
+
+function evaluatedSketches(
+  sketches: SketchRenderInput[],
+): SketchRenderInput[][] {
+  const inactive = sketches.map((sk) => ({
+    ...sk,
+    active: false,
+    profiles: detectProfiles(sk.entities),
+  }));
+  return [0, 1].map(() =>
+    JSON.parse(JSON.stringify(inactive)).map((sk: SketchRenderInput) => ({
+      ...sk,
+      showProfiles: true,
+      usedProfileIds: new Set<string>(),
+    })),
+  );
+}
+
+test("sketch rerender", async ({ bench }) => {
+  const plans = [
+    ["sketch rerender 2000 entities", [squareSketch()]],
+    [
+      "sketch rerender 50 sketches",
+      Array.from({ length: 50 }, (_, k) => ({
+        ...squareSketch(4, 1),
+        sketchId: `perf-sketch-${k}`,
+      })),
+    ],
+  ] as const;
+  for (const [name, sketches] of plans) {
+    const generations = evaluatedSketches([...sketches]);
+    expect(generations[0]!.flatMap((sk) => sk.entities)).toHaveLength(
+      name.endsWith("entities") ? 2000 : 1600,
+    );
+    renderSketches(vp, generations[0]!, [], null);
+    let renders = 0;
+    record(
+      name,
+      await bench(name, sync, () => {
+        renderSketches(vp, generations[renders++ % 2]!, [], null);
+      }).run(SAMPLES),
+      SAMPLES.iterations,
+    );
+  }
   renderSketches(vp, [], [], null);
 });
 
