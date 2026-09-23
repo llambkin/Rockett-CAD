@@ -16,6 +16,7 @@ import type {
 } from "@rockett/shared";
 import type { Selection } from "../store";
 import { clientToNdc } from "./screen";
+import { disposeGroup, disposeObject } from "./dispose";
 
 export const COLORS = {
   bg: 0x2a2d30,
@@ -988,16 +989,4 @@ export class CadViewport {
       this.planeRoot.add(mesh);
     }
   }
-}
-
-function disposeObject(o: THREE.Object3D) {
-  const any = o as any;
-  any.geometry?.dispose?.();
-  const m = any.material;
-  if (Array.isArray(m)) m.forEach((x) => x.dispose?.());
-  else m?.dispose?.();
-}
-
-function disposeGroup(g: THREE.Object3D) {
-  g.traverse(disposeObject);
 }

@@ -21,7 +21,7 @@ client/src/three/MoveGizmo.ts 16
 client/src/three/RevolveGizmo.ts 17
 client/src/three/ViewCube.ts 23
 client/src/three/revolveGhost.ts 9
-client/src/three/sketchRender.ts 14
+client/src/three/sketchRender.ts 13
 client/src/three/toolPreview.ts 10
 client/src/viewportRef.ts 2
 client/test/constructionTools.test.ts 2

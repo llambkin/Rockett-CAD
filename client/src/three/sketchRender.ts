@@ -7,6 +7,7 @@ import * as THREE from "three";
 import type { PlaneFrame, Profile, SketchEntity } from "@rockett/shared";
 import { detectProfiles, sampleArc } from "@rockett/shared";
 import { COLORS, CadViewport, uv3 } from "./CadViewport";
+import { clearGroup } from "./dispose";
 import type { Selection } from "../store";
 import { selectionKey } from "../store";
 
@@ -35,7 +36,7 @@ export function renderSketches(
   hover: Selection | null,
 ): void {
   const root = viewport.getSketchRoot();
-  root.clear();
+  clearGroup(root);
   const selKeys = new Set(selection.map(selectionKey));
   const hoverKey = hover ? selectionKey(hover) : null;
 
@@ -145,33 +146,21 @@ export function renderSketches(
       const geom = new THREE.BufferGeometry().setFromPoints(positions);
       const line = new THREE.Line(
         geom,
-        new THREE.LineBasicMaterial({
-          color,
-          transparent: !sk.active,
-          opacity: sk.active ? 1 : sk.dim ? 0.5 : 0.8,
-          depthTest: false,
-        }),
+        e.construction
+          ? new THREE.LineDashedMaterial({
+              color,
+              dashSize: 2,
+              gapSize: 1.5,
+              depthTest: false,
+            })
+          : new THREE.LineBasicMaterial({
+              color,
+              transparent: !sk.active,
+              opacity: sk.active ? 1 : sk.dim ? 0.5 : 0.8,
+              depthTest: false,
+            }),
       );
-      if (e.construction) {
-        // dashed look for construction geometry
-        const dashedLine = new THREE.Line(
-          geom,
-          new THREE.LineDashedMaterial({
-            color,
-            dashSize: 2,
-            gapSize: 1.5,
-            depthTest: false,
-          }),
-        );
-        dashedLine.computeLineDistances();
-        if (pickable) {
-          dashedLine.userData.sketchEntityId = e.id;
-          dashedLine.userData.sketchId = sk.sketchId;
-        }
-        dashedLine.renderOrder = 6;
-        group.add(dashedLine);
-        continue;
-      }
+      if (e.construction) line.computeLineDistances();
       if (pickable) {
         line.userData.sketchEntityId = e.id;
         line.userData.sketchId = sk.sketchId;
