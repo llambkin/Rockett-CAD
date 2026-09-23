@@ -515,18 +515,22 @@ describe("shell", () => {
     ]);
   });
 
-  // Suspect, pinned: a hollow closed shell should keep 6000 - 18*28*8 = 1968. Today the
-  // body is replaced by the 18 x 28 x 8 inner offset solid instead.
-  it("closed 1 mm shell with no open faces yields the inner offset solid (pinned snapshot, suspect)", () => {
+  it("closed 1 mm shell with no open faces hollows the body: 6000 - 18*28*8 (analytic)", () => {
     const r = run([
       ...baseBox(),
       { ...meta("sh"), type: "shell", openFaces: [], thickness: 1 },
     ]);
     expectOk(r);
     expect(r.bodyIds()).toEqual(["b:box"]);
-    expectVolume(r.volume("b:box"), 18 * 28 * 8);
-    expectBox(r, "b:box", [1, 1, 1], [19, 29, 9], 2);
+    expectVolume(r.volume("b:box"), 6000 - 18 * 28 * 8);
+    expectBox(r, "b:box", [0, 0, 0], [20, 30, 10], 2);
     expect(faceNames(r, "b:box")).toEqual([
+      "f:box:cap:end",
+      "f:box:cap:start",
+      "f:box:s:boxSk-l1",
+      "f:box:s:boxSk-l2",
+      "f:box:s:boxSk-l3",
+      "f:box:s:boxSk-l4",
       "f:sh:x1",
       "f:sh:x2",
       "f:sh:x3",

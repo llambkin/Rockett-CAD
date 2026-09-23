@@ -51,7 +51,7 @@ server/test/api.test.ts 21
 server/test/chamferEnvelope.test.ts 7
 server/test/export.test.ts 1
 server/test/faceExtrude.test.ts 2
-server/test/featureGolden.test.ts 24
+server/test/featureGolden.test.ts 22
 server/test/geometry.test.ts 12
 server/test/signedExtrude.test.ts 1
 server/test/unifyFaces.test.ts 3

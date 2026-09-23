@@ -1414,7 +1414,25 @@ function evalShell(state: EvalState, f: ShellFeature): void {
     const names = propagateNames(op, [body], result, f.id);
     op.delete();
     closing.delete();
-    registerBodySolids(state, bodyId, result, names);
+    if (f.openFaces.length > 0) {
+      registerBodySolids(state, bodyId, result, names);
+      return;
+    }
+    const cut = new k.BRepAlgoAPI_Cut_3(body.shape, result, progress());
+    cut.Build(progress());
+    if (!cut.IsDone()) {
+      cut.delete();
+      throw new Error("shell failed: could not hollow the closed body");
+    }
+    const hollow = cut.Shape();
+    const hollowNames = propagateNames(
+      cut,
+      [body, { shape: result, names }],
+      hollow,
+      f.id,
+    );
+    cut.delete();
+    registerBodySolids(state, bodyId, hollow, hollowNames);
   });
 }
 
