@@ -312,10 +312,7 @@ describe("sweep", () => {
     expect(faceNames(r, "b:sw")).toEqual(["f:sw:x1", "f:sw:x2", "f:sw:x3"]);
   });
 
-  // Known bug, pinned: GC_MakeArcOfCircle.Value() is a Handle_Geom_TrimmedCurve and
-  // BRepBuilderAPI_MakeEdge_24 wants a Handle_Geom_Curve, so any arc in a path fails.
-  // Once fixed, the body should hold pi * 2^2 * (20 + 5 pi) by Pappus.
-  it("a line then a quarter arc fails today with a kernel binding error (pinned snapshot, known bug)", () => {
+  it("a line then a quarter arc gives volume 4 pi (20 + 5 pi) by Pappus (analytic)", () => {
     const path = sketch("path", XZ, [
       P("p0", 0, 0),
       P("p1", 0, 20),
@@ -335,12 +332,9 @@ describe("sweep", () => {
         operation: "newBody",
       },
     ]);
-    expectError(
-      r,
-      "sw",
-      /^sweep path: Expected null or instance of Handle_Geom_Curve, got an instance of Handle_Geom_TrimmedCurve$/,
-    );
-    expect(r.result.bodies).toEqual([]);
+    expectOk(r);
+    expect(r.bodyIds()).toEqual(["b:sw"]);
+    expectVolume(r.volume("b:sw"), Math.PI * 4 * (20 + 5 * Math.PI));
   });
 
   it("a missing path sketch is a feature error", () => {

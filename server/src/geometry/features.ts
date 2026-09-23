@@ -75,6 +75,7 @@ import { curveInfo } from "./tessellate.js";
 import { tangentEdges } from "./tangentEdges.js";
 import { readStep } from "./stepImport.js";
 import {
+  arcEdge,
   buildProfileFace,
   subtractSketchRegionsFromFace,
   type ProfileFace,
@@ -858,27 +859,14 @@ function sketchEntityToEdge(
     return edge;
   }
   if (e.kind === "arc") {
-    const c = points.get(e.center)!;
     const s = points.get(e.start)!;
     const en = points.get(e.end)!;
-    const r = Math.hypot(s.x - c.x, s.y - c.y);
-    const a0 = Math.atan2(s.y - c.y, s.x - c.x);
-    let a1 = Math.atan2(en.y - c.y, en.x - c.x);
-    if (a1 <= a0) a1 += Math.PI * 2;
-    const amid = (a0 + a1) / 2;
-    const pm = to3d(c.x + r * Math.cos(amid), c.y + r * Math.sin(amid));
-    const p1 = to3d(s.x, s.y);
-    const p2 = to3d(en.x, en.y);
-    const arcMk = new k.GC_MakeArcOfCircle_4(
-      pnt(p1[0], p1[1], p1[2]),
-      pnt(pm[0], pm[1], pm[2]),
-      pnt(p2[0], p2[1], p2[2]),
+    return arcEdge(
+      sketch.frame,
+      points.get(e.center)!,
+      [s.x, s.y],
+      [en.x, en.y],
     );
-    const mk = new k.BRepBuilderAPI_MakeEdge_24(arcMk.Value());
-    const edge = mk.Edge();
-    mk.delete();
-    arcMk.delete();
-    return edge;
   }
   return null;
 }

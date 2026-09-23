@@ -66,6 +66,43 @@ function snapper(): (x: number, y: number) => [number, number] {
   };
 }
 
+export function arcEdge(
+  frame: PlaneFrame,
+  c: { x: number; y: number },
+  s: [number, number],
+  e: [number, number],
+  reversed = false,
+): Shape {
+  const k = getKernel();
+  const { a0, a1, r } = arcAngles({
+    cx: c.x,
+    cy: c.y,
+    sx: s[0],
+    sy: s[1],
+    ex: e[0],
+    ey: e[1],
+  });
+  const amid = (a0 + a1) / 2;
+  const [from, to] = reversed ? [e, s] : [s, e];
+  const p1 = uvTo3d(frame, from[0], from[1]);
+  const pm = uvTo3d(frame, c.x + r * Math.cos(amid), c.y + r * Math.sin(amid));
+  const p2 = uvTo3d(frame, to[0], to[1]);
+  const arcMk = new k.GC_MakeArcOfCircle_4(
+    pnt(p1[0], p1[1], p1[2]),
+    pnt(pm[0], pm[1], pm[2]),
+    pnt(p2[0], p2[1], p2[2]),
+  );
+  const curveHandle = arcMk.Value();
+  const baseHandle = new k.Handle_Geom_Curve_2(curveHandle.get());
+  const mk = new k.BRepBuilderAPI_MakeEdge_24(baseHandle);
+  const edge = mk.Edge();
+  mk.delete();
+  baseHandle.delete();
+  curveHandle.delete();
+  arcMk.delete();
+  return edge;
+}
+
 /**
  * Build one wire from an oriented curve chain.
  * Returns the wire plus edge-hash → entity-id entries appended to edgeEntity.
@@ -120,39 +157,7 @@ function buildWire(
       const e0 = oc.trim
         ? { x: oc.trim[2], y: oc.trim[3] }
         : maps.points.get(arc!.end)!;
-      const { a0, a1, r } = arcAngles({
-        cx: c.x,
-        cy: c.y,
-        sx: s0.x,
-        sy: s0.y,
-        ex: e0.x,
-        ey: e0.y,
-      });
-      const amid = (a0 + a1) / 2;
-      const midUV: [number, number] = [
-        c.x + r * Math.cos(amid),
-        c.y + r * Math.sin(amid),
-      ];
-      let sUV = snap(s0.x, s0.y);
-      let eUV = snap(e0.x, e0.y);
-      if (oc.reversed) [sUV, eUV] = [eUV, sUV];
-      const p1 = to3d(sUV);
-      const pm = to3d(midUV);
-      const p2 = to3d(eUV);
-      const arcMk = new k.GC_MakeArcOfCircle_4(
-        pnt(p1[0], p1[1], p1[2]),
-        pnt(pm[0], pm[1], pm[2]),
-        pnt(p2[0], p2[1], p2[2]),
-      );
-      const curveHandle = arcMk.Value();
-      // Embind does not implicitly upcast OCCT handle templates.
-      const baseHandle = new k.Handle_Geom_Curve_2(curveHandle.get());
-      const mk = new k.BRepBuilderAPI_MakeEdge_24(baseHandle);
-      edge = mk.Edge();
-      mk.delete();
-      baseHandle.delete();
-      curveHandle.delete();
-      arcMk.delete();
+      edge = arcEdge(frame, c, snap(s0.x, s0.y), snap(e0.x, e0.y), oc.reversed);
     } else if (circle) {
       const c = maps.points.get(circle.center)!;
       const c3 = to3d([c.x, c.y]);
