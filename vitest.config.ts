@@ -20,6 +20,7 @@ export const projects = [
       "modules/*/test/dom/**/*.test.{ts,tsx}",
     ],
     exclude: [],
+    setupFiles: ["client/test/dom/setup.ts"],
   },
 ];
 

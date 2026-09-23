@@ -4,8 +4,6 @@ import { expect, it } from "vitest";
 import { Toolbar } from "../../src/components/Toolbar";
 import { useStore } from "../../src/store";
 
-Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-
 it("opens the Extrude dialog when its toolbar button is clicked", async () => {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);

@@ -141,6 +141,14 @@ function DialogBody({
     close();
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const commit = async (feature: Feature) => {
     setPending(true);
     try {
