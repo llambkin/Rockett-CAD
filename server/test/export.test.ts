@@ -14,6 +14,7 @@ import { write3mf, writeStl } from "../src/geometry/exporters.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
+import { LocalStorage } from "../src/store/storage.js";
 
 let server: Server | undefined;
 let apiUrl = "";
@@ -25,7 +26,10 @@ beforeAll(async () => {
   store = new ProjectStore(dir);
   await store.init();
   const app = express();
-  app.use("/api", createApiRouter(store, new FolderStore(dir)));
+  app.use(
+    "/api",
+    createApiRouter(store, new FolderStore(new LocalStorage(dir, fs))),
+  );
   const listening = app.listen(0);
   await new Promise((resolve) => listening.once("listening", resolve));
   server = listening;

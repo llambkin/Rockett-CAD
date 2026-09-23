@@ -3,6 +3,7 @@ import { existsSync, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { JsonStore } from "../src/store/jsonStore.js";
+import { LocalStorage } from "../src/store/storage.js";
 
 interface Note {
   version: number;
@@ -12,7 +13,8 @@ interface Note {
 async function tempStore(onWrite: (root: string) => void = () => {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-json-"));
   const store = new JsonStore<Note>({
-    root,
+    storage: new LocalStorage(root, fs),
+    root: "",
     name: "note",
     key: /^[a-z0-9]+$/,
     file: "note.json",

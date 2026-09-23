@@ -1,8 +1,7 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import type { ApiErrorCode } from "@rockett/shared";
 import { ProjectQueue } from "./projectQueue.js";
+import type { Storage } from "./storage.js";
 
 export class StoreError extends Error {
   constructor(
@@ -14,6 +13,7 @@ export class StoreError extends Error {
 }
 
 export interface JsonStoreOptions<T> {
+  storage: Storage;
   root: string;
   name: string;
   key: RegExp;
@@ -30,14 +30,14 @@ export class JsonStore<T> {
   dir(key: string): string {
     if (!this.options.key.test(key))
       throw new StoreError(`invalid ${this.options.name} id`);
-    return path.join(this.options.root, key);
+    return path.posix.join(this.options.root, key);
   }
 
   async read(key: string): Promise<T> {
-    const file = path.join(this.dir(key), this.options.file);
+    const file = path.posix.join(this.dir(key), this.options.file);
     let raw: string;
     try {
-      raw = await fs.readFile(file, "utf8");
+      raw = (await this.options.storage.read(file)).toString("utf8");
     } catch {
       throw new StoreError(
         `${this.options.name} ${key} not found`,
@@ -59,30 +59,19 @@ export class JsonStore<T> {
   write(key: string, value: T): Promise<void> {
     return this.writes.run(key, async () => {
       this.options.validate?.(value);
-      const dir = this.dir(key);
-      await fs.mkdir(dir, { recursive: true });
-      const file = path.join(dir, this.options.file);
-      const tmp = `${file}.${crypto.randomUUID()}.tmp`;
-      try {
-        await fs.writeFile(tmp, JSON.stringify(value, null, 1), "utf8");
-        await fs.rename(tmp, file);
-      } finally {
-        await fs.rm(tmp, { force: true });
-      }
+      await this.options.storage.writeAtomic(
+        path.posix.join(this.dir(key), this.options.file),
+        JSON.stringify(value, null, 1),
+      );
     });
   }
 
   async remove(key: string): Promise<void> {
-    await fs.rm(this.dir(key), { recursive: true, force: true });
+    await this.options.storage.remove(this.dir(key));
   }
 
   async keys(): Promise<string[]> {
-    await fs.mkdir(this.options.root, { recursive: true });
-    const entries = await fs.readdir(this.options.root, {
-      withFileTypes: true,
-    });
-    return entries
-      .filter((e) => e.isDirectory() && this.options.key.test(e.name))
-      .map((e) => e.name);
+    const names = await this.options.storage.list(this.options.root);
+    return names.filter((name) => this.options.key.test(name));
   }
 }

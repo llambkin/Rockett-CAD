@@ -23,6 +23,7 @@ import { initKernel } from "../src/geometry/kernel.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
+import { LocalStorage } from "../src/store/storage.js";
 import { stepFixture } from "./helpers/stepFixture.js";
 
 let base = "";
@@ -36,7 +37,10 @@ beforeAll(async () => {
   store = new ProjectStore(storeDir);
   await store.init();
   const app = express();
-  app.use("/api", createApiRouter(store, new FolderStore(storeDir)));
+  app.use(
+    "/api",
+    createApiRouter(store, new FolderStore(new LocalStorage(storeDir, fs))),
+  );
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
   });

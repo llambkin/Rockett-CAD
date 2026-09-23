@@ -10,6 +10,7 @@ import {
 } from "@rockett/shared";
 import { JsonStore, StoreError } from "./jsonStore.js";
 import { ProjectQueue } from "./projectQueue.js";
+import type { Storage } from "./storage.js";
 
 const KEY = "folders";
 
@@ -17,9 +18,10 @@ export class FolderStore {
   private file: JsonStore<FoldersFile>;
   private queue = new ProjectQueue();
 
-  constructor(dataDir: string) {
+  constructor(storage: Storage) {
     this.file = new JsonStore({
-      root: dataDir,
+      storage,
+      root: "",
       name: "folders",
       key: /^folders$/,
       file: "folders.json",

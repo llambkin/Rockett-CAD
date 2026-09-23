@@ -13,6 +13,7 @@ import type { AddressInfo } from "node:net";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { FolderStore } from "./store/folderStore.js";
+import { LocalStorage } from "./store/storage.js";
 import { createApp } from "./app.js";
 import { parseAllowedOrigins } from "./auth/origin.js";
 
@@ -35,7 +36,8 @@ async function main() {
   await initKernel();
   console.log(`[rockett] kernel ready in ${Date.now() - t0}ms`);
 
-  const store = new ProjectStore(DATA_DIR);
+  const storage = new LocalStorage(DATA_DIR, fs.promises);
+  const store = new ProjectStore(DATA_DIR, storage);
   await store.init();
   console.log(`[rockett] data dir: ${DATA_DIR}`);
 
@@ -50,7 +52,7 @@ async function main() {
   );
   const app = createApp({
     store,
-    folders: new FolderStore(DATA_DIR),
+    folders: new FolderStore(storage),
     clientDir,
     allowedOrigins,
   });

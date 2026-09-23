@@ -99,10 +99,11 @@ docker run -d --name rockett-cad \
         └── exports/        # server-retained exports (opt-in per export)
 ```
 
-Documents are written atomically (tmp file + rename), so a crash or container
-kill never corrupts a project. **The container is stateless outside `/data`**.
-Recreating it (upgrades, host moves) loses nothing; this is verified by the
-persistence tests and was smoke-tested against a live container.
+Documents are written atomically (temp file, fsync, rename, directory fsync),
+so a crash or container kill never corrupts a project. **The container is
+stateless outside `/data`**. Recreating it (upgrades, host moves) loses
+nothing; this is verified by the persistence tests and was smoke-tested against
+a live container.
 
 ## Environment
 

@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { createApp } from "../../src/app.js";
 import { ProjectStore } from "../../src/store/projectStore.js";
 import { FolderStore } from "../../src/store/folderStore.js";
+import { LocalStorage } from "../../src/store/storage.js";
 
 export interface TestRequest extends RequestInit {
   cookie?: string;
@@ -32,7 +33,7 @@ export async function startTestApp(
     "request",
     createApp({
       store,
-      folders: new FolderStore(dataDir),
+      folders: new FolderStore(new LocalStorage(dataDir, fs)),
       clientDir: options.clientDir,
       allowedOrigins: [origin, ...(options.allowedOrigins ?? [])],
     }),

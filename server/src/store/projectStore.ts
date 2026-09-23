@@ -20,6 +20,7 @@ import {
 } from "@rockett/shared";
 import { JsonStore, StoreError } from "./jsonStore.js";
 import { migrateDocument } from "./migrations.js";
+import { LocalStorage, type Storage } from "./storage.js";
 
 export { StoreError };
 
@@ -62,9 +63,13 @@ function imageExt(data: Buffer, label: string): string {
 export class ProjectStore {
   private documents: JsonStore<CadDocument>;
 
-  constructor(dataDir: string) {
+  constructor(
+    private readonly dataDir: string,
+    storage: Storage = new LocalStorage(dataDir, fs),
+  ) {
     this.documents = new JsonStore({
-      root: path.join(dataDir, "projects"),
+      storage,
+      root: "projects",
       name: "project",
       key: ID_RE,
       file: "document.json",
@@ -79,11 +84,11 @@ export class ProjectStore {
   }
 
   private projectDir(id: string): string {
-    return this.documents.dir(id);
+    return path.join(this.dataDir, this.documents.dir(id));
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.documents.options.root, { recursive: true });
+    await fs.mkdir(path.join(this.dataDir, "projects"), { recursive: true });
   }
 
   async list(): Promise<ProjectSummary[]> {

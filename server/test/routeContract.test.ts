@@ -8,12 +8,13 @@ import path from "node:path";
 import { ROUTES, pathFor } from "@rockett/shared";
 import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
+import { LocalStorage } from "../src/store/storage.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 
 function registered(): string[] {
   const router = createApiRouter(
     new ProjectStore(os.tmpdir()),
-    new FolderStore(os.tmpdir()),
+    new FolderStore(new LocalStorage(os.tmpdir(), fs)),
   );
   return router.stack.flatMap((layer) => {
     const route = layer.route;
@@ -64,7 +65,10 @@ beforeAll(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-contract-"));
   const app = express().use(
     "/api",
-    createApiRouter(new ProjectStore(dataDir), new FolderStore(dataDir)),
+    createApiRouter(
+      new ProjectStore(dataDir),
+      new FolderStore(new LocalStorage(dataDir, fs)),
+    ),
   );
   server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
