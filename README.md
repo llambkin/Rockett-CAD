@@ -62,7 +62,8 @@ docker compose up -d
 ```
 
 Then open http://localhost:8788. All state lives in the `rockett-cad_data`
-volume; DOCKER.md covers LAN access and running dev and prod side by side.
+volume; DOCKER.md covers LAN access, running dev and prod side by side, and
+promoting the image dev verified to prod.
 The container runs as the unprivileged `rockett` user: `/app` is root-owned
 and `/data` is the only path it writes.
 

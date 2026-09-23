@@ -19,24 +19,38 @@ the header of the file lists every variable.
 
 ### Several instances on one host
 
-`-p` names the instance, so containers, volumes and data stay separate:
+`-p` names the instance, so containers, volumes and data stay separate. Both
+instances run `rockett-cad:<tag>` images from the same engine.
+
+Prod never builds. Dev builds one image, tagged with the short SHA of the
+commit it bakes in, and prod runs that image once dev has verified it.
 
 ```bash
-# dev: rebuild from the checkout you are working in
-ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_HOST_PORT="$DEV_PORT" ROCKETT_TAG=dev \
-ROCKETT_COMMIT=$(git rev-parse HEAD) \
-ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
+# dev: build and run the image from a clean checkout
+COMMIT=$(git rev-parse HEAD)
+REV=$(git rev-parse --short "$COMMIT")
+git diff --quiet HEAD &&
+ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_HOST_PORT="$DEV_PORT" ROCKETT_TAG=$REV \
+ROCKETT_COMMIT=$COMMIT ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
   docker compose -p rockett-cad-dev up -d --build
 
-# prod: build a revision-tagged image from a clean deploy checkout
-REV=$(git rev-parse --short HEAD)
-ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_TAG=$REV ROCKETT_COMMIT=$(git rev-parse HEAD) \
-ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
-  docker compose -p rockett-cad-prod up -d --build
+# prod: promote the image dev verified
+docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+  rockett-cad:$REV
+ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_TAG=$REV \
+  docker compose -p rockett-cad-prod up -d --no-build
 ```
 
-Roll prod back by rerunning `up -d --no-build` with the previous `ROCKETT_TAG`;
-keep that image until the new one is trusted. Confirm what is running with
+`git diff --quiet HEAD` refuses a tree that `describe` would mark `-dirty`,
+so the tag, the image revision label and `/api/health` all name `COMMIT`.
+`REV` uses the same abbreviation as `describe`, so the corner label
+`v0.1.0-4-g1a2b3c4` runs as `rockett-cad:1a2b3c4`; on a tagged commit the
+label shows the tag and its tooltip the commit. Before promoting,
+`docker image inspect` must print `COMMIT`. If prod uses another engine, move
+the image there with `docker save` and `docker load`; do not rebuild it.
+
+Roll prod back by rerunning the prod command with the previous `REV`; keep
+that image until the new one is trusted. Confirm what is running with
 `curl http://<host>:<port>/api/health`, whose `commit` must match the intended
 revision. The UI shows the same build in its bottom-right corner: `describe`
 when set, else the version and short commit, else `dev`.
