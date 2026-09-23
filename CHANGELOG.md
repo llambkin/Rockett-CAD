@@ -1,7 +1,12 @@
 # Changelog
 
-Versions follow semver. `SCHEMA_VERSION` (document format) is versioned
-separately in `shared/src/model.ts`; `/api/health` reports both.
+Versions follow semver. The root `package.json` owns the one app version;
+the workspace versions stay `0.1.0`. `SCHEMA_VERSION` (document format) is
+versioned separately in `shared/src/model.ts`; `/api/health` reports both.
+
+A release moves `Unreleased` into a dated `## X.Y.Z` section and gets an
+annotated tag `vX.Y.Z` on that `origin/main` commit. Every `SCHEMA_VERSION`
+change gets a `Schema N` line in the section that ships it.
 
 ## Unreleased
 
@@ -32,8 +37,11 @@ separately in `shared/src/model.ts`; `/api/health` reports both.
   Node 24 is the minimum; the image is `node:24-trixie-slim`.
   `npm-run-all` is replaced by its maintained fork `npm-run-all2`.
 
-## 0.1.0
+## 0.1.0 (2026-09-23)
 
 Initial source: parametric sketcher and solver, B-Rep features on OpenCascade
 WASM, persistent topology naming, feature timeline, STEP import, STL and 3MF
 export, sketch offsets and temporary timeline rewind.
+
+- Schema 4: a sketch keeps an `offsets` list, so an offset can be edited by
+  distance. The 3 to 4 migration only bumps the version.
