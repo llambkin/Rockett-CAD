@@ -29,7 +29,7 @@ client/src/sketchTools.ts 827
 client/src/store.ts 1024
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 685
-client/src/three/CadViewport.ts 988
+client/src/three/CadViewport.ts 989
 client/src/three/CadViewport.ts addHighlight 104
 client/src/three/CadViewport.ts buildBody 85
 client/src/three/CadViewport.ts pick 183
@@ -39,7 +39,7 @@ client/src/three/sketchRender.ts renderSketches 169
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 627
 server/src/api/routes.ts createApiRouter 444
-server/src/geometry/engine.ts evaluate 116
+server/src/geometry/engine.ts evaluate 110
 server/src/geometry/features.ts 1907
 server/src/geometry/features.ts applyToolOperation 89
 server/src/geometry/features.ts buildPrism 81
@@ -49,7 +49,7 @@ server/src/geometry/features.ts evalRevolve 95
 server/src/geometry/sketchGeom.ts buildWire 81
 server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
-server/src/geometry/tessellate.ts tessellateBody 87
+server/src/geometry/tessellate.ts tessellateBody 91
 shared/src/model.ts 519
 shared/src/profiles.ts 633
 shared/src/profiles.ts detectProfiles 405
