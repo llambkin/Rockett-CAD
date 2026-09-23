@@ -6,8 +6,8 @@
 
 import * as THREE from "three";
 import type { PlaneFrame, Profile } from "@rockett/shared";
-import { CadViewport } from "./CadViewport";
-import { snapStep } from "./Manipulator";
+import { disposeObject } from "./dispose";
+import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
 
 const ARROW_COLOR = 0x4da3ff;
 const ARROW_HOVER = 0x8fd0ff;
@@ -31,20 +31,16 @@ export interface GizmoSource {
   };
 }
 
-export class ExtrudeGizmo {
-  private group = new THREE.Group();
+export class ExtrudeGizmo extends Manipulator {
   private shaft: THREE.Mesh;
   private cone: THREE.Mesh;
   private previewMesh: THREE.Mesh | null = null;
-  private raycaster = new THREE.Raycaster();
 
   origin = new THREE.Vector3();
   axis = new THREE.Vector3(0, 0, 1);
 
-  dragging = false;
   /** Signed distance along the axis (negative = reversed). */
   value = 0;
-  onChange: ((value: number) => void) | null = null;
   /** Whether the preview shows a cut (red) rather than added material (blue). */
   private cut: boolean;
   /** Anchor on the profile plane itself (before any start offset). */
@@ -53,12 +49,13 @@ export class ExtrudeGizmo {
   private startOffset = 0;
 
   constructor(
-    private viewport: CadViewport,
+    host: ManipulatorHost,
     private source: GizmoSource,
     initialValue: number,
     cut = false,
     startOffset = 0,
   ) {
+    super(host);
     this.cut = cut;
     const f = source.frame;
     this.baseOrigin.set(
@@ -93,17 +90,7 @@ export class ExtrudeGizmo {
     (this.cone.userData as any).extrudeGizmo = true;
     this.group.add(this.shaft);
     this.group.add(this.cone);
-    viewport.scene.add(this.group);
     this.update(initialValue);
-  }
-
-  dispose() {
-    this.viewport.scene.remove(this.group);
-    this.group.traverse((o: any) => {
-      o.geometry?.dispose?.();
-      o.material?.dispose?.();
-    });
-    this.removePreview();
   }
 
   /** Move the start plane: arrow base and preview shift along the axis. */
@@ -137,9 +124,8 @@ export class ExtrudeGizmo {
 
   private removePreview() {
     if (this.previewMesh) {
-      this.viewport.scene.remove(this.previewMesh);
-      (this.previewMesh.geometry as THREE.BufferGeometry).dispose();
-      (this.previewMesh.material as THREE.Material).dispose();
+      this.previewMesh.removeFromParent();
+      disposeObject(this.previewMesh);
       this.previewMesh = null;
     }
   }
@@ -147,7 +133,7 @@ export class ExtrudeGizmo {
   /** Re-position arrow + preview for a (signed) distance value. */
   update(value: number) {
     this.value = value;
-    const wpp = this.viewport.worldPerPixel();
+    const wpp = this.host.worldPerPixel();
     const shaftRadius = wpp * 1.6;
     const coneH = wpp * 16;
     const coneR = wpp * 5;
@@ -219,7 +205,7 @@ export class ExtrudeGizmo {
     geom.applyMatrix4(basis);
     this.previewMesh = new THREE.Mesh(geom, this.previewMaterial());
     this.previewMesh.renderOrder = 4;
-    this.viewport.scene.add(this.previewMesh);
+    this.group.add(this.previewMesh);
   }
 
   /** Translucent prism ghost for a face extrude: offset cap + side walls. */
@@ -273,82 +259,42 @@ export class ExtrudeGizmo {
     geom.setIndex(indices);
     this.previewMesh = new THREE.Mesh(geom, this.previewMaterial());
     this.previewMesh.renderOrder = 4;
-    this.viewport.scene.add(this.previewMesh);
+    this.group.add(this.previewMesh);
   }
 
-  /** Does a pointer event hit the arrow? (distance to the arrow's axis,
-   * with a ~9px pick tolerance so the thin shaft is easy to grab) */
-  hitTest(clientX: number, clientY: number): boolean {
-    const rect = this.viewport.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.viewport.camera);
-    const wpp = this.viewport.worldPerPixel();
+  private tip(extra = 0): THREE.Vector3 {
     const sign = this.value >= 0 ? 1 : -1;
-    const len = Math.max(Math.abs(this.value), wpp * 4) + wpp * 18; // + cone
-    const tip = this.origin
-      .clone()
-      .add(this.axis.clone().multiplyScalar(sign * len));
-    const distSq = this.raycaster.ray.distanceSqToSegment(this.origin, tip);
-    const tol = wpp * 9;
-    return distSq < tol * tol;
+    const len =
+      Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4) + extra;
+    return this.origin.clone().addScaledVector(this.axis, sign * len);
+  }
+
+  hitTest(clientX: number, clientY: number): boolean {
+    return this.hitSegment(
+      this.rayAt(clientX, clientY),
+      this.origin,
+      this.tip(this.host.worldPerPixel() * 18),
+    );
   }
 
   setHover(hover: boolean) {
-    for (const m of [this.shaft, this.cone]) {
-      (m.material as THREE.MeshBasicMaterial).color.setHex(
-        hover ? ARROW_HOVER : ARROW_COLOR,
-      );
-    }
+    this.paint(hover ? ARROW_HOVER : ARROW_COLOR, this.shaft, this.cone);
   }
 
-  /**
-   * Signed axis distance under the cursor, snapped to a zoom-dependent step.
-   */
   dragValue(clientX: number, clientY: number): number {
-    const rect = this.viewport.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.viewport.camera);
-    const ray = this.raycaster.ray;
-    // closest point parameter on the gizmo axis to the mouse ray
+    const ray = this.rayAt(clientX, clientY);
     const w0 = this.origin.clone().sub(ray.origin);
-    const a = 1; // axis·axis
     const b = this.axis.dot(ray.direction);
-    const c = 1; // dir·dir
     const d = this.axis.dot(w0);
     const e = ray.direction.dot(w0);
-    const denom = a * c - b * b;
-    let t: number;
-    if (Math.abs(denom) < 1e-9) {
-      t = 0;
-    } else {
-      t = (b * e - c * d) / denom;
-    }
-    const step = snapStep(this.viewport.worldPerPixel());
+    const denom = 1 - b * b;
+    const t = Math.abs(denom) < 1e-9 ? 0 : (b * e - d) / denom;
+    const step = snapStep(this.host.worldPerPixel());
     const snapped = Math.round(t / step) * step;
     return Math.round(snapped * 1e6) / 1e6;
   }
 
-  /** Screen position of the arrow tip (for the value label). */
   tipScreenPosition(): { x: number; y: number } {
-    const sign = this.value >= 0 ? 1 : -1;
-    const len = Math.max(
-      Math.abs(this.value),
-      this.viewport.worldPerPixel() * 4,
-    );
-    const tip = this.origin
-      .clone()
-      .add(this.axis.clone().multiplyScalar(sign * len))
-      .project(this.viewport.camera);
-    const rect = this.viewport.renderer.domElement.getBoundingClientRect();
-    return {
-      x: rect.left + ((tip.x + 1) / 2) * rect.width,
-      y: rect.top + ((1 - tip.y) / 2) * rect.height,
-    };
+    return this.labelPosition(this.tip());
   }
 }

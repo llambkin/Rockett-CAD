@@ -16,7 +16,7 @@ client/src/sketchTools.ts 85
 client/src/sketchUsage.ts 8
 client/src/store.ts 32
 client/src/three/CadViewport.ts 55
-client/src/three/ExtrudeGizmo.ts 31
+client/src/three/ExtrudeGizmo.ts 24
 client/src/three/MoveGizmo.ts 16
 client/src/three/RevolveGizmo.ts 11
 client/src/three/ViewCube.ts 23
