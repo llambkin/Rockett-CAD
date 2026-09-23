@@ -1,4 +1,17 @@
-# Rockett CAD
+# Rockett CAD - 
+
+Tean Rockett!
+
+Prepare for trouble!
+And make it double!
+To protect the world from devastation!
+To unite all peoples within our nation!
+To denounce the evils of truth and love!
+To extend our reach to the stars above!
+Liam
+Mark
+Team Rocket blasts off at the speed of light!
+Surrender now, or prepare to fight!
 
 Self-hosted, browser-based **parametric CAD** for designing 3D-printable parts.
 A deliberately simplified, self-hostable take on the parametric solid-modelling
