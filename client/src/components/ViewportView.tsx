@@ -59,6 +59,8 @@ interface DimLabel {
   reference?: [THREE.Vector3, THREE.Vector3];
 }
 
+const NUDGE_EVENTS = ["pointerdown", "pointermove", "pointerup", "wheel"];
+
 const livePreview = createLivePreview({
   intervalMs: 250,
   send: (featureId, patch) =>
@@ -229,6 +231,7 @@ export function ViewportView() {
       if (l.world.distanceTo(l.anchorWorld) < wpp * 14) continue;
       dashed(l.anchorWorld, l.world);
     }
+    vp.requestRender();
   }
 
   // ---- engine lifecycle ----
@@ -247,9 +250,13 @@ export function ViewportView() {
     window.addEventListener("resize", onResize);
     const observer = new ResizeObserver(onResize);
     observer.observe(container);
+    const nudge = () => vp.requestRender();
+    const unsubscribe = useStore.subscribe(nudge);
+    for (const type of NUDGE_EVENTS) {
+      container.addEventListener(type, nudge, { passive: true });
+    }
 
-    // dimension label projection every frame
-    vp.onRender = () => {
+    vp.onRender(() => {
       const layer = labelLayerRef.current;
       if (!layer) return;
       const rect = vp.canvasRect();
@@ -263,12 +270,16 @@ export function ViewportView() {
         el.style.transform = `translate(${p.x - rect.left}px, ${p.y - rect.top}px) translate(-50%, -50%)`;
         el.style.display = p.inFront ? "block" : "none";
       }
-    };
+    });
 
     vp.zoomToFit(false);
     return () => {
       window.removeEventListener("resize", onResize);
       observer.disconnect();
+      unsubscribe();
+      for (const type of NUDGE_EVENTS) {
+        container.removeEventListener(type, nudge);
+      }
       cube.dispose();
       extrudeSlot.release();
       moveSlot.release();
@@ -409,6 +420,9 @@ export function ViewportView() {
   }, [evaluation, document_, mode, selection, hover, draftSketch]);
 
   const [, setLabelTick] = useState(0);
+  useEffect(() => {
+    viewportRef.current?.requestRender();
+  });
 
   // ---- extrude drag gizmo ----
 
@@ -698,6 +712,7 @@ export function ViewportView() {
       vp.scene.remove(revolveGhostRef.current);
       disposeGroup(revolveGhostRef.current);
       revolveGhostRef.current = null;
+      vp.requestRender();
     }
     if (!vp) return;
     const s = useStore.getState();
@@ -723,12 +738,14 @@ export function ViewportView() {
       Number.isFinite(angle) ? angle : 360,
     );
     vp.scene.add(ghost);
+    vp.requestRender();
     revolveGhostRef.current = ghost;
     return () => {
       if (revolveGhostRef.current && viewportRef.current) {
         viewportRef.current.scene.remove(revolveGhostRef.current);
         disposeGroup(revolveGhostRef.current);
         revolveGhostRef.current = null;
+        viewportRef.current.requestRender();
       }
     };
   }, [mode, selection, evaluation, dialogParams]);

@@ -38,6 +38,7 @@ export function renderSketches(
 ): void {
   const root = viewport.getSketchRoot();
   clearGroup(root);
+  viewport.requestRender();
   const selKeys = new Set(selection.map(selectionKey));
   const hoverKey = hover ? selectionKey(hover) : null;
 

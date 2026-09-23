@@ -62,7 +62,10 @@ const sketch: SketchRenderInput = {
 
 it("sketch hover rebuild disposes every resource of the previous build once", () => {
   const root = new THREE.Group();
-  const viewport = { getSketchRoot: () => root } as unknown as CadViewport;
+  const viewport = {
+    getSketchRoot: () => root,
+    requestRender: () => {},
+  } as unknown as CadViewport;
   const materialDispose = vi.spyOn(THREE.Material.prototype, "dispose");
   const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, "dispose");
 
@@ -192,7 +195,10 @@ function meshes(viewport: CadViewport): ImageMesh[] {
 describe("reference images", () => {
   it("reference image removed disposes its texture, geometry and material", () => {
     const finishLoads = stubImageLoads();
-    const viewport = { scene: new THREE.Scene() } as unknown as CadViewport;
+    const viewport = {
+      scene: new THREE.Scene(),
+      requestRender: () => {},
+    } as unknown as CadViewport;
     const a = image("a", "asset-a");
     const b = image("b", "asset-b");
     sync(viewport, [a, b]);
@@ -216,7 +222,10 @@ describe("reference images", () => {
 
   it("an image hidden while loading keeps its texture until the load settles", () => {
     const finishLoads = stubImageLoads();
-    const viewport = { scene: new THREE.Scene() } as unknown as CadViewport;
+    const viewport = {
+      scene: new THREE.Scene(),
+      requestRender: () => {},
+    } as unknown as CadViewport;
     const a = image("a", "asset-a");
     sync(viewport, [a]);
     const texture = meshes(viewport)[0]?.material.map;

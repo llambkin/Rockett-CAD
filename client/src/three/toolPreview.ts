@@ -14,6 +14,7 @@ import type { UV } from "../sketchTools";
 let group: THREE.Group | null = null;
 
 function ensureGroup(viewport: CadViewport): THREE.Group {
+  viewport.requestRender();
   if (!group || group.parent !== viewport.scene) {
     group = new THREE.Group();
     group.renderOrder = 9;
@@ -25,6 +26,7 @@ function ensureGroup(viewport: CadViewport): THREE.Group {
 export function clearToolPreview(viewport: CadViewport | null): void {
   if (!viewport || !group) return;
   clearGroup(group);
+  viewport.requestRender();
 }
 
 function ghostLine(pts: THREE.Vector3[]): THREE.Line {

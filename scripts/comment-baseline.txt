@@ -7,7 +7,7 @@ client/src/components/ModelTree.tsx 5
 client/src/components/SketchOffsetIndicators.tsx 1
 client/src/components/Timeline.tsx 7
 client/src/components/Toolbar.tsx 7
-client/src/components/ViewportView.tsx 169
+client/src/components/ViewportView.tsx 168
 client/src/dialogPicks.ts 3
 client/src/dimensionLayout.ts 2
 client/src/panelPlacement.ts 1
@@ -19,7 +19,7 @@ client/src/three/CadViewport.ts 46
 client/src/three/ExtrudeGizmo.ts 23
 client/src/three/MoveGizmo.ts 13
 client/src/three/RevolveGizmo.ts 11
-client/src/three/ViewCube.ts 23
+client/src/three/ViewCube.ts 22
 client/src/three/revolveGhost.ts 9
 client/src/three/sketchRender.ts 13
 client/src/three/toolPreview.ts 10

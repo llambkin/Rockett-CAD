@@ -120,12 +120,14 @@ export class MoveGizmo extends Manipulator {
       g.position.copy(this.offset);
       g.visible = this.offset.lengthSq() > 1e-12;
     }
+    this.host.requestRender();
   }
 
   /** Hide the ghost meshes (edit mode: real geometry live-updates). */
   hideGhosts() {
     for (const g of this.ghosts) g.visible = false;
     this.ghosts = [];
+    this.host.requestRender();
   }
 
   hitTest(clientX: number, clientY: number): number {

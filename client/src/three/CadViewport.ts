@@ -19,6 +19,7 @@ import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 import { themeColor } from "../theme/tokens";
 import { cameraTween, orbitAbout, type CameraPose } from "./camera";
+import { frameScheduler } from "./frameScheduler";
 
 const VIEW_TURN_MS = 300;
 
@@ -108,14 +109,19 @@ export class CadViewport {
   private overlayRoot = new THREE.Group();
   private originRoot = new THREE.Group();
   private raycaster = new THREE.Raycaster();
-  private animFrame = 0;
   private animating: null | {
     start: number;
     poseAt: (t: number) => CameraPose;
   } = null;
+  private frames = frameScheduler((now) => {
+    this.stepAnimation(now);
+    this.render();
+    return this.animating !== null;
+  });
+  readonly requestRender = this.frames.requestRender;
+  readonly onRender = this.frames.onRender;
 
   originPlanesVisible = true;
-  onRender: (() => void) | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -153,17 +159,10 @@ export class CadViewport {
 
     this.buildOriginDisplay();
     this.resize();
-
-    const loop = (now: number) => {
-      this.animFrame = requestAnimationFrame(loop);
-      this.stepAnimation(now);
-      this.render();
-    };
-    loop(performance.now());
   }
 
   dispose() {
-    cancelAnimationFrame(this.animFrame);
+    this.frames.dispose();
     clearGroup(this.scene);
     this.bodies.clear();
     this.renderer.dispose();
@@ -186,10 +185,10 @@ export class CadViewport {
     this.orthoCam.updateProjectionMatrix();
     this.perspCam.aspect = aspect;
     this.perspCam.updateProjectionMatrix();
+    this.requestRender();
   }
 
   render() {
-    this.onRender?.();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -215,6 +214,7 @@ export class CadViewport {
     this.orthoCam.top = this.zoom;
     this.orthoCam.bottom = -this.zoom;
     this.orthoCam.updateProjectionMatrix();
+    this.requestRender();
   }
 
   orbitTrackball(dx: number, dy: number, pivot = this.target) {
@@ -231,6 +231,7 @@ export class CadViewport {
       c.position.copy(view.position);
       c.lookAt(this.target);
     }
+    this.requestRender();
   }
 
   pan(dx: number, dy: number) {
@@ -246,6 +247,7 @@ export class CadViewport {
     for (const c of [this.orthoCam, this.perspCam]) {
       c.position.add(move);
     }
+    this.requestRender();
   }
 
   zoomBy(factor: number, clientX?: number, clientY?: number) {
@@ -369,6 +371,7 @@ export class CadViewport {
         to,
       ),
     };
+    this.requestRender();
   }
 
   private stepAnimation(now: number) {
@@ -453,6 +456,7 @@ export class CadViewport {
 
   setOriginVisible(v: boolean) {
     this.originRoot.visible = v;
+    this.requestRender();
   }
 
   // -------------------------------------------------------------------------
@@ -485,6 +489,7 @@ export class CadViewport {
         this.bodies.delete(id);
       }
     }
+    this.requestRender();
   }
 
   private buildBody(p: BodyPayload): BodyObjects {
@@ -580,6 +585,7 @@ export class CadViewport {
       mat.opacity = dim && id !== exceptBodyId ? 0.35 : 1;
       mat.needsUpdate = true;
     }
+    this.requestRender();
   }
 
   bodyPayloads(): BodyPayload[] {
@@ -786,9 +792,11 @@ export class CadViewport {
       disposeObject(o);
     }
     this.highlightObjects = [];
+    this.requestRender();
   }
 
   addHighlight(sel: Selection, kind: "select" | "hover") {
+    this.requestRender();
     const color = themeColor(kind === "select" ? "selection" : "hover");
     if (sel.kind === "face" || sel.kind === "body") {
       const b = this.bodies.get(sel.bodyId);
@@ -936,5 +944,6 @@ export class CadViewport {
       mesh.add(border);
       this.planeRoot.add(mesh);
     }
+    this.requestRender();
   }
 }

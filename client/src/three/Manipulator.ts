@@ -17,6 +17,7 @@ export interface ManipulatorHost {
   readonly camera: THREE.Camera;
   worldPerPixel(): number;
   canvasRect(): Parameters<typeof clientToNdc>[0];
+  requestRender(): void;
 }
 
 export abstract class Manipulator {
@@ -26,6 +27,7 @@ export abstract class Manipulator {
 
   constructor(protected readonly host: ManipulatorHost) {
     host.scene.add(this.group);
+    host.requestRender();
   }
 
   get isDragging(): boolean {
@@ -40,6 +42,7 @@ export abstract class Manipulator {
     if (!this.group.parent) return;
     this.group.removeFromParent();
     disposeGroup(this.group);
+    this.host.requestRender();
   }
 
   protected rayAt(clientX: number, clientY: number): THREE.Ray {
@@ -67,6 +70,7 @@ export abstract class Manipulator {
     for (const m of meshes) {
       (m.material as THREE.MeshBasicMaterial).color.set(color);
     }
+    this.host.requestRender();
   }
 
   protected labelPosition(point: THREE.Vector3): { x: number; y: number } {

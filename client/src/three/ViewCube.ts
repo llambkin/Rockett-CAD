@@ -40,7 +40,7 @@ export class ViewCube {
   private camera: THREE.OrthographicCamera;
   private cube: THREE.Mesh;
   private raycaster = new THREE.Raycaster();
-  private frame = 0;
+  private stopRendering: () => void;
   private dragging = false;
   private moved = false;
   private lastX = 0;
@@ -138,19 +138,17 @@ export class ViewCube {
     });
     el.addEventListener("pointercancel", endDrag);
 
-    const loop = () => {
-      this.frame = requestAnimationFrame(loop);
-      // cube shows the world orientation as seen by the camera
-      const q = new THREE.Quaternion();
-      this.viewport.camera.getWorldQuaternion(q);
-      this.cube.quaternion.copy(q).invert();
-      this.renderer.render(this.scene, this.camera);
-    };
-    loop();
+    this.stopRendering = viewport.onRender(() => this.render());
+    viewport.requestRender();
+  }
+
+  private render() {
+    this.viewport.camera.getWorldQuaternion(this.cube.quaternion).invert();
+    this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
-    cancelAnimationFrame(this.frame);
+    this.stopRendering();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

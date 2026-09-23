@@ -107,6 +107,7 @@ export class ExtrudeGizmo extends Manipulator {
         themeColor(cut ? "gizmo-cut" : "gizmo"),
       );
     }
+    this.host.requestRender();
   }
 
   private previewMaterial(): THREE.MeshBasicMaterial {
@@ -156,6 +157,7 @@ export class ExtrudeGizmo extends Manipulator {
     this.cone.scale.set(coneR, coneH, coneR);
 
     this.updatePreview(value);
+    this.host.requestRender();
   }
 
   private updatePreview(value: number) {

@@ -142,9 +142,11 @@ function OffsetBody() {
       group.add(markers);
     }
     vp.scene.add(group);
+    vp.requestRender();
     return () => {
       vp.scene.remove(group);
       disposeGroup(group);
+      vp.requestRender();
     };
   }, [preview, draft, evaluation, editing]);
 

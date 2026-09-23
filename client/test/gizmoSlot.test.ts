@@ -8,6 +8,7 @@ const host: ManipulatorHost = {
   camera: new THREE.PerspectiveCamera(),
   worldPerPixel: () => 1,
   canvasRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+  requestRender: () => {},
 };
 
 class StubGizmo extends Manipulator {}

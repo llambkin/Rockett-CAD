@@ -9,6 +9,7 @@ interface CachedTexture {
 }
 
 interface ImageLayer {
+  vp: CadViewport;
   root: THREE.Group;
   textures: Map<string, CachedTexture>;
   used: Set<string>;
@@ -19,7 +20,12 @@ const layers = new WeakMap<CadViewport, ImageLayer>();
 function layerFor(vp: CadViewport): ImageLayer {
   let layer = layers.get(vp);
   if (!layer) {
-    layer = { root: new THREE.Group(), textures: new Map(), used: new Set() };
+    layer = {
+      vp,
+      root: new THREE.Group(),
+      textures: new Map(),
+      used: new Set(),
+    };
     vp.scene.add(layer.root);
     layers.set(vp, layer);
   }
@@ -41,6 +47,7 @@ function acquireTexture(layer: ImageLayer, url: string): THREE.Texture {
   const settle = () => {
     cached.loading = false;
     evictUnused(layer);
+    layer.vp.requestRender();
   };
   const cached: CachedTexture = {
     texture: new THREE.TextureLoader().load(url, settle, undefined, settle),
@@ -61,6 +68,7 @@ export function syncReferenceImages(
   layer.used.clear();
   if (doc) addImages(layer, doc, evaluation);
   evictUnused(layer);
+  vp.requestRender();
 }
 
 function addImages(

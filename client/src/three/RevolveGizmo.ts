@@ -78,6 +78,7 @@ export class RevolveGizmo extends Manipulator {
   update(angleDeg: number) {
     this.angleDeg = angleDeg;
     this.handle.position.copy(this.pointAt(angleDeg));
+    this.host.requestRender();
   }
 
   setHover(hover: boolean) {

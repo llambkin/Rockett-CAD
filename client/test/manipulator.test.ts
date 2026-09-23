@@ -23,6 +23,7 @@ function stubHost(eye = new THREE.Vector3(0, 0, 100)): ManipulatorHost {
     camera,
     worldPerPixel: () => 60 / rect.height,
     canvasRect: () => rect,
+    requestRender: () => {},
   };
 }
 
