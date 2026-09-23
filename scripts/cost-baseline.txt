@@ -1,20 +1,20 @@
-client/src/App.tsx 520
-client/src/App.tsx ProjectList 122
+client/src/App.tsx 544
+client/src/App.tsx ProjectList 145
 client/src/App.tsx Workspace 249
 client/src/components/DraggablePanel.tsx DraggablePanel 125
 client/src/components/FeatureDialog.tsx 1485
 client/src/components/FeatureDialog.tsx DialogBody 1008
 client/src/components/FeatureDialog.tsx ExportPanel 84
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 240
-client/src/components/ModelTree.tsx ModelTree 454
+client/src/components/ModelTree.tsx ModelTree 377
 client/src/components/SketchOffsetPanel.tsx OffsetBody 252
-client/src/components/Timeline.tsx Timeline 167
+client/src/components/Timeline.tsx Timeline 152
 client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 162
 client/src/components/Toolbar.tsx Toolbar 140
-client/src/components/ViewportView.tsx 3314
-client/src/components/ViewportView.tsx ViewportContextMenu 191
-client/src/components/ViewportView.tsx ViewportView 2881
+client/src/components/ViewportContextMenu.tsx ViewportContextMenu 138
+client/src/components/ViewportView.tsx 3101
+client/src/components/ViewportView.tsx ViewportView 2875
 client/src/components/ViewportView.tsx computeGizmoSource 102
 client/src/components/ViewportView.tsx handleHover 135
 client/src/components/ViewportView.tsx handlePrimaryUp 191
