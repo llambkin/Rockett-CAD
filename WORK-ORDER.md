@@ -88,6 +88,12 @@ Decisions ruled by Mark on 2026-09-23, each accepting its recommendation:
 - Error bodies: unknown `/api` paths and Express JSON body errors (malformed JSON, bodies over 50 MB) still answer without `code` (found by KIT-021).
 - Distribution notices: the image carries no licence texts or `THIRD-PARTY-NOTICES.md`, the LGPL opencascade.js source offer is not written, and the Node and Debian packages from the base image are not inventoried; all three block distribution, not intranet use (found by OPS-022).
 - AUTH-002 timing: the hash was timed on the development desktop (70 ms median); the row asks for the dev host figure.
+- First paint: `theme.css` no longer paints a background, so the page is white until `main.tsx` applies the tokens. Set the background in `client/index.html` (found by SET-008).
+- Browser tests: `DEVELOPMENT.md` does not document `npm run test:browser` or `npx playwright-core install chromium-headless-shell` (found by OPS-030).
+- Smoke listener: `server/src/index.ts` listens on all interfaces during the browser smoke test; bind it to loopback (found by OPS-030).
+- Bench output: the PERF-001 row names `--outputJson`, which Vitest 5 dropped; the bench writes `server/dist/bench.json`, and the table test runs only under `npm run bench` (found by PERF-001).
+- Worker lint: three `require-post-message-target-origin` oxlint warnings fire on `worker_threads`, where the rule does not apply (found by PERF-009).
+- Node range: `engines.node` is `>=24` with no upper bound (found by OPS-002).
 
 ## Delivery and acceptance
 
