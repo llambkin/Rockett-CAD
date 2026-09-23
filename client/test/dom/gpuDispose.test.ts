@@ -229,3 +229,113 @@ describe("reference images", () => {
     expect(textureDispose).toHaveBeenCalledTimes(1);
   });
 });
+
+vi.mock("three", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("three")>();
+  class WebGLRenderer {
+    domElement = document.createElement("canvas");
+    setPixelRatio() {}
+    setClearColor() {}
+    setSize() {}
+    render() {}
+    dispose() {}
+  }
+  return { ...actual, WebGLRenderer };
+});
+
+async function mountViewport() {
+  const { CadViewport } = await import("../../src/three/CadViewport");
+  return new CadViewport(document.createElement("div"));
+}
+
+describe("CadViewport ownership", () => {
+  type Planes = Parameters<CadViewport["syncConstructionPlanes"]>[0];
+  type Body = Parameters<CadViewport["syncBodies"]>[0][number];
+
+  const planes: Planes = [0, 5].map((z) => ({
+    featureId: `p${z}`,
+    frame: {
+      origin: [0, 0, z],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 1, 0],
+      normal: [0, 0, 1],
+    },
+    size: 10,
+  }));
+  const visible = new Set(planes.map((p) => p.featureId));
+  const body: Body = {
+    bodyId: "b1",
+    name: "Body",
+    visible: true,
+    positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+    indices: [0, 1, 2],
+    faces: [],
+    edges: [],
+    vertices: [],
+    bbox: { min: [0, 0, 0], max: [1, 1, 0] },
+  };
+
+  it("planes re-sync disposes every resource of the previous sync once", async () => {
+    const vp = await mountViewport();
+    const materialDispose = vi.spyOn(THREE.Material.prototype, "dispose");
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, "dispose");
+
+    const materialsBefore = nextMaterialId();
+    const geometriesBefore = nextGeometryId();
+    vp.syncConstructionPlanes(planes, new Map(), visible);
+    const materialsAfter = nextMaterialId();
+    const geometriesAfter = nextGeometryId();
+    vp.syncConstructionPlanes(planes, new Map(), visible);
+
+    expect(vp.getPlaneRoot().children).toHaveLength(2);
+    const created = idsBetween(materialsBefore, materialsAfter);
+    expect(created).toHaveLength(4);
+    expect(disposedIds(materialDispose)).toEqual(created);
+    expect(disposedIds(geometryDispose)).toEqual(
+      idsBetween(geometriesBefore, geometriesAfter),
+    );
+    vp.dispose();
+  });
+
+  it("viewport dispose releases every scene resource once and keeps a borrowed texture", async () => {
+    const materialsBefore = nextMaterialId();
+    const geometriesBefore = nextGeometryId();
+    const vp = await mountViewport();
+    vp.syncBodies([body]);
+    vp.syncConstructionPlanes(planes, new Map(), visible);
+    vp.addHighlight({ kind: "body", bodyId: "b1" }, "select");
+    renderSketches(vp, [sketch], [], null);
+    const texture = new THREE.Texture();
+    const images = new THREE.Group();
+    images.add(
+      new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ map: texture }),
+      ),
+    );
+    vp.scene.add(images);
+    const materialsAfter = nextMaterialId();
+    const geometriesAfter = nextGeometryId();
+
+    const materialDispose = vi.spyOn(THREE.Material.prototype, "dispose");
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, "dispose");
+    const textureDispose = vi.spyOn(texture, "dispose");
+    let bodiesAtRendererDispose = -1;
+    vi.spyOn(vp.renderer, "dispose").mockImplementation(() => {
+      bodiesAtRendererDispose = vp.bodyPayloads().length;
+    });
+
+    vp.dispose();
+
+    expect(vp.scene.children).toHaveLength(0);
+    expect(bodiesAtRendererDispose).toBe(0);
+    expect(textureDispose).not.toHaveBeenCalled();
+    const created = idsBetween(materialsBefore, materialsAfter);
+    expect(created.length).toBeGreaterThan(20);
+    expect(disposedIds(materialDispose)).toEqual(created);
+    expect(disposedIds(geometryDispose)).toEqual(
+      idsBetween(geometriesBefore, geometriesAfter),
+    );
+  });
+});

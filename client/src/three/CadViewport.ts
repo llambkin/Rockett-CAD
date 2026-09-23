@@ -16,7 +16,7 @@ import type {
 } from "@rockett/shared";
 import type { Selection } from "../store";
 import { clientToNdc } from "./screen";
-import { disposeGroup, disposeObject } from "./dispose";
+import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 
 export const COLORS = {
   bg: 0x2a2d30,
@@ -180,6 +180,8 @@ export class CadViewport {
 
   dispose() {
     cancelAnimationFrame(this.animFrame);
+    clearGroup(this.scene);
+    this.bodies.clear();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -961,7 +963,7 @@ export class CadViewport {
     featureNames: Map<string, string>,
     visibleIds: Set<string>,
   ) {
-    this.planeRoot.clear();
+    clearGroup(this.planeRoot);
     for (const p of planes) {
       if (p.size <= 0) continue; // reference image frames
       if (!visibleIds.has(p.featureId)) continue;
