@@ -337,6 +337,51 @@ describe("sweep", () => {
     expectVolume(r.volume("b:sw"), Math.PI * 4 * (20 + 5 * Math.PI));
   });
 
+  const sweepAlong = (entities: SketchEntity[]) =>
+    run([
+      structuredClone(circle),
+      sketch("path", XZ, entities),
+      {
+        ...meta("sw"),
+        type: "sweep",
+        profiles: [prof("prof")],
+        pathSketchId: "path",
+        operation: "newBody",
+      },
+    ]);
+
+  it("an arc drawn before the line gives the same volume (analytic)", () => {
+    const r = sweepAlong([
+      P("ac", 10, 20),
+      P("as", 10, 30),
+      P("p1", 0, 20),
+      { id: "arc", kind: "arc", center: "ac", start: "as", end: "p1" },
+      P("p0", 0, 0),
+      P("pm", 0, 10),
+      L("low", "p0", "pm"),
+      L("high", "p1", "pm"),
+    ]);
+    expectOk(r);
+    expect(r.bodyIds()).toEqual(["b:sw"]);
+    expectVolume(r.volume("b:sw"), Math.PI * 4 * (20 + 5 * Math.PI));
+  });
+
+  it("a branched or disconnected path is a feature error", () => {
+    for (const extra of [L("branch", "p1", "p2"), L("apart", "p2", "p4")]) {
+      const r = sweepAlong([
+        P("p0", 0, 0),
+        P("p1", 0, 20),
+        P("p2", 5, 20),
+        P("p3", 5, 30),
+        P("p4", 10, 20),
+        L("seg", "p0", "p1"),
+        L("tail", "p1", "p3"),
+        extra,
+      ]);
+      expectError(r, "sw", /^sweep path is not a connected chain$/);
+    }
+  });
+
   it("a missing path sketch is a feature error", () => {
     const r = run([
       structuredClone(circle),

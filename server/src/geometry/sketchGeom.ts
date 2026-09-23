@@ -54,7 +54,7 @@ function buildMaps(entities: SketchEntity[]): EntityMaps {
 }
 
 /** Snap sketch endpoints that nearly coincide so OCCT wires connect exactly. */
-function snapper(): (x: number, y: number) => [number, number] {
+export function snapper(): (x: number, y: number) => [number, number] {
   const known: [number, number][] = [];
   return (x, y) => {
     for (const k of known) {

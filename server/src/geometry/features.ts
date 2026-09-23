@@ -77,6 +77,7 @@ import { readStep } from "./stepImport.js";
 import {
   arcEdge,
   buildProfileFace,
+  snapper,
   subtractSketchRegionsFromFace,
   type ProfileFace,
 } from "./sketchGeom.js";
@@ -745,19 +746,17 @@ function evalSweep(state: EvalState, f: SweepFeature): void {
 
   // Build the spine wire from all non-construction curves of the path sketch,
   // ordered into a connected chain.
+  const points = new Map<string, { x: number; y: number }>();
+  for (const e of pathSketch.entities) {
+    if (e.kind === "point") points.set(e.id, { x: e.x, y: e.y });
+  }
+  const chain = orderOpenChain(pathSketch.entities, points);
   const wire = kernelCall("sweep path", () => {
-    const chain = orderOpenChain(pathSketch.entities);
     if (chain.length === 0)
       throw new Error("path sketch contains no usable curves");
     const wireMaker = new k.BRepBuilderAPI_MakeWire_1();
-    const maps = {
-      points: new Map<string, { x: number; y: number }>(),
-    };
-    for (const e of pathSketch.entities) {
-      if (e.kind === "point") maps.points.set(e.id, { x: e.x, y: e.y });
-    }
     for (const seg of chain) {
-      const edge = sketchEntityToEdge(seg, pathSketch, maps.points);
+      const edge = sketchEntityToEdge(seg, pathSketch, points);
       if (edge) wireMaker.Add_1(edge);
       if (!wireMaker.IsDone()) {
         wireMaker.delete();
@@ -830,12 +829,40 @@ function* exploreWires(shape: Shape): Generator<Shape> {
   ex.delete();
 }
 
-/** Order sketch curve entities into a connected open chain. */
-function orderOpenChain(entities: SketchEntity[]): SketchEntity[] {
-  const curves = entities.filter(
-    (e) => (e.kind === "line" || e.kind === "arc") && !e.construction,
-  );
-  return curves; // v1: assume drawn in order; MakeWire validates connectivity
+function orderOpenChain(
+  entities: SketchEntity[],
+  points: Map<string, { x: number; y: number }>,
+): SketchEntity[] {
+  const snap = snapper();
+  const ends = new Map<SketchEntity, [number, number][]>();
+  const at = new Map<[number, number], SketchEntity[]>();
+  for (const e of entities) {
+    if ((e.kind !== "line" && e.kind !== "arc") || e.construction) continue;
+    const ids = e.kind === "line" ? [e.p1, e.p2] : [e.start, e.end];
+    const keys = ids.map((id) => {
+      const p = points.get(id)!;
+      return snap(p.x, p.y);
+    });
+    ends.set(e, keys);
+    for (const key of keys) at.set(key, [...(at.get(key) ?? []), e]);
+  }
+  const notChain = new Error("sweep path is not a connected chain");
+  if ([...at.values()].some((es) => es.length > 2)) throw notChain;
+  const isEnd = (key: [number, number]) => at.get(key)!.length === 1;
+  const curves = [...ends.keys()];
+  const first = curves.find((e) => ends.get(e)!.some(isEnd)) ?? curves[0];
+  if (!first) return [];
+  const chain: SketchEntity[] = [];
+  let cur: SketchEntity | undefined = first;
+  let from = ends.get(first)!.find(isEnd) ?? ends.get(first)![0]!;
+  while (cur) {
+    chain.push(cur);
+    const [a, b] = ends.get(cur)!;
+    from = from === a ? b! : a!;
+    cur = at.get(from)!.find((e) => !chain.includes(e));
+  }
+  if (chain.length !== curves.length) throw notChain;
+  return chain;
 }
 
 function sketchEntityToEdge(
