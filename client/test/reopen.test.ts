@@ -323,3 +323,38 @@ it("reopen + OK leaves the suppressed flag to the server", async () => {
     expect.not.objectContaining({ suppressed: expect.anything() }),
   );
 });
+
+it("extrude without optional keys round-trips unchanged", async () => {
+  const f: Feature = {
+    ...base,
+    id: "exBare",
+    type: "extrude",
+    profiles: [prof],
+    distance: 10,
+    direction: "normal",
+    operation: "join",
+  };
+  useStore.getState().document!.features.push(f);
+  await openFeatureEditor(f);
+  await pressOk();
+  const { id: _ignored, suppressed: _kept, ...patch } = f;
+  expect(updateFeature).toHaveBeenCalledWith("exBare", patch);
+});
+
+it("extrude edit overwrites stored optional keys", async () => {
+  const f = cases.find((c) => c.id === "ex")!;
+  await openFeatureEditor(f);
+  useStore.setState({
+    selection: [{ kind: "profile", ...prof }],
+    dialogParams: {
+      ...useStore.getState().dialogParams,
+      direction: "normal",
+      startOffset: 0,
+    },
+  });
+  await pressOk();
+  expect(updateFeature).toHaveBeenCalledWith(
+    "ex",
+    expect.objectContaining({ faces: [], distance2: 4, startOffset: 0 }),
+  );
+});

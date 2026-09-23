@@ -306,17 +306,26 @@ function DialogBody({
           )
         )
           return;
+        const stored = document_?.features.find((f) => f.id === editId) ?? {};
+        const direction = p("direction", "normal");
+        const startOffset = num("startOffset", 0);
         await commit({
           id: editId ?? newId("extrude"),
           type: "extrude",
           name: p("name", ""),
           suppressed: false,
           profiles: profileRefs(),
-          faces: faceRefs(),
+          ...((faces.length > 0 || "faces" in stored) && {
+            faces: faceRefs(),
+          }),
           distance: num("distance", 10),
-          distance2: num("distance2", 5),
-          startOffset: num("startOffset", 0),
-          direction: p("direction", "normal"),
+          ...((direction === "twoSided" || "distance2" in stored) && {
+            distance2: num("distance2", 5),
+          }),
+          ...((startOffset !== 0 || "startOffset" in stored) && {
+            startOffset,
+          }),
+          direction,
           operation: p("operation", "join"),
         });
       };
