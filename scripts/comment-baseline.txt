@@ -53,7 +53,6 @@ server/test/signedExtrude.test.ts 1
 server/test/unifyFaces.test.ts 3
 shared/src/api.ts 16
 shared/src/model.ts 84
-shared/src/profiles.ts 57
 shared/src/projection.ts 1
 shared/src/sketchModify.ts 12
 shared/src/sketchOffsets.ts 3

@@ -5,6 +5,7 @@
 
 import {
   detectProfiles,
+  findProfile,
   solveSketch,
   projectEdge,
   ANGULAR_TOL_DEG,
@@ -217,7 +218,7 @@ function resolveProfiles(
   for (const ref of refs) {
     const s = state.sketches.get(ref.sketchId);
     if (!s) throw new Error(`sketch ${ref.sketchId} not found`);
-    const profile = s.profiles.find((p) => p.id === ref.profileId);
+    const profile = findProfile(s, ref.profileId);
     if (!profile) {
       throw new Error(
         `profile ${ref.profileId} no longer exists in ${ref.sketchId} — the sketch region may have changed`,
@@ -832,7 +833,7 @@ function evalLoft(state: EvalState, f: LoftFeature): void {
     for (const ref of f.sections) {
       const sketch = state.sketches.get(ref.sketchId);
       if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
-      const profile = sketch.profiles.find((p) => p.id === ref.profileId);
+      const profile = findProfile(sketch, ref.profileId);
       if (!profile) throw new Error(`profile ${ref.profileId} not found`);
       const pf = buildProfileFace(profile, sketch.entities, sketch.frame);
       // use the outer wire of the face

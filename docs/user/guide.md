@@ -28,6 +28,15 @@ change its distance. Entity IDs stay the same, so downstream profile references
 hold. Offset curves follow their distance and cannot be dragged. Offsets made
 before schema 4 are plain geometry; recreate them to get a badge.
 
+### Regions
+
+Closed shapes fill as regions you can hover, pick and extrude. Curves that
+cross or touch split the fill: a circle inscribed in a square gives the disc
+and four corners, and two overlapping circles give three regions. Pick one
+region on its own, or Ctrl-click or Shift-click several; picking all five of the inscribed
+square extrudes the whole square. A shape inside another stays a hole.
+Construction geometry never splits a region.
+
 ### Project, trim and extend
 
 - Project: click an earlier model edge to add a purple linked reference. Snap or

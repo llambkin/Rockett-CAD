@@ -1,8 +1,16 @@
 # Last run
 
 Paused on request after the running rows finished. DOC-018 then ran alone,
-then BUG-041, then DOC-019.
+then BUG-041, then DOC-019, then CUST-034 from Mark's request.
 No agents are running.
+
+- CUST-034: curves that touch tangentially now split sketch regions, so a
+  circle inscribed in a square gives the disc and four corners, each picked
+  and extruded on its own. Regions bounded by the same curves get distinct
+  ids. Saved ids missing from the new split resolve through the previous
+  detection, so no schema change. 200 curves take 67.5 ms median. Not
+  deployed. `npm run check` passed: 976 tests and 20 browser tests.
+- CUST-035 (Trim reworked on CUST-034's `curveHits`) is filed and queued.
 
 - Done this run: CUST-030, CUST-031, CUST-032, BUG-038, BUG-039, BUG-040,
   PERF-041, REF-004, PERF-035, and DOC-010, DOC-011, DOC-012, DOC-015,
@@ -30,8 +38,8 @@ No agents are running.
 
 ## Next
 
-DOC-020. CUST-033 (drag handles on every feature) is still queued and not
-started.
+DOC-020. CUST-033 (drag handles on every feature) and CUST-035 (Trim) are
+queued and not started.
 
 ## Left open
 
@@ -41,6 +49,9 @@ started.
 - A view PUT overwrites `view.json` with no backup. Only a document
   migration backs it up.
 - Pick labels follow payload order.
+- A feature saved on a region id from before CUST-034 still builds, but its
+  pick row shows no region number and the sketch does not tint that region
+  as used. See Proposed.
 - REF-004 proposes hashing identity outside names.
 - PERF-035 covers linear patterns only, not circular patterns, mirrors or
   moves.

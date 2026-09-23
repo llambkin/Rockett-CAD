@@ -227,10 +227,18 @@ several engage); a typed angle overrides all direction snapping, a typed
 length keeps it.
 
 **Profiles** (closed regions) are detected by planar half-edge traversal
-(`shared/src/profiles.ts`): minimal enclosed cycles become selectable regions;
-full circles form disc regions; containment builds an even-odd region tree so
+(`shared/src/profiles.ts`): non-construction curves split where they cross,
+where one ends on another, and where they touch tangentially within
+`1e-6` mm; minimal enclosed cycles become selectable regions; an unsplit
+circle forms a disc region; containment builds an even-odd region tree so
 inner loops become holes. A profile's id is a hash of the entity ids bounding
 it, stable across regeneration while the same entities enclose the region.
+Regions bounded by the same entities, such as the lens and crescents of two
+overlapping circles, add a hash of each boundary's orientation to that id.
+`findProfile` resolves a saved id missing from this split through the
+detection before tangent splitting and those suffixes, so projects saved
+earlier keep their regions (DEC-101). `curveHits` reports where each curve
+meets the others by line fraction or arc and circle angle.
 
 **Sketch planes** resolve to a frame (origin, x-axis, y-axis, normal):
 

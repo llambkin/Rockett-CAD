@@ -93,3 +93,36 @@ it("rebuilds only the sketch whose entity or hover changed", () => {
   expect(root.children[0]).not.toBe(groups[0]);
   expect(root.children[1]).toBe(kept);
 });
+
+it("fills, hovers and selects each region of a circle inscribed in a square", () => {
+  const entities: SketchEntity[] = [
+    ...square(0).filter((e) => e.id !== "o"),
+    { id: "m", kind: "point", x: 5, y: 5 },
+    { id: "o", kind: "circle", center: "m", radius: 5 },
+  ];
+  const [sk] = inputs([evaluated("s1", entities)]);
+  const ids = sk!.profiles!.map((p) => p.id);
+  const root = new THREE.Group();
+  const viewport = {
+    getSketchRoot: () => root,
+    requestRender: () => {},
+  } as unknown as CadViewport;
+  const pick = (profileId: string) => ({
+    kind: "profile" as const,
+    sketchId: "s1",
+    profileId,
+  });
+  renderSketches(
+    viewport,
+    [{ ...sk!, usedProfileIds: new Set() }],
+    [pick(ids[1]!), pick(ids[2]!)],
+    pick(ids[0]!),
+  );
+  const fills = root.children[0]!.children.filter(
+    (o) => o.userData.profileId,
+  ) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[];
+  expect(new Set(fills.map((m) => m.userData.profileId)).size).toBe(5);
+  expect(fills.map((m) => m.material.opacity).sort()).toEqual([
+    0.18, 0.18, 0.4, 0.55, 0.55,
+  ]);
+});

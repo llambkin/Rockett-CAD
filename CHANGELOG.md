@@ -10,6 +10,14 @@ change gets a `Schema N` line in the section that ships it.
 
 ## Unreleased
 
+### Added
+
+- Sketch curves that touch tangentially split regions, so a circle inscribed
+  in a square gives the disc and four corners to pick and extrude one by one.
+  Regions that share their bounding curves, such as the lens and crescents of
+  two overlapping circles, get distinct ids. Saved region ids keep resolving
+  to the region they named.
+
 ### Fixed
 
 - Rewinding the timeline (sketch edit, tangent-edge and projection queries)

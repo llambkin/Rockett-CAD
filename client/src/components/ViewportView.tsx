@@ -13,6 +13,7 @@ import type {
   SketchSolveStatus,
 } from "@rockett/shared";
 import {
+  findProfile,
   formatAngle,
   formatLength,
   newId,
@@ -476,7 +477,7 @@ export function ViewportView() {
       const sk = s.evaluation?.sketches.find(
         (x) => x.featureId === profSel.sketchId,
       );
-      const p = sk?.profiles.find((x) => x.id === profSel.profileId);
+      const p = sk && findProfile(sk, profSel.profileId);
       if (sk && p && p.polygon.length >= 6) {
         let cx = 0,
           cy = 0;
@@ -739,7 +740,7 @@ export function ViewportView() {
     const sk = s.evaluation?.sketches.find(
       (x) => x.featureId === profSel.sketchId,
     );
-    const profile = sk?.profiles.find((p) => p.id === profSel.profileId);
+    const profile = sk && findProfile(sk, profSel.profileId);
     if (!sk || !profile) return null;
     return { sk, profile };
   }
