@@ -32,6 +32,7 @@ import { write3mf, writeStl } from "../geometry/exporters.js";
 import type { NamedBody } from "../geometry/naming.js";
 import {
   knownKeys,
+  parseEdgeRef,
   record,
   validateDocument,
   validateFeature,
@@ -372,18 +373,11 @@ export function createApiRouter(store: ProjectStore): Router {
       const sketch = doc.features[index];
       if (!sketch || sketch.type !== "sketch")
         throw new ValidationError("Sketch not found");
-      const { edge: ref, entityId } = req.body ?? {};
-      if (
-        ref?.kind !== "edge" ||
-        typeof ref.bodyId !== "string" ||
-        typeof ref.edgeName !== "string" ||
-        typeof entityId !== "string" ||
-        !entityId ||
-        entityId.length > 100
-      )
-        throw new ValidationError(
-          "An edge reference and entity ID are required",
-        );
+      const { edge: value, entityId } = req.body ?? {};
+      const message = "An edge reference and entity ID are required";
+      const ref = parseEdgeRef(value, message);
+      if (typeof entityId !== "string" || !entityId || entityId.length > 100)
+        throw new ValidationError(message);
       const state = engineFor(doc.id).stateAt(doc, index);
       const body = state.bodies.get(ref.bodyId);
       const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
@@ -444,13 +438,8 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/tangent-edges",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const { edge, beforeFeatureId } = req.body ?? {};
-      if (
-        edge?.kind !== "edge" ||
-        typeof edge.bodyId !== "string" ||
-        typeof edge.edgeName !== "string"
-      )
-        throw new ValidationError("An edge reference is required");
+      const { edge: value, beforeFeatureId } = req.body ?? {};
+      const edge = parseEdgeRef(value, "An edge reference is required");
       const index =
         beforeFeatureId === undefined
           ? undefined
