@@ -127,3 +127,14 @@ it.each(buttonStates)("%s text meets %d:1", (_, target, cascade) => {
     contrastRatio(THEME_TOKENS[fg], THEME_TOKENS[bg]),
   ).toBeGreaterThanOrEqual(target);
 });
+
+it("paints every scrollbar thin with the border thumb on the bg1 track", () => {
+  const root = css.split("\n:root {\n")[1]?.split("}")[0] ?? "";
+  expect(root).toMatch(/\sscrollbar-color: var\(--border\) var\(--bg1\);/);
+  expect(css.split("\n* {\n")[1]?.split("}")[0]).toMatch(
+    /\sscrollbar-width: thin;/,
+  );
+  expect(
+    contrastRatio(THEME_TOKENS.border, THEME_TOKENS.bg1),
+  ).toBeGreaterThanOrEqual(3);
+});

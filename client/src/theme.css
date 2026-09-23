@@ -1,9 +1,14 @@
 /* Rockett CAD — professional dense engineering UI, dark theme */
 
+:root {
+  scrollbar-color: var(--border) var(--bg1);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
 }
 
 html,
