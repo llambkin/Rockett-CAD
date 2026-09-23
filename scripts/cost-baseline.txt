@@ -1,13 +1,13 @@
-client/src/App.tsx 589
-client/src/App.tsx ProjectList 190
-client/src/App.tsx Workspace 249
-client/src/App.tsx projects.map() 83
+client/src/App.tsx Workspace 248
 client/src/components/DraggablePanel.tsx DraggablePanel 125
 client/src/components/FeatureDialog.tsx 1355
 client/src/components/FeatureDialog.tsx DialogBody 984
 client/src/components/FeatureDialog.tsx ExportPanel 81
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 240
 client/src/components/ModelTree.tsx ModelTree 377
+client/src/components/ProjectItems.tsx ItemRow 85
+client/src/components/ProjectItems.tsx ProjectItems 135
+client/src/components/ProjectList.tsx ProjectList 92
 client/src/components/SketchOffsetPanel.tsx OffsetBody 252
 client/src/components/Timeline.tsx Timeline 152
 client/src/components/Timeline.tsx openFeatureEditor 175
@@ -26,9 +26,9 @@ client/src/components/ViewportView.tsx pointerToSketchUV 224
 client/src/components/ViewportView.tsx useEffect() 112
 client/src/components/ViewportView.tsx useEffect()#2 279
 client/src/sketchTools.ts 827
-client/src/store.ts 961
+client/src/store.ts 942
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 663
+client/src/store.ts useStore 662
 client/src/three/CadViewport.ts 940
 client/src/three/CadViewport.ts addHighlight 103
 client/src/three/CadViewport.ts buildBody 85
