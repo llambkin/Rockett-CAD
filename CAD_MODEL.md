@@ -36,6 +36,29 @@ The field needs no schema step: documents saved before it have no `format`
 and still read as STEP, so schema 5 stands. A build older than this one reads
 an IGES or BREP import as STEP and reports that feature as failed.
 
+### STL and OBJ imports
+
+An `importMesh` feature holds `filename`, `format` (`stl` or `obj`) and the
+original file as base64 in `data`, so binary STL survives JSON. Regeneration
+reads it with `RWStl` or `RWObj`, which merge coincident nodes. Each triangle
+becomes a planar face over shared vertices and edges, and
+`BRepBuilderAPI_Sewing` joins them. With no free edges each shell becomes a
+solid, reversed if its volume is negative. Otherwise the sewn shell is the body
+and the feature status is `warning`, naming the open edge count. Meshes over
+200,000 triangles fail with their count. Faces stay triangles, so a mesh body
+is not parametric and has one face per triangle.
+
+OCCT's STL reader takes a file as ASCII when its first 134 bytes are all
+printable, which misreads a binary cube with small coordinates. When the size
+is exactly 84 bytes plus 50 per declared facet, the reader's copy gets a
+non-ASCII first header byte, forcing the binary path. The stored data is not
+changed.
+
+The feature needs no schema step: no saved document changes meaning, so
+schema 5 stands. A build older than this one loads such a project, reports the
+`importMesh` feature as an unknown type error and refuses to save a full
+document containing it, so nothing is lost.
+
 ## Body identity
 
 Bodies get stable ids derived from the feature that created them:

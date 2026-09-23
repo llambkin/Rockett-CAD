@@ -19,7 +19,9 @@ export function StepImportButton({
     setPending(true);
     try {
       if (file.size > 10 * 1024 * 1024)
-        throw new Error("Choose a STEP, IGES or BREP file up to 10 MB.");
+        throw new Error(
+          "Choose a STEP, IGES, BREP, STL or OBJ file up to 10 MB.",
+        );
       const s = useStore.getState();
       if (newProject) {
         const result = await api.importStep(file);
@@ -44,7 +46,7 @@ export function StepImportButton({
   };
   const button = {
     disabled: pending || busy,
-    title: "Import STEP, IGES or BREP solid bodies, up to 10 MB",
+    title: "Import STEP, IGES, BREP, STL or OBJ bodies, up to 10 MB",
     onClick: () => input.current?.click(),
   };
   return (
@@ -52,9 +54,9 @@ export function StepImportButton({
       <input
         ref={input}
         type="file"
-        accept=".step,.stp,.igs,.iges,.brep"
+        accept=".step,.stp,.igs,.iges,.brep,.stl,.obj"
         hidden
-        aria-label="STEP, IGES or BREP file"
+        aria-label="STEP, IGES, BREP, STL or OBJ file"
         onChange={(e) => void load(e.target.files?.[0])}
       />
       {newProject ? (

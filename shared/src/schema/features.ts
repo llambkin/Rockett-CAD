@@ -199,6 +199,15 @@ const importStep = Type.Refine(
   () => "needs STEP data unless format is iges or brep",
 );
 
+const importMesh = feature("importMesh", {
+  filename: Type.String({ minLength: 1, maxLength: 255 }),
+  format: Type.Enum(["stl", "obj"]),
+  data: Type.String({
+    maxLength: Math.ceil(MAX_IMPORT_BYTES / 3) * 4,
+    pattern: "^[A-Za-z0-9+/]*={0,2}$",
+  }),
+});
+
 const emboss = feature("emboss", {
   profiles: profiles(1),
   depth: positive,
@@ -307,6 +316,7 @@ export const FEATURE_SCHEMAS = {
   constructionPlane,
   referenceImage,
   importStep,
+  importMesh,
   emboss,
   extrude,
   revolve,

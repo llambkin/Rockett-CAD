@@ -364,8 +364,16 @@ export interface ImportStepFeature extends FeatureBase {
   data: string;
 }
 
+export interface ImportMeshFeature extends FeatureBase {
+  type: "importMesh";
+  filename: string;
+  format: "stl" | "obj";
+  data: string;
+}
+
 export type Feature =
   | ImportStepFeature
+  | ImportMeshFeature
   | SketchFeature
   | ExtrudeFeature
   | RevolveFeature
@@ -447,6 +455,7 @@ export function newId(prefix: string): string {
 
 export const FEATURE_LABELS: Record<FeatureType, string> = {
   importStep: "Import STEP",
+  importMesh: "Import mesh",
   sketch: "Sketch",
   extrude: "Extrude",
   revolve: "Revolve",

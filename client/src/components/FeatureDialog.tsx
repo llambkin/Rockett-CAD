@@ -224,11 +224,12 @@ function DialogBody({
   switch (dialog) {
     case "importStep": {
       const feature = document_?.features.find((f) => f.id === editId);
+      const mesh = feature?.type === "importMesh";
       return (
-        <DraggablePanel title="Imported STEP">
+        <DraggablePanel title={mesh ? "Imported mesh" : "Imported STEP"}>
           <div className="dialog-body">
             <p>
-              {feature?.type === "importStep"
+              {feature?.type === "importStep" || mesh
                 ? feature.filename
                 : "STEP import"}
             </p>
@@ -237,8 +238,9 @@ function DialogBody({
               cuts, fillets, and other features to modify them.
             </p>
             <p>
-              The originating CAD program’s sketches and feature history are not
-              included in STEP files.
+              {mesh
+                ? "A mesh imports as flat triangular faces. It is not parametric."
+                : "The originating CAD program’s sketches and feature history are not included in STEP files."}
             </p>
           </div>
           <div className="dialog-actions">

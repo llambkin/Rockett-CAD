@@ -16,6 +16,7 @@ import { ContextMenu } from "./ContextMenu";
 
 const TYPE_ICONS: Record<string, string> = {
   importStep: "⇩",
+  importMesh: "⇩",
   sketch: "✏",
   extrude: "⬆",
   revolve: "↻",
@@ -114,7 +115,7 @@ export function Timeline() {
             <span key={f.id} style={{ display: "contents" }}>
               <div
                 className={cls}
-                title={`${f.name} (${f.type})${st?.error ? `\n⚠ ${st.error}` : ""}${f.suppressed ? "\n(suppressed)" : ""}`}
+                title={`${f.name} (${f.type})${st?.error || st?.warning ? `\n⚠ ${st.error ?? st.warning}` : ""}${f.suppressed ? "\n(suppressed)" : ""}`}
                 onDoubleClick={() => openEditor(f)}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -145,7 +146,9 @@ export function Timeline() {
                 ) : (
                   <span className="tl-name">{f.name}</span>
                 )}
-                {st?.status === "error" && <span className="tl-warn">⚠</span>}
+                {(st?.status === "error" || st?.status === "warning") && (
+                  <span className="tl-warn">⚠</span>
+                )}
               </div>
               <div
                 className={`tl-marker ${pos === i + 1 ? "current" : ""}`}
@@ -359,7 +362,7 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   }
   s.setMode({
     name: "dialog",
-    dialog: f.type as DialogType,
+    dialog: (f.type === "importMesh" ? "importStep" : f.type) as DialogType,
     editFeatureId: f.id,
   });
   s.setDialogParams(params);

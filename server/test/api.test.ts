@@ -607,7 +607,7 @@ describe("REST API MVP workflow", () => {
     ).toEqual({
       status: 413,
       body: {
-        error: "Upload one STEP, IGES or BREP file, up to 10 MB.",
+        error: "Upload one STEP, IGES, BREP, STL or OBJ file, up to 10 MB.",
         code: "too_large",
       },
     });

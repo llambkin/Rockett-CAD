@@ -7,6 +7,7 @@ benchmark mode. No extra dependency.
 npm run bench -w server              # every server bench
 npm run bench -w server -- evaluate  # evaluate.bench.ts only
 npm run bench -w server -- payload   # payload.bench.ts only
+npm run bench -w server -- importMesh # importMesh.bench.ts only
 ```
 
 Each run prints one line per bench with its sample count, median and p95, and
@@ -90,12 +91,25 @@ can restore the default plan. For the same reason `evaluate cold many-body`,
 which grows the heap by about 100 MB per sample, lives in `payload.bench.ts`,
 so it runs in its own worker.
 
+`importMesh.bench.ts` imports UV spheres of radius 10 mm from
+`server/test/helpers/meshFixtures.ts`, written as binary STL and stored base64
+in one `importMesh` feature.
+
+- `mesh-10k`: 100 slices by 51 rings, 10,000 triangles and 5,002 nodes.
+- `mesh-100k`: 500 slices by 101 rings, 100,000 triangles and 50,002 nodes.
+- `import mesh 10k` and `import mesh 100k`: a fresh engine evaluates the
+  document per sample, which is the work an import request waits for: read,
+  sew, solid, face names and tessellation. The 100k bench runs 0 warm-up and
+  2 samples. One profile of a 10k import took 1.8 s to read and sew, 1.2 s to
+  name faces and 4.4 s to tessellate 10,000 faces and 15,000 edges.
+
 ## Baselines
 
 PERF-001 ranges span seven runs of `npm run bench -w server -- evaluate` on
 2026-09-23. PERF-002 ranges span two runs of each file on its own, `-- evaluate`
 then `-- payload`, on 2026-09-23 with a load average of 12 to 30 from other
-agents. Run the files one at a time when recording a baseline, because
+agents. EXCH-019 ranges span two runs of `-- importMesh` on 2026-09-23 with a
+load average of 8 to 18. Run the files one at a time when recording a baseline, because
 `npm run bench -w server` runs every file at once.
 
 | metric                     | fixture              | hardware class | runtime      | warm-up | repetitions | median                         | p95                            | budget                    | row      |
@@ -108,6 +122,8 @@ agents. Run the files one at a time when recording a baseline, because
 | evaluate edit-head         | many-feature (n 100) | class-a        | Node 24.12.0 | 0       | 2           | 151.9 to 161.5 s               | 157.7 to 165.0 s               | median 200 s, p95 240 s   | PERF-002 |
 | evaluate cold many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 9.37 to 9.58 s                 | 14.8 to 22.5 s                 | median 15 s, p95 30 s     | PERF-002 |
 | payload bytes many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 23,674,467 to 23,674,468 bytes | 23,674,467 to 23,674,468 bytes | at most 25,000,000 bytes  | PERF-002 |
+| import mesh 10k            | mesh-10k             | class-a        | Node 24.12.0 | 2       | 10          | 6.90 to 7.19 s                 | 13.6 to 14.7 s                 | median 10 s, p95 20 s     | EXCH-019 |
+| import mesh 100k           | mesh-100k            | class-a        | Node 24.12.0 | 0       | 2           | 59.2 to 65.4 s                 | 61.0 to 73.0 s                 | median 90 s, p95 120 s    | EXCH-019 |
 
 The last test in `evaluate.bench.ts` fails when a row of this table misses a
 column or leaves a cell empty. It runs with the benches, not with `npm test`.

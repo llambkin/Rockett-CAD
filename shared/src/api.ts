@@ -67,12 +67,14 @@ export interface BodyPayload {
   bbox: { min: Vec3; max: Vec3 };
 }
 
-export type FeatureRunStatus = "ok" | "error" | "suppressed" | "rolledBack";
+export type FeatureRunStatus =
+  "ok" | "warning" | "error" | "suppressed" | "rolledBack";
 
 export interface FeatureStatus {
   featureId: string;
   status: FeatureRunStatus;
   error?: string;
+  warning?: string;
 }
 
 export interface SketchPayload {

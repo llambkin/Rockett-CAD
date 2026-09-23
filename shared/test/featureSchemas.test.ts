@@ -10,6 +10,7 @@ import type {
   ExtrudeFeature,
   FilletFeature,
   ImportStepFeature,
+  ImportMeshFeature,
   LinearPatternFeature,
   LoftFeature,
   MirrorFeature,
@@ -45,6 +46,7 @@ const typesMatch: {
     ReferenceImageFeature
   >;
   importStep: Equal<Static<Schemas["importStep"]>, ImportStepFeature>;
+  importMesh: Equal<Static<Schemas["importMesh"]>, ImportMeshFeature>;
   emboss: Equal<Static<Schemas["emboss"]>, EmbossFeature>;
   extrude: Equal<Static<Schemas["extrude"]>, ExtrudeFeature>;
   revolve: Equal<Static<Schemas["revolve"]>, RevolveFeature>;
@@ -72,6 +74,7 @@ const typesMatch: {
   constructionPlane: true,
   referenceImage: true,
   importStep: true,
+  importMesh: true,
   emboss: true,
   extrude: true,
   revolve: true,
@@ -215,6 +218,23 @@ const fixtures: {
       data: "solid part",
     },
     path: "",
+  },
+  importMesh: {
+    valid: {
+      ...base,
+      type: "importMesh",
+      filename: "part.stl",
+      format: "stl",
+      data: "c29saWQ=",
+    },
+    invalid: {
+      ...base,
+      type: "importMesh",
+      filename: "part.stl",
+      format: "stl",
+      data: "solid part",
+    },
+    path: "/data",
   },
   emboss: {
     valid: {

@@ -79,7 +79,7 @@ import {
 } from "./frames.js";
 import { curveInfo } from "./tessellate.js";
 import { tangentEdges } from "./tangentEdges.js";
-import { readImport } from "./importers.js";
+import { readImport, readMesh } from "./importers.js";
 import {
   arcEdge,
   buildProfileFace,
@@ -1838,7 +1838,7 @@ export function evaluateFeature(
   state: EvalState,
   feature: Feature,
   earlier: Feature[],
-): void {
+): string | void {
   switch (feature.type) {
     case "importStep": {
       const shape = readImport(feature);
@@ -1849,6 +1849,14 @@ export function evaluateFeature(
         finalizeNames(shape, new Map(), feature.id),
       );
       return;
+    }
+    case "importMesh": {
+      const { shape, warning } = readMesh(feature),
+        bodyId = `b:${feature.id}`,
+        names = finalizeNames(shape, new Map(), feature.id);
+      if (warning) state.bodies.set(bodyId, { bodyId, shape, names });
+      else registerBodySolids(state, bodyId, shape, names);
+      return warning;
     }
     case "sketch":
       return evalSketch(state, feature);

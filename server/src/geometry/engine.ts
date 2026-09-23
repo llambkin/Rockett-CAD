@@ -80,8 +80,14 @@ class DocumentEngine {
         status = { featureId: feature.id, status: "suppressed" };
       } else {
         try {
-          evaluateFeature(next, feature, doc.features.slice(0, i));
-          status = { featureId: feature.id, status: "ok" };
+          const warning = evaluateFeature(
+            next,
+            feature,
+            doc.features.slice(0, i),
+          );
+          status = warning
+            ? { featureId: feature.id, status: "warning", warning }
+            : { featureId: feature.id, status: "ok" };
         } catch (err: any) {
           status = {
             featureId: feature.id,
