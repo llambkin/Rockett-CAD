@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import type { BodyPayload } from "@rockett/shared";
+import type { BodyPayload, Feature } from "@rockett/shared";
+import { previewTints } from "../src/livePreview";
 import type { Selection } from "../src/store";
 import { CadViewport } from "../src/three/CadViewport";
 import { syncReferenceImages } from "../src/three/referenceImages";
@@ -90,6 +91,19 @@ test("many-body", async ({ bench }) => {
   );
   vp.clearHighlights();
   vp.syncBodies([]);
+});
+
+test("preview tints many-body", async ({ bench }) => {
+  const join = { type: "extrude", operation: "join" } as Feature;
+  const after: BodyPayload[] = JSON.parse(JSON.stringify(bodies));
+  record(
+    "preview tints many-body",
+    await bench("preview tints many-body", sync, () => {
+      previewTints(join, bodies, after);
+    }).run(SAMPLES),
+    SAMPLES.iterations,
+  );
+  expect(previewTints(join, bodies, after).size).toBe(0);
 });
 
 test("sketch hover 2000 entities", async ({ bench }) => {

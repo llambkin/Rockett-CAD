@@ -69,31 +69,16 @@ function removesMaterial(feature: Feature): boolean {
   }
 }
 
-function sameNumbers(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
-function sameMesh(a: BodyPayload | undefined, b: BodyPayload): boolean {
-  return (
-    a === b ||
-    (a !== undefined &&
-      sameNumbers(a.positions, b.positions) &&
-      sameNumbers(a.indices, b.indices))
-  );
-}
-
 export function previewTints(
   feature: Feature,
   before: BodyPayload[],
   after: BodyPayload[],
 ): Map<string, ThemeColor> {
   const tint = removesMaterial(feature) ? "preview-cut" : "preview-add";
-  const old = new Map(before.map((b) => [b.bodyId, b]));
+  const old = new Map(before.map((b) => [b.bodyId, b.meshKey]));
   return new Map(
     after
-      .filter((b) => !sameMesh(old.get(b.bodyId), b))
+      .filter((b) => old.get(b.bodyId) !== b.meshKey)
       .map((b) => [b.bodyId, tint]),
   );
 }

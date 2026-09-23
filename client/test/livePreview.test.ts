@@ -1,5 +1,11 @@
 import { expect, it, vi } from "vitest";
-import { createLivePreview, PREVIEW_DWELL_MS } from "../src/livePreview";
+import type { Feature } from "@rockett/shared";
+import {
+  createLivePreview,
+  PREVIEW_DWELL_MS,
+  previewTints,
+} from "../src/livePreview";
+import { manyBodyPayloads } from "./helpers/perfFixtures";
 
 function setup() {
   let clock = 0;
@@ -85,4 +91,18 @@ it("cancel and commit drop a pending dwell", () => {
   expect(send).toHaveBeenCalledOnce();
   expect(send).toHaveBeenCalledWith("f", { distance: 3 });
   vi.useRealTimers();
+});
+
+it("tints a preview body only when its mesh key differs from the baseline", () => {
+  const [kept, moved, added] = manyBodyPayloads(3, 1);
+  const cut = { type: "extrude", operation: "cut" } as Feature;
+  const after = JSON.parse(
+    JSON.stringify([kept, { ...moved, meshKey: "moved" }, added]),
+  );
+  expect(previewTints(cut, [kept!, moved!], after)).toEqual(
+    new Map([
+      [moved!.bodyId, "preview-cut"],
+      [added!.bodyId, "preview-cut"],
+    ]),
+  );
 });
