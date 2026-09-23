@@ -9,7 +9,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "tsc -p . && vitest run"
   },
   "dependencies": {
     "typebox": "1.3.34"

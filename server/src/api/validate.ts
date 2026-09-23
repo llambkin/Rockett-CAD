@@ -4,12 +4,16 @@
  */
 
 import {
+  FEATURE_SCHEMAS,
   LINEAR_TOL,
+  MAX_DIM,
+  parse,
   SCHEMA_VERSION,
   UNIT_TO_MM,
   ValidationError,
   type CadDocument,
   type Feature,
+  type SketchFeature,
 } from "@rockett/shared";
 
 function num(v: unknown, label: string, min?: number, max?: number): void {
@@ -233,108 +237,64 @@ export function knownKeys(v: object, type: unknown): void {
     throw new ValidationError(`unknown ${type} key ${unknown.join(", ")}`);
 }
 
-const MAX_DIM = 100_000; // 100 m in mm — sanity bound
 const MIN_OFFSET_MM = 1e-7;
+
+type SchemaFeature = Extract<Feature, { type: keyof typeof FEATURE_SCHEMAS }>;
+
+function hasSchema(f: Feature): f is SchemaFeature {
+  return Object.hasOwn(FEATURE_SCHEMAS, f.type);
+}
+
+function sketchReferences(f: SketchFeature): void {
+  const offsetIds = new Set<string>();
+  const outputs = new Set<string>();
+  for (const offset of f.offsets ?? []) {
+    if (offsetIds.has(offset.id))
+      throw new ValidationError("duplicate offset id");
+    offsetIds.add(offset.id);
+    if (Math.abs(offset.distance) < MIN_OFFSET_MM)
+      throw new ValidationError("offset distance must be non-zero");
+    for (const id of offset.entityIds) {
+      if (outputs.has(id) || offset.sourceIds.includes(id))
+        throw new ValidationError(
+          "offset outputs must be distinct from sources and other offsets",
+        );
+      outputs.add(id);
+    }
+  }
+  const entityIds = new Set(f.entities.map((e) => e.id));
+  if (entityIds.size !== f.entities.length)
+    throw new ValidationError("duplicate sketch entity ID");
+  const pointIds = new Set(
+    f.entities.filter((e) => e.kind === "point").map((e) => e.id),
+  );
+  for (const e of f.entities) {
+    const pointRefs =
+      e.kind === "line"
+        ? [e.p1, e.p2]
+        : e.kind === "circle"
+          ? [e.center]
+          : e.kind === "arc"
+            ? [e.center, e.start, e.end]
+            : [];
+    if (pointRefs.some((id) => !pointIds.has(id)))
+      throw new ValidationError(`Missing endpoint on sketch entity ${e.id}`);
+    if (e.kind !== "point" && e.projection && !e.external)
+      throw new ValidationError("projected curves must be external");
+  }
+}
 
 export function validateFeature(f: Feature): void {
   record(f, "feature");
+  if (hasSchema(f)) {
+    parse(FEATURE_SCHEMAS[f.type], f);
+    if (f.type === "sketch") sketchReferences(f);
+    return;
+  }
   str(f.id, "feature id", 100);
   if (f.name !== undefined) str(f.name, "feature name", 120);
   bool(f.suppressed, "feature suppressed");
   switch (f.type) {
-    case "importStep":
-      str(f.filename, "STEP filename", 255);
-      if (
-        typeof f.data !== "string" ||
-        f.data.length > 10 * 1024 * 1024 ||
-        !f.data.trimStart().startsWith("ISO-10303-21;")
-      )
-        throw new ValidationError("A valid STEP file up to 10 MB is required");
-      break;
-    case "sketch": {
-      planeRef(f.plane, "sketch plane");
-      if (!Array.isArray(f.entities) || f.entities.length > 5000) {
-        throw new ValidationError("sketch entities invalid");
-      }
-      if (!Array.isArray(f.constraints) || f.constraints.length > 5000) {
-        throw new ValidationError("sketch constraints invalid");
-      }
-      if (f.offsets !== undefined) {
-        if (!Array.isArray(f.offsets) || f.offsets.length > 1000)
-          throw new ValidationError("sketch offsets invalid");
-        const ids = new Set<string>();
-        const outputs = new Set<string>();
-        for (const offset of f.offsets) {
-          record(offset, "sketch offset");
-          str(offset.id, "offset id", 100);
-          if (ids.has(offset.id))
-            throw new ValidationError("duplicate offset id");
-          ids.add(offset.id);
-          num(offset.distance, "offset distance", -MAX_DIM, MAX_DIM);
-          if (Math.abs(offset.distance) < MIN_OFFSET_MM)
-            throw new ValidationError("offset distance must be non-zero");
-          num(offset.joinTolerance, "offset join tolerance", 0, 1);
-          for (const refs of [offset.sourceIds, offset.entityIds]) {
-            if (
-              !Array.isArray(refs) ||
-              !refs.length ||
-              refs.length > 5000 ||
-              new Set(refs).size !== refs.length
-            )
-              throw new ValidationError("offset entity references invalid");
-            for (const id of refs) str(id, "offset entity id", 100);
-          }
-          for (const id of offset.entityIds) {
-            if (outputs.has(id) || offset.sourceIds.includes(id))
-              throw new ValidationError(
-                "offset outputs must be distinct from sources and other offsets",
-              );
-            outputs.add(id);
-          }
-        }
-      }
-      if (f.visible !== undefined) bool(f.visible, "sketch visible");
-      for (const e of f.entities) record(e, "sketch entity");
-      const entityIds = new Set(f.entities.map((e) => e.id));
-      if (entityIds.size !== f.entities.length)
-        throw new ValidationError("duplicate sketch entity ID");
-      const pointIds = new Set(
-        f.entities.filter((e) => e.kind === "point").map((e) => e.id),
-      );
-      for (const e of f.entities) {
-        const pointRefs =
-          e.kind === "line"
-            ? [e.p1, e.p2]
-            : e.kind === "circle"
-              ? [e.center]
-              : e.kind === "arc"
-                ? [e.center, e.start, e.end]
-                : [];
-        if (pointRefs.some((id) => !pointIds.has(id)))
-          throw new ValidationError(
-            `Missing endpoint on sketch entity ${e.id}`,
-          );
-        if (e.kind !== "point" && e.projection) {
-          edgeRef(e.projection, "projection");
-          if (!e.external)
-            throw new ValidationError("projected curves must be external");
-        }
-        if (e.kind === "point") {
-          num(e.x, "point x", -MAX_DIM, MAX_DIM);
-          num(e.y, "point y", -MAX_DIM, MAX_DIM);
-        } else if (e.kind === "circle") {
-          num(e.radius, "circle radius", 0, MAX_DIM);
-        }
-      }
-      for (const c of f.constraints) {
-        if (c.type !== "lineAngle") continue;
-        str(c.line, "line angle line", 100);
-        num(c.value, "line angle", -180, 180);
-        if (c.value === -180)
-          throw new ValidationError("line angle must be > -180");
-      }
-      break;
-    }
     case "extrude": {
       // signed: a negative distance extrudes to the other side of the sketch
       num(f.distance, "extrude distance", -MAX_DIM, MAX_DIM);
@@ -417,34 +377,9 @@ export function validateFeature(f: Feature): void {
       num(f.totalAngle, "pattern angle", -360, 360);
       bool(f.combine, "pattern combine");
       break;
-    case "constructionPlane":
-      record(f.method, "plane method");
-      if (f.method.kind === "offset") {
-        planeRef(f.method.base, "plane base");
-        num(f.method.distance, "plane offset", -MAX_DIM, MAX_DIM);
-      } else if (f.method.kind === "midplane") {
-        planeRef(f.method.a, "midplane first plane");
-        planeRef(f.method.b, "midplane second plane");
-      } else
-        throw new ValidationError("plane method must be offset or midplane");
-      break;
-    case "referenceImage":
-      planeRef(f.plane, "image plane");
-      num(f.opacity, "opacity", 0, 1);
-      record(f.transform, "image transform");
-      num(f.transform.scale, "image scale", 1e-9, MAX_DIM);
-      num(f.width, "image width", 1, 65536);
-      num(f.height, "image height", 1, 65536);
-      bool(f.visible, "image visible");
-      break;
     case "offsetFace":
       num(f.distance, "offset distance", -MAX_DIM, MAX_DIM);
       list(f.faces, "offset faces", 1, 256, faceRef);
-      break;
-    case "emboss":
-      list(f.profiles, "emboss profiles", 1, 64, profileRef);
-      num(f.depth, "emboss depth", LINEAR_TOL, MAX_DIM);
-      oneOf(f.mode, "emboss mode", ["emboss", "deboss"]);
       break;
     case "move":
       list(f.bodies, "move bodies", 1, 64, str);

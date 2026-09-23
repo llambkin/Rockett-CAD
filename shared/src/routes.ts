@@ -8,6 +8,7 @@ import type {
   ProjectResponse,
   ProjectSummary,
 } from "./api.js";
+import { edgeRef, faceRef } from "./schema/features.js";
 
 export interface MutationResponse {
   document: CadDocument;
@@ -56,18 +57,8 @@ const route =
 
 const name = Type.Object({ name: Type.Optional(Type.String()) });
 
-const edgeRef = Type.Object({
-  kind: Type.Literal("edge"),
-  bodyId: Type.String(),
-  edgeName: Type.String(),
-});
-
 const topoRef = Type.Union([
-  Type.Object({
-    kind: Type.Literal("face"),
-    bodyId: Type.String(),
-    faceName: Type.String(),
-  }),
+  faceRef,
   edgeRef,
   Type.Object({
     kind: Type.Literal("vertex"),
