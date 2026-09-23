@@ -183,7 +183,7 @@ const referenceImage = feature("referenceImage", {
     scale: Type.Number({ minimum: 1e-9, maximum: MAX_DIM }),
   }),
   opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  visible: Type.Boolean(),
+  visible: flag,
   width: Type.Number({ minimum: 1, maximum: 65536 }),
   height: Type.Number({ minimum: 1, maximum: 65536 }),
 });
@@ -329,7 +329,6 @@ export const FEATURE_SCHEMAS = {
   move,
 };
 
-const vector = Type.Tuple([Type.Number(), Type.Number(), Type.Number()]);
 const text = Type.String({ minLength: 1, maxLength: 200 });
 
 export const groupsSchema = Type.Refine(
@@ -371,10 +370,7 @@ export const documentSchema = Type.Refine(
     modifiedAt: text,
     features: Type.Array(Type.Unknown()),
     timelinePosition: Type.Integer({ minimum: 0 }),
-    bodyMeta: Type.Record(
-      Type.String(),
-      Type.Object({ name: Type.String(), visible: Type.Boolean() }),
-    ),
+    bodyMeta: Type.Record(Type.String(), Type.Object({ name: Type.String() })),
     counters: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
     groups: groupsSchema,
     extensions: Type.Record(
@@ -387,14 +383,6 @@ export const documentSchema = Type.Refine(
         data: Type.Unknown(),
       }),
       { additionalProperties: false },
-    ),
-    camera: Type.Optional(
-      Type.Object({
-        position: vector,
-        target: vector,
-        up: vector,
-        projection: Type.Enum(["orthographic", "perspective"]),
-      }),
     ),
   }),
   (doc) => doc.timelinePosition <= doc.features.length,

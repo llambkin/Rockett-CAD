@@ -11,8 +11,8 @@ import { LocalStorage } from "../src/store/storage.js";
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 
 describe("schema fixtures", () => {
-  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])(
-    "loads v%i at the current schema with features unchanged apart from STEP sources",
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])(
+    "loads v%i at the current schema with features unchanged apart from STEP sources and visibility",
     async (version) => {
       const raw = await fs.readFile(
         path.join(fixtures, `v${version}.json`),
@@ -31,8 +31,21 @@ describe("schema fixtures", () => {
       ).load(fixture.id);
 
       expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
-      expect(loaded.features).toEqual(withStepBlobs(fixture.features));
-      expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
+      expect(loaded.features).toEqual(
+        withStepBlobs(fixture.features).map(
+          ({ visible: _visible, ...feature }: Record<string, unknown>) =>
+            feature,
+        ),
+      );
+      expect(loaded.bodyMeta).toEqual(
+        Object.fromEntries(
+          Object.entries(fixture.bodyMeta).map(([id, meta]) => [
+            id,
+            { name: (meta as { name: string }).name },
+          ]),
+        ),
+      );
+      expect(loaded).not.toHaveProperty("camera");
       expect(loaded.timelinePosition).toBe(fixture.timelinePosition);
       expect(loaded.groups).toEqual(fixture.groups ?? []);
       expect(loaded.revision).toBe(fixture.revision ?? 0);

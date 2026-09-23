@@ -2,9 +2,15 @@ import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 
 type Value = Record<string, unknown>;
 
+export interface Visibility {
+  bodies: Record<string, boolean>;
+  features: Record<string, boolean>;
+}
+
 export interface MigrationContext {
   put(bytes: Uint8Array): string;
   asset(name: string): Uint8Array | undefined;
+  show(visibility: Visibility): void;
 }
 
 export interface Migrations<T> {
@@ -20,6 +26,9 @@ export const NO_BLOBS: MigrationContext = {
   },
   asset() {
     throw new Error("this migration needs a blob store");
+  },
+  show() {
+    throw new Error("this migration needs a view store");
   },
 };
 
@@ -81,6 +90,28 @@ function imageBlob(feature: Value, context: MigrationContext): Value {
   return bytes ? { ...feature, assetId: context.put(bytes) } : feature;
 }
 
+export function splitView(doc: Value): { doc: Value; shown: Visibility } {
+  const shown: Visibility = { bodies: {}, features: {} };
+  const bodyMeta = Object.entries(
+    (doc.bodyMeta ?? {}) as Record<string, Value>,
+  ).map(([id, { visible, ...meta }]) => {
+    if (typeof visible === "boolean") shown.bodies[id] = visible;
+    return [id, meta];
+  });
+  const features = ((doc.features ?? []) as Value[]).map(
+    ({ visible, ...feature }) => {
+      if (typeof visible === "boolean")
+        shown.features[String(feature.id)] = visible;
+      return feature;
+    },
+  );
+  const { camera: _camera, ...rest } = doc;
+  return {
+    doc: { ...rest, bodyMeta: Object.fromEntries(bodyMeta), features },
+    shown,
+  };
+}
+
 export const documentMigrations: Migrations<CadDocument> = {
   namespace: "document",
   current: SCHEMA_VERSION,
@@ -107,5 +138,10 @@ export const documentMigrations: Migrations<CadDocument> = {
       ),
     }),
     9: (doc) => ({ ...doc, extensions: doc.extensions ?? {} }),
+    10: (doc, context) => {
+      const split = splitView(doc);
+      context.show(split.shown);
+      return split.doc;
+    },
   },
 };

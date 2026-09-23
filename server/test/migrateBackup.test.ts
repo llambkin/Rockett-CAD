@@ -30,6 +30,16 @@ const pending = new PendingBlobs(new Map([["0123456789abcdef.png", png]]));
 const migratedDoc = migrate(documentMigrations, fixture, pending);
 const backedUp = new Map<string, Buffer>(original);
 for (const [hash, bytes] of pending.blobs) backedUp.set(`blobs/${hash}`, bytes);
+backedUp.set(
+  "view.json",
+  Buffer.from(
+    JSON.stringify(
+      { version: 1, hidden: { bodies: ["b:imp1"], features: [] } },
+      null,
+      1,
+    ),
+  ),
+);
 const migrated = new Map(
   [...backedUp].filter(([name]) => !name.startsWith("assets/")),
 ).set("document.json", Buffer.from(JSON.stringify(migratedDoc, null, 1)));
@@ -212,7 +222,14 @@ describe.each(backends)("project migration on %s", (_, make) => {
     const reopened = new ProjectStore(restored, validateDocument);
     const loaded = await reopened.load(id);
     expect(loaded.features).toEqual(migratedDoc.features);
-    expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
+    expect(loaded.bodyMeta).toEqual({
+      "b:ext1": { name: "Body1" },
+      "b:imp1": { name: "Imported" },
+    });
+    expect(await reopened.view(id)).toEqual({
+      version: 1,
+      hidden: { bodies: ["b:imp1"], features: [] },
+    });
     expect((await reopened.readAsset(id, sha(png))).data).toEqual(png);
 
     await store.save(await edit(store));

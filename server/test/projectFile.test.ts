@@ -143,10 +143,17 @@ describe("project file", () => {
       "attachment; filename=\"Bracket_v2_.rockett\"; filename*=UTF-8''Bracket%20%C3%B6%20%22v2%22.rockett",
     );
     const file = await res.json();
+    const stored = {
+      ...project,
+      features: project.features.map((f) => {
+        const { visible: _visible, ...rest } = f as { visible?: boolean };
+        return rest;
+      }),
+    };
     expect(file).toEqual({
       format: "rockett-project",
       version: 1,
-      document: project,
+      document: stored,
       assets: { [assetId]: png.toString("base64") },
     });
     const before = await projectDirs();
@@ -155,14 +162,17 @@ describe("project file", () => {
     const { document } = await imported.json();
     expect(document.id).not.toBe(project.id);
     expect(document.revision).toBe(1);
-    expect({
-      ...document,
-      id: project.id,
-      modifiedAt: project.modifiedAt,
-      revision: project.revision,
-    }).toEqual(project);
+    const fresh = {
+      id: document.id,
+      modifiedAt: document.modifiedAt,
+      revision: document.revision,
+    };
+    expect(document).toEqual({ ...stored, ...fresh });
     expect(await projectDirs()).toEqual(new Set([...before, document.id]));
-    expect((await json(`/projects/${document.id}`)).document).toEqual(document);
+    expect((await json(`/projects/${document.id}`)).document).toEqual({
+      ...project,
+      ...fresh,
+    });
     const asset = await send(`/api/projects/${document.id}/assets/${assetId}`);
     expect(Buffer.from(await asset.arrayBuffer())).toEqual(png);
   });

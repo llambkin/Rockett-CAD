@@ -200,7 +200,7 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 | `PUT /projects/:id/features/:fid`    | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
 | `DELETE /projects/:id/features/:fid` | none                    | Marker adjusts if needed                                                     |
 | `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
-| `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Body display metadata                                                        |
+| `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Rename a body; `visible` writes `view.json`, as below                        |
 | `PUT /projects/:id/groups`           | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
 
 ### View state
@@ -211,17 +211,26 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 with no saved view returns empty lists. `PUT /projects/:id/view` replaces it
 with a body of the same shape and echoes it back. The body is validated, with
 unknown fields rejected, and a bad one is 400 with nothing written. The PUT
-never writes the document, never evaluates and never raises the revision, so
+never edits the document, never evaluates and never raises the revision, so
 it takes no `If-Match`; the last write wins. A missing project is 404. The
-view stays with the project and is shared by everyone who opens it. Nothing
-reads it yet: visibility still comes from the document.
+view stays with the project and is shared by everyone who opens it. A GET on
+a project saved before schema 11 reports the visibility its document held. A
+PUT first migrates that document on disk, after its backup, so the old flags
+cannot return over the new view.
+
+Visibility lives only in the view. Until DOC-020 the old paths still work
+through it: `visible` in a body PUT or a feature patch writes `view.json`, and
+a patch with nothing else saves no document and keeps the revision. Responses
+report `visible` from the view: on each body, and on each sketch and reference
+image in the document. `PUT /projects/:id/document` moves any `visible` it
+carries into the view.
 
 ## Inspection & output
 
-| Method & path                | Body                                                             | Returns                                                                                                                                                    |
-| ---------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                              |
-| `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = all visible bodies. `retain: true` also stores a copy under the project's `exports/` dir |
+| Method & path                | Body                                                             | Returns                                                                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                                             |
+| `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = every body the view does not hide. `retain: true` also stores a copy under the project's `exports/` dir |
 
 Export returns 400 when an id in `bodyIds` is not a body of the evaluated
 model; the error names the offending ids. `format` is required, and `stl` is
@@ -269,15 +278,15 @@ feature in `detail`, such as `/transform/scale`.
 `revision` is a non-negative integer, `savedWith` is `null` or
 `{ version, commit }` with `commit` a string or `null`,
 `units` is `mm`, `cm`, `m` or `in`, `bodyMeta` values are
-`{ name: string, visible: boolean }`, `counters` are non-negative integers,
+`{ name: string }`, `counters` are non-negative integers,
 `groups` have unique ids, a name of 1 to 200 characters, `kind` `body` or
 `sketch`, and no member in two groups,
 `extensions` keys match `^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$` and each
 value is `{ version, data }` with `version` a non-negative integer and `data`
 any JSON value,
-`createdAt` and `modifiedAt` are non-empty strings, `timelinePosition` is an
-integer no greater than the feature count and `camera` has its shape when
-present. Loading a saved project migrates it without validating.
+`createdAt` and `modifiedAt` are non-empty strings and `timelinePosition` is an
+integer no greater than the feature count. Loading a saved project migrates
+it without validating.
 
 Every validation failure returns 400 and nothing is saved.
 

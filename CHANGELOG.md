@@ -55,6 +55,10 @@ change gets a `Schema N` line in the section that ships it.
 
 ### Changed
 
+- Schema 11: which bodies, sketches and reference images are hidden moves out
+  of the document into the project's `view.json`, and the unused `camera` is
+  dropped. The 10 to 11 migration writes `view.json` beside the new blobs,
+  before the backup and the document rewrite.
 - Schema 10: a document keeps module data in `extensions`, keyed by a dotted
   module id. The 9 to 10 migration adds an empty `extensions`.
 - Schema 5: a sketch line can keep its angle from the sketch +X axis

@@ -183,15 +183,8 @@ class DocumentEngine {
     // --- payloads ---
     const bodies: BodyPayload[] = [];
     for (const body of state.bodies.values()) {
-      const meta = doc.bodyMeta[body.bodyId] ?? {
-        name: body.bodyId,
-        visible: true,
-      };
-      bodies.push({
-        ...this.tessellated(body, meta),
-        name: meta.name,
-        visible: meta.visible,
-      });
+      const name = doc.bodyMeta[body.bodyId]?.name ?? body.bodyId;
+      bodies.push({ ...this.tessellated(body, name), name });
     }
 
     const sketches: SketchPayload[] = [];
@@ -220,13 +213,11 @@ class DocumentEngine {
     };
   }
 
-  private tessellated(
-    body: StateBody,
-    meta: { name: string; visible: boolean },
-  ): BodyPayload {
+  private tessellated(body: StateBody, name: string): BodyPayload {
     const hit = this.cached(body);
     if (hit) return hit;
-    const payload = this.moved(body) ?? tessellateBody(body, meta);
+    const payload =
+      this.moved(body) ?? tessellateBody(body, { name, visible: true });
     const key = cacheKey(body);
     const stale = this.tessCache.get(key);
     this.tessCache.delete(key);

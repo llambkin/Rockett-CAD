@@ -7,6 +7,7 @@ import {
 } from "@rockett/shared";
 import { documentMigrations, migrate } from "../src/store/migrations.js";
 import { validateDocument, validateFeature } from "../src/api/validate.js";
+import { PendingBlobs } from "../src/store/blobStore.js";
 
 const base = { id: "f1", name: "F1", suppressed: false };
 const profile = { sketchId: "sk", profileId: "p" };
@@ -295,7 +296,6 @@ describe("validateFeature", () => {
       { ...linearPattern, combine: "true" },
       { ...circularPattern, combine: undefined },
       { ...referenceImage, visible: "yes" },
-      { ...referenceImage, visible: undefined },
     ];
     for (const f of invalid)
       expect
@@ -419,19 +419,14 @@ describe("validateDocument", () => {
           "utf8",
         ),
       ).document,
+      new PendingBlobs(),
     );
     const doc = {
       ...createEmptyDocument("d", "D"),
       features: [{ ...base, type: "fillet", edges: [edge], radius: 1 }],
       timelinePosition: 1,
-      bodyMeta: { b1: { name: "", visible: false } },
+      bodyMeta: { b1: { name: "" } },
       counters: { fillet: 1, body: 0 },
-      camera: {
-        position: [1, 2, 3],
-        target: [0, 0, 0],
-        up: [0, 0, 1],
-        projection: "perspective",
-      },
     };
     for (const valid of [fixture, createEmptyDocument("e", "E"), doc])
       expect(() => validateDocument(valid as any)).not.toThrow();
@@ -443,8 +438,7 @@ describe("validateDocument", () => {
       { units: "ft" },
       { bodyMeta: null },
       { bodyMeta: { b1: null } },
-      { bodyMeta: { b1: { name: 1, visible: true } } },
-      { bodyMeta: { b1: { name: "B", visible: "yes" } } },
+      { bodyMeta: { b1: { name: 1 } } },
       { counters: [] },
       { counters: { fillet: -1 } },
       { counters: { fillet: 1.5 } },
@@ -452,10 +446,6 @@ describe("validateDocument", () => {
       { createdAt: 0 },
       { modifiedAt: undefined },
       { timelinePosition: 0.5 },
-      { camera: null },
-      { camera: { ...doc.camera, position: [0, 0] } },
-      { camera: { ...doc.camera, up: [0, 0, "1"] } },
-      { camera: { ...doc.camera, projection: "fisheye" } },
     ];
     for (const change of invalid)
       expect

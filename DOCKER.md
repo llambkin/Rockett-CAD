@@ -101,7 +101,7 @@ docker run -d --name rockett-cad \
 └── projects/
     └── {projectId}/
         ├── document.json   # the parametric document (full history)
-        ├── view.json       # hidden bodies and features; written only by PUT /view
+        ├── view.json       # hidden bodies and features, outside the document
         ├── temporary.json  # present only on a temporary copy of a browser project
         ├── blobs/          # reference images and STEP, IGES and BREP sources, each named by its sha256
         └── exports/        # server-retained exports (opt-in per export)

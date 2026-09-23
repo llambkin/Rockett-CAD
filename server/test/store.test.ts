@@ -5,6 +5,7 @@ import os from "node:os";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { validateDocument } from "../src/api/validate.js";
 import { LocalStorage } from "../src/store/storage.js";
+import { PendingBlobs } from "../src/store/blobStore.js";
 import {
   documentMigrations,
   migrate,
@@ -28,7 +29,7 @@ describe("project store", () => {
       ...createEmptyDocument("legacy", "Legacy"),
       schemaVersion: 1,
     };
-    const upgraded = migrate(documentMigrations, legacy);
+    const upgraded = migrate(documentMigrations, legacy, new PendingBlobs());
     expect(upgraded.schemaVersion).toBe(SCHEMA_VERSION);
     expect(upgraded.features).toEqual(legacy.features);
     expect(legacy.schemaVersion).toBe(1);
@@ -104,7 +105,7 @@ describe("project store", () => {
       constraints: [{ id: "c1", type: "fix", point: "p1" }],
     });
     doc.timelinePosition = 1;
-    doc.bodyMeta["b:x"] = { name: "Housing", visible: false };
+    doc.bodyMeta["b:x"] = { name: "Housing" };
     await store.save(doc);
 
     const loaded = await store.load(doc.id);
@@ -113,7 +114,6 @@ describe("project store", () => {
     expect(loaded.features[0]!.type).toBe("sketch");
     expect((loaded.features[0] as any).constraints[0].type).toBe("fix");
     expect(loaded.bodyMeta["b:x"]!.name).toBe("Housing");
-    expect(loaded.bodyMeta["b:x"]!.visible).toBe(false);
     expect(loaded.timelinePosition).toBe(1);
   });
 

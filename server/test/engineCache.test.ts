@@ -221,11 +221,11 @@ it(
     expect(engine.evaluate(doc).bodies).toHaveLength(1000);
     expect(tessellated.mock.calls.length).toBe(0);
 
-    doc.bodyMeta["b:box"] = { name: "Renamed", visible: false };
+    doc.bodyMeta["b:box"] = { name: "Renamed" };
     const renamed = engine
       .evaluate(doc)
       .bodies.find((b) => b.bodyId === "b:box");
-    expect(renamed).toMatchObject({ name: "Renamed", visible: false });
+    expect(renamed).toMatchObject({ name: "Renamed" });
     expect(tessellated.mock.calls.length).toBe(0);
     dropEngine(doc.id);
   },

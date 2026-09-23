@@ -47,7 +47,7 @@ describe("createApp", () => {
   it("gzips a large JSON response only for a client that accepts gzip", async () => {
     const doc = await app.store.create("Large");
     for (let i = 0; i < 5000; i++)
-      doc.bodyMeta[`b:${i}`] = { name: `Body${i}`, visible: true };
+      doc.bodyMeta[`b:${i}`] = { name: `Body${i}` };
     await app.store.save(doc);
     const get = (encoding: string) =>
       app.request(`/api/projects/${doc.id}`, {

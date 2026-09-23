@@ -223,12 +223,16 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     return this.writes.run(key, async () => {
       const value = change(await this.previous(key));
       this.options.validate?.(value);
-      await this.upgrade(key, !(await this.options.unbacked?.(key)));
+      await this.upgrade(key);
       await this.options.storage.writeAtomic(
         this.file(key),
         JSON.stringify(value, null, 1),
       );
     });
+  }
+
+  settle(key: string): Promise<void> {
+    return this.writes.run(key, () => this.upgrade(key));
   }
 
   private async previous(key: string): Promise<T | undefined> {
@@ -241,7 +245,8 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     }
   }
 
-  private async upgrade(key: string, backed: boolean): Promise<void> {
+  private async upgrade(key: string): Promise<void> {
+    const backed = !(await this.options.unbacked?.(key));
     if (backed) await this.recover(key);
     let value: unknown;
     try {
@@ -256,7 +261,8 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     const staged = JSON.stringify(next, null, 1);
     if (backed) this.options.validate?.(JSON.parse(staged));
     await this.options.effects?.commit(key, context);
-    if (!backed) return;
+    if (!backed)
+      return this.options.storage.writeAtomic(this.file(key), staged);
     const from = (value as Record<string, unknown>)[
       this.options.migrations.field
     ];

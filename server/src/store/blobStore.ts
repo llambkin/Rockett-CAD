@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import { sha256, StoreError } from "./jsonStore.js";
+import type { Visibility } from "./migrations.js";
 import type { Storage } from "./storage.js";
 
 export const HASH_RE = /^[0-9a-f]{64}$/;
@@ -8,6 +9,7 @@ export const HASH_RE = /^[0-9a-f]{64}$/;
 export class PendingBlobs {
   readonly blobs = new Map<string, Buffer>();
   readonly used = new Set<string>();
+  shown: Visibility = { bodies: {}, features: {} };
 
   constructor(readonly assets: ReadonlyMap<string, Buffer> = new Map()) {
     for (const bytes of assets.values()) this.put(bytes);
@@ -23,6 +25,10 @@ export class PendingBlobs {
     const bytes = this.assets.get(name);
     if (bytes) this.used.add(name);
     return bytes;
+  }
+
+  show(visibility: Visibility): void {
+    this.shown = visibility;
   }
 }
 

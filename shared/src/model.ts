@@ -11,7 +11,7 @@
 
 import type { Units } from "./units.js";
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -337,7 +337,7 @@ export interface ReferenceImageFeature extends FeatureBase {
     scale: number;
   };
   opacity: number; // 0..1
-  visible: boolean;
+  visible?: boolean;
   /** Natural image size in pixels (for aspect + calibration). */
   width: number;
   height: number;
@@ -401,7 +401,6 @@ export type FeatureType = Feature["type"];
 
 export interface BodyMeta {
   name: string;
-  visible: boolean;
 }
 
 export interface TreeGroup {
@@ -409,13 +408,6 @@ export interface TreeGroup {
   name: string;
   kind: "body" | "sketch";
   members: string[];
-}
-
-export interface CameraState {
-  position: [number, number, number];
-  target: [number, number, number];
-  up: [number, number, number];
-  projection: "orthographic" | "perspective";
 }
 
 export interface ExtensionData {
@@ -438,13 +430,12 @@ export interface CadDocument {
    * < features.length). New features insert at this position.
    */
   timelinePosition: number;
-  /** Display metadata per body id (names, visibility). */
+  /** Display names per body id. */
   bodyMeta: Record<string, BodyMeta>;
   /** Per-type counters used for default names (Sketch1, Extrude2, ...). */
   counters: Record<string, number>;
   groups: TreeGroup[];
   extensions: Record<string, ExtensionData>;
-  camera?: CameraState;
 }
 
 // ---------------------------------------------------------------------------

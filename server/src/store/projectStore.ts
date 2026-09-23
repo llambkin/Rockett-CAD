@@ -12,7 +12,11 @@ import {
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
 import { JsonStore, sha256, StoreError, type Inventory } from "./jsonStore.js";
-import { documentMigrations, TooNewError } from "./migrations.js";
+import {
+  documentMigrations,
+  TooNewError,
+  type Visibility,
+} from "./migrations.js";
 import type { Storage } from "./storage.js";
 
 export { StoreError };
@@ -58,6 +62,27 @@ function imageMime(data: Buffer, label: string): string {
       `${label}unsupported image type (PNG, JPEG, WebP only)`,
     );
   return type.mime;
+}
+
+export function emptyView(): ProjectView {
+  return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
+}
+
+function withShown(view: ProjectView, shown: Visibility): ProjectView {
+  const apply = (ids: string[], flags: Record<string, boolean>) => {
+    const hidden = new Set(ids);
+    for (const [id, visible] of Object.entries(flags))
+      if (visible) hidden.delete(id);
+      else hidden.add(id);
+    return [...hidden];
+  };
+  return {
+    version: VIEW_VERSION,
+    hidden: {
+      bodies: apply(view.hidden.bodies, shown.bodies),
+      features: apply(view.hidden.features, shown.features),
+    },
+  };
 }
 
 function stepBlobs(doc: CadDocument): string[] {
@@ -111,6 +136,10 @@ export class ProjectStore {
         commit: async (id, pending) => {
           for (const bytes of pending.blobs.values())
             await this.blobs(id).put(bytes);
+          await this.views.write(
+            id,
+            withShown(await this.storedView(id), pending.shown),
+          );
         },
         retire: (id) => storage.remove(this.assetDir(id)),
       },
@@ -165,7 +194,18 @@ export class ProjectStore {
   }
 
   async load(id: string): Promise<CadDocument> {
-    const doc = await this.documents.read(id);
+    return this.valid(id, await this.documents.read(id));
+  }
+
+  async open(id: string): Promise<{ doc: CadDocument; view: ProjectView }> {
+    const { value, context } = await this.documents.migrated(id);
+    return {
+      doc: this.valid(id, value),
+      view: withShown(await this.storedView(id), context.shown),
+    };
+  }
+
+  private valid(id: string, doc: CadDocument): CadDocument {
     try {
       this.validate(doc);
     } catch (err) {
@@ -191,16 +231,35 @@ export class ProjectStore {
   }
 
   async view(id: string): Promise<ProjectView> {
-    await this.exists(id);
-    return this.views.read(id).catch((err) => {
-      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
-      return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
-    });
+    return (await this.open(id)).view;
   }
 
   async setView(id: string, view: ProjectView): Promise<void> {
     await this.exists(id);
+    await this.documents.settle(id);
     await this.views.write(id, view);
+  }
+
+  async setVisible(
+    id: string,
+    view: ProjectView,
+    shown: Visibility,
+  ): Promise<ProjectView> {
+    if (
+      !Object.keys(shown.bodies).length &&
+      !Object.keys(shown.features).length
+    )
+      return view;
+    const next = withShown(view, shown);
+    await this.setView(id, next);
+    return next;
+  }
+
+  private storedView(id: string): Promise<ProjectView> {
+    return this.views.read(id).catch((err) => {
+      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
+      return emptyView();
+    });
   }
 
   private async exists(id: string): Promise<void> {
