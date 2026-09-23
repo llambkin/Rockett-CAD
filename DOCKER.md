@@ -7,6 +7,7 @@ dependencies). All persistent state lives under **one volume: `/data`**.
 ## Compose
 
 ```bash
+ROCKETT_ALLOWED_ORIGINS=https://cad.example.com \
 ROCKETT_COMMIT=$(git rev-parse HEAD) \
 ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
   docker compose up -d --build
@@ -15,7 +16,8 @@ ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
 
 `docker-compose.yml` builds the image locally and keeps `/data` in a named
 volume. It publishes on `127.0.0.1` unless `ROCKETT_BIND` says otherwise;
-the header of the file lists every variable.
+the header of the file lists every variable. The server will not start
+without `ROCKETT_ALLOWED_ORIGINS`; set it to the origin you browse to.
 
 ### Several instances on one host
 
@@ -30,6 +32,7 @@ commit it bakes in, and prod runs that image once dev has verified it.
 COMMIT=$(git rev-parse HEAD)
 REV=$(git rev-parse --short "$COMMIT")
 git diff --quiet HEAD &&
+ROCKETT_ALLOWED_ORIGINS="$DEV_ORIGIN" \
 ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_HOST_PORT="$DEV_PORT" ROCKETT_TAG=$REV \
 ROCKETT_COMMIT=$COMMIT ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
   docker compose -p rockett-cad-dev up -d --build
@@ -37,6 +40,7 @@ ROCKETT_COMMIT=$COMMIT ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) 
 # prod: promote the image dev verified
 docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
   rockett-cad:$REV
+ROCKETT_ALLOWED_ORIGINS="$PROD_ORIGIN" \
 ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_TAG=$REV \
   docker compose -p rockett-cad-prod up -d --no-build
 ```
@@ -66,6 +70,7 @@ docker build -t rockett-cad:latest \
   --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) .
 docker run -d --name rockett-cad \
   -p 8788:8788 \
+  -e ROCKETT_ALLOWED_ORIGINS=https://cad.example.com \
   -v /path/to/appdata/rockett-cad:/data \
   --restart unless-stopped \
   rockett-cad:latest
@@ -78,7 +83,8 @@ docker run -d --name rockett-cad \
 2. Copy `docker/unraid-rockett-cad.xml` to
    `/boot/config/plugins/dockerMan/templates-user/` on the Unraid box.
 3. Add the container from the template. Defaults: WebUI port `8788`, data path
-   `/mnt/user/appdata/rockett-cad`.
+   `/mnt/user/appdata/rockett-cad`. Add the `ROCKETT_ALLOWED_ORIGINS`
+   variable; the template does not carry it yet.
 
 ## Persistent layout (`/data`)
 
@@ -98,12 +104,13 @@ persistence tests and was smoke-tested against a live container.
 
 ## Environment
 
-| Variable           | Default | Purpose                                                                      |
-| ------------------ | ------- | ---------------------------------------------------------------------------- |
-| `ROCKETT_PORT`     | `8788`  | HTTP port inside the container                                               |
-| `DATA_DIR`         | `/data` | Persistent root                                                              |
-| `ROCKETT_COMMIT`   | empty   | Git revision reported by `/api/health` (build arg)                           |
-| `ROCKETT_DESCRIBE` | empty   | `git describe --tags --always --dirty` reported by `/api/health` (build arg) |
+| Variable                  | Default  | Purpose                                                                                                         |
+| ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `ROCKETT_ALLOWED_ORIGINS` | required | Comma-separated bare origins, such as `https://cad.example.com`; writes to `/api` from any other origin get 403 |
+| `ROCKETT_PORT`            | `8788`   | HTTP port inside the container                                                                                  |
+| `DATA_DIR`                | `/data`  | Persistent root                                                                                                 |
+| `ROCKETT_COMMIT`          | empty    | Git revision reported by `/api/health` (build arg)                                                              |
+| `ROCKETT_DESCRIBE`        | empty    | `git describe --tags --always --dirty` reported by `/api/health` (build arg)                                    |
 
 ## Security
 

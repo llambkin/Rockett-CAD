@@ -13,8 +13,13 @@
 ```bash
 npm ci
 npm run prepare
+export ROCKETT_ALLOWED_ORIGINS=http://localhost:5173
 npm run dev
 ```
+
+The server will not start without `ROCKETT_ALLOWED_ORIGINS`, and every write
+to `/api` needs an `Origin` in it. List bare origins separated by commas,
+such as `http://localhost:5173,https://cad.example.com`.
 
 `.npmrc` sets `ignore-scripts=true`, so `npm ci` skips lifecycle scripts.
 `npm run prepare` installs the husky git hooks.
