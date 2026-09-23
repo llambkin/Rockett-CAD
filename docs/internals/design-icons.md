@@ -1,6 +1,6 @@
 # Toolbar icons
 
-Status: proposal for Mark under DEC-405; CUST-020 and CUST-021 build it.
+Status: approved by Mark under DEC-405; CUST-020 and CUST-021 build it.
 `dist/preview/design-icons.html`, generated and not committed, shows the set at
 16, 20 and 24 px on the DEC-403 black theme, each layout and the menu.
 
