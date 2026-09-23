@@ -10,7 +10,11 @@ export const projects = [
       "client/test/**/*.test.ts",
       "modules/*/test/**/*.test.ts",
     ],
-    exclude: ["**/test/dom/**", "**/test/browser/**"],
+    exclude: [
+      "**/test/dom/**",
+      "**/test/browser/**",
+      "server/test/memorySoak.test.ts",
+    ],
     benchmark: { include: [] },
   },
   {
@@ -23,6 +27,13 @@ export const projects = [
     exclude: [],
     setupFiles: ["client/test/dom/setup.ts"],
     benchmark: { include: ["client/test/**/*.bench.ts"] },
+  },
+  {
+    name: "soak",
+    environment: "node",
+    include: ["server/test/memorySoak.test.ts"],
+    exclude: [],
+    benchmark: { include: [] },
   },
   {
     name: "browser",

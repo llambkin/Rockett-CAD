@@ -84,8 +84,8 @@ Benches over them:
   bytes, the stringify time is printed with it.
 
 The two many-feature full regenerations run 0 warm-up and 2 samples. Shapes
-are never freed yet (PERF-005 and PERF-006), and one full many-feature
-regeneration grows the kernel heap by about 700 MB, forced GC included. The
+are never freed yet (see Memory soak; PERF-006 fixes it), and one full
+many-feature regeneration grows the kernel heap by about 700 MB, forced GC included. The
 heap caps at 4 GB, so 12 regenerations in one process would abort. PERF-006
 can restore the default plan. For the same reason `evaluate cold many-body`,
 which grows the heap by about 100 MB per sample, lives in `payload.bench.ts`,
@@ -205,6 +205,122 @@ sketch objects and reruns `detectProfiles`; PERF-032 owns that. The texture
 budget is one mip chain per image, so any texture kept past eviction shows as
 a larger figure. The texture sync took a median of 1.46 to 1.69 ms, p95 1.79
 to 7.24 ms. The pick hover median is under DEC-202's 4 ms.
+
+## Memory soak
+
+`server/test/memorySoak.test.ts` sits in its own `soak` vitest project, so
+`npm test` and `npm run check` skip it. The default 300 cycles take about 6
+minutes.
+
+```sh
+npm test -w server -- memorySoak
+ROCKETT_SOAK_CYCLES=1000 npm test -w server -- memorySoak
+```
+
+It evaluates `manyFeaturePart(25)` cold, then runs three phases of the same
+cycle count on one engine:
+
+- `edit-tail`: alternates the last fillet's radius between 0.6 and 0.5 mm,
+  as the bench does, so each cycle regenerates one feature and tessellates
+  the new body.
+- `rewind`: evaluates 3 features before the end, then at the end, as the
+  timeline's temporary rewind does.
+- `tessellate`: calls `tessellateBody` on the unchanged tip body. The body
+  already carries its triangulation, so this is tessellation with no new
+  mesh.
+
+At cycle 0, every 100 cycles, the last cycle and after `dropEngine`, it
+forces GC twice (`--expose-gc` is set at runtime) and prints one `memory soak`
+JSON line: RSS, V8 heap used, WASM heap size, handle counts and the one-minute
+load average. The WASM heap never shrinks, so its size is the high-water mark,
+and use under the initial 100 MB does not show. The test asserts only that the
+samples exist and are finite. PERF-006 owns the budget.
+
+Handle counts come from wrapping every Embind class constructor, static
+function and method at start-up. A returned class handle is live until its
+`.delete()`. A live handle whose JS wrapper has been collected is orphaned:
+nothing can free its C++ object any more. `finalizedHandles` counts handles
+Embind's own finalizer freed. `.get()` on an OCCT handle returns a non-owning
+pointer that counts too, so the count is an upper bound.
+
+The soak uses 25 pockets because 100 cannot finish 300 cycles: edit-tail at
+`manyFeaturePart(100)` grows the heap 17.3 MB a cycle and would pass the 4 GB
+cap near cycle 190.
+
+### Curve
+
+One run on 2026-09-23, `class-a`, Node 24.12.0, `manyFeaturePart(25)` (77
+features, one body), 300 cycles a phase, 6 min 14 s. Load average 31.4 at the
+start and 20.7 to 44.4 at the samples. Reachable is live minus orphaned.
+
+| phase      | cycle | RSS MB | JS heap MB | WASM heap MB | live handles | reachable | tessellation entries |
+| ---------- | ----- | ------ | ---------- | ------------ | ------------ | --------- | -------------------- |
+| kernel     | 0     | 737    | 247        | 100          | 0            | 0         | 0                    |
+| cold       | 77    | 835    | 259        | 100          | 96,267       | 51        | 1                    |
+| edit-tail  | 100   | 1,666  | 335        | 613          | 2,475,067    | 51        | 64                   |
+| edit-tail  | 200   | 2,129  | 347        | 998          | 4,853,867    | 51        | 64                   |
+| edit-tail  | 300   | 2,577  | 339        | 1,479        | 7,232,667    | 51        | 64                   |
+| rewind     | 100   | 2,571  | 331        | 1,479        | 7,250,933    | 51        | 64                   |
+| rewind     | 200   | 2,572  | 331        | 1,479        | 7,250,933    | 51        | 64                   |
+| rewind     | 300   | 2,572  | 331        | 1,479        | 7,250,933    | 51        | 64                   |
+| tessellate | 100   | 3,026  | 379        | 1,576        | 9,152,633    | 51        | 64                   |
+| tessellate | 200   | 3,164  | 387        | 1,768        | 11,054,333   | 51        | 64                   |
+| tessellate | 300   | 3,302  | 395        | 1,865        | 12,956,033   | 51        | 64                   |
+| dropEngine | 0     | 3,302  | 330        | 1,865        | 12,956,033   | 0         | 0                    |
+
+`finalizedHandles` stayed 0 throughout. Growth per cycle:
+
+| phase      | handles                | WASM heap                      | top classes per cycle                                                                                   |
+| ---------- | ---------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| edit-tail  | 23,788 in both windows | 4.33 MB over cycles 100 to 300 | `TopoDS_Shape` 7,193, `gp_Pnt` 4,855, `gp_Dir` 4,855, `TopTools_ListOfShape` 3,481, `TopoDS_Edge` 1,212 |
+| rewind     | 18,266 once, then 0    | 0                              | the first rewind tessellates the body at feature 74 once                                                |
+| tessellate | 19,017 in every window | 1.29 MB over cycles 0 to 300   | `TopoDS_Shape` 4,923, `gp_Pnt` 4,855, `gp_Dir` 4,855, `TopTools_ListOfShape` 2,040, `TopoDS_Edge` 612   |
+
+The WASM heap grows in steps, so single windows read 3.85 and 4.81 MB for
+edit-tail and 0.97 to 1.92 MB for tessellate. The JS heap rose 76 MB while the
+tessellation cache filled to 64 entries, then stayed flat.
+
+One probe with the same code at `manyFeaturePart(100)` (302 features), load
+average 25.7 to 34.9: the cold build took 193 s, took the WASM heap from 100
+to 805 MB and left 1,227,792 live handles, 201 of them reachable. After 100
+edit-tail cycles the heap was 2,537 MB, RSS 4,714 MB and live handles
+10,656,592: 94,288 handles and 17.3 MB a cycle. The 64 cached payloads held
+277 MB of JS heap, 4.4 MB each. The run then failed with `Unknown Error: 24`,
+a thrown kernel exception, after 1,122 s and before cycle 200.
+
+### Findings
+
+- The kernel frees nothing. No handle was finalized out of 13 million.
+  Embind's `attachFinalizer` registers a handle only when `$$.smartPtr` is
+  set, and opencascade.js binds OCCT handles as value classes (`Handle_*`), so
+  no class handle has one. Forced GC collects JS wrappers only.
+- The engine cache is not what holds the handles. At the end 51 of 12,956,033
+  live handles were reachable; the rest were orphaned. The snapshots hold the
+  body and sketch shapes, and `engine.ts:67` (`this.snapshots.length =
+valid`), `invalidate()` and `dropEngine` drop them without `.delete()`. That
+  is one body a cycle in edit-tail: few handles, but the whole B-rep and its
+  triangulation. `dropEngine` deleted no handle; its 51 reachable handles
+  turned orphaned.
+- Transient handles leak on every path. Tessellation alone leaves 19,017 of
+  the 23,788 a cycle. `explore()` in `kernel.ts` never deletes `ex.Current()`,
+  and `faces()`, `edges()`, `vertices()` and `solids()` add a second copy per
+  subshape that callers rarely delete. `surfaceInfo` and `curveInfo` in
+  `tessellate.ts` leave the `gp_Pln` or `gp_Cylinder`, `gp_Ax1`, `gp_Pnt` and
+  `gp_Dir` of each face and circular edge, hence equal `gp_Pnt` and `gp_Dir`
+  counts. `listToArray` leaves each `First_1()` copy, and `computeEdgeNames`
+  and `computeVertexNames` leave every `FindKey` and `FindFromIndex` copy.
+- Each undeleted `TopoDS_Shape` holds a reference on its TShape, so these
+  handles keep old faces and edges alive after their body goes. Deleting the
+  engine's body shapes alone will not return the geometry.
+- Bytes per edit-tail cycle at 25 pockets: tessellating an unchanged body
+  costs 1.29 MB of the 4.33 MB. The other 3.0 MB is the fillet result, its
+  new faces and their triangulation, plus naming. This split is inferred from
+  two phases; the module exports no `mallinfo`.
+- The 64-entry tessellation cache is bounded JS memory and holds no handles:
+  76 MB at 25 pockets, 277 MB at 100. `dropEngine` returned 65 MB of it.
+- A rewind costs one tessellation of an uncached body, then nothing.
+- RSS outgrows the WASM and JS heaps: 3,302 MB at the end against 1,865 plus
+  330 MB. The remainder is not attributed.
 
 ## Cost table
 
