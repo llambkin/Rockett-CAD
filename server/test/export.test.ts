@@ -15,6 +15,7 @@ import { ProjectStore } from "../src/store/projectStore.js";
 import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
 import { LocalStorage } from "../src/store/storage.js";
+import { expectEvidence } from "./helpers/interopEvidence.js";
 
 let server: Server | undefined;
 let apiUrl = "";
@@ -137,6 +138,7 @@ describe("exporters", () => {
     expect(model).toContain("<vertex ");
     expect(model).toContain("<triangle ");
     expect(model).toContain('<item objectid="1"/>');
+    expectEvidence("box.3mf", data);
   });
 
   it("export request validation", async () => {

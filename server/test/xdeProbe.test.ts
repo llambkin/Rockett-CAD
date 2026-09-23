@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { beforeAll, expect, it } from "vitest";
 import { getKernel, initKernel, volumeOf } from "../src/geometry/kernel.js";
+import { expectEvidence } from "./helpers/interopEvidence.js";
 
 beforeAll(initKernel, 120_000);
 
@@ -103,6 +104,7 @@ it("round-trips named, coloured parts and an assembly through XDE", () => {
       k.IFSelect_ReturnStatus.IFSelect_RetDone,
     );
     const step: string = k.FS.readFile(stepFile, { encoding: "utf8" });
+    expectEvidence("xde-assembly.step", Buffer.from(step, "utf8"));
     expect(step.match(/PRODUCT\('[^']*'/g)).toEqual([
       "PRODUCT('Assembly'",
       "PRODUCT('Plate'",
@@ -216,6 +218,7 @@ it("round-trips named, coloured parts and an assembly through XDE", () => {
     ).toBe(true);
     const glb = Buffer.from(k.FS.readFile(glbFile) as Uint8Array);
     expect(glb.subarray(0, 4).toString("latin1")).toBe("glTF");
+    expectEvidence("xde-assembly.glb", glb);
     const json = JSON.parse(
       glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8"),
     );
