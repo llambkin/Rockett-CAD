@@ -47,8 +47,8 @@ export class ShapeMap<V> {
     return this.order.values();
   }
 
-  *values(): IterableIterator<V> {
-    for (const [, value] of this.order) yield value;
+  values(): IterableIterator<V> {
+    return Array.from(this.order.values(), ([, value]) => value).values();
   }
 
   release(): void {

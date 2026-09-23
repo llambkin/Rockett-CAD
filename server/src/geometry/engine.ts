@@ -59,10 +59,13 @@ function evaluateTracked(
   next: EvalState,
   feature: CadDocument["features"][number],
   earlier: CadDocument["features"],
+  sources: Sources,
 ): string | void {
   const made: ShapeMap<unknown>[] = [];
   try {
-    return trackShapeMaps(made, () => evaluateFeature(next, feature, earlier));
+    return trackShapeMaps(made, () =>
+      evaluateFeature(next, feature, earlier, sources),
+    );
   } finally {
     const held = new Set<ShapeMap<unknown>>(
       [...next.bodies.values()].map((b) => b.names),
