@@ -19,6 +19,8 @@ export const SAMPLES = {
   retainSamples: true,
 };
 
+export const SLOW_SAMPLES = { ...SAMPLES, iterations: 2, warmupIterations: 0 };
+
 export function record(name: string, result: BenchResult, iterations: number) {
   const samples = result.latency.samples ?? [];
   const p95 = samples[Math.ceil(samples.length * 0.95) - 1] ?? NaN;

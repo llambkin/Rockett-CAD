@@ -10,15 +10,13 @@ import {
 } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../src/geometry/engine.js";
-import { manyFeaturePart, record, SAMPLES } from "./helpers/perfFixtures.js";
+import {
+  manyFeaturePart,
+  record,
+  SAMPLES,
+  SLOW_SAMPLES,
+} from "./helpers/perfFixtures.js";
 
-const REGENERATION = {
-  iterations: 2,
-  warmupIterations: 0,
-  time: 0,
-  warmupTime: 0,
-  retainSamples: true,
-};
 const COLUMNS = [
   "metric",
   "fixture",
@@ -171,8 +169,8 @@ test("evaluate many-feature", { timeout: 1_800_000 }, async ({ bench }) => {
     await bench("evaluate cold many-feature", sync, () => {
       dropEngine(id);
       cold = engineFor(id).evaluate(doc);
-    }).run(REGENERATION),
-    REGENERATION.iterations,
+    }).run(SLOW_SAMPLES),
+    SLOW_SAMPLES.iterations,
   );
   expect(cold?.featureStatuses.filter((s) => s.status !== "ok")).toEqual([]);
   expect(cold?.bodies).toHaveLength(1);
@@ -188,7 +186,7 @@ test("evaluate many-feature", { timeout: 1_800_000 }, async ({ bench }) => {
   const runs = [
     ["evaluate noop many-feature", () => doc, SAMPLES],
     ["evaluate edit-tail", tail, SAMPLES],
-    ["evaluate edit-head", head, REGENERATION],
+    ["evaluate edit-head", head, SLOW_SAMPLES],
   ] as const;
   for (const [name, next, plan] of runs)
     record(

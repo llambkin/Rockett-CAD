@@ -8,6 +8,7 @@ npm run bench -w server              # every server bench
 npm run bench -w server -- evaluate  # evaluate.bench.ts only
 npm run bench -w server -- payload   # payload.bench.ts only
 npm run bench -w server -- importMesh # importMesh.bench.ts only
+npm run bench -w server -- stepImport # stepImport.bench.ts only
 ```
 
 Each run prints one line per bench with its sample count, median and p95, and
@@ -103,13 +104,33 @@ in one `importMesh` feature.
   2 samples. One profile of a 10k import took 1.8 s to read and sew, 1.2 s to
   name faces and 4.4 s to tessellate 10,000 faces and 15,000 edges.
 
+`stepImport.bench.ts` imports `largeStepFixture(355)` from
+`server/test/helpers/stepFixture.ts`: 355 boxes of 10 mm with a 1 mm fillet
+on all 12 edges, 15 mm apart in a 19 by 19 grid, each transferred through
+`STEPControl_Writer` as its own root. The STEP text is 24,975,842 bytes. The
+first build added about 160 s to a run under load, so the text is cached in
+the OS temp directory, keyed by the box count and a content version.
+
+- `import large STEP`: what the import route does after its size checks.
+  `readImport` reads the file once to validate it, then a fresh engine
+  evaluates the one-feature document, reading it again and tessellating
+  355 bodies. 0 warm-up and 2 samples.
+- `evaluate noop large STEP`: the same document again on the engine of the
+  last import sample.
+
+The no-op is not a cache hit. The tessellation cache holds 64 bodies
+(`engine.ts:133`) and evicts in insertion order, so with 355 bodies every
+lookup misses and each no-op re-tessellates every body. No row owns that cap
+yet; PERF-008's 5 ms target needs it lifted as well as its own key change.
+
 ## Baselines
 
 PERF-001 ranges span seven runs of `npm run bench -w server -- evaluate` on
 2026-09-23. PERF-002 ranges span two runs of each file on its own, `-- evaluate`
 then `-- payload`, on 2026-09-23 with a load average of 12 to 30 from other
 agents. EXCH-019 ranges span two runs of `-- importMesh` on 2026-09-23 with a
-load average of 8 to 18. Run the files one at a time when recording a baseline, because
+load average of 8 to 18. PERF-003 ranges span three runs of `-- stepImport` on
+2026-09-23 with a load average of 13 to 40. Run the files one at a time when recording a baseline, because
 `npm run bench -w server` runs every file at once.
 
 PERF-025 made the viewport deflection scale with the body. Its rows span two
@@ -119,20 +140,26 @@ and 10.02 s and p95 of 18.0 and 19.5 s. The 10 x 10 x 5 mm bodies now mesh at
 0.0075 mm instead of 0.08 mm, so the payload grew 7.1 percent, past its
 25,000,000 byte budget.
 
-| metric                     | fixture              | hardware class | runtime      | warm-up | repetitions | median                         | p95                            | budget                    | row      |
-| -------------------------- | -------------------- | -------------- | ------------ | ------- | ----------- | ------------------------------ | ------------------------------ | ------------------------- | -------- |
-| evaluate cold golden       | golden               | class-a        | Node 24.12.0 | 2       | 10          | 95 to 172 ms                   | 100 to 204 ms                  | median 250 ms, p95 400 ms | PERF-001 |
-| evaluate warm golden       | golden               | class-a        | Node 24.12.0 | 2       | 10          | 0.007 to 0.017 ms              | 0.033 to 0.107 ms              | median 1 ms, p95 5 ms     | PERF-001 |
-| evaluate cold many-feature | many-feature (n 100) | class-a        | Node 24.12.0 | 0       | 2           | 141.7 to 146.7 s               | 150.8 to 160.9 s               | median 200 s, p95 240 s   | PERF-002 |
-| evaluate noop many-feature | many-feature (n 100) | class-a        | Node 24.12.0 | 2       | 10          | 0.343 to 0.444 ms              | 0.352 to 0.762 ms              | median 5 ms, p95 20 ms    | PERF-002 |
-| evaluate edit-tail         | many-feature (n 100) | class-a        | Node 24.12.0 | 2       | 10          | 1.92 to 1.93 s                 | 2.22 to 3.80 s                 | median 3 s, p95 6 s       | PERF-002 |
-| evaluate edit-head         | many-feature (n 100) | class-a        | Node 24.12.0 | 0       | 2           | 151.9 to 161.5 s               | 157.7 to 165.0 s               | median 200 s, p95 240 s   | PERF-002 |
-| evaluate cold many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 9.37 to 9.58 s                 | 14.8 to 22.5 s                 | median 15 s, p95 30 s     | PERF-002 |
-| payload bytes many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 23,674,467 to 23,674,468 bytes | 23,674,467 to 23,674,468 bytes | at most 25,000,000 bytes  | PERF-002 |
-| import mesh 10k            | mesh-10k             | class-a        | Node 24.12.0 | 2       | 10          | 6.90 to 7.19 s                 | 13.6 to 14.7 s                 | median 10 s, p95 20 s     | EXCH-019 |
-| import mesh 100k           | mesh-100k            | class-a        | Node 24.12.0 | 0       | 2           | 59.2 to 65.4 s                 | 61.0 to 73.0 s                 | median 90 s, p95 120 s    | EXCH-019 |
-| evaluate cold many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 9.19 to 9.77 s                 | 9.35 to 19.1 s                 | median 15 s, p95 30 s     | PERF-025 |
-| payload bytes many-body    | many-body            | class-a        | Node 24.12.0 | 2       | 10          | 25,356,592 to 25,356,593 bytes | 25,356,592 to 25,356,593 bytes | at most 25,000,000 bytes  | PERF-025 |
+| metric                     | fixture                       | hardware class | runtime      | warm-up | repetitions | median                         | p95                            | budget                    | row      |
+| -------------------------- | ----------------------------- | -------------- | ------------ | ------- | ----------- | ------------------------------ | ------------------------------ | ------------------------- | -------- |
+| evaluate cold golden       | golden                        | class-a        | Node 24.12.0 | 2       | 10          | 95 to 172 ms                   | 100 to 204 ms                  | median 250 ms, p95 400 ms | PERF-001 |
+| evaluate warm golden       | golden                        | class-a        | Node 24.12.0 | 2       | 10          | 0.007 to 0.017 ms              | 0.033 to 0.107 ms              | median 1 ms, p95 5 ms     | PERF-001 |
+| evaluate cold many-feature | many-feature (n 100)          | class-a        | Node 24.12.0 | 0       | 2           | 141.7 to 146.7 s               | 150.8 to 160.9 s               | median 200 s, p95 240 s   | PERF-002 |
+| evaluate noop many-feature | many-feature (n 100)          | class-a        | Node 24.12.0 | 2       | 10          | 0.343 to 0.444 ms              | 0.352 to 0.762 ms              | median 5 ms, p95 20 ms    | PERF-002 |
+| evaluate edit-tail         | many-feature (n 100)          | class-a        | Node 24.12.0 | 2       | 10          | 1.92 to 1.93 s                 | 2.22 to 3.80 s                 | median 3 s, p95 6 s       | PERF-002 |
+| evaluate edit-head         | many-feature (n 100)          | class-a        | Node 24.12.0 | 0       | 2           | 151.9 to 161.5 s               | 157.7 to 165.0 s               | median 200 s, p95 240 s   | PERF-002 |
+| evaluate cold many-body    | many-body                     | class-a        | Node 24.12.0 | 2       | 10          | 9.37 to 9.58 s                 | 14.8 to 22.5 s                 | median 15 s, p95 30 s     | PERF-002 |
+| payload bytes many-body    | many-body                     | class-a        | Node 24.12.0 | 2       | 10          | 23,674,467 to 23,674,468 bytes | 23,674,467 to 23,674,468 bytes | at most 25,000,000 bytes  | PERF-002 |
+| import mesh 10k            | mesh-10k                      | class-a        | Node 24.12.0 | 2       | 10          | 6.90 to 7.19 s                 | 13.6 to 14.7 s                 | median 10 s, p95 20 s     | EXCH-019 |
+| import mesh 100k           | mesh-100k                     | class-a        | Node 24.12.0 | 0       | 2           | 59.2 to 65.4 s                 | 61.0 to 73.0 s                 | median 90 s, p95 120 s    | EXCH-019 |
+| evaluate cold many-body    | many-body                     | class-a        | Node 24.12.0 | 2       | 10          | 9.19 to 9.77 s                 | 9.35 to 19.1 s                 | median 15 s, p95 30 s     | PERF-025 |
+| payload bytes many-body    | many-body                     | class-a        | Node 24.12.0 | 2       | 10          | 25,356,592 to 25,356,593 bytes | 25,356,592 to 25,356,593 bytes | at most 25,000,000 bytes  | PERF-025 |
+| import large STEP          | large STEP (24,975,842 bytes) | class-a        | Node 24.12.0 | 0       | 2           | 65.3 to 71.8 s                 | 68.8 to 73.8 s                 | median 120 s, p95 180 s   | PERF-003 |
+| evaluate noop large STEP   | large STEP (24,975,842 bytes) | class-a        | Node 24.12.0 | 2       | 10          | 4.03 to 7.64 s                 | 5.04 to 26.2 s                 | median 5 ms, p95 20 ms    | PERF-003 |
+
+`evaluate noop large STEP` misses its budget by three orders of magnitude,
+for the tessellation cache reason above. The three runs gave p95 of 5.04,
+17.6 and 26.2 s.
 
 The last test in `evaluate.bench.ts` fails when a row of this table misses a
 column or leaves a cell empty. It runs with the benches, not with `npm test`.

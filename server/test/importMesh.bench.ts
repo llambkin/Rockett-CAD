@@ -2,22 +2,14 @@ import { beforeAll, expect, test } from "vitest";
 import { createEmptyDocument, type EvaluateResult } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../src/geometry/engine.js";
-import { record, SAMPLES } from "./helpers/perfFixtures.js";
+import { record, SAMPLES, SLOW_SAMPLES } from "./helpers/perfFixtures.js";
 import { binaryStl, sphere } from "./helpers/meshFixtures.js";
-
-const LARGE = {
-  iterations: 2,
-  warmupIterations: 0,
-  time: 0,
-  warmupTime: 0,
-  retainSamples: true,
-};
 
 beforeAll(initKernel, 120_000);
 
 test.for([
   { name: "import mesh 10k", slices: 100, rings: 51, plan: SAMPLES },
-  { name: "import mesh 100k", slices: 500, rings: 101, plan: LARGE },
+  { name: "import mesh 100k", slices: 500, rings: 101, plan: SLOW_SAMPLES },
 ])(
   "$name",
   { timeout: 1_800_000 },
