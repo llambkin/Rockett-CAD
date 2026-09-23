@@ -225,6 +225,7 @@ interface State {
   updateFeature: (fid: string, patch: Partial<Feature>) => Promise<void>;
   /** Live-preview edit: updates the feature WITHOUT pushing an undo entry. */
   updateFeaturePreview: (fid: string, patch: Partial<Feature>) => Promise<void>;
+  previewNewFeature: (feature: Feature) => Promise<void>;
   /** Revert any live-preview edits made since the dialog opened. */
   cancelPreview: () => Promise<void>;
   deleteFeature: (fid: string) => Promise<void>;
@@ -241,11 +242,28 @@ interface State {
   runMeasure: () => Promise<void>;
 }
 
+export function featurePatch(feature: Feature): Partial<Feature> {
+  const { id: _id, suppressed: _suppressed, ...patch } = feature as any;
+  if (!patch.name) delete patch.name;
+  return patch;
+}
+
 const preview: {
   seq: number;
   pending: { fid: string; patch: Partial<Feature> } | null;
   inFlight: Promise<void> | null;
-} = { seq: 0, pending: null, inFlight: null };
+  provisional: { id: string; added: boolean } | null;
+  error: string | null;
+} = { seq: 0, pending: null, inFlight: null, provisional: null, error: null };
+
+export function previewedFeature(s: {
+  mode: Mode;
+  document: CadDocument | null;
+}): Feature | undefined {
+  if (s.mode.name !== "dialog") return undefined;
+  const id = s.mode.editFeatureId ?? preview.provisional?.id;
+  return s.document?.features.find((f) => f.id === id);
+}
 
 async function sendPreviews(): Promise<void> {
   while (preview.pending) {
@@ -254,12 +272,28 @@ async function sendPreviews(): Promise<void> {
     const seq = preview.seq;
     const { document } = useStore.getState();
     if (!document) break;
+    const provisional =
+      preview.provisional?.id === fid ? preview.provisional : null;
     try {
-      const m = await api.updateFeature(document.id, fid, patch);
+      const m = await (provisional && !provisional.added
+        ? api.addFeature(document.id, { ...patch, id: fid } as Feature)
+        : api.updateFeature(
+            document.id,
+            fid,
+            provisional ? featurePatch(patch as Feature) : patch,
+          ));
+      if (provisional) provisional.added = true;
       if (seq === preview.seq)
-        useStore.setState({ document: m.document, evaluation: m.evaluation });
+        useStore.setState((s) => ({
+          document: m.document,
+          evaluation: m.evaluation,
+          error: s.error === preview.error ? null : s.error,
+        }));
     } catch (e: any) {
-      if (seq === preview.seq) useStore.setState({ error: e.message });
+      if (seq === preview.seq) {
+        preview.error = e.message;
+        useStore.setState({ error: e.message });
+      }
     }
   }
   preview.inFlight = null;
@@ -298,6 +332,7 @@ export const useStore = create<State>((set, get) => ({
   previewBaseline: null,
 
   async openProject(id) {
+    void get().cancelPreview();
     set({ busy: true, error: null });
     try {
       const { document } = await api.getProject(id);
@@ -312,6 +347,7 @@ export const useStore = create<State>((set, get) => ({
         mode: { name: "idle" },
         draftSketch: null,
         dialogParams: {},
+        previewBaseline: null,
         busy: false,
       });
       showPath(projectPath(id));
@@ -323,6 +359,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   closeProject() {
+    void get().cancelPreview();
     set({
       error: null,
       projectId: null,
@@ -334,6 +371,7 @@ export const useStore = create<State>((set, get) => ({
       redoStack: [],
       draftSketch: null,
       dialogParams: {},
+      previewBaseline: null,
       busy: false,
     });
   },
@@ -384,25 +422,32 @@ export const useStore = create<State>((set, get) => ({
     return preview.inFlight;
   },
 
+  async previewNewFeature(feature) {
+    if (!get().document) return;
+    preview.provisional ??= { id: feature.id, added: false };
+    return get().updateFeaturePreview(preview.provisional.id, feature);
+  },
+
   async cancelPreview() {
-    const { previewBaseline, projectId } = get();
+    const { previewBaseline } = get();
     const settling = endPreviews();
-    if (!previewBaseline || !projectId) {
-      set({ previewBaseline: null });
-      return;
-    }
+    preview.provisional = null;
+    if (!previewBaseline) return;
+    const current = () => get().projectId === previewBaseline.id;
     set({ busy: true });
     try {
       await settling;
-      const m = await api.replaceDocument(projectId, previewBaseline);
-      set({
-        document: m.document,
-        evaluation: m.evaluation,
-        previewBaseline: null,
-        busy: false,
-      });
+      const m = await api.replaceDocument(previewBaseline.id, previewBaseline);
+      if (current())
+        set({
+          document: m.document,
+          evaluation: m.evaluation,
+          previewBaseline: null,
+          busy: false,
+        });
     } catch (e: any) {
-      set({ error: e.message, previewBaseline: null, busy: false });
+      if (current())
+        set({ error: e.message, previewBaseline: null, busy: false });
     }
   },
 
@@ -860,7 +905,16 @@ export const useStore = create<State>((set, get) => ({
     if (!document) return;
     // name left empty → the server assigns Sketch1/Extrude2/… and persists
     // the per-type counter.
-    await get().mutate(() => api.addFeature(document.id, feature));
+    await get().mutate(() =>
+      preview.provisional?.added
+        ? api.updateFeature(
+            document.id,
+            preview.provisional.id,
+            featurePatch(feature),
+          )
+        : api.addFeature(document.id, feature),
+    );
+    preview.provisional = null;
   },
 
   async updateFeature(fid, patch) {

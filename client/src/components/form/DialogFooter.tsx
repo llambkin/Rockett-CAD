@@ -19,8 +19,11 @@ export function DialogFooter({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const canOk = onOk !== undefined && !pending && !okDisabled;
+  const latest = useRef({ onOk, onCancel, pending, canOk, escapeAnywhere });
+  latest.current = { onOk, onCancel, pending, canOk, escapeAnywhere };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const { onOk, onCancel, pending, canOk, escapeAnywhere } = latest.current;
       const target = e.target;
       const inside =
         target instanceof Node &&
@@ -34,11 +37,11 @@ export function DialogFooter({
         target instanceof HTMLInputElement &&
         target.type !== "file"
       )
-        onOk();
+        onOk?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
   return (
     <div className="dialog-actions" ref={ref}>
       {onOk && (

@@ -14,8 +14,14 @@ import type {
   ProfileRef,
 } from "@rockett/shared";
 import { newId } from "@rockett/shared";
-import { useStore, type DialogType, type Selection } from "../store";
+import {
+  featurePatch,
+  useStore,
+  type DialogType,
+  type Selection,
+} from "../store";
 import { api, saveDownload } from "../api";
+import { createLivePreview } from "../livePreview";
 import { viewportHandle } from "../viewportRef";
 import { DraggablePanel } from "./DraggablePanel";
 import {
@@ -28,6 +34,46 @@ import {
   SelectField,
 } from "./form/fields";
 import { DialogFooter } from "./form/DialogFooter";
+
+function need(cond: unknown, message: string): asserts cond {
+  if (!cond) throw new Error(message);
+}
+
+function attempt(build: (() => Feature) | null): Feature | null {
+  try {
+    return build?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function useLivePreview(editId: string | undefined, draft: Feature | null) {
+  const key = draft && JSON.stringify(featurePatch(draft));
+  const sent = useRef(editId ? key : null);
+  const [live] = useState(() =>
+    createLivePreview({
+      send: async (_id, feature) => {
+        const patch = featurePatch(feature as Feature);
+        sent.current = JSON.stringify(patch);
+        const s = useStore.getState();
+        if (!editId) return s.previewNewFeature(feature as Feature);
+        const stored: any = s.document?.features.find((f) => f.id === editId);
+        if (
+          Object.entries(patch).some(
+            ([k, v]) => JSON.stringify(stored?.[k]) !== JSON.stringify(v),
+          )
+        )
+          return s.updateFeaturePreview(editId, patch);
+      },
+    }),
+  );
+  useEffect(() => {
+    if (draft && key !== sent.current) live.dwell(draft.id, draft);
+    else live.cancel();
+  }, [key]);
+  useEffect(() => live.cancel, [live]);
+  return live;
+}
 
 export function FeatureDialog() {
   const mode = useStore((s) => s.mode);
@@ -145,36 +191,6 @@ function DialogBody({
   };
 
   const close = () => setMode({ name: "idle" });
-  /** Cancel: revert any live-preview edits (e.g. gizmo drags) then close. */
-  const cancel = () => {
-    void useStore.getState().cancelPreview();
-    close();
-  };
-
-  const commit = async (feature: Feature) => {
-    setPending(true);
-    try {
-      if (editId) {
-        const { id: _ignored, suppressed: _kept, ...patch } = feature as any;
-        await updateFeature(editId, patch);
-      } else {
-        await addFeature(feature);
-      }
-      close();
-    } catch {
-      // error toast already set by store
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const requireSel = (cond: boolean, msg: string): boolean => {
-    if (!cond) {
-      setError(msg);
-      return false;
-    }
-    return true;
-  };
 
   // Extrude: typing a negative distance means "into the part" — switch Join to
   // Cut automatically (Fusion-style); going positive again undoes only that
@@ -196,31 +212,16 @@ function DialogBody({
       setParams({ operation: "join", autoCut: false });
   }, [params.distance, dialog]);
 
-  // Move edits live-preview (fields or gizmo drag both go through params)
-  const movePreviewFirst = useRef(true);
-  useEffect(() => {
-    if (dialog !== "move" || !editId) return;
-    if (movePreviewFirst.current) {
-      movePreviewFirst.current = false;
-      return;
-    }
-    const t = window.setTimeout(() => {
-      void useStore.getState().updateFeaturePreview(editId, {
-        translation: [num("tx", 0), num("ty", 0), num("tz", 0)],
-      } as any);
-    }, 200);
-    return () => window.clearTimeout(t);
-  }, [params.tx, params.ty, params.tz, dialog, editId]);
-
   let title = "";
   let body: ReactElement | null = null;
-  let onOk: (() => Promise<void>) | null = null;
+  let build: (() => Feature) | null = null;
+  let panel: ReactElement | null = null;
 
   switch (dialog) {
     case "importStep": {
       const feature = document_?.features.find((f) => f.id === editId);
       const mesh = feature?.type === "importMesh";
-      return (
+      panel = (
         <DraggablePanel title={mesh ? "Imported mesh" : "Imported STEP"}>
           <div className="dialog-body">
             <p>
@@ -238,9 +239,10 @@ function DialogBody({
                 : "The originating CAD program’s sketches and feature history are not included in STEP files."}
             </p>
           </div>
-          <DialogFooter onCancel={cancel} cancelLabel="Close" escapeAnywhere />
+          <DialogFooter onCancel={close} cancelLabel="Close" escapeAnywhere />
         </DraggablePanel>
       );
+      break;
     }
     case "extrude": {
       title = "Extrude";
@@ -300,25 +302,16 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (
-          !requireSel(
-            profiles.length + faces.length > 0,
-            "Select at least one profile or planar face",
-          )
-        )
-          return;
-        if (
-          !requireSel(
-            num("distance", 10) !== 0,
-            "Extrude distance must be non-zero",
-          )
-        )
-          return;
+      build = () => {
+        need(
+          profiles.length + faces.length > 0,
+          "Select at least one profile or planar face",
+        );
+        need(num("distance", 10) !== 0, "Extrude distance must be non-zero");
         const stored = document_?.features.find((f) => f.id === editId) ?? {};
         const direction = p("direction", "normal");
         const startOffset = num("startOffset", 0);
-        await commit({
+        return {
           id: editId ?? newId("extrude"),
           type: "extrude",
           name: p("name", ""),
@@ -336,7 +329,7 @@ function DialogBody({
           }),
           direction,
           operation: p("operation", "join"),
-        });
+        };
       };
       break;
     }
@@ -378,10 +371,9 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(profiles.length > 0, "Select at least one profile"))
-          return;
-        await commit({
+      build = () => {
+        need(profiles.length > 0, "Select at least one profile");
+        return {
           id: editId ?? newId("revolve"),
           type: "revolve",
           name: p("name", ""),
@@ -390,7 +382,7 @@ function DialogBody({
           axis: axisRef(),
           angle: num("angle", 360),
           operation: p("operation", "join"),
-        });
+        };
       };
       break;
     }
@@ -417,16 +409,16 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(bodies.length > 0, "Select at least one body")) return;
-        await commit({
+      build = () => {
+        need(bodies.length > 0, "Select at least one body");
+        return {
           id: editId ?? newId("move"),
           type: "move",
           name: p("name", ""),
           suppressed: false,
           bodies: bodies.map((b) => b.bodyId),
           translation: [num("tx", 0), num("ty", 0), num("tz", 0)],
-        });
+        };
       };
       break;
     }
@@ -463,11 +455,10 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(profiles.length > 0, "Select a profile")) return;
-        if (!requireSel(!!p("pathSketchId", ""), "Choose a path sketch"))
-          return;
-        await commit({
+      build = () => {
+        need(profiles.length > 0, "Select a profile");
+        need(p("pathSketchId", ""), "Choose a path sketch");
+        return {
           id: editId ?? newId("sweep"),
           type: "sweep",
           name: p("name", ""),
@@ -475,7 +466,7 @@ function DialogBody({
           profiles: profileRefs(),
           pathSketchId: p("pathSketchId", ""),
           operation: p("operation", "join"),
-        });
+        };
       };
       break;
     }
@@ -500,22 +491,16 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (
-          !requireSel(
-            profiles.length >= 2,
-            "Select at least two section profiles",
-          )
-        )
-          return;
-        await commit({
+      build = () => {
+        need(profiles.length >= 2, "Select at least two section profiles");
+        return {
           id: editId ?? newId("loft"),
           type: "loft",
           name: p("name", ""),
           suppressed: false,
           sections: profileRefs(),
           operation: p("operation", "join"),
-        });
+        };
       };
       break;
     }
@@ -545,9 +530,9 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(profiles.length > 0, "Select profiles")) return;
-        await commit({
+      build = () => {
+        need(profiles.length > 0, "Select profiles");
+        return {
           id: editId ?? newId("emboss"),
           type: "emboss",
           name: p("name", ""),
@@ -555,7 +540,7 @@ function DialogBody({
           profiles: profileRefs(),
           depth: num("depth", 1),
           mode: p("embossMode", "emboss"),
-        });
+        };
       };
       break;
     }
@@ -587,9 +572,9 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(edges.length > 0, "Select at least one edge")) return;
-        await commit({
+      build = () => {
+        need(edges.length > 0, "Select at least one edge");
+        return {
           id: editId ?? newId("fillet"),
           type: "fillet",
           name: p("name", ""),
@@ -597,7 +582,7 @@ function DialogBody({
           edges: edgeRefs(),
           radius: num("radius", 2),
           tangentChain: p("tangentChain", true),
-        });
+        };
       };
       break;
     }
@@ -629,9 +614,9 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(edges.length > 0, "Select at least one edge")) return;
-        await commit({
+      build = () => {
+        need(edges.length > 0, "Select at least one edge");
+        return {
           id: editId ?? newId("chamfer"),
           type: "chamfer",
           name: p("name", ""),
@@ -639,7 +624,7 @@ function DialogBody({
           edges: edgeRefs(),
           distance: num("distance", 1),
           tangentChain: p("tangentChain", true),
-        });
+        };
       };
       break;
     }
@@ -660,16 +645,14 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        await commit({
-          id: editId ?? newId("shell"),
-          type: "shell",
-          name: p("name", ""),
-          suppressed: false,
-          openFaces: faceRefs(),
-          thickness: num("thickness", 2),
-        });
-      };
+      build = () => ({
+        id: editId ?? newId("shell"),
+        type: "shell",
+        name: p("name", ""),
+        suppressed: false,
+        openFaces: faceRefs(),
+        thickness: num("thickness", 2),
+      });
       break;
     }
     case "combine": {
@@ -698,15 +681,9 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (
-          !requireSel(
-            bodies.length >= 2,
-            "Select a target body then tool bodies",
-          )
-        )
-          return;
-        await commit({
+      build = () => {
+        need(bodies.length >= 2, "Select a target body then tool bodies");
+        return {
           id: editId ?? newId("combine"),
           type: "combine",
           name: p("name", ""),
@@ -715,7 +692,7 @@ function DialogBody({
           targetBody: bodies[0]!.bodyId,
           toolBodies: bodies.slice(1).map((b) => b.bodyId),
           keepTools: !!p("keepTools", false),
-        });
+        };
       };
       break;
     }
@@ -735,18 +712,18 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(bodies.length > 0, "Select a body to split")) return;
+      build = () => {
+        need(bodies.length > 0, "Select a body to split");
         const tool = planeRef();
-        if (!requireSel(!!tool, "Select a splitting plane")) return;
-        await commit({
+        need(tool, "Select a splitting plane");
+        return {
           id: editId ?? newId("split"),
           type: "splitBody",
           name: p("name", ""),
           suppressed: false,
           body: bodies[0]!.bodyId,
-          tool: tool!,
-        });
+          tool,
+        };
       };
       break;
     }
@@ -767,16 +744,16 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(faces.length > 0, "Select faces")) return;
-        await commit({
+      build = () => {
+        need(faces.length > 0, "Select faces");
+        return {
           id: editId ?? newId("offsetf"),
           type: "offsetFace",
           name: p("name", ""),
           suppressed: false,
           faces: faceRefs(),
           distance: num("distance", 5),
-        });
+        };
       };
       break;
     }
@@ -797,19 +774,19 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(bodies.length > 0, "Select bodies to mirror")) return;
+      build = () => {
+        need(bodies.length > 0, "Select bodies to mirror");
         const plane = planeRef();
-        if (!requireSel(!!plane, "Select a mirror plane")) return;
-        await commit({
+        need(plane, "Select a mirror plane");
+        return {
           id: editId ?? newId("mirror"),
           type: "mirror",
           name: p("name", ""),
           suppressed: false,
           bodies: bodies.map((b) => b.bodyId),
-          plane: plane!,
+          plane,
           combine: p("combine", true),
-        });
+        };
       };
       break;
     }
@@ -854,13 +831,13 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(bodies.length > 0, "Select bodies to pattern")) return;
+      build = () => {
+        need(bodies.length > 0, "Select bodies to pattern");
         const direction =
           p("axisSource", "origin") === "edge" && edges.length > 0
             ? ({ kind: "edge", edge: edgeRefs()[0]! } as const)
             : ({ kind: "axis", axis: p("axis", "X") } as const);
-        await commit({
+        return {
           id: editId ?? newId("lpat"),
           type: "linearPattern",
           name: p("name", ""),
@@ -870,7 +847,7 @@ function DialogBody({
           count: Math.round(num("count", 3)),
           spacing: num("spacing", 20),
           combine: !!p("combine", false),
-        });
+        };
       };
       break;
     }
@@ -903,9 +880,9 @@ function DialogBody({
           />
         </>
       );
-      onOk = async () => {
-        if (!requireSel(bodies.length > 0, "Select bodies to pattern")) return;
-        await commit({
+      build = () => {
+        need(bodies.length > 0, "Select bodies to pattern");
+        return {
           id: editId ?? newId("cpat"),
           type: "circularPattern",
           name: p("name", ""),
@@ -915,7 +892,7 @@ function DialogBody({
           count: Math.round(num("count", 6)),
           totalAngle: num("totalAngle", 360),
           combine: !!p("combine", false),
-        });
+        };
       };
       break;
     }
@@ -947,7 +924,7 @@ function DialogBody({
           )}
         </>
       );
-      onOk = async () => {
+      build = () => {
         const refs: PlaneRef[] = [
           ...planes.map((x) => x.ref),
           ...faces.map((f) => ({
@@ -959,61 +936,74 @@ function DialogBody({
             },
           })),
         ];
-        if (p("method", "offset") === "midplane") {
-          if (
-            !requireSel(
-              refs.length >= 2,
-              "Select two references for a midplane",
-            )
-          )
-            return;
-          await commit({
-            id: editId ?? newId("plane"),
-            type: "constructionPlane",
-            name: p("name", ""),
-            suppressed: false,
-            method: { kind: "midplane", a: refs[0]!, b: refs[1]! },
-          });
-        } else {
-          if (!requireSel(refs.length >= 1, "Select a base plane or face"))
-            return;
-          await commit({
-            id: editId ?? newId("plane"),
-            type: "constructionPlane",
-            name: p("name", ""),
-            suppressed: false,
-            method: {
-              kind: "offset",
-              base: refs[0]!,
-              distance: num("distance", 10),
-            },
-          });
-        }
+        const midplane = p("method", "offset") === "midplane";
+        if (midplane)
+          need(refs.length >= 2, "Select two references for a midplane");
+        else need(refs.length >= 1, "Select a base plane or face");
+        return {
+          id: editId ?? newId("plane"),
+          type: "constructionPlane",
+          name: p("name", ""),
+          suppressed: false,
+          method: midplane
+            ? { kind: "midplane", a: refs[0]!, b: refs[1]! }
+            : { kind: "offset", base: refs[0]!, distance: num("distance", 10) },
+        };
       };
       break;
     }
     case "referenceImage": {
-      title = "Reference Image";
-      return (
+      panel = (
         <ReferenceImagePanel
           editId={editId}
           planeRef={planeRef}
           onClose={close}
         />
       );
+      break;
     }
     case "export": {
-      title = "Export";
-      return <ExportPanel onClose={close} />;
+      panel = <ExportPanel onClose={close} />;
+      break;
     }
   }
+
+  const live = useLivePreview(editId, attempt(build));
+  useEffect(
+    () => () => {
+      void useStore.getState().cancelPreview();
+    },
+    [],
+  );
+  if (panel) return panel;
+
+  const ok = async () => {
+    let feature: Feature;
+    try {
+      feature = build!();
+    } catch (e: any) {
+      setError(e.message);
+      return;
+    }
+    live.cancel();
+    setPending(true);
+    try {
+      if (editId) await updateFeature(editId, featurePatch(feature));
+      else await addFeature(feature);
+      close();
+    } catch {
+      // error toast already set by store
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <DraggablePanel title={title}>
       <div className="dialog-body">{body}</div>
       <DialogFooter
-        onOk={() => void onOk?.()}
-        onCancel={cancel}
+        onOk={() => void ok()}
+        onCancel={close}
         pending={pending}
         escapeAnywhere
       />
@@ -1054,25 +1044,15 @@ function ReferenceImagePanel({
   const [v, setV] = useState<number>(existing?.transform.v ?? 0);
   const [calibrating, setCalibrating] = useState(false);
 
-  // Editing an existing canvas live-previews scale/rotation/position/opacity
-  // in the viewport (debounced); Cancel reverts, OK commits as one undo step.
-  const firstPreview = useRef(true);
-  useEffect(() => {
-    if (!existing) return;
-    if (firstPreview.current) {
-      firstPreview.current = false;
-      return;
-    }
-    const t = window.setTimeout(() => {
-      void useStore.getState().updateFeaturePreview(editId!, {
-        opacity,
-        transform: { u, v, rotation, scale },
-      } as any);
-    }, 150);
-    return () => window.clearTimeout(t);
-  }, [opacity, scale, rotation, u, v]);
+  const live = useLivePreview(
+    editId,
+    existing
+      ? { ...existing, opacity, transform: { u, v, rotation, scale } }
+      : null,
+  );
 
   const onOk = async () => {
+    live.cancel();
     setPending(true);
     try {
       if (existing) {
@@ -1218,10 +1198,7 @@ function ReferenceImagePanel({
       </div>
       <DialogFooter
         onOk={() => void onOk()}
-        onCancel={() => {
-          void useStore.getState().cancelPreview();
-          onClose();
-        }}
+        onCancel={onClose}
         pending={pending}
         escapeAnywhere
       />

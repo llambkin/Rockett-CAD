@@ -31,7 +31,7 @@ import { RevolveGizmo } from "../three/RevolveGizmo";
 import { GizmoSlot } from "../three/gizmoSlot";
 import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
-import { useStore, type Selection } from "../store";
+import { previewedFeature, useStore, type Selection } from "../store";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import * as tools from "../sketchTools";
@@ -542,7 +542,7 @@ export function ViewportView() {
     if (!src) return null;
     const s = useStore.getState();
     // when editing, the real geometry live-updates — skip the ghost preview
-    if (s.mode.name === "dialog" && s.mode.editFeatureId) {
+    if (previewedFeature(s)) {
       src.profile = undefined;
       src.faceGhost = undefined;
     }
@@ -599,7 +599,7 @@ export function ViewportView() {
     ];
     // bodies already sit at +t when editing (feature applied) — the gizmo
     // base is the pre-move position
-    const editing = !!s.mode.editFeatureId;
+    const shown = previewedFeature(s);
     const center = new THREE.Vector3();
     for (const b of bodies) {
       center.add(
@@ -611,9 +611,10 @@ export function ViewportView() {
       );
     }
     center.divideScalar(bodies.length);
-    if (editing) center.sub(new THREE.Vector3(...t));
+    if (shown?.type === "move")
+      center.sub(new THREE.Vector3(...shown.translation));
     // ghost meshes only for NEW moves; edits live-update the real geometry
-    const ghosts = editing
+    const ghosts = shown
       ? []
       : bodies.map((b) => ({ positions: b.positions, indices: b.indices }));
     return new MoveGizmo(vp, center, t, ghosts);
@@ -719,7 +720,7 @@ export function ViewportView() {
     if (
       s.mode.name !== "dialog" ||
       s.mode.dialog !== "revolve" ||
-      s.mode.editFeatureId // edits regenerate the real body on OK
+      previewedFeature(s) // the previewed body is already real
     ) {
       return;
     }
@@ -2603,33 +2604,18 @@ export function ViewportView() {
     !!mode.editFeatureId &&
     (mode.dialog === "extrude" || mode.dialog === "revolve");
 
-  // Adding or removing a region while editing re-previews the feature, so the
-  // effect of each pick shows at once.
   useEffect(() => {
-    if (!editingProfiles || mode.name !== "dialog") return;
+    if (!editingProfiles || mode.name !== "dialog" || peekRef.current) return;
     const editId = mode.editFeatureId!;
     const refs = selectionRefs(mode.dialog, selection);
     if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
-    const current = document_?.features.find((f) => f.id === editId) as any;
-    const key = (arr: any[] | undefined, f: (x: any) => string) =>
-      JSON.stringify((arr ?? []).map(f).sort());
-    const same =
-      current &&
-      !current.suppressed &&
-      key(refs.profiles, (p) => `${p.sketchId}:${p.profileId}`) ===
-        key(current.profiles, (p) => `${p.sketchId}:${p.profileId}`) &&
-      key(refs.faces, (x) => `${x.bodyId}:${x.faceName}`) ===
-        key(current.faces, (x) => `${x.bodyId}:${x.faceName}`);
-    if (same) return;
-    const t = window.setTimeout(() => {
-      void useStore.getState().updateFeaturePreview(editId, {
-        ...refs,
-        // while Ctrl/⌘ is held the feature stays hidden until release
-        ...(peekRef.current ? {} : { suppressed: false }),
-      } as any);
-    }, 150);
-    return () => window.clearTimeout(t);
-  }, [selection, mode, editingProfiles, document_]);
+    const current = document_?.features.find((f) => f.id === editId);
+    if (!current?.suppressed) return;
+    void useStore.getState().updateFeaturePreview(editId, {
+      ...refs,
+      suppressed: false,
+    } as any);
+  }, [selection, editingProfiles]);
 
   // Hold Ctrl/⌘ while editing to see the model WITHOUT this feature — its
   // regions come back into view for picking — and release to see it with the

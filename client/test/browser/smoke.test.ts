@@ -112,8 +112,16 @@ it("creates, edits, extrudes, rolls back, exports and reopens a project", async 
   await page.locator(".tree-item", { hasText: "Sketch1" }).click();
   await page.getByRole("button", { name: "Extrude", exact: true }).click();
   await page.getByLabel("Distance (mm)").fill("10");
-  await page.getByRole("button", { name: "OK", exact: true }).click();
   await bodiesHeader().getByText("Bodies (1)").waitFor();
+  await expect.poll(() => chips().count()).toBe(2);
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await expect.poll(() => chips().count()).toBe(2);
+
+  await page.locator(".tree-item", { hasText: "Sketch1" }).click();
+  await page.getByRole("button", { name: "Extrude", exact: true }).click();
+  await page.getByLabel("Distance (mm)").fill("5");
+  await expect.poll(() => chips().count()).toBe(3);
+  await page.keyboard.press("Escape");
   await expect.poll(() => chips().count()).toBe(2);
 
   const solid = await api<EvaluateResult>(`/projects/${id}/evaluate`);

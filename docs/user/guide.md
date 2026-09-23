@@ -163,6 +163,10 @@ confirm button and Escape inside a panel presses Cancel. Escape from anywhere
 cancels an open feature dialog, reverts its live preview and clears the
 selection.
 
+A feature dialog previews its result in the model 0.3 seconds after your last
+change, for a new feature as well as an edit. OK keeps the previewed feature as
+one undo step; Cancel, Escape or closing the dialog removes it.
+
 Errors remain visible until dismissed or the next operation starts, and their
 text can be selected and copied.
 

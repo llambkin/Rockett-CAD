@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { createLivePreview } from "../src/livePreview";
+import { createLivePreview, PREVIEW_DWELL_MS } from "../src/livePreview";
 
 function setup() {
   let clock = 0;
@@ -56,4 +56,33 @@ it("commit always sends the last patch", () => {
   live.commit("f", { distance: 3 } as any);
   expect(send).toHaveBeenCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith("f", { distance: 3 });
+});
+
+it("sends one dwell preview with the last of five quick inputs", () => {
+  vi.useFakeTimers();
+  const send = vi.fn(async () => {});
+  const live = createLivePreview({ send });
+  for (let i = 1; i <= 5; i++) {
+    live.dwell("f", { distance: i } as any);
+    vi.advanceTimersByTime(PREVIEW_DWELL_MS - 1);
+  }
+  expect(send).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(send).toHaveBeenCalledOnce();
+  expect(send).toHaveBeenCalledWith("f", { distance: 5 });
+  vi.useRealTimers();
+});
+
+it("cancel and commit drop a pending dwell", () => {
+  vi.useFakeTimers();
+  const send = vi.fn(async () => {});
+  const live = createLivePreview({ send });
+  live.dwell("f", { distance: 1 } as any);
+  live.cancel();
+  live.dwell("f", { distance: 2 } as any);
+  live.commit("f", { distance: 3 } as any);
+  vi.advanceTimersByTime(PREVIEW_DWELL_MS * 2);
+  expect(send).toHaveBeenCalledOnce();
+  expect(send).toHaveBeenCalledWith("f", { distance: 3 });
+  vi.useRealTimers();
 });
