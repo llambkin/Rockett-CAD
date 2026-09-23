@@ -10,6 +10,8 @@ export * from "./projection.js";
 export * from "./sketchModify.js";
 export * from "./sketchOffsets.js";
 export * from "./importDxf.js";
+export * from "./importSvg.js";
+export type { SketchImport } from "./sketchBuilder.js";
 export * from "./meshFormat.js";
 export * from "./tolerance.js";
 export * from "./units.js";
