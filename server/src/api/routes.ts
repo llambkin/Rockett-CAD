@@ -505,22 +505,32 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/export",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const format = req.body?.format ?? "stl";
+      const body = req.body ?? {};
+      record(body, "export request");
+      const { format = "stl", bodyIds, quality = 0.05 } = body;
       if (typeof format !== "string" || !Object.hasOwn(EXPORTERS, format)) {
         throw new ValidationError(
           `unsupported export format; supported: ${Object.keys(EXPORTERS).join(", ")}`,
         );
       }
       const exporter = EXPORTERS[format as ExportRequest["format"]];
-      const quality = Math.min(
-        Math.max(Number(req.body?.quality) || 0.05, 0.001),
-        1,
-      );
-      const requestedIds: string[] = Array.isArray(req.body?.bodyIds)
-        ? req.body.bodyIds.map(String)
-        : [];
+      if (typeof quality !== "number" || !Number.isFinite(quality))
+        throw new ValidationError("export quality must be a finite number");
+      if (!Array.isArray(bodyIds))
+        throw new ValidationError("export bodyIds must be an array");
+      const nonStrings = bodyIds.filter((id) => typeof id !== "string");
+      if (nonStrings.length)
+        throw new ValidationError(
+          `export bodyIds must be strings: ${nonStrings.map(String).join(", ")}`,
+        );
+      const requestedIds: string[] = bodyIds;
       const engine = engineFor(doc.id);
       const state = engine.stateAt(doc);
+      const missing = requestedIds.filter((id) => !state.bodies.has(id));
+      if (missing.length)
+        throw new ValidationError(
+          `export bodies not in the model: ${missing.join(", ")}`,
+        );
       const chosen = [...state.bodies.values()].filter((b) => {
         if (requestedIds.length > 0) return requestedIds.includes(b.bodyId);
         return doc.bodyMeta[b.bodyId]?.visible !== false;
@@ -530,10 +540,14 @@ export function createApiRouter(store: ProjectStore): Router {
       }
       const safeName =
         doc.name.replace(/[^\w-]+/g, "_").slice(0, 60) || "model";
-      const data = exporter.write(chosen, doc, quality);
+      const data = exporter.write(
+        chosen,
+        doc,
+        Math.min(Math.max(quality, 0.001), 1),
+      );
       const fileName = `${safeName}.${format}`;
       res.setHeader("Content-Type", exporter.mime);
-      if (req.body?.retain) {
+      if (body.retain) {
         await store.saveExport(doc.id, fileName, data);
       }
       res.setHeader(

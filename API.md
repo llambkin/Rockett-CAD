@@ -62,6 +62,12 @@ source is embedded in the document; uploads that take the document beyond
 | `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                              |
 | `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = all visible bodies. `retain: true` also stores a copy under the project's `exports/` dir |
 
+Export returns 400 when `bodyIds` is missing or not an array, when an id is
+not a string, or when an id is not a body of the evaluated model; the error
+names the offending ids. `format` defaults to `stl`, which is always binary.
+`quality` is the tessellation tolerance in mm: a finite number, default 0.05,
+clamped to 0.001 to 1; anything else returns 400.
+
 ## Assets (reference images)
 
 | Method & path                       | Body              | Notes                                                 |

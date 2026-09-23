@@ -140,7 +140,6 @@ export interface ExportRequest {
   bodyIds: string[]; // empty = all visible bodies
   /** Linear tessellation tolerance in mm (default 0.05). */
   quality?: number;
-  binary?: boolean;
   /** Also store a copy under the project's exports/ directory. */
   retain?: boolean;
 }

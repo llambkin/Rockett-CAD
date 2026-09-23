@@ -1,14 +1,40 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import express from "express";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
 import { unzipSync, strFromU8 } from "fflate";
 import type { ExtrudeFeature } from "@rockett/shared";
 import { createEmptyDocument } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
 import { write3mf, writeStl } from "../src/geometry/exporters.js";
+import { ProjectStore } from "../src/store/projectStore.js";
+import { createApiRouter } from "../src/api/routes.js";
+
+let server: Server | undefined;
+let apiUrl = "";
+let store: ProjectStore;
 
 beforeAll(async () => {
   await initKernel();
+  store = new ProjectStore(
+    await fs.mkdtemp(path.join(os.tmpdir(), "rockett-export-")),
+  );
+  await store.init();
+  const app = express();
+  app.use("/api", createApiRouter(store));
+  const listening = app.listen(0);
+  await new Promise((resolve) => listening.once("listening", resolve));
+  server = listening;
+  apiUrl = `http://127.0.0.1:${(listening.address() as AddressInfo).port}/api`;
 }, 120_000);
+
+afterAll(() => {
+  server?.close();
+});
 
 function boxDoc(id: string) {
   const doc = createEmptyDocument(id, "Box");
@@ -110,5 +136,46 @@ describe("exporters", () => {
     expect(model).toContain("<vertex ");
     expect(model).toContain("<triangle ");
     expect(model).toContain('<item objectid="1"/>');
+  });
+
+  it("export request validation", async () => {
+    const { id } = await store.create("Box");
+    const doc = boxDoc(id);
+    const result = engineFor(id).evaluate(doc, 1);
+    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
+      result.sketches[0].profiles[0].id;
+    await store.save(doc);
+    const post = (body: unknown) =>
+      fetch(`${apiUrl}/projects/${id}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const rejects = async (body: unknown, error: RegExp) => {
+      const res = await post(body);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(error);
+    };
+
+    await rejects({ format: "stl" }, /bodyIds must be an array/);
+    await rejects({ format: "stl", bodyIds: "b:ext1" }, /bodyIds must be/);
+    await rejects({ format: "stl", bodyIds: [5, null] }, /strings: 5, null/);
+    await rejects(
+      { format: "stl", bodyIds: ["b:ext1", "b:gone", "b:lost"] },
+      /not in the model: b:gone, b:lost/,
+    );
+    await rejects(
+      { format: "stl", bodyIds: [], quality: "fine" },
+      /quality must be a finite number/,
+    );
+
+    const res = await post({
+      format: "stl",
+      bodyIds: ["b:ext1"],
+      quality: 0.1,
+    });
+    expect(res.status).toBe(200);
+    const stl = Buffer.from(await res.arrayBuffer());
+    expect(stl.readUInt32LE(80)).toBeGreaterThanOrEqual(12);
   });
 });
