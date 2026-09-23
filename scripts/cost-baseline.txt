@@ -11,8 +11,9 @@ client/src/components/ModelTree.tsx ModelTree 377
 client/src/components/SketchOffsetPanel.tsx OffsetBody 252
 client/src/components/Timeline.tsx Timeline 152
 client/src/components/Timeline.tsx openFeatureEditor 175
-client/src/components/Toolbar.tsx SketchToolbar 160
+client/src/components/Toolbar.tsx SketchToolbar 198
 client/src/components/Toolbar.tsx Toolbar 132
+client/src/components/Toolbar.tsx applyConstraint 110
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 138
 client/src/components/ViewportView.tsx 3101
 client/src/components/ViewportView.tsx ViewportView 2875

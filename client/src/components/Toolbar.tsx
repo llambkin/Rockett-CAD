@@ -66,7 +66,11 @@ const CONSTRAINTS: Array<{
 }> = [
   { type: "horizontal", label: "―", title: "Horizontal" },
   { type: "vertical", label: "|", title: "Vertical" },
-  { type: "coincident", label: "⊙", title: "Coincident (2 points)" },
+  {
+    type: "coincident",
+    label: "⊙",
+    title: "Coincident (2 points, or a point on a line, circle or arc)",
+  },
   { type: "parallel", label: "∥", title: "Parallel (2 lines)" },
   { type: "perpendicular", label: "⊥", title: "Perpendicular (2 lines)" },
   { type: "tangent", label: "⌒", title: "Tangent (line + circle)" },
@@ -330,10 +334,48 @@ function SketchToolbar() {
       case "vertical":
         if (lines.length >= 1) c = { id, type: "vertical", line: lines[0] };
         break;
-      case "coincident":
+      case "coincident": {
+        const [point] = points;
+        const [circle] = circleLikes;
+        const [line] = lines;
+        const own = (curve: string) => {
+          const e = find(curve);
+          if (e?.kind === "line") return [e.p1, e.p2];
+          if (e?.kind === "circle") return [e.center];
+          if (e?.kind === "arc") return [e.center, e.start, e.end];
+          return [];
+        };
+        const at = (p: string) => {
+          const e = find(p);
+          return e?.kind === "point" ? e : { x: NaN, y: NaN };
+        };
+        const offCurve = (p: string) => {
+          const e = find(circle);
+          if (e?.kind !== "circle" && e?.kind !== "arc") return Infinity;
+          const o = at(e.center);
+          const r =
+            e.kind === "circle"
+              ? e.radius
+              : Math.hypot(at(e.start).x - o.x, at(e.start).y - o.y);
+          return Math.abs(Math.hypot(at(p).x - o.x, at(p).y - o.y) - r);
+        };
         if (points.length >= 2)
           c = { id, type: "coincident", a: points[0], b: points[1] };
+        else if (point && circle && !own(circle).includes(point))
+          c = { id, type: "pointOnCircle", point, circle };
+        else if (point && line && !own(line).includes(point))
+          c = { id, type: "pointOnLine", point, line };
+        else if (!point && line && circle)
+          c = {
+            id,
+            type: "pointOnCircle",
+            point: own(line).reduce((a, b) =>
+              offCurve(b) < offCurve(a) ? b : a,
+            ),
+            circle,
+          };
         break;
+      }
       case "parallel":
         if (lines.length >= 2)
           c = { id, type: "parallel", a: lines[0], b: lines[1] };
