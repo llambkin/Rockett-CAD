@@ -110,7 +110,7 @@ function buildProblem(input: SolveInput): Problem {
       const fx = p.x;
       return () => fx;
     }
-    return (x: Float64Array) => x[vi];
+    return (x: Float64Array) => x[vi]!;
   };
   const py = (id: string) => {
     const p = points.get(id)!;
@@ -119,7 +119,7 @@ function buildProblem(input: SolveInput): Problem {
       const fy = p.y;
       return () => fy;
     }
-    return (x: Float64Array) => x[vi + 1];
+    return (x: Float64Array) => x[vi + 1]!;
   };
   const radius = (id: string) => {
     const c = circles.get(id);
@@ -129,7 +129,7 @@ function buildProblem(input: SolveInput): Problem {
         const r = c.radius;
         return () => r;
       }
-      return (x: Float64Array) => x[vi];
+      return (x: Float64Array) => x[vi]!;
     }
     const a = arcs.get(id);
     if (a) {
@@ -250,8 +250,8 @@ function buildProblem(input: SolveInput): Problem {
           residuals.push((x) => {
             const d = Math.hypot(B.cx(x) - A.cx(x), B.cy(x) - A.cy(x));
             const ext = Math.abs(d - (ra(x) + rb(x)));
-            const int_ = Math.abs(d - Math.abs(ra(x) - rb(x)));
-            return ext <= int_
+            const internal = Math.abs(d - Math.abs(ra(x) - rb(x)));
+            return ext <= internal
               ? d - (ra(x) + rb(x))
               : d - Math.abs(ra(x) - rb(x));
           });
@@ -381,8 +381,8 @@ function buildProblem(input: SolveInput): Problem {
     const vi = pointVarIndex.get(input.drag.pointId);
     if (vi !== undefined && vi >= 0) {
       const { x: tx, y: ty } = { x: input.drag.x, y: input.drag.y };
-      residuals.push((x) => DRAG_WEIGHT * (x[vi] - tx));
-      residuals.push((x) => DRAG_WEIGHT * (x[vi + 1] - ty));
+      residuals.push((x) => DRAG_WEIGHT * (x[vi]! - tx));
+      residuals.push((x) => DRAG_WEIGHT * (x[vi + 1]! - ty));
     }
   }
 
@@ -391,12 +391,12 @@ function buildProblem(input: SolveInput): Problem {
       if (e.kind === "point") {
         const vi = pointVarIndex.get(e.id)!;
         if (vi >= 0) {
-          e.x = x[vi];
-          e.y = x[vi + 1];
+          e.x = x[vi]!;
+          e.y = x[vi + 1]!;
         }
       } else if (e.kind === "circle") {
         const vi = radiusVarIndex.get(e.id)!;
-        if (vi >= 0) e.radius = Math.abs(x[vi]);
+        if (vi >= 0) e.radius = Math.abs(x[vi]!);
       }
     }
   };
@@ -414,8 +414,14 @@ export class SolverModelError extends Error {}
 
 function evalResiduals(res: Residual[], x: Float64Array): Float64Array {
   const out = new Float64Array(res.length);
-  for (let i = 0; i < res.length; i++) out[i] = res[i](x);
+  for (let i = 0; i < res.length; i++) out[i] = res[i]!(x);
   return out;
+}
+
+function checkLength(values: { length: number }, length: number): void {
+  if (values.length !== length) {
+    throw new RangeError(`expected length ${length}, got ${values.length}`);
+  }
 }
 
 function numericJacobian(
@@ -423,18 +429,19 @@ function numericJacobian(
   x: Float64Array,
   r0: Float64Array,
 ): Float64Array[] {
+  checkLength(r0, res.length);
   const m = res.length;
   const n = x.length;
   const J: Float64Array[] = [];
   for (let i = 0; i < m; i++) J.push(new Float64Array(n));
   const xp = Float64Array.from(x);
   for (let j = 0; j < n; j++) {
-    const h = 1e-6 * Math.max(1, Math.abs(x[j]));
-    xp[j] = x[j] + h;
+    const h = 1e-6 * Math.max(1, Math.abs(x[j]!));
+    xp[j] = x[j]! + h;
     for (let i = 0; i < m; i++) {
-      J[i][j] = (res[i](xp) - r0[i]) / h;
+      J[i]![j] = (res[i]!(xp) - r0[i]!) / h;
     }
-    xp[j] = x[j];
+    xp[j] = x[j]!;
   }
   return J;
 }
@@ -446,6 +453,8 @@ function solveNormal(
   lambda: number,
   n: number,
 ): Float64Array | null {
+  checkLength(r, J.length);
+  for (const row of J) checkLength(row, n);
   // Build A = JᵀJ and g = Jᵀr
   const A: Float64Array[] = [];
   for (let i = 0; i < n; i++) A.push(new Float64Array(n + 1));
@@ -453,46 +462,47 @@ function solveNormal(
     for (let a = 0; a < n; a++) {
       if (row[a] === 0) continue;
       for (let b = a; b < n; b++) {
-        A[a][b] += row[a] * row[b];
+        A[a]![b]! += row[a]! * row[b]!;
       }
-      A[a][n] -= row[a] * r[ri];
+      A[a]![n]! -= row[a]! * r[ri]!;
     }
   }
   for (let a = 0; a < n; a++) {
-    for (let b = 0; b < a; b++) A[a][b] = A[b][a];
-    A[a][a] *= 1 + lambda;
-    A[a][a] += 1e-12; // regularisation for gauge freedoms
+    for (let b = 0; b < a; b++) A[a]![b] = A[b]![a]!;
+    A[a]![a]! *= 1 + lambda;
+    A[a]![a]! += 1e-12;
   }
   // Gaussian elimination with partial pivoting
   for (let col = 0; col < n; col++) {
     let piv = col;
     for (let row = col + 1; row < n; row++) {
-      if (Math.abs(A[row][col]) > Math.abs(A[piv][col])) piv = row;
+      if (Math.abs(A[row]![col]!) > Math.abs(A[piv]![col]!)) piv = row;
     }
-    if (Math.abs(A[piv][col]) < 1e-14) continue; // free variable → dx 0
+    if (Math.abs(A[piv]![col]!) < 1e-14) continue;
     if (piv !== col) {
-      const t = A[piv];
-      A[piv] = A[col];
+      const t = A[piv]!;
+      A[piv] = A[col]!;
       A[col] = t;
     }
-    const d = A[col][col];
+    const d = A[col]![col]!;
     for (let row = col + 1; row < n; row++) {
-      const f = A[row][col] / d;
+      const f = A[row]![col]! / d;
       if (f === 0) continue;
-      for (let k = col; k <= n; k++) A[row][k] -= f * A[col][k];
+      for (let k = col; k <= n; k++) A[row]![k]! -= f * A[col]![k]!;
     }
   }
   const dx = new Float64Array(n);
   for (let row = n - 1; row >= 0; row--) {
-    let s = A[row][n];
-    for (let k = row + 1; k < n; k++) s -= A[row][k] * dx[k];
-    dx[row] = Math.abs(A[row][row]) < 1e-14 ? 0 : s / A[row][row];
+    let s = A[row]![n]!;
+    for (let k = row + 1; k < n; k++) s -= A[row]![k]! * dx[k]!;
+    dx[row] = Math.abs(A[row]![row]!) < 1e-14 ? 0 : s / A[row]![row]!;
   }
   return dx;
 }
 
 /** Rank of the Jacobian via row-echelon elimination with a tolerance. */
 function jacobianRank(J: Float64Array[], n: number): number {
+  for (const row of J) checkLength(row, n);
   const rows = J.map((r) => Float64Array.from(r));
   let rank = 0;
   let col = 0;
@@ -501,7 +511,7 @@ function jacobianRank(J: Float64Array[], n: number): number {
     let piv = -1;
     let best = tol;
     for (let r = rank; r < rows.length; r++) {
-      const v = Math.abs(rows[r][col]);
+      const v = Math.abs(rows[r]![col]!);
       if (v > best) {
         best = v;
         piv = r;
@@ -511,14 +521,14 @@ function jacobianRank(J: Float64Array[], n: number): number {
       col++;
       continue;
     }
-    const t = rows[piv];
-    rows[piv] = rows[rank];
+    const t = rows[piv]!;
+    rows[piv] = rows[rank]!;
     rows[rank] = t;
-    const d = rows[rank][col];
+    const d = rows[rank]![col]!;
     for (let r = rank + 1; r < rows.length; r++) {
-      const f = rows[r][col] / d;
+      const f = rows[r]![col]! / d;
       if (f === 0) continue;
-      for (let k = col; k < n; k++) rows[r][k] -= f * rows[rank][k];
+      for (let k = col; k < n; k++) rows[r]![k]! -= f * rows[rank]![k]!;
     }
     rank++;
     col++;
@@ -531,6 +541,7 @@ function runLM(
   xStart: Float64Array,
   numVars: number,
 ): { x: Float64Array; r: Float64Array } {
+  checkLength(xStart, numVars);
   let x = Float64Array.from(xStart);
   let r = evalResiduals(residuals, x);
   let cost = r.reduce((s, v) => s + v * v, 0);
@@ -543,7 +554,7 @@ function runLM(
       const dx = solveNormal(J, r, lambda, numVars);
       if (!dx) break;
       const xNew = Float64Array.from(x);
-      for (let j = 0; j < numVars; j++) xNew[j] += dx[j];
+      for (const [j, dj] of dx.entries()) xNew[j]! += dj;
       const rNew = evalResiduals(residuals, xNew);
       const costNew = rNew.reduce((s, v) => s + v * v, 0);
       if (costNew < cost) {
@@ -580,9 +591,7 @@ export function solveSketch(input: SolveInput): SolveResult {
   problem.apply(x, entities);
 
   let maxResidual = 0;
-  for (let i = 0; i < hardCount; i++) {
-    maxResidual = Math.max(maxResidual, Math.abs(r[i]));
-  }
+  for (const v of r) maxResidual = Math.max(maxResidual, Math.abs(v));
   const converged = maxResidual < CONFLICT_TOL;
 
   // DOF analysis at the solution (hard constraints only).
