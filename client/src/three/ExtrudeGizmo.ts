@@ -68,16 +68,22 @@ export class ExtrudeGizmo {
     private source: GizmoSource,
     initialValue: number,
     cut = false,
-    startOffset = 0
+    startOffset = 0,
   ) {
     this.cut = cut;
     const f = source.frame;
     this.baseOrigin.set(
       ...([
-        f.origin[0] + source.anchorUV[0] * f.xAxis[0] + source.anchorUV[1] * f.yAxis[0],
-        f.origin[1] + source.anchorUV[0] * f.xAxis[1] + source.anchorUV[1] * f.yAxis[1],
-        f.origin[2] + source.anchorUV[0] * f.xAxis[2] + source.anchorUV[1] * f.yAxis[2],
-      ] as [number, number, number])
+        f.origin[0] +
+          source.anchorUV[0] * f.xAxis[0] +
+          source.anchorUV[1] * f.yAxis[0],
+        f.origin[1] +
+          source.anchorUV[0] * f.xAxis[1] +
+          source.anchorUV[1] * f.yAxis[1],
+        f.origin[2] +
+          source.anchorUV[0] * f.xAxis[2] +
+          source.anchorUV[1] * f.yAxis[2],
+      ] as [number, number, number]),
     );
     this.axis.set(f.normal[0], f.normal[1], f.normal[2]).normalize();
     this.startOffset = startOffset;
@@ -125,7 +131,7 @@ export class ExtrudeGizmo {
     this.cut = cut;
     if (this.previewMesh) {
       (this.previewMesh.material as THREE.MeshBasicMaterial).color.setHex(
-        cut ? PREVIEW_CUT : PREVIEW_ADD
+        cut ? PREVIEW_CUT : PREVIEW_ADD,
       );
     }
   }
@@ -168,7 +174,7 @@ export class ExtrudeGizmo {
 
     const quat = new THREE.Quaternion().setFromUnitVectors(
       new THREE.Vector3(0, 1, 0),
-      this.axis.clone().multiplyScalar(sign)
+      this.axis.clone().multiplyScalar(sign),
     );
     this.shaft.position.copy(mid);
     this.shaft.quaternion.copy(quat);
@@ -209,10 +215,13 @@ export class ExtrudeGizmo {
     const basis = new THREE.Matrix4().makeBasis(
       new THREE.Vector3(...f.xAxis),
       new THREE.Vector3(...f.yAxis),
-      new THREE.Vector3(...f.normal)
+      new THREE.Vector3(...f.normal),
     );
     basis.setPosition(
-      new THREE.Vector3(...f.origin).addScaledVector(this.axis, this.startOffset)
+      new THREE.Vector3(...f.origin).addScaledVector(
+        this.axis,
+        this.startOffset,
+      ),
     );
     if (value < 0) {
       // extrude backwards along the normal
@@ -239,7 +248,7 @@ export class ExtrudeGizmo {
       positions.push(
         ghost.positions[i] + off.x,
         ghost.positions[i + 1] + off.y,
-        ghost.positions[i + 2] + off.z
+        ghost.positions[i + 2] + off.z,
       );
     }
     indices.push(...ghost.indices);
@@ -250,11 +259,15 @@ export class ExtrudeGizmo {
       const base = positions.length / 3;
       const n = poly.length / 3;
       for (let i = 0; i < n; i++) {
-        positions.push(poly[i * 3] + start.x, poly[i * 3 + 1] + start.y, poly[i * 3 + 2] + start.z);
+        positions.push(
+          poly[i * 3] + start.x,
+          poly[i * 3 + 1] + start.y,
+          poly[i * 3 + 2] + start.z,
+        );
         positions.push(
           poly[i * 3] + off.x,
           poly[i * 3 + 1] + off.y,
-          poly[i * 3 + 2] + off.z
+          poly[i * 3 + 2] + off.z,
         );
       }
       for (let i = 0; i < n - 1; i++) {
@@ -264,7 +277,10 @@ export class ExtrudeGizmo {
     }
 
     const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
     geom.setIndex(indices);
     this.previewMesh = new THREE.Mesh(geom, this.previewMaterial());
     this.previewMesh.renderOrder = 4;
@@ -277,7 +293,7 @@ export class ExtrudeGizmo {
     const rect = this.viewport.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.viewport.camera);
     const wpp = this.viewport.worldPerPixel();
@@ -294,7 +310,7 @@ export class ExtrudeGizmo {
   setHover(hover: boolean) {
     for (const m of [this.shaft, this.cone]) {
       (m.material as THREE.MeshBasicMaterial).color.setHex(
-        hover ? ARROW_HOVER : ARROW_COLOR
+        hover ? ARROW_HOVER : ARROW_COLOR,
       );
     }
   }
@@ -306,7 +322,7 @@ export class ExtrudeGizmo {
     const rect = this.viewport.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.viewport.camera);
     const ray = this.raycaster.ray;
@@ -332,7 +348,10 @@ export class ExtrudeGizmo {
   /** Screen position of the arrow tip (for the value label). */
   tipScreenPosition(): { x: number; y: number } {
     const sign = this.value >= 0 ? 1 : -1;
-    const len = Math.max(Math.abs(this.value), this.viewport.worldPerPixel() * 4);
+    const len = Math.max(
+      Math.abs(this.value),
+      this.viewport.worldPerPixel() * 4,
+    );
     const tip = this.origin
       .clone()
       .add(this.axis.clone().multiplyScalar(sign * len))

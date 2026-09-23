@@ -170,7 +170,7 @@ function buildProblem(input: SolveInput): Problem {
     residuals.push(
       (x) =>
         Math.hypot(sx(x) - cx(x), sy(x) - cy(x)) -
-        Math.hypot(ex(x) - cx(x), ey(x) - cy(x))
+        Math.hypot(ex(x) - cx(x), ey(x) - cy(x)),
     );
   }
 
@@ -251,7 +251,9 @@ function buildProblem(input: SolveInput): Problem {
             const d = Math.hypot(B.cx(x) - A.cx(x), B.cy(x) - A.cy(x));
             const ext = Math.abs(d - (ra(x) + rb(x)));
             const int_ = Math.abs(d - Math.abs(ra(x) - rb(x)));
-            return ext <= int_ ? d - (ra(x) + rb(x)) : d - Math.abs(ra(x) - rb(x));
+            return ext <= int_
+              ? d - (ra(x) + rb(x))
+              : d - Math.abs(ra(x) - rb(x));
           });
         }
         break;
@@ -271,7 +273,7 @@ function buildProblem(input: SolveInput): Problem {
           residuals.push(
             (x) =>
               Math.hypot(a.x2(x) - a.x1(x), a.y2(x) - a.y1(x)) -
-              Math.hypot(b.x2(x) - b.x1(x), b.y2(x) - b.y1(x))
+              Math.hypot(b.x2(x) - b.x1(x), b.y2(x) - b.y1(x)),
           );
         } else {
           const ra = radius(c.a),
@@ -316,7 +318,7 @@ function buildProblem(input: SolveInput): Problem {
         const { cx, cy } = centerOf(c.circle);
         const r = radius(c.circle);
         residuals.push(
-          (x) => Math.hypot(p.x(x) - cx(x), p.y(x) - cy(x)) - r(x)
+          (x) => Math.hypot(p.x(x) - cx(x), p.y(x) - cy(x)) - r(x),
         );
         break;
       }
@@ -339,7 +341,7 @@ function buildProblem(input: SolveInput): Problem {
         const l = lineEnds(c.line);
         const v = c.value;
         residuals.push(
-          (x) => Math.hypot(l.x2(x) - l.x1(x), l.y2(x) - l.y1(x)) - v
+          (x) => Math.hypot(l.x2(x) - l.x1(x), l.y2(x) - l.y1(x)) - v,
         );
         break;
       }
@@ -419,7 +421,7 @@ function evalResiduals(res: Residual[], x: Float64Array): Float64Array {
 function numericJacobian(
   res: Residual[],
   x: Float64Array,
-  r0: Float64Array
+  r0: Float64Array,
 ): Float64Array[] {
   const m = res.length;
   const n = x.length;
@@ -442,7 +444,7 @@ function solveNormal(
   J: Float64Array[],
   r: Float64Array,
   lambda: number,
-  n: number
+  n: number,
 ): Float64Array | null {
   // Build A = JᵀJ and g = Jᵀr
   const A: Float64Array[] = [];
@@ -527,7 +529,7 @@ function jacobianRank(J: Float64Array[], n: number): number {
 function runLM(
   residuals: Residual[],
   xStart: Float64Array,
-  numVars: number
+  numVars: number,
 ): { x: Float64Array; r: Float64Array } {
   let x = Float64Array.from(xStart);
   let r = evalResiduals(residuals, x);
@@ -592,7 +594,11 @@ export function solveSketch(input: SolveInput): SolveResult {
 
   let status: SketchSolveStatus;
   if (!converged) status = "over_constrained";
-  else if (dof === 0) status = numVars === 0 && hardCount === 0 && input.entities.length === 0 ? "unconstrained" : "fully_constrained";
+  else if (dof === 0)
+    status =
+      numVars === 0 && hardCount === 0 && input.entities.length === 0
+        ? "unconstrained"
+        : "fully_constrained";
   else if (hardCount === 0 && !input.constraints.some((c) => c.type === "fix"))
     status = "unconstrained";
   else status = "partially_constrained";

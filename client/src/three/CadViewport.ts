@@ -45,15 +45,30 @@ export interface PickResult {
 const ORIGIN_PLANE_DEFS: { name: "XY" | "XZ" | "YZ"; frame: PlaneFrame }[] = [
   {
     name: "XY",
-    frame: { origin: [0, 0, 0], xAxis: [1, 0, 0], yAxis: [0, 1, 0], normal: [0, 0, 1] },
+    frame: {
+      origin: [0, 0, 0],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 1, 0],
+      normal: [0, 0, 1],
+    },
   },
   {
     name: "XZ",
-    frame: { origin: [0, 0, 0], xAxis: [1, 0, 0], yAxis: [0, 0, 1], normal: [0, -1, 0] },
+    frame: {
+      origin: [0, 0, 0],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 0, 1],
+      normal: [0, -1, 0],
+    },
   },
   {
     name: "YZ",
-    frame: { origin: [0, 0, 0], xAxis: [0, 1, 0], yAxis: [0, 0, 1], normal: [1, 0, 0] },
+    frame: {
+      origin: [0, 0, 0],
+      xAxis: [0, 1, 0],
+      yAxis: [0, 0, 1],
+      normal: [1, 0, 0],
+    },
   },
 ];
 
@@ -62,7 +77,7 @@ export function frameBasis(frame: PlaneFrame): THREE.Matrix4 {
   m.makeBasis(
     new THREE.Vector3(...frame.xAxis),
     new THREE.Vector3(...frame.yAxis),
-    new THREE.Vector3(...frame.normal)
+    new THREE.Vector3(...frame.normal),
   );
   m.setPosition(new THREE.Vector3(...frame.origin));
   return m;
@@ -72,7 +87,7 @@ export function uv3(frame: PlaneFrame, u: number, v: number): THREE.Vector3 {
   return new THREE.Vector3(
     frame.origin[0] + u * frame.xAxis[0] + v * frame.yAxis[0],
     frame.origin[1] + u * frame.xAxis[1] + v * frame.yAxis[1],
-    frame.origin[2] + u * frame.xAxis[2] + v * frame.yAxis[2]
+    frame.origin[2] + u * frame.xAxis[2] + v * frame.yAxis[2],
   );
 }
 
@@ -226,10 +241,10 @@ export class CadViewport {
     const cam = this.camera;
     const offset = cam.position.clone().sub(this.target);
     const forward = offset.clone().normalize().negate();
-    const right = new THREE.Vector3()
-      .crossVectors(forward, cam.up)
+    const right = new THREE.Vector3().crossVectors(forward, cam.up).normalize();
+    const screenUp = new THREE.Vector3()
+      .crossVectors(right, forward)
       .normalize();
-    const screenUp = new THREE.Vector3().crossVectors(right, forward).normalize();
     // model follows the cursor → camera rotates by the inverse
     const q = new THREE.Quaternion()
       .setFromAxisAngle(screenUp, dx * 0.014)
@@ -249,11 +264,11 @@ export class CadViewport {
     const offset = cam.position.clone().sub(this.target);
     const quat = new THREE.Quaternion().setFromUnitVectors(
       cam.up.clone().normalize(),
-      new THREE.Vector3(0, 0, 1)
+      new THREE.Vector3(0, 0, 1),
     );
     // Use spherical around current up
     const spherical = new THREE.Spherical().setFromVector3(
-      offset.clone().applyQuaternion(quat)
+      offset.clone().applyQuaternion(quat),
     );
     spherical.theta -= dx * 0.008;
     spherical.phi -= dy * 0.008;
@@ -308,21 +323,18 @@ export class CadViewport {
   screenToPlanePoint(
     clientX: number,
     clientY: number,
-    frame: PlaneFrame | null
+    frame: PlaneFrame | null,
   ): THREE.Vector3 | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
     let plane: THREE.Plane;
     if (frame) {
       const n = new THREE.Vector3(...frame.normal);
-      plane = new THREE.Plane(
-        n,
-        -n.dot(new THREE.Vector3(...frame.origin))
-      );
+      plane = new THREE.Plane(n, -n.dot(new THREE.Vector3(...frame.origin)));
     } else {
       const n = this.camera
         .getWorldDirection(new THREE.Vector3())
@@ -338,7 +350,13 @@ export class CadViewport {
     const toPos = this.target
       .clone()
       .add(new THREE.Vector3(...direction).normalize().multiplyScalar(dist));
-    this.animateTo(toPos, new THREE.Vector3(...up), this.target.clone(), this.zoom, animate);
+    this.animateTo(
+      toPos,
+      new THREE.Vector3(...up),
+      this.target.clone(),
+      this.zoom,
+      animate,
+    );
   }
 
   /** Fit current bodies (or a bbox) into view. */
@@ -356,12 +374,15 @@ export class CadViewport {
       box.expandByObject(this.sketchRoot);
       any = true;
     }
-    if (!any) box.set(new THREE.Vector3(-60, -60, -30), new THREE.Vector3(60, 60, 30));
+    if (!any)
+      box.set(new THREE.Vector3(-60, -60, -30), new THREE.Vector3(60, 60, 30));
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3()).length();
     const newZoom = Math.max(size * 0.62, 10);
     const dir = this.camera.position.clone().sub(this.target).normalize();
-    const toPos = center.clone().add(dir.multiplyScalar(Math.max(size * 1.8, 100)));
+    const toPos = center
+      .clone()
+      .add(dir.multiplyScalar(Math.max(size * 1.8, 100)));
     this.animateTo(toPos, this.camera.up.clone(), center, newZoom, animate);
   }
 
@@ -370,7 +391,7 @@ export class CadViewport {
     toUp: THREE.Vector3,
     toTarget: THREE.Vector3,
     toZoom: number,
-    animate = true
+    animate = true,
   ) {
     if (!animate) {
       this.target.copy(toTarget);
@@ -442,7 +463,11 @@ export class CadViewport {
       mesh.renderOrder = -5;
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0x8b93a5, transparent: true, opacity: 0.35 })
+        new THREE.LineBasicMaterial({
+          color: 0x8b93a5,
+          transparent: true,
+          opacity: 0.35,
+        }),
       );
       mesh.add(border);
       this.originRoot.add(mesh);
@@ -462,8 +487,12 @@ export class CadViewport {
       this.originRoot.add(
         new THREE.Line(
           geom,
-          new THREE.LineBasicMaterial({ color: a.color, transparent: true, opacity: 0.6 })
-        )
+          new THREE.LineBasicMaterial({
+            color: a.color,
+            transparent: true,
+            opacity: 0.6,
+          }),
+        ),
       );
     }
   }
@@ -509,7 +538,10 @@ export class CadViewport {
     group.userData.bodyId = p.bodyId;
 
     const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(p.positions, 3));
+    geom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(p.positions, 3),
+    );
     geom.setAttribute("normal", new THREE.Float32BufferAttribute(p.normals, 3));
     geom.setIndex(p.indices);
     const mat = new THREE.MeshStandardMaterial({
@@ -535,16 +567,19 @@ export class CadViewport {
           e.polyline[i + 2],
           e.polyline[i + 3],
           e.polyline[i + 4],
-          e.polyline[i + 5]
+          e.polyline[i + 5],
         );
         edgeSegments.push(e.name);
       }
     }
     const edgeGeom = new THREE.BufferGeometry();
-    edgeGeom.setAttribute("position", new THREE.Float32BufferAttribute(edgePts, 3));
+    edgeGeom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(edgePts, 3),
+    );
     const edges = new THREE.LineSegments(
       edgeGeom,
-      new THREE.LineBasicMaterial({ color: COLORS.edge })
+      new THREE.LineBasicMaterial({ color: COLORS.edge }),
     );
     edges.userData.bodyId = p.bodyId;
     group.add(edges);
@@ -557,16 +592,31 @@ export class CadViewport {
       vertexNames.push(v.name);
     }
     const vertGeom = new THREE.BufferGeometry();
-    vertGeom.setAttribute("position", new THREE.Float32BufferAttribute(vertPts, 3));
+    vertGeom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(vertPts, 3),
+    );
     const vertices = new THREE.Points(
       vertGeom,
-      new THREE.PointsMaterial({ color: COLORS.edge, size: 4, sizeAttenuation: false })
+      new THREE.PointsMaterial({
+        color: COLORS.edge,
+        size: 4,
+        sizeAttenuation: false,
+      }),
     );
     vertices.visible = false; // shown during vertex-relevant modes
     vertices.userData.bodyId = p.bodyId;
     group.add(vertices);
 
-    return { group, mesh, edges, edgeSegments, vertices, vertexNames, payload: p };
+    return {
+      group,
+      mesh,
+      edges,
+      edgeSegments,
+      vertices,
+      vertexNames,
+      payload: p,
+    };
   }
 
   setBodyDimmed(dim: boolean, exceptBodyId?: string) {
@@ -599,12 +649,12 @@ export class CadViewport {
       profiles?: boolean;
       sketchEntities?: boolean;
       depth?: number; // alt-click cycling
-    }
+    },
   ): PickResult | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
     const pxTol = this.worldPerPixel() * 7;
@@ -645,7 +695,11 @@ export class CadViewport {
           const name = b.edgeSegments[seg];
           if (!name) continue;
           results.push({
-            selection: { kind: "edge", bodyId: b.payload.bodyId, edgeName: name },
+            selection: {
+              kind: "edge",
+              bodyId: b.payload.bodyId,
+              edgeName: name,
+            },
             distance: h.distance - pxTol * 1.2,
             point: h.point,
           });
@@ -661,7 +715,7 @@ export class CadViewport {
           if (h.faceIndex === undefined || h.faceIndex === null) continue;
           const indexPos = h.faceIndex * 3;
           const face = b.payload.faces.find(
-            (f) => indexPos >= f.start && indexPos < f.start + f.count
+            (f) => indexPos >= f.start && indexPos < f.start + f.count,
           );
           if (opts.faces && face) {
             results.push({
@@ -758,7 +812,7 @@ export class CadViewport {
       const tied = results.filter(
         (r) =>
           r.selection.kind === "profile" &&
-          Math.abs(r.distance - chosen.distance) < pxTol * 0.1
+          Math.abs(r.distance - chosen.distance) < pxTol * 0.1,
       );
       if (tied.length > 1) {
         tied.sort((a, b) => (a.area ?? Infinity) - (b.area ?? Infinity));
@@ -800,9 +854,12 @@ export class CadViewport {
         const geom = new THREE.BufferGeometry();
         geom.setAttribute(
           "position",
-          new THREE.Float32BufferAttribute(src.positions, 3)
+          new THREE.Float32BufferAttribute(src.positions, 3),
         );
-        geom.setAttribute("normal", new THREE.Float32BufferAttribute(src.normals, 3));
+        geom.setAttribute(
+          "normal",
+          new THREE.Float32BufferAttribute(src.normals, 3),
+        );
         geom.setIndex(src.indices.slice(r.start, r.start + r.count));
         const mesh = new THREE.Mesh(
           geom,
@@ -814,7 +871,7 @@ export class CadViewport {
             polygonOffset: true,
             polygonOffsetFactor: -2,
             polygonOffsetUnits: -2,
-          })
+          }),
         );
         mesh.renderOrder = 5;
         this.overlayRoot.add(mesh);
@@ -826,11 +883,17 @@ export class CadViewport {
       if (!e) return;
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i < e.polyline.length; i += 3) {
-        pts.push(new THREE.Vector3(e.polyline[i], e.polyline[i + 1], e.polyline[i + 2]));
+        pts.push(
+          new THREE.Vector3(
+            e.polyline[i],
+            e.polyline[i + 1],
+            e.polyline[i + 2],
+          ),
+        );
       }
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(pts),
-        new THREE.LineBasicMaterial({ color, linewidth: 2, depthTest: false })
+        new THREE.LineBasicMaterial({ color, linewidth: 2, depthTest: false }),
       );
       line.renderOrder = 10;
       this.overlayRoot.add(line);
@@ -842,15 +905,22 @@ export class CadViewport {
       if (idx < 0) return;
       const v = b.payload.vertices[idx];
       const pt = new THREE.Points(
-        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...v.position)]),
-        new THREE.PointsMaterial({ color, size: 10, sizeAttenuation: false, depthTest: false })
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(...v.position),
+        ]),
+        new THREE.PointsMaterial({
+          color,
+          size: 10,
+          sizeAttenuation: false,
+          depthTest: false,
+        }),
       );
       pt.renderOrder = 11;
       this.overlayRoot.add(pt);
       this.highlightObjects.push(pt);
     } else if (sel.kind === "plane" && sel.ref.kind === "origin") {
       const mesh = this.originPlaneMeshes.find(
-        (m) => m.userData.originPlane === (sel.ref as any).plane
+        (m) => m.userData.originPlane === (sel.ref as any).plane,
       );
       if (mesh) {
         const clone = new THREE.Mesh(
@@ -861,7 +931,7 @@ export class CadViewport {
             opacity: 0.25,
             side: THREE.DoubleSide,
             depthWrite: false,
-          })
+          }),
         );
         clone.applyMatrix4(mesh.matrixWorld);
         this.overlayRoot.add(clone);
@@ -886,7 +956,7 @@ export class CadViewport {
   syncConstructionPlanes(
     planes: ConstructionPlanePayload[],
     featureNames: Map<string, string>,
-    visibleIds: Set<string>
+    visibleIds: Set<string>,
   ) {
     this.planeRoot.clear();
     for (const p of planes) {
@@ -906,7 +976,11 @@ export class CadViewport {
       mesh.userData.label = featureNames.get(p.featureId) ?? "Plane";
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: COLORS.planeFill, transparent: true, opacity: 0.55 })
+        new THREE.LineBasicMaterial({
+          color: COLORS.planeFill,
+          transparent: true,
+          opacity: 0.55,
+        }),
       );
       mesh.add(border);
       this.planeRoot.add(mesh);

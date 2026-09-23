@@ -61,7 +61,7 @@ interface HalfEdge {
 
 export function arcAngles(
   a: { cx: number; cy: number; sx: number; sy: number; ex: number; ey: number },
-  _ccw = true
+  _ccw = true,
 ): { a0: number; a1: number; r: number } {
   const a0 = Math.atan2(a.sy - a.cy, a.sx - a.cx);
   let a1 = Math.atan2(a.ey - a.cy, a.ex - a.cx);
@@ -77,7 +77,7 @@ export function sampleArc(
   sy: number,
   ex: number,
   ey: number,
-  segments = ARC_SEGMENTS
+  segments = ARC_SEGMENTS,
 ): number[] {
   const { a0, a1, r } = arcAngles({ cx, cy, sx, sy, ex, ey });
   const out: number[] = [];
@@ -152,7 +152,7 @@ function lineCircleCrossings(
   l: RawLine,
   cx: number,
   cy: number,
-  r: number
+  r: number,
 ): [number, number][] {
   const dx = l.x2 - l.x1;
   const dy = l.y2 - l.y1;
@@ -196,13 +196,13 @@ function curveCrossings(a: RawCurve, b: RawCurve): [number, number][] {
   if (a.kind === "line" && b.kind === "line") return lineLineCrossings(a, b);
   if (a.kind === "arc" && b.kind === "arc") {
     return circleCircleCrossings(a, b).filter(
-      ([x, y]) => onArcInterior(a, x, y) && onArcInterior(b, x, y)
+      ([x, y]) => onArcInterior(a, x, y) && onArcInterior(b, x, y),
     );
   }
   const line = a.kind === "line" ? a : (b as RawLine);
   const arc = a.kind === "arc" ? a : (b as RawArc);
   return lineCircleCrossings(line, arc.cx, arc.cy, arc.r).filter(([x, y]) =>
-    onArcInterior(arc, x, y)
+    onArcInterior(arc, x, y),
   );
 }
 
@@ -339,7 +339,8 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       const cuts: { n: number; t: number }[] = [];
       for (let i = 0; i < nodes.length; i++) {
         if (i === from || i === to) continue;
-        const t = ((nodes[i].x - p1.x) * abx + (nodes[i].y - p1.y) * aby) / len2;
+        const t =
+          ((nodes[i].x - p1.x) * abx + (nodes[i].y - p1.y) * aby) / len2;
         if (t <= 1e-9 || t >= 1 - 1e-9) continue;
         const px = p1.x + t * abx;
         const py = p1.y + t * aby;
@@ -411,7 +412,10 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
       for (let i = 0; i < nodes.length; i++) {
         const d = Math.hypot(nodes[i].x - c.x, nodes[i].y - c.y);
         if (Math.abs(d - e.radius) < SPLIT_TOL) {
-          onCircle.push({ n: i, ang: Math.atan2(nodes[i].y - c.y, nodes[i].x - c.x) });
+          onCircle.push({
+            n: i,
+            ang: Math.atan2(nodes[i].y - c.y, nodes[i].x - c.x),
+          });
         }
       }
       if (onCircle.length < 2) {
@@ -441,7 +445,8 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
   for (const c of curves) {
     const n = c.samples.length;
     const rev: number[] = [];
-    for (let i = n - 2; i >= 0; i -= 2) rev.push(c.samples[i], c.samples[i + 1]);
+    for (let i = n - 2; i >= 0; i -= 2)
+      rev.push(c.samples[i], c.samples[i + 1]);
     const fwdIdx = halfEdges.length;
     const angle = (samples: number[]) =>
       Math.atan2(samples[3] - samples[1], samples[2] - samples[0]);
@@ -503,7 +508,11 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
         break;
       }
       he.visited = true;
-      loopCurves.push({ entityId: he.entityId, reversed: he.reversed, trim: he.trim });
+      loopCurves.push({
+        entityId: he.entityId,
+        reversed: he.reversed,
+        trim: he.trim,
+      });
       for (let i = 0; i < he.samples.length - 2; i += 2) {
         poly.push(he.samples[i], he.samples[i + 1]);
       }
@@ -596,13 +605,16 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
     const inside = allLoops.filter((o) => contains(loop, o));
     // direct children: contained in loop but not in any other contained loop
     const holesLoops = inside.filter(
-      (o) => !inside.some((mid) => mid !== o && contains(mid, o))
+      (o) => !inside.some((mid) => mid !== o && contains(mid, o)),
     );
     const holes = holesLoops.map((h) => h.curves);
     const holePolygons = holesLoops.map((h) => h.polygon);
     const outerIds = loop.curves.map((c) => c.entityId);
     profiles.push({
-      id: profileIdFor(outerIds, holes.map((h) => h.map((c) => c.entityId))),
+      id: profileIdFor(
+        outerIds,
+        holes.map((h) => h.map((c) => c.entityId)),
+      ),
       outer: loop.curves,
       holes,
       polygon: loop.polygon,

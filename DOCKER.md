@@ -77,11 +77,11 @@ persistence tests and was smoke-tested against a live container.
 
 ## Environment
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `ROCKETT_PORT` | `8788` | HTTP port inside the container |
-| `DATA_DIR` | `/data` | Persistent root |
-| `ROCKETT_COMMIT` | empty | Git revision reported by `/api/health` (build arg) |
+| Variable         | Default | Purpose                                            |
+| ---------------- | ------- | -------------------------------------------------- |
+| `ROCKETT_PORT`   | `8788`  | HTTP port inside the container                     |
+| `DATA_DIR`       | `/data` | Persistent root                                    |
+| `ROCKETT_COMMIT` | empty   | Git revision reported by `/api/health` (build arg) |
 
 ## Security
 

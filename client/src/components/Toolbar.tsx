@@ -11,7 +11,11 @@ import { StepImportButton } from "./StepImportButton";
 import { withKey } from "../shortcuts";
 
 const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
-  { id: "extrude", label: "Extrude", title: withKey("Extrude profiles", "extrude") },
+  {
+    id: "extrude",
+    label: "Extrude",
+    title: withKey("Extrude profiles", "extrude"),
+  },
   { id: "revolve", label: "Revolve", title: "Revolve profiles around an axis" },
   { id: "sweep", label: "Sweep", title: "Sweep a profile along a path" },
   { id: "loft", label: "Loft", title: "Loft between profiles" },
@@ -22,7 +26,11 @@ const MODIFY: Array<{ id: DialogType; label: string; title: string }> = [
   { id: "fillet", label: "Fillet", title: withKey("Fillet edges", "fillet") },
   { id: "chamfer", label: "Chamfer", title: "Chamfer edges" },
   { id: "shell", label: "Shell", title: "Hollow the body" },
-  { id: "combine", label: "Combine", title: "Boolean join/cut/intersect bodies" },
+  {
+    id: "combine",
+    label: "Combine",
+    title: "Boolean join/cut/intersect bodies",
+  },
   { id: "splitBody", label: "Split", title: "Split a body with a plane" },
   { id: "offsetFace", label: "Press/Pull", title: "Offset a planar face" },
   { id: "move", label: "Move", title: withKey("Move bodies", "move") },
@@ -204,7 +212,11 @@ export function Toolbar() {
       </div>
       <div className="tb-group">
         <span className="tb-title">EXPORT</span>
-        <button className="tb-btn" disabled={busy} onClick={() => openDialog("export")}>
+        <button
+          className="tb-btn"
+          disabled={busy}
+          onClick={() => openDialog("export")}
+        >
           STL / 3MF
         </button>
       </div>
@@ -215,7 +227,11 @@ export function Toolbar() {
 }
 
 function ViewButtons() {
-  const views: Array<{ label: string; dir: [number, number, number]; up: [number, number, number] }> = [
+  const views: Array<{
+    label: string;
+    dir: [number, number, number];
+    up: [number, number, number];
+  }> = [
     { label: "Front", dir: [0, -1, 0], up: [0, 0, 1] },
     { label: "Back", dir: [0, 1, 0], up: [0, 0, 1] },
     { label: "Left", dir: [-1, 0, 0], up: [0, 0, 1] },
@@ -256,7 +272,7 @@ function ViewButtons() {
           const vp = viewportHandle.current;
           if (!vp) return;
           vp.setProjection(
-            vp.projection === "orthographic" ? "perspective" : "orthographic"
+            vp.projection === "orthographic" ? "perspective" : "orthographic",
           );
         }}
       >
@@ -309,7 +325,8 @@ function SketchToolbar() {
           c = { id, type: "coincident", a: points[0], b: points[1] };
         break;
       case "parallel":
-        if (lines.length >= 2) c = { id, type: "parallel", a: lines[0], b: lines[1] };
+        if (lines.length >= 2)
+          c = { id, type: "parallel", a: lines[0], b: lines[1] };
         break;
       case "perpendicular":
         if (lines.length >= 2)
@@ -322,7 +339,8 @@ function SketchToolbar() {
           c = { id, type: "tangent", a: circleLikes[0], b: circleLikes[1] };
         break;
       case "equal":
-        if (lines.length >= 2) c = { id, type: "equal", a: lines[0], b: lines[1] };
+        if (lines.length >= 2)
+          c = { id, type: "equal", a: lines[0], b: lines[1] };
         else if (circleLikes.length >= 2)
           c = { id, type: "equal", a: circleLikes[0], b: circleLikes[1] };
         break;
@@ -335,14 +353,17 @@ function SketchToolbar() {
           c = { id, type: "midpoint", point: points[0], line: lines[0] };
         break;
       case "collinear":
-        if (lines.length >= 2) c = { id, type: "collinear", a: lines[0], b: lines[1] };
+        if (lines.length >= 2)
+          c = { id, type: "collinear", a: lines[0], b: lines[1] };
         break;
       case "fix":
         if (points.length >= 1) c = { id, type: "fix", point: points[0] };
         break;
     }
     if (!c) {
-      setError(`Selection doesn't match the ${type} constraint — check the tooltip`);
+      setError(
+        `Selection doesn't match the ${type} constraint — check the tooltip`,
+      );
       return;
     }
     updateDraft(draft.entities, [...draft.constraints, c]);
@@ -378,7 +399,9 @@ function SketchToolbar() {
             min={3}
             max={24}
             value={dialogParams.polygonSides ?? 6}
-            onChange={(e) => setDialogParams({ polygonSides: Number(e.target.value) })}
+            onChange={(e) =>
+              setDialogParams({ polygonSides: Number(e.target.value) })
+            }
             title="Polygon sides"
           />
         )}
@@ -404,7 +427,11 @@ function SketchToolbar() {
             {c.label}
           </button>
         ))}
-        <button className="tb-btn" title="Delete selected (Del)" onClick={() => void deleteSelected()}>
+        <button
+          className="tb-btn"
+          title="Delete selected (Del)"
+          onClick={() => void deleteSelected()}
+        >
           Delete
         </button>
       </div>

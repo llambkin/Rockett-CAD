@@ -18,7 +18,12 @@ import type {
   SketchEntity,
   SketchFeature,
 } from "@rockett/shared";
-import { newId, solveSketch, createSketchOffset, editSketchOffset } from "@rockett/shared";
+import {
+  newId,
+  solveSketch,
+  createSketchOffset,
+  editSketchOffset,
+} from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 
 // ---------------------------------------------------------------------------
@@ -96,8 +101,7 @@ export function constraintEntityRefs(c: SketchConstraint): string[] {
   const anyC = c as any;
   return (
     [anyC.a, anyC.b, anyC.line, anyC.point, anyC.circle, anyC.entity] as (
-      | string
-      | undefined
+      string | undefined
     )[]
   ).filter((x): x is string => typeof x === "string");
 }
@@ -105,25 +109,44 @@ export function constraintEntityRefs(c: SketchConstraint): string[] {
 export type Mode =
   | { name: "idle" }
   | { name: "pickPlane"; purpose: "sketch" }
-  | { name: "sketch"; sketchId: string; tool: SketchTool; constructionMode: boolean }
+  | {
+      name: "sketch";
+      sketchId: string;
+      tool: SketchTool;
+      constructionMode: boolean;
+    }
   | { name: "dialog"; dialog: DialogType; editFeatureId?: string }
   | { name: "measure" };
 
-function historyEditingState(mode: Mode, m: MutationResponse): Pick<State, "mode" | "draftSketch" | "selection"> {
+function historyEditingState(
+  mode: Mode,
+  m: MutationResponse,
+): Pick<State, "mode" | "draftSketch" | "selection"> {
   if (mode.name === "sketch") {
-    const feature = m.document.features.find(f => f.id === mode.sketchId);
-    const solved = m.evaluation.sketches.find(sk => sk.featureId === mode.sketchId);
-    if (feature?.type === "sketch" && solved) return {
-      mode: { ...mode, tool: "select" }, selection: [],
-      draftSketch: JSON.parse(JSON.stringify({ ...feature, entities: solved.entities })),
-    };
+    const feature = m.document.features.find((f) => f.id === mode.sketchId);
+    const solved = m.evaluation.sketches.find(
+      (sk) => sk.featureId === mode.sketchId,
+    );
+    if (feature?.type === "sketch" && solved)
+      return {
+        mode: { ...mode, tool: "select" },
+        selection: [],
+        draftSketch: JSON.parse(
+          JSON.stringify({ ...feature, entities: solved.entities }),
+        ),
+      };
   }
   return { mode: { name: "idle" }, draftSketch: null, selection: [] };
 }
 
-export function sketchEditingPosition(document: CadDocument, mode: Mode): number | undefined {
+export function sketchEditingPosition(
+  document: CadDocument,
+  mode: Mode,
+): number | undefined {
   if (mode.name !== "sketch") return undefined;
-  const index = document.features.findIndex(f => f.id === mode.sketchId && f.type === "sketch");
+  const index = document.features.findIndex(
+    (f) => f.id === mode.sketchId && f.type === "sketch",
+  );
   return index < 0 ? undefined : index + 1;
 }
 
@@ -171,12 +194,17 @@ interface State {
 
   startSketchOnPlane: (ref: PlaneRef) => Promise<void>;
   editSketch: (sketchId: string) => Promise<void>;
-  createOffset: (ids: string[], distance: number, autoChain: boolean, joinTolerance: number) => Promise<void>;
+  createOffset: (
+    ids: string[],
+    distance: number,
+    autoChain: boolean,
+    joinTolerance: number,
+  ) => Promise<void>;
   editOffset: (id: string, distance: number) => Promise<void>;
   setSketchTool: (tool: SketchTool) => void;
   updateDraftSketch: (
     entities: SketchEntity[],
-    constraints: SketchConstraint[]
+    constraints: SketchConstraint[],
   ) => void;
   solveDraft: (drag?: { pointId: string; x: number; y: number }) => void;
   commitDraftSketch: () => Promise<void>;
@@ -199,7 +227,10 @@ interface State {
   /** Rename the open project (display only — no regeneration, not an undo step). */
   renameProject: (name: string) => Promise<void>;
   rollTimeline: (position: number) => Promise<void>;
-  setBodyMeta: (bodyId: string, patch: { name?: string; visible?: boolean }) => Promise<void>;
+  setBodyMeta: (
+    bodyId: string,
+    patch: { name?: string; visible?: boolean },
+  ) => Promise<void>;
 
   runMeasure: () => Promise<void>;
 }
@@ -324,7 +355,11 @@ export const useStore = create<State>((set, get) => ({
     const prev = undoStack[undoStack.length - 1];
     set({ busy: true });
     try {
-      const m = await api.replaceDocument(projectId, prev, sketchEditingPosition(prev, mode));
+      const m = await api.replaceDocument(
+        projectId,
+        prev,
+        sketchEditingPosition(prev, mode),
+      );
       set((s) => ({
         document: m.document,
         evaluation: m.evaluation,
@@ -344,7 +379,11 @@ export const useStore = create<State>((set, get) => ({
     const next = redoStack[redoStack.length - 1];
     set({ busy: true });
     try {
-      const m = await api.replaceDocument(projectId, next, sketchEditingPosition(next, mode));
+      const m = await api.replaceDocument(
+        projectId,
+        next,
+        sketchEditingPosition(next, mode),
+      );
       set((s) => ({
         document: m.document,
         evaluation: m.evaluation,
@@ -395,9 +434,16 @@ export const useStore = create<State>((set, get) => ({
     };
     await get().mutate(() => api.addFeature(document.id, feature));
     const doc = get().document!;
-    const created = doc.features.find((f) => f.id === feature.id) as SketchFeature;
+    const created = doc.features.find(
+      (f) => f.id === feature.id,
+    ) as SketchFeature;
     set({
-      mode: { name: "sketch", sketchId: feature.id, tool: "line", constructionMode: false },
+      mode: {
+        name: "sketch",
+        sketchId: feature.id,
+        tool: "line",
+        constructionMode: false,
+      },
       draftSketch: JSON.parse(JSON.stringify(created)),
       selection: [],
     });
@@ -412,55 +458,116 @@ export const useStore = create<State>((set, get) => ({
     }
     const { document } = get();
     const feature = document?.features.find(
-      (f) => f.id === sketchId && f.type === "sketch"
+      (f) => f.id === sketchId && f.type === "sketch",
     ) as SketchFeature | undefined;
     if (!feature || !document || feature.suppressed) return;
     set({ busy: true, error: null });
     try {
-      const evaluation = await api.evaluate(document.id, document.features.indexOf(feature) + 1);
+      const evaluation = await api.evaluate(
+        document.id,
+        document.features.indexOf(feature) + 1,
+      );
       if (get().projectId !== document.id) return;
-      const solved = evaluation.sketches.find(sk => sk.featureId === sketchId);
-      if (!solved) throw new Error(evaluation.featureStatuses.find(f => f.featureId === sketchId)?.error ?? "Sketch could not be evaluated.");
+      const solved = evaluation.sketches.find(
+        (sk) => sk.featureId === sketchId,
+      );
+      if (!solved)
+        throw new Error(
+          evaluation.featureStatuses.find((f) => f.featureId === sketchId)
+            ?.error ?? "Sketch could not be evaluated.",
+        );
       set({
-        evaluation, busy: false, dialogParams: {},
-        mode: { name: "sketch", sketchId, tool: "select", constructionMode: false },
-        draftSketch: { ...JSON.parse(JSON.stringify(feature)), entities: JSON.parse(JSON.stringify(solved.entities)) },
+        evaluation,
+        busy: false,
+        dialogParams: {},
+        mode: {
+          name: "sketch",
+          sketchId,
+          tool: "select",
+          constructionMode: false,
+        },
+        draftSketch: {
+          ...JSON.parse(JSON.stringify(feature)),
+          entities: JSON.parse(JSON.stringify(solved.entities)),
+        },
         selection: [],
       });
     } catch (e: any) {
-      if (get().projectId === document.id) set({ busy: false, error: e.message });
+      if (get().projectId === document.id)
+        set({ busy: false, error: e.message });
     }
   },
 
   async createOffset(ids, distance, autoChain, joinTolerance) {
     const { draftSketch, busy } = get();
     if (!draftSketch || busy) return;
-    const next = createSketchOffset(draftSketch, ids, distance, autoChain, joinTolerance);
+    const next = createSketchOffset(
+      draftSketch,
+      ids,
+      distance,
+      autoChain,
+      joinTolerance,
+    );
     set({ draftSketch: next });
-    try { await get().commitDraftSketch(); }
-    catch (e) { set({ draftSketch }); throw e; }
+    try {
+      await get().commitDraftSketch();
+    } catch (e) {
+      set({ draftSketch });
+      throw e;
+    }
   },
 
   async editOffset(id, distance) {
     const { draftSketch, busy } = get();
     if (!draftSketch || busy) return;
     const next = editSketchOffset(draftSketch, id, distance);
-    const solved = solveSketch({ entities: next.entities, constraints: next.constraints });
-    const owned = new Set((next.offsets ?? []).flatMap(o => o.entityIds));
-    if (!solved.converged || solved.entities.some((e, i) => owned.has(e.id) && (
-      e.kind === "point" && next.entities[i].kind === "point" && Math.hypot(e.x - next.entities[i].x, e.y - next.entities[i].y) > 1e-5 ||
-      e.kind === "circle" && next.entities[i].kind === "circle" && Math.abs(e.radius - next.entities[i].radius) > 1e-5
-    ))) throw new Error("Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.");
+    const solved = solveSketch({
+      entities: next.entities,
+      constraints: next.constraints,
+    });
+    const owned = new Set((next.offsets ?? []).flatMap((o) => o.entityIds));
+    if (
+      !solved.converged ||
+      solved.entities.some(
+        (e, i) =>
+          owned.has(e.id) &&
+          ((e.kind === "point" &&
+            next.entities[i].kind === "point" &&
+            Math.hypot(e.x - next.entities[i].x, e.y - next.entities[i].y) >
+              1e-5) ||
+            (e.kind === "circle" &&
+              next.entities[i].kind === "circle" &&
+              Math.abs(e.radius - next.entities[i].radius) > 1e-5)),
+      )
+    )
+      throw new Error(
+        "Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.",
+      );
     set({ draftSketch: { ...next, entities: solved.entities } });
-    try { await get().commitDraftSketch(); }
-    catch (e) { set({ draftSketch }); throw e; }
+    try {
+      await get().commitDraftSketch();
+    } catch (e) {
+      set({ draftSketch });
+      throw e;
+    }
   },
 
   setSketchTool(tool) {
     const { mode } = get();
     if (mode.name !== "sketch") return;
-    set({ mode: { ...mode, tool }, selection: [],
-      ...(tool === "offset" ? { dialogParams: { ...get().dialogParams, offsetManualSelection: false, editOffsetId: undefined } } : {}) });
+    set({
+      mode: { ...mode, tool },
+      selection: [],
+      ...(tool === "offset"
+        ? {
+            dialogParams: {
+              ...get().dialogParams,
+              offsetManualSelection: false,
+              editOffsetId: undefined,
+            },
+          }
+        : {}),
+    });
   },
 
   updateDraftSketch(entities, constraints) {
@@ -488,25 +595,45 @@ export const useStore = create<State>((set, get) => ({
   async commitDraftSketch() {
     const { draftSketch, document } = get();
     if (!draftSketch || !document) return;
-    const saved = document.features.find(f => f.id === draftSketch.id);
-    if (saved?.type === "sketch" && JSON.stringify([saved.entities, saved.constraints, saved.offsets ?? []]) ===
-      JSON.stringify([draftSketch.entities, draftSketch.constraints, draftSketch.offsets ?? []])) return;
+    const saved = document.features.find((f) => f.id === draftSketch.id);
+    if (
+      saved?.type === "sketch" &&
+      JSON.stringify([
+        saved.entities,
+        saved.constraints,
+        saved.offsets ?? [],
+      ]) ===
+        JSON.stringify([
+          draftSketch.entities,
+          draftSketch.constraints,
+          draftSketch.offsets ?? [],
+        ])
+    )
+      return;
     await get().mutate(() =>
-      api.updateFeature(document.id, draftSketch.id, {
-        entities: draftSketch.entities,
-        constraints: draftSketch.constraints,
-        offsets: draftSketch.offsets,
-      } as Partial<Feature>, sketchEditingPosition(document, get().mode))
+      api.updateFeature(
+        document.id,
+        draftSketch.id,
+        {
+          entities: draftSketch.entities,
+          constraints: draftSketch.constraints,
+          offsets: draftSketch.offsets,
+        } as Partial<Feature>,
+        sketchEditingPosition(document, get().mode),
+      ),
     );
     // refresh draft from authoritative solve
     const evaluation = get().evaluation;
     const solvedSketch = evaluation?.sketches.find(
-      (s) => s.featureId === draftSketch.id
+      (s) => s.featureId === draftSketch.id,
     );
     if (solvedSketch) {
       set((s) => ({
         draftSketch: s.draftSketch
-          ? { ...s.draftSketch, entities: solvedSketch.entities as SketchEntity[] }
+          ? {
+              ...s.draftSketch,
+              entities: solvedSketch.entities as SketchEntity[],
+            }
           : null,
       }));
     }
@@ -521,8 +648,17 @@ export const useStore = create<State>((set, get) => ({
       set({ busy: true });
       const evaluation = await api.evaluate(doc.id);
       if (get().projectId !== doc.id) return;
-      set({ evaluation, busy: false, mode: { name: "idle" }, draftSketch: null, selection: [], dialogParams: {} });
-    } catch (e: any) { set({ busy: false, error: e.message }); }
+      set({
+        evaluation,
+        busy: false,
+        mode: { name: "idle" },
+        draftSketch: null,
+        selection: [],
+        dialogParams: {},
+      });
+    } catch (e: any) {
+      set({ busy: false, error: e.message });
+    }
   },
 
   async deleteSketchEntities(entityIds) {
@@ -555,7 +691,8 @@ export const useStore = create<State>((set, get) => ({
 
     let entities = draftSketch.entities.filter((e) => {
       if (idSet.has(e.id)) return false;
-      if (e.kind === "line" && (idSet.has(e.p1) || idSet.has(e.p2))) return false;
+      if (e.kind === "line" && (idSet.has(e.p1) || idSet.has(e.p2)))
+        return false;
       if (e.kind === "circle" && idSet.has(e.center)) return false;
       if (
         e.kind === "arc" &&
@@ -583,7 +720,7 @@ export const useStore = create<State>((set, get) => ({
       (e) =>
         e.kind !== "point" ||
         stillUsed.has(e.id) ||
-        !deletedCurvePoints.has(e.id)
+        !deletedCurvePoints.has(e.id),
     );
 
     // A connected endpoint may survive deletion of its projected curve.
@@ -591,16 +728,28 @@ export const useStore = create<State>((set, get) => ({
     const drivenPoints = new Set<string>();
     for (const e of entities) {
       if (e.kind === "point" || !e.projection) continue;
-      if (e.kind === "line") { drivenPoints.add(e.p1); drivenPoints.add(e.p2); }
-      else if (e.kind === "circle") drivenPoints.add(e.center);
-      else { drivenPoints.add(e.center); drivenPoints.add(e.start); drivenPoints.add(e.end); }
+      if (e.kind === "line") {
+        drivenPoints.add(e.p1);
+        drivenPoints.add(e.p2);
+      } else if (e.kind === "circle") drivenPoints.add(e.center);
+      else {
+        drivenPoints.add(e.center);
+        drivenPoints.add(e.start);
+        drivenPoints.add(e.end);
+      }
     }
-    entities = entities.map(e => e.kind === "point" && e.external && deletedCurvePoints.has(e.id) && !drivenPoints.has(e.id)
-      ? { ...e, external: false } : e);
+    entities = entities.map((e) =>
+      e.kind === "point" &&
+      e.external &&
+      deletedCurvePoints.has(e.id) &&
+      !drivenPoints.has(e.id)
+        ? { ...e, external: false }
+        : e,
+    );
 
     const remaining = new Set(entities.map((e) => e.id));
     const constraints = draftSketch.constraints.filter((c) =>
-      constraintEntityRefs(c).every((r) => remaining.has(r))
+      constraintEntityRefs(c).every((r) => remaining.has(r)),
     );
     get().updateDraftSketch(entities, constraints);
     await get().commitDraftSketch();
@@ -612,9 +761,12 @@ export const useStore = create<State>((set, get) => ({
     if (!draftSketch || entityIds.length === 0) return;
     const idSet = new Set(entityIds);
     const entities = draftSketch.entities.map((e) =>
-      idSet.has(e.id) ? { ...e, construction: !e.construction } : e
+      idSet.has(e.id) ? { ...e, construction: !e.construction } : e,
     );
-    get().updateDraftSketch(entities as SketchEntity[], draftSketch.constraints);
+    get().updateDraftSketch(
+      entities as SketchEntity[],
+      draftSketch.constraints,
+    );
     await get().commitDraftSketch();
   },
 
@@ -629,7 +781,14 @@ export const useStore = create<State>((set, get) => ({
   async updateFeature(fid, patch) {
     const { document } = get();
     if (!document) return;
-    await get().mutate(() => api.updateFeature(document.id, fid, patch, sketchEditingPosition(document, get().mode)));
+    await get().mutate(() =>
+      api.updateFeature(
+        document.id,
+        fid,
+        patch,
+        sketchEditingPosition(document, get().mode),
+      ),
+    );
   },
 
   async deleteFeature(fid) {
@@ -652,7 +811,10 @@ export const useStore = create<State>((set, get) => ({
     const trimmed = name.trim();
     if (!document || !trimmed || trimmed === document.name) return;
     try {
-      const { document: renamed } = await api.renameProject(document.id, trimmed);
+      const { document: renamed } = await api.renameProject(
+        document.id,
+        trimmed,
+      );
       // only the name changed server-side; keep whatever else is in the store
       const current = get().document;
       if (current && current.id === renamed.id) {
@@ -680,7 +842,9 @@ export const useStore = create<State>((set, get) => ({
     const { selection, document } = get();
     if (!document) return;
     const refs = selection
-      .filter((s) => s.kind === "face" || s.kind === "edge" || s.kind === "vertex")
+      .filter(
+        (s) => s.kind === "face" || s.kind === "edge" || s.kind === "vertex",
+      )
       .slice(0, 2) as any[];
     if (refs.length === 0) {
       set({ measureResult: null });

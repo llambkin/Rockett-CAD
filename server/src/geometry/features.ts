@@ -65,7 +65,13 @@ import {
   type NameMap,
   type NamedBody,
 } from "./naming.js";
-import { ORIGIN_FRAMES, V, frameFromPlane, offsetFrame, uvTo3d } from "./frames.js";
+import {
+  ORIGIN_FRAMES,
+  V,
+  frameFromPlane,
+  offsetFrame,
+  uvTo3d,
+} from "./frames.js";
 import { curveInfo } from "./tessellate.js";
 import { tangentEdges } from "./tangentEdges.js";
 import { readStep } from "./stepImport.js";
@@ -105,7 +111,7 @@ export function emptyState(): EvalState {
 export class FeatureError extends Error {
   constructor(
     public featureId: string,
-    message: string
+    message: string,
   ) {
     super(message);
   }
@@ -129,7 +135,9 @@ export function resolvePlaneFrame(state: EvalState, ref: PlaneRef): PlaneFrame {
   if (!body) throw new Error(`body ${ref.face.bodyId} no longer exists`);
   const face = findFace(body, ref.face.faceName);
   if (!face) {
-    throw new Error(`face ${ref.face.faceName} no longer exists on ${ref.face.bodyId}`);
+    throw new Error(
+      `face ${ref.face.faceName} no longer exists on ${ref.face.bodyId}`,
+    );
   }
   const k = getKernel();
   const surf = new k.BRepAdaptor_Surface_2(face, false);
@@ -152,7 +160,7 @@ export function resolvePlaneFrame(state: EvalState, ref: PlaneRef): PlaneFrame {
 
 function resolveAxis(
   state: EvalState,
-  ref: AxisRef
+  ref: AxisRef,
 ): { origin: Vec3; direction: Vec3 } {
   if (ref.kind === "originAxis") {
     const dirs: Record<string, Vec3> = {
@@ -166,7 +174,7 @@ function resolveAxis(
     const sketch = state.sketches.get(ref.sketchId);
     if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
     const line = sketch.entities.find(
-      (e) => e.id === ref.entityId && e.kind === "line"
+      (e) => e.id === ref.entityId && e.kind === "line",
     ) as any;
     if (!line) throw new Error(`axis line ${ref.entityId} not found`);
     const p1 = sketch.entities.find((e) => e.id === line.p1) as any;
@@ -199,7 +207,7 @@ function resolveAxis(
 
 function resolveProfiles(
   state: EvalState,
-  refs: ProfileRef[]
+  refs: ProfileRef[],
 ): { faces: ProfileFace[]; sketch: EvaluatedSketch } {
   if (refs.length === 0) throw new Error("no profiles selected");
   const sketch = state.sketches.get(refs[0].sketchId);
@@ -211,7 +219,7 @@ function resolveProfiles(
     const profile = s.profiles.find((p) => p.id === ref.profileId);
     if (!profile) {
       throw new Error(
-        `profile ${ref.profileId} no longer exists in ${ref.sketchId} — the sketch region may have changed`
+        `profile ${ref.profileId} no longer exists in ${ref.sketchId} — the sketch region may have changed`,
       );
     }
     out.push(buildProfileFace(profile, s.entities, s.frame));
@@ -243,7 +251,7 @@ function registerBodySolids(
   state: EvalState,
   bodyId: string,
   shape: Shape,
-  names: NameMap
+  names: NameMap,
 ): void {
   const sols = solids(shape);
   if (sols.length === 0) {
@@ -281,7 +289,12 @@ interface ToolResult {
 function unifyTool(tool: ToolResult, featureId: string): ToolResult {
   const k = getKernel();
   try {
-    const uni = new k.ShapeUpgrade_UnifySameDomain_2(tool.shape, true, true, false);
+    const uni = new k.ShapeUpgrade_UnifySameDomain_2(
+      tool.shape,
+      true,
+      true,
+      false,
+    );
     uni.Build();
     const merged = uni.Shape();
     if (facesOf(merged).length === 0) {
@@ -302,7 +315,7 @@ function applyToolOperation(
   state: EvalState,
   featureId: string,
   tool: ToolResult,
-  operation: "newBody" | "join" | "cut" | "intersect"
+  operation: "newBody" | "join" | "cut" | "intersect",
 ): void {
   const k = getKernel();
   if (operation === "newBody" || state.bodies.size === 0) {
@@ -313,7 +326,7 @@ function applyToolOperation(
   if (operation === "join") {
     // Fuse into the first overlapping body; otherwise create a new body.
     const target = [...state.bodies.values()].find((b) =>
-      bboxOverlap(b.shape, tool.shape)
+      bboxOverlap(b.shape, tool.shape),
     );
     if (!target) {
       registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
@@ -330,7 +343,7 @@ function applyToolOperation(
       op,
       [target, { shape: tool.shape, names: tool.names }],
       result,
-      featureId
+      featureId,
     );
     op.delete();
     // Clean the final union too: unifying only the incoming tool leaves
@@ -357,7 +370,7 @@ function applyToolOperation(
         op,
         [body, { shape: tool.shape, names: tool.names }],
         result,
-        featureId
+        featureId,
       );
       op.delete();
       registerBodySolids(state, body.bodyId, result, names);
@@ -368,7 +381,7 @@ function applyToolOperation(
 
   // intersect
   const target = [...state.bodies.values()].find((b) =>
-    bboxOverlap(b.shape, tool.shape)
+    bboxOverlap(b.shape, tool.shape),
   );
   if (!target) throw new Error("intersect tool does not overlap any body");
   const op = new k.BRepAlgoAPI_Common_3(target.shape, tool.shape, progress());
@@ -382,7 +395,7 @@ function applyToolOperation(
     op,
     [target, { shape: tool.shape, names: tool.names }],
     result,
-    featureId
+    featureId,
   );
   op.delete();
   registerBodySolids(state, target.bodyId, result, names);
@@ -394,19 +407,31 @@ function applyToolOperation(
 
 function evalSketch(state: EvalState, f: SketchFeature): void {
   const frame = resolvePlaneFrame(state, f.plane);
-  let entities = f.entities.map(e => ({ ...e }));
+  let entities = f.entities.map((e) => ({ ...e }));
   for (const entity of f.entities) {
     if (entity.kind === "point" || !entity.projection) continue;
     const ref = entity.projection;
     const body = state.bodies.get(ref.bodyId);
     const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
-    if (!edge) throw new Error(`Projected edge ${ref.edgeName} is missing. Restore its source or delete and re-project the reference.`);
-    const projected = projectEdge(curveInfo(edge), frame, entity.id, ref, entity.construction);
+    if (!edge)
+      throw new Error(
+        `Projected edge ${ref.edgeName} is missing. Restore its source or delete and re-project the reference.`,
+      );
+    const projected = projectEdge(
+      curveInfo(edge),
+      frame,
+      entity.id,
+      ref,
+      entity.construction,
+    );
     if (projected.at(-1)!.kind !== entity.kind)
-      throw new Error(`Projected edge ${ref.edgeName} changed curve type. Re-project this reference.`);
-    const replacements = new Map(projected.map(e => [e.id, e]));
-    entities = entities.map(e => replacements.get(e.id) ?? e);
-    for (const e of projected) if (!entities.some(old => old.id === e.id)) entities.push(e);
+      throw new Error(
+        `Projected edge ${ref.edgeName} changed curve type. Re-project this reference.`,
+      );
+    const replacements = new Map(projected.map((e) => [e.id, e]));
+    entities = entities.map((e) => replacements.get(e.id) ?? e);
+    for (const e of projected)
+      if (!entities.some((old) => old.id === e.id)) entities.push(e);
   }
   const solved = solveSketch({ entities, constraints: f.constraints });
   const profiles = detectProfiles(solved.entities);
@@ -427,7 +452,7 @@ function buildPrism(
   direction: Vec3,
   distance: number,
   baseOffset: number,
-  copyBase = false
+  copyBase = false,
 ): ToolResult {
   const k = getKernel();
   return kernelCall("extrude", () => {
@@ -436,7 +461,11 @@ function buildPrism(
     if (baseOffset !== 0) {
       const trsf = new k.gp_Trsf_1();
       trsf.SetTranslation_1(
-        vec(direction[0] * baseOffset, direction[1] * baseOffset, direction[2] * baseOffset)
+        vec(
+          direction[0] * baseOffset,
+          direction[1] * baseOffset,
+          direction[2] * baseOffset,
+        ),
       );
       const tr = new k.BRepBuilderAPI_Transform_2(face, trsf, true);
       const moved = tr.Shape();
@@ -460,7 +489,7 @@ function buildPrism(
     const v = vec(
       direction[0] * distance,
       direction[1] * distance,
-      direction[2] * distance
+      direction[2] * distance,
     );
     const prism = new k.BRepPrimAPI_MakePrism_1(face, v, copyBase, true);
     prism.Build(progress());
@@ -541,7 +570,11 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
     // fuse back in below.
     const cut = subtractSketchRegionsFromFace(face, state.sketches.values());
     sources.push({
-      pf: { face: cut.face, edgeEntity: cut.edgeEntity, profileId: ref.faceName },
+      pf: {
+        face: cut.face,
+        edgeEntity: cut.edgeEntity,
+        profileId: ref.faceName,
+      },
       n,
       copy: true,
     });
@@ -575,7 +608,12 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
   if (f.operation === "newBody") {
     tools.forEach((t, i) => {
       const u = unifyTool(t, f.id);
-      registerBodySolids(state, i === 0 ? `b:${f.id}` : `b:${f.id}:${i + 1}`, u.shape, u.names);
+      registerBodySolids(
+        state,
+        i === 0 ? `b:${f.id}` : `b:${f.id}:${i + 1}`,
+        u.shape,
+        u.names,
+      );
     });
     return;
   }
@@ -598,7 +636,7 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
         { shape: tools[i].shape, names: tools[i].names },
       ],
       merged,
-      f.id
+      f.id,
     );
     op.delete();
     tool = { shape: merged, names };
@@ -623,8 +661,8 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
         dir(
           sign * axis.direction[0],
           sign * axis.direction[1],
-          sign * axis.direction[2]
-        )
+          sign * axis.direction[2],
+        ),
       );
       const revol = full
         ? new k.BRepPrimAPI_MakeRevol_2(pf.face, ax1, false)
@@ -633,7 +671,7 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
       if (!revol.IsDone()) {
         revol.delete();
         throw new Error(
-          "revolve failed — the profile may cross the axis of revolution"
+          "revolve failed — the profile may cross the axis of revolution",
         );
       }
       const shape = revol.Shape();
@@ -669,7 +707,12 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
   if (f.operation === "newBody") {
     tools.forEach((t, i) => {
       const u = unifyTool(t, f.id);
-      registerBodySolids(state, i === 0 ? `b:${f.id}` : `b:${f.id}:${i + 1}`, u.shape, u.names);
+      registerBodySolids(
+        state,
+        i === 0 ? `b:${f.id}` : `b:${f.id}:${i + 1}`,
+        u.shape,
+        u.names,
+      );
     });
     return;
   }
@@ -686,7 +729,7 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
         { shape: tools[i].shape, names: tools[i].names },
       ],
       merged,
-      f.id
+      f.id,
     );
     op.delete();
     tool = { shape: merged, names };
@@ -704,7 +747,8 @@ function evalSweep(state: EvalState, f: SweepFeature): void {
   // ordered into a connected chain.
   const wire = kernelCall("sweep path", () => {
     const chain = orderOpenChain(pathSketch.entities);
-    if (chain.length === 0) throw new Error("path sketch contains no usable curves");
+    if (chain.length === 0)
+      throw new Error("path sketch contains no usable curves");
     const wireMaker = new k.BRepBuilderAPI_MakeWire_1();
     const maps = {
       points: new Map<string, { x: number; y: number }>(),
@@ -730,7 +774,9 @@ function evalSweep(state: EvalState, f: SweepFeature): void {
     pipe.Build(progress());
     if (!pipe.IsDone()) {
       pipe.delete();
-      throw new Error("sweep failed — check that the profile lies on the path start");
+      throw new Error(
+        "sweep failed — check that the profile lies on the path start",
+      );
     }
     const shape = pipe.Shape();
     const names = finalizeNames(shape, new Map(), f.id);
@@ -742,7 +788,8 @@ function evalSweep(state: EvalState, f: SweepFeature): void {
 
 function evalLoft(state: EvalState, f: LoftFeature): void {
   const k = getKernel();
-  if (f.sections.length < 2) throw new Error("loft requires at least two sections");
+  if (f.sections.length < 2)
+    throw new Error("loft requires at least two sections");
   const tool = kernelCall("loft", () => {
     const thru = new k.BRepOffsetAPI_ThruSections(true, false, 1e-6);
     for (const ref of f.sections) {
@@ -774,7 +821,7 @@ function* exploreWires(shape: Shape): Generator<Shape> {
   const ex = new k.TopExp_Explorer_2(
     shape,
     k.TopAbs_ShapeEnum.TopAbs_WIRE,
-    k.TopAbs_ShapeEnum.TopAbs_SHAPE
+    k.TopAbs_ShapeEnum.TopAbs_SHAPE,
   );
   while (ex.More()) {
     yield k.TopoDS.Wire_1(ex.Current());
@@ -786,7 +833,7 @@ function* exploreWires(shape: Shape): Generator<Shape> {
 /** Order sketch curve entities into a connected open chain. */
 function orderOpenChain(entities: SketchEntity[]): SketchEntity[] {
   const curves = entities.filter(
-    (e) => (e.kind === "line" || e.kind === "arc") && !e.construction
+    (e) => (e.kind === "line" || e.kind === "arc") && !e.construction,
   );
   return curves; // v1: assume drawn in order; MakeWire validates connectivity
 }
@@ -794,7 +841,7 @@ function orderOpenChain(entities: SketchEntity[]): SketchEntity[] {
 function sketchEntityToEdge(
   e: SketchEntity,
   sketch: EvaluatedSketch,
-  points: Map<string, { x: number; y: number }>
+  points: Map<string, { x: number; y: number }>,
 ): Shape | null {
   const k = getKernel();
   const to3d = (u: number, v: number): Vec3 => uvTo3d(sketch.frame, u, v);
@@ -805,7 +852,7 @@ function sketchEntityToEdge(
     const p2 = to3d(b.x, b.y);
     const mk = new k.BRepBuilderAPI_MakeEdge_3(
       pnt(p1[0], p1[1], p1[2]),
-      pnt(p2[0], p2[1], p2[2])
+      pnt(p2[0], p2[1], p2[2]),
     );
     const edge = mk.Edge();
     mk.delete();
@@ -826,7 +873,7 @@ function sketchEntityToEdge(
     const arcMk = new k.GC_MakeArcOfCircle_4(
       pnt(p1[0], p1[1], p1[2]),
       pnt(pm[0], pm[1], pm[2]),
-      pnt(p2[0], p2[1], p2[2])
+      pnt(p2[0], p2[1], p2[2]),
     );
     const mk = new k.BRepBuilderAPI_MakeEdge_24(arcMk.Value());
     const edge = mk.Edge();
@@ -848,7 +895,7 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
     const edgeNames = computeEdgeNames(body);
     const op = new k.BRepFilletAPI_MakeFillet(
       body.shape,
-      k.ChFi3d_FilletShape.ChFi3d_Rational
+      k.ChFi3d_FilletShape.ChFi3d_Rational,
     );
     const sourceEdges: { edge: Shape; name: string }[] = [];
     for (const ref of f.tangentChain ? tangentEdges(body, f.edges) : f.edges) {
@@ -866,7 +913,7 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
     if (!op.IsDone()) {
       op.delete();
       throw new Error(
-        `fillet of radius ${f.radius} failed — radius may be too large for the geometry`
+        `fillet of radius ${f.radius} failed — radius may be too large for the geometry`,
       );
     }
     const result = op.Shape();
@@ -882,7 +929,7 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
     if (!valid) {
       op.delete();
       throw new Error(
-        `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`
+        `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`,
       );
     }
     // Modified faces keep names; generated fillet faces are named per edge.
@@ -904,7 +951,7 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
         if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
           provisional.set(
             shapeHash(g),
-            `f:${f.id}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`
+            `f:${f.id}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
           );
         }
       });
@@ -928,7 +975,7 @@ function chamferByEnvelope(
   body: NamedBody,
   selected: { edge: Shape; name: string }[],
   distance: number,
-  featureId: string
+  featureId: string,
 ): ToolResult | null {
   const k = getKernel();
   const selHashes = new Set(selected.map((s) => shapeHash(s.edge)));
@@ -951,7 +998,8 @@ function chamferByEnvelope(
     const pln = surf.Plane();
     const d = pln.Axis().Direction();
     const loc = pln.Location();
-    const sgn = face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+    const sgn =
+      face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
     const out = {
       origin: [loc.X(), loc.Y(), loc.Z()] as Vec3,
       normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as Vec3,
@@ -964,23 +1012,35 @@ function chamferByEnvelope(
   // perpendicular planar walls. Holes in the cap are left alone — the
   // envelope only shapes the outline, so a through-hole survives untouched
   // (its edges must not be part of the selection, though).
-  const caps: { face: Shape; edges: Shape[]; plane: { origin: Vec3; normal: Vec3 } }[] = [];
+  const caps: {
+    face: Shape;
+    edges: Shape[];
+    plane: { origin: Vec3; normal: Vec3 };
+  }[] = [];
   const covered = new Set<number>();
   for (const face of bodyFaces) {
     const fe = edgesOf(k.BRepTools.OuterWire(face));
-    if (fe.length === 0 || !fe.every((e) => selHashes.has(shapeHash(e)))) continue;
+    if (fe.length === 0 || !fe.every((e) => selHashes.has(shapeHash(e))))
+      continue;
     const plane = planeOf(face);
     if (!plane) return null;
     for (const e of fe) {
       const h = shapeHash(e);
-      const wall = (edgeFaces.get(h) ?? []).find((w) => shapeHash(w) !== shapeHash(face));
+      const wall = (edgeFaces.get(h) ?? []).find(
+        (w) => shapeHash(w) !== shapeHash(face),
+      );
       const wp = wall ? planeOf(wall) : null;
-      if (!wall || !wp || Math.abs(dot(wp.normal, plane.normal)) > 1e-6) return null;
+      if (!wall || !wp || Math.abs(dot(wp.normal, plane.normal)) > 1e-6)
+        return null;
       // the chamfer may use up the wall exactly, but not cut past it
       let wallDepth = 0;
       for (const v of verticesOf(wall)) {
         const p = k.BRep_Tool.Pnt(v);
-        const rel: Vec3 = [p.X() - plane.origin[0], p.Y() - plane.origin[1], p.Z() - plane.origin[2]];
+        const rel: Vec3 = [
+          p.X() - plane.origin[0],
+          p.Y() - plane.origin[1],
+          p.Z() - plane.origin[2],
+        ];
         wallDepth = Math.max(wallDepth, -dot(rel, plane.normal));
         p.delete();
       }
@@ -992,11 +1052,12 @@ function chamferByEnvelope(
   if (caps.length === 0 || covered.size !== selHashes.size) return null;
 
   const firstWire = (shape: Shape): Shape | null => {
-    if (shape.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_WIRE) return k.TopoDS.Wire_1(shape);
+    if (shape.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_WIRE)
+      return k.TopoDS.Wire_1(shape);
     const ex = new k.TopExp_Explorer_2(
       shape,
       k.TopAbs_ShapeEnum.TopAbs_WIRE,
-      k.TopAbs_ShapeEnum.TopAbs_SHAPE
+      k.TopAbs_ShapeEnum.TopAbs_SHAPE,
     );
     const w = ex.More() ? k.TopoDS.Wire_1(ex.Current()) : null;
     ex.delete();
@@ -1013,14 +1074,21 @@ function chamferByEnvelope(
     return s;
   };
   const bb = bboxOf(body.shape);
-  const diag = Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]);
+  const diag = Math.hypot(
+    bb.max[0] - bb.min[0],
+    bb.max[1] - bb.min[1],
+    bb.max[2] - bb.min[2],
+  );
 
   let current: NamedBody = body;
   for (const cap of caps) {
     const n = cap.plane.normal;
     // offset the OUTER outline only — offsetting the cap face itself would
     // push any hole in it outward as well
-    const outlineFaceMk = new k.BRepBuilderAPI_MakeFace_15(k.BRepTools.OuterWire(cap.face), true);
+    const outlineFaceMk = new k.BRepBuilderAPI_MakeFace_15(
+      k.BRepTools.OuterWire(cap.face),
+      true,
+    );
     if (!outlineFaceMk.IsDone()) return null;
     const outlineFace = outlineFaceMk.Face();
     outlineFaceMk.delete();
@@ -1028,7 +1096,7 @@ function chamferByEnvelope(
       const mk = new k.BRepOffsetAPI_MakeOffset_2(
         outlineFace,
         k.GeomAbs_JoinType.GeomAbs_Intersection,
-        false
+        false,
       );
       mk.Perform(d, 0);
       const w = mk.IsDone() ? firstWire(mk.Shape()) : null;
@@ -1088,7 +1156,8 @@ function chamferByEnvelope(
       if (!ok) return null;
     }
     if (!addFace(inner)) return null;
-    if (!addFace(inward(k.BRepTools.OuterWire(cap.face), n, distance))) return null;
+    if (!addFace(inward(k.BRepTools.OuterWire(cap.face), n, distance)))
+      return null;
     sewing.Perform(progress());
     const shell = sewing.SewedShape();
     sewing.delete();
@@ -1102,14 +1171,14 @@ function chamferByEnvelope(
     if (!bigWire) return null;
     const bigFace = new k.BRepBuilderAPI_MakeFace_15(
       k.TopoDS.Wire_1(inward(bigWire, n, distance)),
-      true
+      true,
     );
     const far = diag + 1;
     const prism = new k.BRepPrimAPI_MakePrism_1(
       bigFace.Face(),
       vec(-n[0] * far, -n[1] * far, -n[2] * far),
       false,
-      true
+      true,
     );
     prism.Build(progress());
     const fuse = new k.BRepAlgoAPI_Fuse_3(band, prism.Shape(), progress());
@@ -1131,8 +1200,12 @@ function chamferByEnvelope(
     for (const face of facesOf(envelope)) {
       const c = faceCentroid(face);
       const depth = -dot(
-        [c[0] - cap.plane.origin[0], c[1] - cap.plane.origin[1], c[2] - cap.plane.origin[2]],
-        n
+        [
+          c[0] - cap.plane.origin[0],
+          c[1] - cap.plane.origin[1],
+          c[2] - cap.plane.origin[2],
+        ],
+        n,
       );
       if (Math.abs(depth) < 1e-6) {
         if (capName) envNames.set(shapeHash(face), capName);
@@ -1151,11 +1224,17 @@ function chamferByEnvelope(
         }
       });
       if (best < 0) continue;
-      const idx = selected.findIndex((s) => shapeHash(s.edge) === shapeHash(mids[best].e));
+      const idx = selected.findIndex(
+        (s) => shapeHash(s.edge) === shapeHash(mids[best].e),
+      );
       envNames.set(shapeHash(face), `f:${featureId}:fe:${idx + 1}`);
     }
 
-    const common = new k.BRepAlgoAPI_Common_3(current.shape, envelope, progress());
+    const common = new k.BRepAlgoAPI_Common_3(
+      current.shape,
+      envelope,
+      progress(),
+    );
     common.Build(progress());
     if (!common.IsDone()) {
       common.delete();
@@ -1170,7 +1249,7 @@ function chamferByEnvelope(
       common,
       [current, { shape: envelope, names: envNames }],
       result,
-      featureId
+      featureId,
     );
     common.delete();
     current = { bodyId: body.bodyId, shape: result, names };
@@ -1190,9 +1269,11 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
     const op = new k.BRepFilletAPI_MakeChamfer(body.shape);
     const sourceEdges: { edge: Shape; name: string }[] = [];
     for (const ref of f.tangentChain ? tangentEdges(body, f.edges) : f.edges) {
-      if (ref.bodyId !== bodyId) throw new Error("all chamfer edges must belong to the same body");
+      if (ref.bodyId !== bodyId)
+        throw new Error("all chamfer edges must belong to the same body");
       const edge = edgeNames.byName.get(ref.edgeName);
-      if (!edge) throw new Error(`referenced edge no longer exists: ${ref.edgeName}`);
+      if (!edge)
+        throw new Error(`referenced edge no longer exists: ${ref.edgeName}`);
       if (!op.Contour(edge)) op.Add_2(f.distance, edge);
       sourceEdges.push({ edge, name: ref.edgeName });
     }
@@ -1201,9 +1282,16 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
       op.delete();
       // ChFi3d can't consume a face (e.g. chamfers from both caps meeting
       // mid-wall); a boolean envelope can, for complete planar outlines
-      const viaEnvelope = chamferByEnvelope(body, sourceEdges, f.distance, f.id);
+      const viaEnvelope = chamferByEnvelope(
+        body,
+        sourceEdges,
+        f.distance,
+        f.id,
+      );
       if (!viaEnvelope) {
-        throw new Error(`could not build a ${f.distance} mm chamfer — check for missing connecting edges or try a smaller distance`);
+        throw new Error(
+          `could not build a ${f.distance} mm chamfer — check for missing connecting edges or try a smaller distance`,
+        );
       }
       registerBodySolids(state, bodyId, viaEnvelope.shape, viaEnvelope.names);
       return;
@@ -1227,7 +1315,7 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
         if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
           provisional.set(
             shapeHash(g),
-            `f:${f.id}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`
+            `f:${f.id}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
           );
         }
       });
@@ -1300,7 +1388,7 @@ function evalShell(state: EvalState, f: ShellFeature): void {
       false,
       k.GeomAbs_JoinType.GeomAbs_Arc,
       false,
-      progress()
+      progress(),
     );
     op.Build(progress());
     if (!op.IsDone()) {
@@ -1373,7 +1461,7 @@ function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
         op,
         [current, { shape: toolShape, names: toolNames }],
         result,
-        f.id
+        f.id,
       );
       op.delete();
       current = { bodyId, shape: result, names };
@@ -1393,13 +1481,19 @@ function evalSplitBody(state: EvalState, f: SplitBodyFeature): void {
       Math.hypot(
         bbox.max[0] - bbox.min[0],
         bbox.max[1] - bbox.min[1],
-        bbox.max[2] - bbox.min[2]
+        bbox.max[2] - bbox.min[2],
       ) + 10;
     const pln = new k.gp_Pln_3(
       pnt(frame.origin[0], frame.origin[1], frame.origin[2]),
-      dir(frame.normal[0], frame.normal[1], frame.normal[2])
+      dir(frame.normal[0], frame.normal[1], frame.normal[2]),
     );
-    const faceMk = new k.BRepBuilderAPI_MakeFace_9(pln, -diag, diag, -diag, diag);
+    const faceMk = new k.BRepBuilderAPI_MakeFace_9(
+      pln,
+      -diag,
+      diag,
+      -diag,
+      diag,
+    );
     const toolFace = faceMk.Face();
     faceMk.delete();
     pln.delete();
@@ -1454,7 +1548,7 @@ function mirrorTrsfFor(frame: PlaneFrame): any {
   const ax2 = new k.gp_Ax2_2(
     pnt(frame.origin[0], frame.origin[1], frame.origin[2]),
     dir(frame.normal[0], frame.normal[1], frame.normal[2]),
-    dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2])
+    dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2]),
   );
   trsf.SetMirror_3(ax2);
   ax2.delete();
@@ -1485,7 +1579,7 @@ function evalMirror(state: EvalState, f: MirrorFeature): void {
           op,
           [body, { shape: mirrored, names: mirroredNames }],
           result,
-          f.id
+          f.id,
         );
         op.delete();
         registerBodySolids(state, bodyId, result, names);
@@ -1505,7 +1599,8 @@ function evalMirror(state: EvalState, f: MirrorFeature): void {
  * their frames translated too, so they stay attached visually and any later
  * features built from them land at the moved position. */
 function evalMove(state: EvalState, f: MoveFeature, doc: CadDocument): void {
-  if (f.bodies.length === 0) throw new Error("select at least one body to move");
+  if (f.bodies.length === 0)
+    throw new Error("select at least one body to move");
   const [tx, ty, tz] = f.translation;
   const k = getKernel();
   kernelCall("move", () => {
@@ -1527,10 +1622,12 @@ function evalMove(state: EvalState, f: MoveFeature, doc: CadDocument): void {
   // carry the bodies' sketches along
   const movedIds = new Set(f.bodies);
   const createdBy = (g: Feature) =>
-    [...movedIds].some((id) => id === `b:${g.id}` || id.startsWith(`b:${g.id}:`));
+    [...movedIds].some(
+      (id) => id === `b:${g.id}` || id.startsWith(`b:${g.id}:`),
+    );
   for (const [skId, sk] of state.sketches) {
     const feat = doc.features.find(
-      (g) => g.id === skId && g.type === "sketch"
+      (g) => g.id === skId && g.type === "sketch",
     ) as SketchFeature | undefined;
     if (!feat) continue;
     let follows =
@@ -1540,7 +1637,7 @@ function evalMove(state: EvalState, f: MoveFeature, doc: CadDocument): void {
         const anyG = g as any;
         const consumes =
           [...(anyG.profiles ?? []), ...(anyG.sections ?? [])].some(
-            (p: any) => p.sketchId === skId
+            (p: any) => p.sketchId === skId,
           ) || anyG.pathSketchId === skId;
         if (consumes && createdBy(g)) {
           follows = true;
@@ -1569,7 +1666,11 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
   const k = getKernel();
   let direction: Vec3;
   if (f.direction.kind === "axis") {
-    const dirs: Record<string, Vec3> = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
+    const dirs: Record<string, Vec3> = {
+      X: [1, 0, 0],
+      Y: [0, 1, 0],
+      Z: [0, 0, 1],
+    };
     direction = dirs[f.direction.axis];
   } else {
     const axis = resolveAxis(state, { kind: "edge", edge: f.direction.edge });
@@ -1586,8 +1687,8 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
           vec(
             direction[0] * f.spacing * i,
             direction[1] * f.spacing * i,
-            direction[2] * f.spacing * i
-          )
+            direction[2] * f.spacing * i,
+          ),
         );
         const tr = new k.BRepBuilderAPI_Transform_2(body.shape, trsf, true);
         const instance = tr.Shape();
@@ -1595,7 +1696,11 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
         tr.delete();
         trsf.delete();
         if (f.combine) {
-          const op = new k.BRepAlgoAPI_Fuse_3(combined.shape, instance, progress());
+          const op = new k.BRepAlgoAPI_Fuse_3(
+            combined.shape,
+            instance,
+            progress(),
+          );
           op.Build(progress());
           if (!op.IsDone()) {
             op.delete();
@@ -1606,7 +1711,7 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
             op,
             [combined, { shape: instance, names: instNames }],
             result,
-            f.id
+            f.id,
           );
           op.delete();
           combined = { bodyId, shape: result, names };
@@ -1616,7 +1721,7 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
             state,
             newId,
             instance,
-            finalizeNames(instance, instNames, f.id)
+            finalizeNames(instance, instNames, f.id),
           );
         }
       }
@@ -1627,7 +1732,10 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
   });
 }
 
-function evalCircularPattern(state: EvalState, f: CircularPatternFeature): void {
+function evalCircularPattern(
+  state: EvalState,
+  f: CircularPatternFeature,
+): void {
   if (f.count < 2) throw new Error("pattern count must be ≥ 2");
   const axis = resolveAxis(state, f.axis);
   const k = getKernel();
@@ -1637,7 +1745,7 @@ function evalCircularPattern(state: EvalState, f: CircularPatternFeature): void 
   kernelCall("circularPattern", () => {
     const ax1 = new k.gp_Ax1_2(
       pnt(axis.origin[0], axis.origin[1], axis.origin[2]),
-      dir(axis.direction[0], axis.direction[1], axis.direction[2])
+      dir(axis.direction[0], axis.direction[1], axis.direction[2]),
     );
     for (const bodyId of f.bodies) {
       const body = state.bodies.get(bodyId);
@@ -1652,7 +1760,11 @@ function evalCircularPattern(state: EvalState, f: CircularPatternFeature): void 
         tr.delete();
         trsf.delete();
         if (f.combine) {
-          const op = new k.BRepAlgoAPI_Fuse_3(combined.shape, instance, progress());
+          const op = new k.BRepAlgoAPI_Fuse_3(
+            combined.shape,
+            instance,
+            progress(),
+          );
           op.Build(progress());
           if (!op.IsDone()) {
             op.delete();
@@ -1663,7 +1775,7 @@ function evalCircularPattern(state: EvalState, f: CircularPatternFeature): void 
             op,
             [combined, { shape: instance, names: instNames }],
             result,
-            f.id
+            f.id,
           );
           op.delete();
           combined = { bodyId, shape: result, names };
@@ -1673,7 +1785,7 @@ function evalCircularPattern(state: EvalState, f: CircularPatternFeature): void 
             state,
             newId,
             instance,
-            finalizeNames(instance, instNames, f.id)
+            finalizeNames(instance, instNames, f.id),
           );
         }
       }
@@ -1687,7 +1799,7 @@ function evalCircularPattern(state: EvalState, f: CircularPatternFeature): void 
 
 function evalConstructionPlane(
   state: EvalState,
-  f: ConstructionPlaneFeature
+  f: ConstructionPlaneFeature,
 ): void {
   let frame: PlaneFrame;
   if (f.method.kind === "offset") {
@@ -1709,8 +1821,8 @@ function evalConstructionPlane(
       Math.hypot(
         bb.max[0] - bb.min[0],
         bb.max[1] - bb.min[1],
-        bb.max[2] - bb.min[2]
-      ) * 0.75
+        bb.max[2] - bb.min[2],
+      ) * 0.75,
     );
   }
   state.planes.set(f.id, { frame, size });
@@ -1739,12 +1851,17 @@ function evalEmboss(state: EvalState, f: EmbossFeature): void {
 export function evaluateFeature(
   state: EvalState,
   feature: Feature,
-  doc: CadDocument
+  doc: CadDocument,
 ): void {
   switch (feature.type) {
     case "importStep": {
       const shape = readStep(feature.data);
-      registerBodySolids(state, `b:${feature.id}`, shape, finalizeNames(shape, new Map(), feature.id));
+      registerBodySolids(
+        state,
+        `b:${feature.id}`,
+        shape,
+        finalizeNames(shape, new Map(), feature.id),
+      );
       return;
     }
     case "sketch":

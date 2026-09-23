@@ -7,7 +7,7 @@ exports geometry. This is the most load-bearing document in the repo.
 
 The authoritative model is OpenCascade B-Rep: each **body** is a
 `TopoDS_Solid` (occasionally several solids when an operation splits a body).
-The document (`shared/src/model.ts`) stores the *recipe*: sketches with
+The document (`shared/src/model.ts`) stores the _recipe_: sketches with
 constraints, features with parameters and references, and embedded source
 data for imported geometry.
 Geometry exists only inside the evaluation state and its caches, and is
@@ -34,7 +34,7 @@ Bodies get stable ids derived from the feature that created them:
   selection order (`b:x`, `b:x:2`, …); `join` is what merges regions into a
   single solid (with no existing body to join, the merged solid becomes the new
   body).
-- Boolean join/cut keep the *target* body's id.
+- Boolean join/cut keep the _target_ body's id.
 - An operation that leaves multiple solids appends ordinal suffixes ordered
   by volume (`b:x`, `b:x:2`, …); `splitBody` orders along the split-plane
   normal (`b:x`, `b:x:s2`).
@@ -51,15 +51,15 @@ index. Instead:
 ### Face names
 
 Every face of every body carries a persistent string name assigned when it is
-created and *propagated* through later operations:
+created and _propagated_ through later operations:
 
-| Origin | Name |
-| --- | --- |
-| Extrude/revolve side face generated from a sketch curve | `f:{featureId}:s:{sketchEntityId}` |
-| Extrude/revolve cap | `f:{featureId}:cap:start` / `f:{featureId}:cap:end` |
-| Fillet/chamfer face generated from an edge | `f:{featureId}:fe:{n}` |
-| Mirrored / patterned copy | `m:{featureId}:{originalName}` / `p{i}:{featureId}:{originalName}` |
-| Anything the history cannot attribute | `f:{featureId}:x{n}` (deterministic centroid order) |
+| Origin                                                  | Name                                                               |
+| ------------------------------------------------------- | ------------------------------------------------------------------ |
+| Extrude/revolve side face generated from a sketch curve | `f:{featureId}:s:{sketchEntityId}`                                 |
+| Extrude/revolve cap                                     | `f:{featureId}:cap:start` / `f:{featureId}:cap:end`                |
+| Fillet/chamfer face generated from an edge              | `f:{featureId}:fe:{n}`                                             |
+| Mirrored / patterned copy                               | `m:{featureId}:{originalName}` / `p{i}:{featureId}:{originalName}` |
+| Anything the history cannot attribute                   | `f:{featureId}:x{n}` (deterministic centroid order)                |
 
 Propagation uses the kernel's own history API. For every boolean, fillet,
 chamfer, shell, or offset operation we walk the input faces and ask OCCT
@@ -105,7 +105,7 @@ them.
 
 Sketch-curve attribution deserves a note: wire construction can rebuild edge
 shapes (vertex merging), so after building a profile face we re-derive the
-edge→sketch-entity map *geometrically* (each face edge's midpoint is matched
+edge→sketch-entity map _geometrically_ (each face edge's midpoint is matched
 against the sketch curves) rather than trusting construction-time handles.
 
 ### Edge and vertex names
@@ -146,7 +146,7 @@ unconstrained / partially / fully / over-constrained badge.
 
 **Drawing inference** (client, `client/src/sketchTools.ts`): while a line is
 being drawn, the cursor snaps first to existing points, the origin and line
-midpoints. Otherwise a *direction lock* may engage from the start point — axis
+midpoints. Otherwise a _direction lock_ may engage from the start point — axis
 alignment, or a right angle to any line that ends there when within 4°
 (`perpendicularSnap`) — and curve snapping then runs on the steered cursor: a
 hit on a line is placed exactly where the locked direction crosses it
@@ -183,7 +183,7 @@ it — stable across regeneration while the same entities enclose the region.
 2. After each feature a **snapshot** is stored, keyed by the feature's JSON.
 3. On the next evaluation the longest prefix whose feature JSON is unchanged
    is reused; evaluation restarts from the first changed feature — editing
-   feature *k* re-evaluates only *k..end* ("retain valid cached state,
+   feature _k_ re-evaluates only _k..end_ ("retain valid cached state,
    invalidate downstream").
 4. The timeline marker simply truncates evaluation; rolled-back features are
    reported as `rolledBack`.

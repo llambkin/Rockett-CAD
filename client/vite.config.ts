@@ -7,7 +7,10 @@ export default defineConfig({
   resolve: {
     alias: {
       // Import shared TS source directly so Vite transpiles it.
-      "@rockett/shared": path.resolve(import.meta.dirname, "../shared/src/index.ts"),
+      "@rockett/shared": path.resolve(
+        import.meta.dirname,
+        "../shared/src/index.ts",
+      ),
     },
   },
   server: {

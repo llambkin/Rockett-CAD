@@ -12,7 +12,12 @@ import { MeasurePanel } from "./components/MeasurePanel";
 import { StepImportButton } from "./components/StepImportButton";
 import { DraggablePanel } from "./components/DraggablePanel";
 import { viewportHandle } from "./viewportRef";
-import { IDLE_SHORTCUTS, SKETCH_SHORTCUTS, idleActionFor, sketchToolFor } from "./shortcuts";
+import {
+  IDLE_SHORTCUTS,
+  SKETCH_SHORTCUTS,
+  idleActionFor,
+  sketchToolFor,
+} from "./shortcuts";
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
@@ -28,7 +33,10 @@ function ProjectList() {
   const openProject = useStore((s) => s.openProject);
 
   const refresh = () => {
-    api.listProjects().then(setProjects).catch((e) => setError(e.message));
+    api
+      .listProjects()
+      .then(setProjects)
+      .catch((e) => setError(e.message));
   };
   useEffect(refresh, []);
 
@@ -72,12 +80,16 @@ function ProjectList() {
                     className="project-rename"
                     onCommit={(n) => {
                       setRenamingId(null);
-                      api.renameProject(p.id, n).then(refresh).catch((e) => setError(e.message));
+                      api
+                        .renameProject(p.id, n)
+                        .then(refresh)
+                        .catch((e) => setError(e.message));
                     }}
                     onCancel={() => setRenamingId(null)}
                   />
                   <span>
-                    {p.featureCount} features · {new Date(p.modifiedAt).toLocaleString()}
+                    {p.featureCount} features ·{" "}
+                    {new Date(p.modifiedAt).toLocaleString()}
                   </span>
                 </div>
               ) : (
@@ -88,7 +100,8 @@ function ProjectList() {
                 >
                   <b>{p.name}</b>
                   <span>
-                    {p.featureCount} features · {new Date(p.modifiedAt).toLocaleString()}
+                    {p.featureCount} features ·{" "}
+                    {new Date(p.modifiedAt).toLocaleString()}
                   </span>
                 </button>
               )}
@@ -122,7 +135,9 @@ function ProjectList() {
               </button>
             </div>
           ))}
-          {projects.length === 0 && <div className="tree-empty">No projects yet</div>}
+          {projects.length === 0 && (
+            <div className="tree-empty">No projects yet</div>
+          )}
         </div>
       </div>
     </div>
@@ -193,7 +208,9 @@ function ProjectName({ name }: { name: string }) {
       onClick={() => setEditing(true)}
     >
       {name}
-      <span className="doc-name-pen" aria-hidden="true">✎</span>
+      <span className="doc-name-pen" aria-hidden="true">
+        ✎
+      </span>
     </button>
   );
 }
@@ -241,9 +258,17 @@ function Workspace() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
+      if (
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable
+      )
+        return;
       const s = useStore.getState();
-      if (e.key === "?") { e.preventDefault(); setShowHelp(v => !v); return; }
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowHelp((v) => !v);
+        return;
+      }
       if (s.busy || e.repeat) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -281,13 +306,17 @@ function Workspace() {
         const tool = sketchToolFor(k);
         if (tool) s.setSketchTool(tool);
         if (k === "x") {
-          s.setMode({ ...(s.mode as any), constructionMode: !(s.mode as any).constructionMode });
+          s.setMode({
+            ...(s.mode as any),
+            constructionMode: !(s.mode as any).constructionMode,
+          });
         }
         return;
       }
       if (s.mode.name === "idle") {
         const action = idleActionFor(k);
-        if (action?.kind === "sketch") s.setMode({ name: "pickPlane", purpose: "sketch" });
+        if (action?.kind === "sketch")
+          s.setMode({ name: "pickPlane", purpose: "sketch" });
         if (action?.kind === "measure") s.setMode({ name: "measure" });
         if (action?.kind === "dialog") openDialog(action.dialog);
       }
@@ -299,17 +328,31 @@ function Workspace() {
   return (
     <div className="workspace">
       <div className="top-bar">
-        <button className="app-title" onClick={closeProject} title="Back to projects">
+        <button
+          className="app-title"
+          onClick={closeProject}
+          title="Back to projects"
+        >
           ⬢ Rockett CAD
         </button>
         <ProjectName name={document_?.name ?? ""} />
         <UndoRedoButtons />
         {busy && <span className="busy-indicator">⟳ working…</span>}
-        <span className="save-indicator" aria-live="polite" title="Changes save automatically after each operation">
+        <span
+          className="save-indicator"
+          aria-live="polite"
+          title="Changes save automatically after each operation"
+        >
           {busy ? "Working…" : error ? "Check message" : "Changes saved"}
         </span>
-        <button className="icon-btn" title="Keyboard and mouse controls (?)" aria-expanded={showHelp}
-          onClick={() => setShowHelp(v => !v)}>Controls</button>
+        <button
+          className="icon-btn"
+          title="Keyboard and mouse controls (?)"
+          aria-expanded={showHelp}
+          onClick={() => setShowHelp((v) => !v)}
+        >
+          Controls
+        </button>
       </div>
       <Toolbar />
       <div className="main-row">
@@ -318,40 +361,123 @@ function Workspace() {
         <FeatureDialog />
         <SketchOffsetPanel />
         <MeasurePanel />
-        {showHelp && <DraggablePanel title="Keyboard & mouse controls">
-          <div className="dialog-body shortcut-help">
-            <p><b>Viewport</b></p>
-            <p>Drag the ViewCube to orbit; click a face for a standard view.</p>
-            <p>Middle-drag pans; right-drag or Shift+middle-drag orbits. Scroll to zoom.</p>
-            <p><kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view</p>
-            <p><b>Modelling</b></p>
-            <p>{IDLE_SHORTCUTS.map((x, i) => <span key={x.key}>{i > 0 && " · "}<kbd>{x.key}</kbd> {x.label}</span>)}</p>
-            <p><b>Sketching</b></p>
-            <p>{SKETCH_SHORTCUTS.map((x, i) => <span key={x.key}>{i > 0 && " · "}<kbd>{x.key}</kbd> {x.label}</span>)}</p>
-            <p><kbd>X</kbd> Construction (applies to whatever tool you draw with next: lines, rectangles, circles, arcs, polygons, slots)</p>
-            <p>Double-click a curve to edit its size. Drag a dimension label to move it. Dimensioning something that already has a dimension edits the existing one; the ✕ beside the value (or <kbd>Delete</kbd> on an empty box) removes it.</p>
-            <p><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds/removes selections, including profiles. In Extrude, <kbd>Shift</kbd> + click picks a face instead of a profile. <kbd>Esc</kbd> ends the drawing tool.</p>
-            <p>While drawing, type a size to lock it, <kbd>Tab</kbd> to move between sizes, <kbd>Enter</kbd> to place the shape.</p>
-            <p>A line within 4° of a right angle to a line it starts from snaps to exactly 90° (and gets a perpendicular constraint); move further off or type an angle for anything else.</p>
-            <p>Right-click a sketch region for Extrude / Revolve, or a sketch line to toggle construction; right-click a sketch in the tree to extrude its free regions.</p>
-            <p>Extrude <b>Start offset</b> begins the extrusion on a plane that far along the sketch or face normal (Fusion's Start → Offset); the arrow and ghost move with it.</p>
-            <p>Extrude distance is signed: type a negative value (or drag the arrow into the part) to go the other way; a typed negative switches Join to Cut and the preview turns red.</p>
-            <p>Sketches stay visible after use — used regions shade faintly but stay selectable; the eye in the tree hides a sketch. While editing an extrude or revolve, hold <kbd>Ctrl</kbd> / <kbd>⌘</kbd> to see the model without it and pick regions to add or remove.</p>
-            <p><kbd>Delete</kbd> removes selected sketch geometry.</p>
-            <p><kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo · <kbd>Ctrl</kbd> + <kbd>Y</kbd> Redo</p>
-          </div>
-          <div className="dialog-actions"><button className="btn" onClick={() => setShowHelp(false)}>Close controls</button></div>
-        </DraggablePanel>}
+        {showHelp && (
+          <DraggablePanel title="Keyboard & mouse controls">
+            <div className="dialog-body shortcut-help">
+              <p>
+                <b>Viewport</b>
+              </p>
+              <p>
+                Drag the ViewCube to orbit; click a face for a standard view.
+              </p>
+              <p>
+                Middle-drag pans; right-drag or Shift+middle-drag orbits. Scroll
+                to zoom.
+              </p>
+              <p>
+                <kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view
+              </p>
+              <p>
+                <b>Modelling</b>
+              </p>
+              <p>
+                {IDLE_SHORTCUTS.map((x, i) => (
+                  <span key={x.key}>
+                    {i > 0 && " · "}
+                    <kbd>{x.key}</kbd> {x.label}
+                  </span>
+                ))}
+              </p>
+              <p>
+                <b>Sketching</b>
+              </p>
+              <p>
+                {SKETCH_SHORTCUTS.map((x, i) => (
+                  <span key={x.key}>
+                    {i > 0 && " · "}
+                    <kbd>{x.key}</kbd> {x.label}
+                  </span>
+                ))}
+              </p>
+              <p>
+                <kbd>X</kbd> Construction (applies to whatever tool you draw
+                with next: lines, rectangles, circles, arcs, polygons, slots)
+              </p>
+              <p>
+                Double-click a curve to edit its size. Drag a dimension label to
+                move it. Dimensioning something that already has a dimension
+                edits the existing one; the ✕ beside the value (or{" "}
+                <kbd>Delete</kbd> on an empty box) removes it.
+              </p>
+              <p>
+                <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds/removes selections,
+                including profiles. In Extrude, <kbd>Shift</kbd> + click picks a
+                face instead of a profile. <kbd>Esc</kbd> ends the drawing tool.
+              </p>
+              <p>
+                While drawing, type a size to lock it, <kbd>Tab</kbd> to move
+                between sizes, <kbd>Enter</kbd> to place the shape.
+              </p>
+              <p>
+                A line within 4° of a right angle to a line it starts from snaps
+                to exactly 90° (and gets a perpendicular constraint); move
+                further off or type an angle for anything else.
+              </p>
+              <p>
+                Right-click a sketch region for Extrude / Revolve, or a sketch
+                line to toggle construction; right-click a sketch in the tree to
+                extrude its free regions.
+              </p>
+              <p>
+                Extrude <b>Start offset</b> begins the extrusion on a plane that
+                far along the sketch or face normal (Fusion's Start → Offset);
+                the arrow and ghost move with it.
+              </p>
+              <p>
+                Extrude distance is signed: type a negative value (or drag the
+                arrow into the part) to go the other way; a typed negative
+                switches Join to Cut and the preview turns red.
+              </p>
+              <p>
+                Sketches stay visible after use — used regions shade faintly but
+                stay selectable; the eye in the tree hides a sketch. While
+                editing an extrude or revolve, hold <kbd>Ctrl</kbd> /{" "}
+                <kbd>⌘</kbd> to see the model without it and pick regions to add
+                or remove.
+              </p>
+              <p>
+                <kbd>Delete</kbd> removes selected sketch geometry.
+              </p>
+              <p>
+                <kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo · <kbd>Ctrl</kbd> +{" "}
+                <kbd>Y</kbd> Redo
+              </p>
+            </div>
+            <div className="dialog-actions">
+              <button className="btn" onClick={() => setShowHelp(false)}>
+                Close controls
+              </button>
+            </div>
+          </DraggablePanel>
+        )}
       </div>
       <Timeline />
       {error && (
         <div className="error-toast" role="alert">
           <span>⚠ {error}</span>
-          <button onClick={() => setError(null)} aria-label="Dismiss message" title="Dismiss">✕</button>
+          <button
+            onClick={() => setError(null)}
+            aria-label="Dismiss message"
+            title="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
       {mode.name === "pickPlane" && (
-        <div className="mode-banner">Select a plane or planar face for the sketch (Esc to cancel)</div>
+        <div className="mode-banner">
+          Select a plane or planar face for the sketch (Esc to cancel)
+        </div>
       )}
     </div>
   );

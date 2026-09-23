@@ -5,12 +5,28 @@ import { api } from "../src/api";
 vi.mock("../src/api", () => ({ api: { renameProject: vi.fn() } }));
 
 const doc = createEmptyDocument("proj1", "Old name");
-const evaluation = { bodies: [], planes: [], kernelMs: 0, featureStatuses: [], sketches: [] };
+const evaluation = {
+  bodies: [],
+  planes: [],
+  kernelMs: 0,
+  featureStatuses: [],
+  sketches: [],
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useStore.setState({ document: doc, projectId: doc.id, evaluation: evaluation as any, busy: false, error: null, undoStack: [], redoStack: [] });
-  vi.mocked(api.renameProject).mockImplementation(async (_id, name) => ({ document: { ...doc, name } }));
+  useStore.setState({
+    document: doc,
+    projectId: doc.id,
+    evaluation: evaluation as any,
+    busy: false,
+    error: null,
+    undoStack: [],
+    redoStack: [],
+  });
+  vi.mocked(api.renameProject).mockImplementation(async (_id, name) => ({
+    document: { ...doc, name },
+  }));
 });
 
 it("renames the open project in place without touching evaluation or history", async () => {

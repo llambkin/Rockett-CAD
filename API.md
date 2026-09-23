@@ -23,15 +23,15 @@ snapshots sent by different clients.
 
 ## Projects
 
-| Method & path | Body | Returns |
-| --- | --- | --- |
-| `GET /health` | – | `{ ok: true, version, schemaVersion, commit }` (`commit` from `ROCKETT_COMMIT`, else `null`) |
-| `GET /projects` | – | `ProjectSummary[]` |
-| `POST /projects` | `{ name }` | `{ document }` |
-| `GET /projects/:id` | – | `{ document }` |
-| `DELETE /projects/:id` | – | `{ ok }` |
-| `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied) |
-| `POST /projects/:id/rename` | `{ name }` | `{ document }` |
+| Method & path                  | Body        | Returns                                                                                      |
+| ------------------------------ | ----------- | -------------------------------------------------------------------------------------------- |
+| `GET /health`                  | –           | `{ ok: true, version, schemaVersion, commit }` (`commit` from `ROCKETT_COMMIT`, else `null`) |
+| `GET /projects`                | –           | `ProjectSummary[]`                                                                           |
+| `POST /projects`               | `{ name }`  | `{ document }`                                                                               |
+| `GET /projects/:id`            | –           | `{ document }`                                                                               |
+| `DELETE /projects/:id`         | –           | `{ ok }`                                                                                     |
+| `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied)                                                               |
+| `POST /projects/:id/rename`    | `{ name }`  | `{ document }`                                                                               |
 
 ## Model
 
@@ -45,29 +45,29 @@ bodies. Invalid files are rejected before a new project is created. The STEP
 source is embedded in the document; uploads that take the document beyond
 40 MB are rejected.
 
-| Method & path | Body | Notes |
-| --- | --- | --- |
-| `GET /projects/:id/evaluate` | – | Evaluate to the timeline marker; returns `EvaluateResult` |
-| `PUT /projects/:id/document` | `{ document }` | Full replace (undo/redo restore); validated; 404 if project no longer exists |
-| `POST /projects/:id/features` | `{ feature }` | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
-| `PUT /projects/:id/features/:fid` | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable |
-| `DELETE /projects/:id/features/:fid` | – | Marker adjusts if needed |
-| `POST /projects/:id/timeline` | `{ position }` | Move the rollback marker |
-| `PUT /projects/:id/bodies/:bodyId` | `{ name?, visible? }` | Body display metadata |
+| Method & path                        | Body                    | Notes                                                                        |
+| ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |
+| `GET /projects/:id/evaluate`         | –                       | Evaluate to the timeline marker; returns `EvaluateResult`                    |
+| `PUT /projects/:id/document`         | `{ document }`          | Full replace (undo/redo restore); validated; 404 if project no longer exists |
+| `POST /projects/:id/features`        | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
+| `PUT /projects/:id/features/:fid`    | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
+| `DELETE /projects/:id/features/:fid` | –                       | Marker adjusts if needed                                                     |
+| `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
+| `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Body display metadata                                                        |
 
 ## Inspection & output
 
-| Method & path | Body | Returns |
-| --- | --- | --- |
-| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2) | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position) |
-| `POST /projects/:id/export` | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = all visible bodies. `retain: true` also stores a copy under the project's `exports/` dir |
+| Method & path                | Body                                                             | Returns                                                                                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                              |
+| `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = all visible bodies. `retain: true` also stores a copy under the project's `exports/` dir |
 
 ## Assets (reference images)
 
-| Method & path | Body | Notes |
-| --- | --- | --- |
-| `POST /projects/:id/assets` | multipart `image` | PNG/JPEG/WebP by magic bytes, ≤ 25 MB → `{ assetId }` |
-| `GET /projects/:id/assets/:assetId` | – | Serves the image |
+| Method & path                       | Body              | Notes                                                 |
+| ----------------------------------- | ----------------- | ----------------------------------------------------- |
+| `POST /projects/:id/assets`         | multipart `image` | PNG/JPEG/WebP by magic bytes, ≤ 25 MB → `{ assetId }` |
+| `GET /projects/:id/assets/:assetId` | –                 | Serves the image                                      |
 
 ## Validation
 

@@ -26,7 +26,7 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export class StoreError extends Error {
   constructor(
     message: string,
-    public status = 400
+    public status = 400,
   ) {
     super(message);
   }
@@ -53,7 +53,9 @@ export class ProjectStore {
 
   async list(): Promise<ProjectSummary[]> {
     await this.init();
-    const entries = await fs.readdir(this.projectsDir(), { withFileTypes: true });
+    const entries = await fs.readdir(this.projectsDir(), {
+      withFileTypes: true,
+    });
     const out: ProjectSummary[] = [];
     for (const e of entries) {
       if (!e.isDirectory() || !ID_RE.test(e.name)) continue;
@@ -77,8 +79,12 @@ export class ProjectStore {
   async create(name: string): Promise<CadDocument> {
     const id = crypto.randomBytes(6).toString("hex");
     const doc = createEmptyDocument(id, name || "Untitled");
-    await fs.mkdir(path.join(this.projectDir(id), "assets"), { recursive: true });
-    await fs.mkdir(path.join(this.projectDir(id), "exports"), { recursive: true });
+    await fs.mkdir(path.join(this.projectDir(id), "assets"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(this.projectDir(id), "exports"), {
+      recursive: true,
+    });
     await this.save(doc);
     return doc;
   }
@@ -112,7 +118,7 @@ export class ProjectStore {
     if (doc.schemaVersion !== SCHEMA_VERSION) {
       throw new StoreError(
         `document schema ${doc.schemaVersion} does not match ${SCHEMA_VERSION}`,
-        400
+        400,
       );
     }
     doc.modifiedAt = new Date().toISOString();
@@ -147,7 +153,7 @@ export class ProjectStore {
       for (const f of await fs.readdir(srcAssets)) {
         await fs.copyFile(
           path.join(srcAssets, f),
-          path.join(this.projectDir(copy.id), "assets", f)
+          path.join(this.projectDir(copy.id), "assets", f),
         );
       }
     } catch {
@@ -167,7 +173,7 @@ export class ProjectStore {
   async saveAsset(
     projectId: string,
     data: Buffer,
-    mime: string
+    mime: string,
   ): Promise<{ assetId: string }> {
     const ext =
       mime === "image/png" ? "png" : mime === "image/jpeg" ? "jpg" : "webp";
@@ -194,7 +200,7 @@ export class ProjectStore {
   async saveExport(
     projectId: string,
     fileName: string,
-    data: Buffer
+    data: Buffer,
   ): Promise<void> {
     if (!/^[\w.-]{1,120}$/.test(fileName)) return;
     const dir = path.join(this.projectDir(projectId), "exports");

@@ -10,7 +10,11 @@ export type IdleAction =
   | { kind: "measure" }
   | { kind: "dialog"; dialog: DialogType };
 
-export const IDLE_SHORTCUTS: Array<{ key: string; label: string; action: IdleAction }> = [
+export const IDLE_SHORTCUTS: Array<{
+  key: string;
+  label: string;
+  action: IdleAction;
+}> = [
   { key: "S", label: "Sketch", action: { kind: "sketch" } },
   { key: "E", label: "Extrude", action: { kind: "dialog", dialog: "extrude" } },
   { key: "F", label: "Fillet", action: { kind: "dialog", dialog: "fillet" } },
@@ -18,7 +22,11 @@ export const IDLE_SHORTCUTS: Array<{ key: string; label: string; action: IdleAct
   { key: "I", label: "Measure", action: { kind: "measure" } },
 ];
 
-export const SKETCH_SHORTCUTS: Array<{ key: string; label: string; tool: SketchTool }> = [
+export const SKETCH_SHORTCUTS: Array<{
+  key: string;
+  label: string;
+  tool: SketchTool;
+}> = [
   { key: "V", label: "Select", tool: "select" },
   { key: "L", label: "Line", tool: "line" },
   { key: "R", label: "Rectangle", tool: "rect" },
@@ -36,9 +44,14 @@ export function sketchToolFor(key: string): SketchTool | undefined {
 }
 
 /** Appends " (K)" when the dialog or sketch tool has a shortcut. */
-export function withKey(title: string, id: DialogType | SketchTool | "sketch" | "measure"): string {
+export function withKey(
+  title: string,
+  id: DialogType | SketchTool | "sketch" | "measure",
+): string {
   const key =
-    IDLE_SHORTCUTS.find((s) => (s.action.kind === "dialog" ? s.action.dialog : s.action.kind) === id)?.key ??
-    SKETCH_SHORTCUTS.find((s) => s.tool === id)?.key;
+    IDLE_SHORTCUTS.find(
+      (s) =>
+        (s.action.kind === "dialog" ? s.action.dialog : s.action.kind) === id,
+    )?.key ?? SKETCH_SHORTCUTS.find((s) => s.tool === id)?.key;
   return key ? `${title} (${key})` : title;
 }

@@ -7,7 +7,13 @@
  * client can do CAD-topology selection (body/face/edge/vertex) on the mesh.
  */
 
-import type { BodyPayload, EdgeInfo, FaceInfo, VertexInfo, Vec3 } from "@rockett/shared";
+import type {
+  BodyPayload,
+  EdgeInfo,
+  FaceInfo,
+  VertexInfo,
+  Vec3,
+} from "@rockett/shared";
 import {
   bboxOf,
   getKernel,
@@ -32,7 +38,7 @@ export interface TessellationOptions {
 export function tessellateBody(
   body: NamedBody,
   meta: { name: string; visible: boolean },
-  opts: TessellationOptions = {}
+  opts: TessellationOptions = {},
 ): BodyPayload {
   const k = getKernel();
   const linear = opts.linear ?? 0.08;
@@ -45,7 +51,7 @@ export function tessellateBody(
     linear,
     false,
     angular,
-    false
+    false,
   );
   mesh.delete();
 

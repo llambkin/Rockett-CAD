@@ -7,12 +7,7 @@
  * used for persistent side-face naming during extrude/revolve.
  */
 
-import type {
-  PlaneFrame,
-  Profile,
-  SketchEntity,
-  Vec3,
-} from "@rockett/shared";
+import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
 import { arcAngles } from "@rockett/shared";
 import {
   getKernel,
@@ -43,7 +38,10 @@ function buildMaps(entities: SketchEntity[]): EntityMaps {
   const points = new Map<string, { x: number; y: number }>();
   const lines = new Map<string, { p1: string; p2: string }>();
   const circles = new Map<string, { center: string; radius: number }>();
-  const arcs = new Map<string, { center: string; start: string; end: string }>();
+  const arcs = new Map<
+    string,
+    { center: string; start: string; end: string }
+  >();
   for (const e of entities) {
     if (e.kind === "point") points.set(e.id, { x: e.x, y: e.y });
     else if (e.kind === "line") lines.set(e.id, { p1: e.p1, p2: e.p2 });
@@ -73,11 +71,15 @@ function snapper(): (x: number, y: number) => [number, number] {
  * Returns the wire plus edge-hash → entity-id entries appended to edgeEntity.
  */
 function buildWire(
-  chain: { entityId: string; reversed: boolean; trim?: [number, number, number, number] }[],
+  chain: {
+    entityId: string;
+    reversed: boolean;
+    trim?: [number, number, number, number];
+  }[],
   maps: EntityMaps,
   frame: PlaneFrame,
   snap: (x: number, y: number) => [number, number],
-  edgeEntity: Map<number, string>
+  edgeEntity: Map<number, string>,
 ): Shape {
   const k = getKernel();
   const wireMaker = new k.BRepBuilderAPI_MakeWire_1();
@@ -104,7 +106,7 @@ function buildWire(
       const p2 = to3d(e);
       const mk = new k.BRepBuilderAPI_MakeEdge_3(
         pnt(p1[0], p1[1], p1[2]),
-        pnt(p2[0], p2[1], p2[2])
+        pnt(p2[0], p2[1], p2[2]),
       );
       edge = mk.Edge();
       mk.delete();
@@ -140,7 +142,7 @@ function buildWire(
       const arcMk = new k.GC_MakeArcOfCircle_4(
         pnt(p1[0], p1[1], p1[2]),
         pnt(pm[0], pm[1], pm[2]),
-        pnt(p2[0], p2[1], p2[2])
+        pnt(p2[0], p2[1], p2[2]),
       );
       const curveHandle = arcMk.Value();
       // Embind does not implicitly upcast OCCT handle templates.
@@ -157,7 +159,7 @@ function buildWire(
       const ax2 = new k.gp_Ax2_2(
         pnt(c3[0], c3[1], c3[2]),
         dir(frame.normal[0], frame.normal[1], frame.normal[2]),
-        dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2])
+        dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2]),
       );
       const circ = new k.gp_Circ_2(ax2, circle.radius);
       const mk = new k.BRepBuilderAPI_MakeEdge_8(circ);
@@ -166,12 +168,15 @@ function buildWire(
       circ.delete();
       ax2.delete();
     }
-    if (!edge) throw new Error(`profile references unknown entity ${oc.entityId}`);
+    if (!edge)
+      throw new Error(`profile references unknown entity ${oc.entityId}`);
     edgeEntity.set(shapeHash(edge), oc.entityId);
     wireMaker.Add_1(edge);
     if (!wireMaker.IsDone()) {
       wireMaker.delete();
-      throw new Error(`failed to connect profile wire at entity ${oc.entityId}`);
+      throw new Error(
+        `failed to connect profile wire at entity ${oc.entityId}`,
+      );
     }
   }
   const wire = wireMaker.Wire();
@@ -188,12 +193,16 @@ function matchEdgesToEntities(
   face: Shape,
   chainIds: string[],
   maps: EntityMaps,
-  frame: PlaneFrame
+  frame: PlaneFrame,
 ): Map<number, string> {
   const k = getKernel();
   const result = new Map<number, string>();
   const origin = frame.origin;
-  const toUV = (p: { X(): number; Y(): number; Z(): number }): [number, number] => {
+  const toUV = (p: {
+    X(): number;
+    Y(): number;
+    Z(): number;
+  }): [number, number] => {
     const dx = p.X() - origin[0];
     const dy = p.Y() - origin[1];
     const dz = p.Z() - origin[2];
@@ -205,7 +214,7 @@ function matchEdgesToEntities(
   const ex = new k.TopExp_Explorer_2(
     face,
     k.TopAbs_ShapeEnum.TopAbs_EDGE,
-    k.TopAbs_ShapeEnum.TopAbs_SHAPE
+    k.TopAbs_ShapeEnum.TopAbs_SHAPE,
   );
   while (ex.More()) {
     const edge = k.TopoDS.Edge_1(ex.Current());
@@ -271,7 +280,7 @@ export interface SketchOnPlane {
  */
 export function subtractSketchRegionsFromFace(
   face: Shape,
-  sketches: Iterable<SketchOnPlane>
+  sketches: Iterable<SketchOnPlane>,
 ): { face: Shape; edgeEntity: Map<number, string> } {
   const noop = { face, edgeEntity: new Map<number, string>() };
   try {
@@ -312,7 +321,7 @@ export function subtractSketchRegionsFromFace(
           pnt(w[0], w[1], w[2]),
           1e-6,
           false,
-          0.1
+          0.1,
         );
         const st = cls.State();
         cls.delete();
@@ -329,12 +338,15 @@ export function subtractSketchRegionsFromFace(
       const ndot = Math.abs(n[0] * fn[0] + n[1] * fn[1] + n[2] * fn[2]);
       if (ndot < 1 - 1e-6) continue;
       const doff = Math.abs(
-        (o[0] - fp[0]) * fn[0] + (o[1] - fp[1]) * fn[1] + (o[2] - fp[2]) * fn[2]
+        (o[0] - fp[0]) * fn[0] +
+          (o[1] - fp[1]) * fn[1] +
+          (o[2] - fp[2]) * fn[2],
       );
       if (doff > 1e-5) continue;
       for (const p of sk.profiles) {
         if (p.area <= 1e-9) continue;
-        if (strictlyInside(sk.frame, p.polygon)) regions.push({ sk, profile: p });
+        if (strictlyInside(sk.frame, p.polygon))
+          regions.push({ sk, profile: p });
       }
     }
     if (regions.length === 0) return noop;
@@ -363,7 +375,7 @@ export function subtractSketchRegionsFromFace(
       const ex = new k.TopExp_Explorer_2(
         result,
         k.TopAbs_ShapeEnum.TopAbs_FACE,
-        k.TopAbs_ShapeEnum.TopAbs_SHAPE
+        k.TopAbs_ShapeEnum.TopAbs_SHAPE,
       );
       const cutFaces: Shape[] = [];
       while (ex.More()) {
@@ -389,7 +401,7 @@ export function subtractSketchRegionsFromFace(
           cutFace,
           [...ids],
           buildMaps(sk.entities),
-          sk.frame
+          sk.frame,
         );
         for (const [h, id] of matched) edgeEntity.set(h, id);
       }
@@ -404,7 +416,7 @@ export function subtractSketchRegionsFromFace(
 export function buildProfileFace(
   profile: Profile,
   entities: SketchEntity[],
-  frame: PlaneFrame
+  frame: PlaneFrame,
 ): ProfileFace {
   return kernelCall(`profile ${profile.id}`, () => {
     const k = getKernel();
@@ -416,7 +428,7 @@ export function buildProfileFace(
 
     const pln = new k.gp_Pln_3(
       pnt(frame.origin[0], frame.origin[1], frame.origin[2]),
-      dir(frame.normal[0], frame.normal[1], frame.normal[2])
+      dir(frame.normal[0], frame.normal[1], frame.normal[2]),
     );
     const faceMk = new k.BRepBuilderAPI_MakeFace_16(pln, outerWire, true);
     if (!faceMk.IsDone()) {

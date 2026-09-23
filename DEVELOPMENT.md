@@ -21,11 +21,11 @@ Data in dev goes to `./data/` (gitignored).
 
 ## Workspaces
 
-| Workspace | Commands |
-| --- | --- |
-| `shared` | `npm test -w shared` — solver + profile-detection tests |
-| `server` | `npm run dev -w server`, `npm test -w server`, `npm run build -w server` (esbuild bundle → `server/dist/server.js`) |
-| `client` | `npm run dev -w client`, `npm run build -w client` (Vite → `client/dist`) |
+| Workspace | Commands                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
+| `shared`  | `npm test -w shared` — solver + profile-detection tests                                                             |
+| `server`  | `npm run dev -w server`, `npm test -w server`, `npm run build -w server` (esbuild bundle → `server/dist/server.js`) |
+| `client`  | `npm run dev -w client`, `npm run build -w client` (Vite → `client/dist`)                                           |
 
 `@rockett/shared` is consumed as TypeScript source (tsx and Vite both
 transpile it); the server production build bundles it via esbuild.
@@ -56,7 +56,7 @@ The suites map to the layers the brief requires:
 - **API integration** (`server/test/api.test.ts`) — the complete MVP workflow
   over real HTTP, ending in reload-and-verify.
 
-Write geometry tests as *reproducible numeric models* (exact volumes, bounding
+Write geometry tests as _reproducible numeric models_ (exact volumes, bounding
 boxes, face counts) — never rely on visual confirmation alone.
 
 ## Working on the geometry layer

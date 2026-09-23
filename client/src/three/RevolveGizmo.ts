@@ -34,7 +34,7 @@ export class RevolveGizmo {
     private dir: THREE.Vector3,
     zeroDir: THREE.Vector3,
     private radius: number,
-    initialDeg: number
+    initialDeg: number,
   ) {
     this.dir = dir.clone().normalize();
     this.u = zeroDir.clone().normalize();
@@ -49,16 +49,19 @@ export class RevolveGizmo {
         depthTest: false,
         transparent: true,
         opacity: 0.9,
-      })
+      }),
     );
     // torus lies around local Z — align local Z with the axis
-    this.ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.dir);
+    this.ring.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1),
+      this.dir,
+    );
     this.ring.position.copy(center);
     this.ring.renderOrder = 20;
 
     this.handle = new THREE.Mesh(
       new THREE.SphereGeometry(wpp * 5, 16, 12),
-      new THREE.MeshBasicMaterial({ color: HANDLE_COLOR, depthTest: false })
+      new THREE.MeshBasicMaterial({ color: HANDLE_COLOR, depthTest: false }),
     );
     this.handle.renderOrder = 21;
 
@@ -90,7 +93,7 @@ export class RevolveGizmo {
 
   setHover(hover: boolean) {
     (this.ring.material as THREE.MeshBasicMaterial).color.setHex(
-      hover ? RING_HOVER : RING_COLOR
+      hover ? RING_HOVER : RING_COLOR,
     );
   }
 
@@ -100,7 +103,7 @@ export class RevolveGizmo {
     const rect = this.viewport.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.viewport.camera);
     const ray = this.raycaster.ray;
@@ -118,7 +121,7 @@ export class RevolveGizmo {
     const rect = this.viewport.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.viewport.camera);
     // handle sphere: generous grab
@@ -155,13 +158,16 @@ export class RevolveGizmo {
     this.prevRaw = raw;
     this.cumulative = Math.max(
       -360,
-      Math.min(360, this.cumulative + THREE.MathUtils.radToDeg(delta))
+      Math.min(360, this.cumulative + THREE.MathUtils.radToDeg(delta)),
     );
     // zoom-adaptive snap: pick the finest of 1/5/15/45° that is ≥ ~4px of arc
     const wpp = this.viewport.worldPerPixel();
-    const pxPerDeg = ((Math.PI * 2 * this.radius) / 360) / wpp;
+    const pxPerDeg = (Math.PI * 2 * this.radius) / 360 / wpp;
     const step = [1, 5, 15, 45].find((s) => s * pxPerDeg >= 4) ?? 45;
-    return Math.max(-360, Math.min(360, Math.round(this.cumulative / step) * step));
+    return Math.max(
+      -360,
+      Math.min(360, Math.round(this.cumulative / step) * step),
+    );
   }
 
   endDrag() {

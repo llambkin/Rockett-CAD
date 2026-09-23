@@ -29,7 +29,8 @@ export async function initKernel(): Promise<OC> {
 }
 
 export function getKernel(): OC {
-  if (!oc) throw new Error("OCCT kernel not initialised — call initKernel() first");
+  if (!oc)
+    throw new Error("OCCT kernel not initialised — call initKernel() first");
   return oc;
 }
 
@@ -46,7 +47,7 @@ export function shapeHash(shape: Shape): number {
 
 export function* explore(
   shape: Shape,
-  type: "face" | "edge" | "vertex" | "solid" | "wire" | "shell"
+  type: "face" | "edge" | "vertex" | "solid" | "wire" | "shell",
 ): Generator<Shape> {
   const k = getKernel();
   const enumMap: Record<string, any> = {
@@ -60,7 +61,7 @@ export function* explore(
   const ex = new k.TopExp_Explorer_2(
     shape,
     enumMap[type],
-    k.TopAbs_ShapeEnum.TopAbs_SHAPE
+    k.TopAbs_ShapeEnum.TopAbs_SHAPE,
   );
   // De-duplicate: an explorer visits shared subshapes once per occurrence.
   const seen = new Set<number>();

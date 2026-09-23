@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/index.ts",
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:opencascade.js --external:express --external:multer --external:fflate --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "dev": "tsx watch --clear-screen=false src/index.ts",
     "start": "node dist/server.js",
     "test": "vitest run"
   },

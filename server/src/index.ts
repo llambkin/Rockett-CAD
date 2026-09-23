@@ -39,7 +39,9 @@ async function main() {
     path.resolve(__dirname, "./client/dist"), // Docker image layout
     path.resolve(__dirname, "../client/dist"),
   ];
-  const clientDir = candidates.find((c) => fs.existsSync(path.join(c, "index.html")));
+  const clientDir = candidates.find((c) =>
+    fs.existsSync(path.join(c, "index.html")),
+  );
   if (clientDir) {
     app.use(express.static(clientDir));
     app.get("/{*splat}", (_req, res) => {
@@ -47,7 +49,9 @@ async function main() {
     });
     console.log(`[rockett] serving client from ${clientDir}`);
   } else {
-    console.log("[rockett] no client build found — API only (use Vite dev server)");
+    console.log(
+      "[rockett] no client build found — API only (use Vite dev server)",
+    );
   }
 
   app.listen(PORT, () => {

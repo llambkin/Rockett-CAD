@@ -23,7 +23,9 @@ function num(v: unknown, label: string, min?: number, max?: number): void {
 
 function str(v: unknown, label: string, maxLen = 200): void {
   if (typeof v !== "string" || v.length === 0 || v.length > maxLen) {
-    throw new ValidationError(`${label} must be a non-empty string (≤${maxLen})`);
+    throw new ValidationError(
+      `${label} must be a non-empty string (≤${maxLen})`,
+    );
   }
 }
 
@@ -48,7 +50,11 @@ export function validateFeature(f: Feature): void {
   switch (f.type) {
     case "importStep":
       str(f.filename, "STEP filename", 255);
-      if (typeof f.data !== "string" || f.data.length > 10 * 1024 * 1024 || !f.data.trimStart().startsWith("ISO-10303-21;"))
+      if (
+        typeof f.data !== "string" ||
+        f.data.length > 10 * 1024 * 1024 ||
+        !f.data.trimStart().startsWith("ISO-10303-21;")
+      )
         throw new ValidationError("A valid STEP file up to 10 MB is required");
       break;
     case "sketch": {
@@ -59,24 +65,35 @@ export function validateFeature(f: Feature): void {
         throw new ValidationError("sketch constraints invalid");
       }
       if (f.offsets !== undefined) {
-        if (!Array.isArray(f.offsets) || f.offsets.length > 1000) throw new ValidationError("sketch offsets invalid");
+        if (!Array.isArray(f.offsets) || f.offsets.length > 1000)
+          throw new ValidationError("sketch offsets invalid");
         const ids = new Set<string>();
         const outputs = new Set<string>();
         for (const offset of f.offsets) {
           if (!offset) throw new ValidationError("sketch offset invalid");
           str(offset.id, "offset id", 100);
-          if (ids.has(offset.id)) throw new ValidationError("duplicate offset id");
+          if (ids.has(offset.id))
+            throw new ValidationError("duplicate offset id");
           ids.add(offset.id);
           num(offset.distance, "offset distance", -MAX_DIM, MAX_DIM);
-          if (Math.abs(offset.distance) < 1e-7) throw new ValidationError("offset distance must be non-zero");
+          if (Math.abs(offset.distance) < 1e-7)
+            throw new ValidationError("offset distance must be non-zero");
           num(offset.joinTolerance, "offset join tolerance", 0, 1);
           for (const refs of [offset.sourceIds, offset.entityIds]) {
-            if (!Array.isArray(refs) || !refs.length || refs.length > 5000 || new Set(refs).size !== refs.length)
+            if (
+              !Array.isArray(refs) ||
+              !refs.length ||
+              refs.length > 5000 ||
+              new Set(refs).size !== refs.length
+            )
               throw new ValidationError("offset entity references invalid");
             for (const id of refs) str(id, "offset entity id", 100);
           }
           for (const id of offset.entityIds) {
-            if (outputs.has(id) || offset.sourceIds.includes(id)) throw new ValidationError("offset outputs must be distinct from sources and other offsets");
+            if (outputs.has(id) || offset.sourceIds.includes(id))
+              throw new ValidationError(
+                "offset outputs must be distinct from sources and other offsets",
+              );
             outputs.add(id);
           }
         }
@@ -84,18 +101,32 @@ export function validateFeature(f: Feature): void {
       if (f.visible !== undefined && typeof f.visible !== "boolean") {
         throw new ValidationError("sketch visible must be a boolean");
       }
-      const entityIds = new Set(f.entities.map(e => e.id));
-      if (entityIds.size !== f.entities.length) throw new ValidationError("duplicate sketch entity ID");
-      const pointIds = new Set(f.entities.filter(e => e.kind === "point").map(e => e.id));
+      const entityIds = new Set(f.entities.map((e) => e.id));
+      if (entityIds.size !== f.entities.length)
+        throw new ValidationError("duplicate sketch entity ID");
+      const pointIds = new Set(
+        f.entities.filter((e) => e.kind === "point").map((e) => e.id),
+      );
       for (const e of f.entities) {
-        const pointRefs = e.kind === "line" ? [e.p1, e.p2] : e.kind === "circle" ? [e.center]
-          : e.kind === "arc" ? [e.center, e.start, e.end] : [];
-        if (pointRefs.some(id => !pointIds.has(id))) throw new ValidationError(`Missing endpoint on sketch entity ${e.id}`);
+        const pointRefs =
+          e.kind === "line"
+            ? [e.p1, e.p2]
+            : e.kind === "circle"
+              ? [e.center]
+              : e.kind === "arc"
+                ? [e.center, e.start, e.end]
+                : [];
+        if (pointRefs.some((id) => !pointIds.has(id)))
+          throw new ValidationError(
+            `Missing endpoint on sketch entity ${e.id}`,
+          );
         if (e.kind !== "point" && e.projection) {
-          if (e.projection.kind !== "edge") throw new ValidationError("projection must reference an edge");
+          if (e.projection.kind !== "edge")
+            throw new ValidationError("projection must reference an edge");
           str(e.projection.bodyId, "projection body");
           str(e.projection.edgeName, "projection edge", 2000);
-          if (!e.external) throw new ValidationError("projected curves must be external");
+          if (!e.external)
+            throw new ValidationError("projected curves must be external");
         }
         if (e.kind === "point") {
           num(e.x, "point x", -MAX_DIM, MAX_DIM);
@@ -109,9 +140,12 @@ export function validateFeature(f: Feature): void {
     case "extrude": {
       // signed: a negative distance extrudes to the other side of the sketch
       num(f.distance, "extrude distance", -MAX_DIM, MAX_DIM);
-      if (Math.abs(f.distance) < 0.000001) throw new ValidationError("extrude distance must be non-zero");
-      if (f.distance2 !== undefined) num(f.distance2, "second distance", 0, MAX_DIM);
-      if (f.startOffset !== undefined) num(f.startOffset, "start offset", -MAX_DIM, MAX_DIM);
+      if (Math.abs(f.distance) < 0.000001)
+        throw new ValidationError("extrude distance must be non-zero");
+      if (f.distance2 !== undefined)
+        num(f.distance2, "second distance", 0, MAX_DIM);
+      if (f.startOffset !== undefined)
+        num(f.startOffset, "start offset", -MAX_DIM, MAX_DIM);
       list(f.profiles, "extrude profiles", 0, 64);
       if (f.faces !== undefined) list(f.faces, "extrude faces", 0, 64);
       const sourceCount = f.profiles.length + (f.faces?.length ?? 0);
@@ -131,12 +165,14 @@ export function validateFeature(f: Feature): void {
       list(f.sections, "loft sections", 2, 64);
       break;
     case "fillet":
-      if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean") throw new ValidationError("tangentChain must be boolean");
+      if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean")
+        throw new ValidationError("tangentChain must be boolean");
       num(f.radius, "fillet radius", 0.000001, MAX_DIM);
       list(f.edges, "fillet edges", 1, 256);
       break;
     case "chamfer":
-      if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean") throw new ValidationError("tangentChain must be boolean");
+      if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean")
+        throw new ValidationError("tangentChain must be boolean");
       num(f.distance, "chamfer distance", 0.000001, MAX_DIM);
       list(f.edges, "chamfer edges", 1, 256);
       break;
@@ -145,7 +181,9 @@ export function validateFeature(f: Feature): void {
       break;
     case "combine":
       if (!["join", "cut", "intersect"].includes(f.operation)) {
-        throw new ValidationError("combine operation must be join, cut or intersect");
+        throw new ValidationError(
+          "combine operation must be join, cut or intersect",
+        );
       }
       str(f.targetBody, "combine target body");
       list(f.toolBodies, "combine tool bodies", 1, 64);
@@ -194,7 +232,9 @@ export function validateFeature(f: Feature): void {
       break;
     default: {
       const unknown: never = f;
-      throw new ValidationError(`unknown feature type ${String((unknown as { type?: unknown }).type)}`);
+      throw new ValidationError(
+        `unknown feature type ${String((unknown as { type?: unknown }).type)}`,
+      );
     }
   }
 }
@@ -208,7 +248,8 @@ export function validateDocument(doc: CadDocument): void {
   num(doc.timelinePosition, "timeline position", 0, doc.features.length);
   const ids = new Set<string>();
   for (const f of doc.features) {
-    if (ids.has(f.id)) throw new ValidationError(`duplicate feature id ${f.id}`);
+    if (ids.has(f.id))
+      throw new ValidationError(`duplicate feature id ${f.id}`);
     ids.add(f.id);
     validateFeature(f);
   }

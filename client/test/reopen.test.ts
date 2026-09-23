@@ -8,7 +8,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { renderToString } from "react-dom/server";
-import { createEmptyDocument, type Feature, type SketchFeature } from "@rockett/shared";
+import {
+  createEmptyDocument,
+  type Feature,
+  type SketchFeature,
+} from "@rockett/shared";
 import { useStore } from "../src/store";
 import { filterSelectionFor } from "../src/dialogPicks";
 import { openFeatureEditor } from "../src/components/Timeline";
@@ -47,29 +51,174 @@ const onFace = { kind: "face" as const, face };
 
 /** Every editable type, with each reference variant the dialog can build. */
 const cases: Feature[] = [
-  { ...base, id: "ex", type: "extrude", profiles: [prof], faces: [face], distance: 12, distance2: 4, startOffset: 1, direction: "twoSided", operation: "cut" },
-  { ...base, id: "rvO", type: "revolve", profiles: [prof], axis: { kind: "originAxis", axis: "Y" }, angle: 90, operation: "newBody" },
-  { ...base, id: "rvE", type: "revolve", profiles: [prof], axis: { kind: "edge", edge }, angle: 180, operation: "join" },
-  { ...base, id: "rvS", type: "revolve", profiles: [prof], axis: { kind: "sketchLine", sketchId: "sk1", entityId: "ln1" }, angle: 360, operation: "join" },
-  { ...base, id: "sw", type: "sweep", profiles: [prof], pathSketchId: "sk1", operation: "newBody" },
-  { ...base, id: "lo", type: "loft", sections: [prof, prof2], operation: "join" },
-  { ...base, id: "fi", type: "fillet", edges: [edge], radius: 3, tangentChain: true },
-  { ...base, id: "ch", type: "chamfer", edges: [edge], distance: 2, tangentChain: false },
+  {
+    ...base,
+    id: "ex",
+    type: "extrude",
+    profiles: [prof],
+    faces: [face],
+    distance: 12,
+    distance2: 4,
+    startOffset: 1,
+    direction: "twoSided",
+    operation: "cut",
+  },
+  {
+    ...base,
+    id: "rvO",
+    type: "revolve",
+    profiles: [prof],
+    axis: { kind: "originAxis", axis: "Y" },
+    angle: 90,
+    operation: "newBody",
+  },
+  {
+    ...base,
+    id: "rvE",
+    type: "revolve",
+    profiles: [prof],
+    axis: { kind: "edge", edge },
+    angle: 180,
+    operation: "join",
+  },
+  {
+    ...base,
+    id: "rvS",
+    type: "revolve",
+    profiles: [prof],
+    axis: { kind: "sketchLine", sketchId: "sk1", entityId: "ln1" },
+    angle: 360,
+    operation: "join",
+  },
+  {
+    ...base,
+    id: "sw",
+    type: "sweep",
+    profiles: [prof],
+    pathSketchId: "sk1",
+    operation: "newBody",
+  },
+  {
+    ...base,
+    id: "lo",
+    type: "loft",
+    sections: [prof, prof2],
+    operation: "join",
+  },
+  {
+    ...base,
+    id: "fi",
+    type: "fillet",
+    edges: [edge],
+    radius: 3,
+    tangentChain: true,
+  },
+  {
+    ...base,
+    id: "ch",
+    type: "chamfer",
+    edges: [edge],
+    distance: 2,
+    tangentChain: false,
+  },
   { ...base, id: "sh", type: "shell", openFaces: [face], thickness: 1.5 },
-  { ...base, id: "co", type: "combine", operation: "cut", targetBody: "b1", toolBodies: ["b2", "b3"], keepTools: true },
+  {
+    ...base,
+    id: "co",
+    type: "combine",
+    operation: "cut",
+    targetBody: "b1",
+    toolBodies: ["b2", "b3"],
+    keepTools: true,
+  },
   { ...base, id: "spP", type: "splitBody", body: "b1", tool: xy },
   { ...base, id: "spF", type: "splitBody", body: "b1", tool: onFace },
   { ...base, id: "of", type: "offsetFace", faces: [face], distance: -2 },
-  { ...base, id: "mi", type: "mirror", bodies: ["b1"], plane: yz, combine: false },
-  { ...base, id: "lpA", type: "linearPattern", bodies: ["b1"], direction: { kind: "axis", axis: "Y" }, count: 4, spacing: 15, combine: true },
-  { ...base, id: "lpE", type: "linearPattern", bodies: ["b1"], direction: { kind: "edge", edge }, count: 2, spacing: 5, combine: false },
-  { ...base, id: "cpO", type: "circularPattern", bodies: ["b1"], axis: { kind: "originAxis", axis: "X" }, count: 5, totalAngle: 180, combine: true },
-  { ...base, id: "cpE", type: "circularPattern", bodies: ["b1"], axis: { kind: "edge", edge }, count: 6, totalAngle: 360, combine: false },
-  { ...base, id: "cpS", type: "circularPattern", bodies: ["b1"], axis: { kind: "sketchLine", sketchId: "sk1", entityId: "ln1" }, count: 3, totalAngle: 120, combine: false },
-  { ...base, id: "cpOff", type: "constructionPlane", method: { kind: "offset", base: onFace, distance: 7 } },
-  { ...base, id: "cpMid", type: "constructionPlane", method: { kind: "midplane", a: xy, b: onFace } },
-  { ...base, id: "em", type: "emboss", profiles: [prof], depth: 0.5, mode: "deboss" },
-  { ...base, id: "mv", type: "move", bodies: ["b1", "b2"], translation: [1, -2, 3] },
+  {
+    ...base,
+    id: "mi",
+    type: "mirror",
+    bodies: ["b1"],
+    plane: yz,
+    combine: false,
+  },
+  {
+    ...base,
+    id: "lpA",
+    type: "linearPattern",
+    bodies: ["b1"],
+    direction: { kind: "axis", axis: "Y" },
+    count: 4,
+    spacing: 15,
+    combine: true,
+  },
+  {
+    ...base,
+    id: "lpE",
+    type: "linearPattern",
+    bodies: ["b1"],
+    direction: { kind: "edge", edge },
+    count: 2,
+    spacing: 5,
+    combine: false,
+  },
+  {
+    ...base,
+    id: "cpO",
+    type: "circularPattern",
+    bodies: ["b1"],
+    axis: { kind: "originAxis", axis: "X" },
+    count: 5,
+    totalAngle: 180,
+    combine: true,
+  },
+  {
+    ...base,
+    id: "cpE",
+    type: "circularPattern",
+    bodies: ["b1"],
+    axis: { kind: "edge", edge },
+    count: 6,
+    totalAngle: 360,
+    combine: false,
+  },
+  {
+    ...base,
+    id: "cpS",
+    type: "circularPattern",
+    bodies: ["b1"],
+    axis: { kind: "sketchLine", sketchId: "sk1", entityId: "ln1" },
+    count: 3,
+    totalAngle: 120,
+    combine: false,
+  },
+  {
+    ...base,
+    id: "cpOff",
+    type: "constructionPlane",
+    method: { kind: "offset", base: onFace, distance: 7 },
+  },
+  {
+    ...base,
+    id: "cpMid",
+    type: "constructionPlane",
+    method: { kind: "midplane", a: xy, b: onFace },
+  },
+  {
+    ...base,
+    id: "em",
+    type: "emboss",
+    profiles: [prof],
+    depth: 0.5,
+    mode: "deboss",
+  },
+  {
+    ...base,
+    id: "mv",
+    type: "move",
+    bodies: ["b1", "b2"],
+    translation: [1, -2, 3],
+  },
 ];
 
 const updateFeature = vi.fn(async () => {});
@@ -80,7 +229,15 @@ beforeEach(() => {
   panels.length = 0;
   const doc = createEmptyDocument("d1", "Doc");
   doc.features = [sketch, ...cases];
-  useStore.setState({ document: doc, busy: false, mode: { name: "idle" }, selection: [], dialogParams: {}, updateFeature, setError });
+  useStore.setState({
+    document: doc,
+    busy: false,
+    mode: { name: "idle" },
+    selection: [],
+    dialogParams: {},
+    updateFeature,
+    setError,
+  });
 });
 
 /** Render the open dialog and press its primary button. */
@@ -100,27 +257,46 @@ async function pressOk(): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-it.each(cases.map((f) => [f.id, f] as const))("reopen + OK round-trips %s", async (_id, f) => {
-  await openFeatureEditor(f);
-  const s = useStore.getState();
-  expect(s.mode).toEqual({ name: "dialog", dialog: f.type, editFeatureId: f.id });
-  // everything reopen selects is pickable in that dialog
-  expect(filterSelectionFor(f.type as any, s.selection)).toEqual(s.selection);
-  await pressOk();
-  expect(setError).not.toHaveBeenCalled();
-  const { id: _ignored, suppressed: _kept, ...patch } = f;
-  expect(updateFeature).toHaveBeenCalledWith(f.id, patch);
-});
+it.each(cases.map((f) => [f.id, f] as const))(
+  "reopen + OK round-trips %s",
+  async (_id, f) => {
+    await openFeatureEditor(f);
+    const s = useStore.getState();
+    expect(s.mode).toEqual({
+      name: "dialog",
+      dialog: f.type,
+      editFeatureId: f.id,
+    });
+    // everything reopen selects is pickable in that dialog
+    expect(filterSelectionFor(f.type as any, s.selection)).toEqual(s.selection);
+    await pressOk();
+    expect(setError).not.toHaveBeenCalled();
+    const { id: _ignored, suppressed: _kept, ...patch } = f;
+    expect(updateFeature).toHaveBeenCalledWith(f.id, patch);
+  },
+);
 
 it("reopen keeps a reference image's placement", async () => {
   const img: Feature = {
-    ...base, id: "ri", type: "referenceImage", plane: xy, assetId: "a1", fileName: "x.png",
-    transform: { u: 1, v: 2, rotation: 30, scale: 0.25 }, opacity: 0.4, visible: true, width: 100, height: 50,
+    ...base,
+    id: "ri",
+    type: "referenceImage",
+    plane: xy,
+    assetId: "a1",
+    fileName: "x.png",
+    transform: { u: 1, v: 2, rotation: 30, scale: 0.25 },
+    opacity: 0.4,
+    visible: true,
+    width: 100,
+    height: 50,
   };
   useStore.getState().document!.features.push(img);
   await openFeatureEditor(img);
   await pressOk();
-  expect(updateFeature).toHaveBeenCalledWith("ri", { opacity: 0.4, transform: img.transform });
+  expect(updateFeature).toHaveBeenCalledWith("ri", {
+    opacity: 0.4,
+    transform: img.transform,
+  });
 });
 
 it("reopen of a sketch enters sketch editing instead of a dialog", async () => {
@@ -132,8 +308,18 @@ it("reopen of a sketch enters sketch editing instead of a dialog", async () => {
 });
 
 it("reopen + OK leaves the suppressed flag to the server", async () => {
-  const f: Feature = { ...base, id: "sup", type: "offsetFace", faces: [face], distance: 1, suppressed: true };
+  const f: Feature = {
+    ...base,
+    id: "sup",
+    type: "offsetFace",
+    faces: [face],
+    distance: 1,
+    suppressed: true,
+  };
   await openFeatureEditor(f);
   await pressOk();
-  expect(updateFeature).toHaveBeenCalledWith("sup", expect.not.objectContaining({ suppressed: expect.anything() }));
+  expect(updateFeature).toHaveBeenCalledWith(
+    "sup",
+    expect.not.objectContaining({ suppressed: expect.anything() }),
+  );
 });

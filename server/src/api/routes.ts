@@ -30,7 +30,11 @@ import { tangentEdges } from "../geometry/tangentEdges.js";
 import { readStep } from "../geometry/stepImport.js";
 import { write3mf, writeStl } from "../geometry/exporters.js";
 import type { NamedBody } from "../geometry/naming.js";
-import { validateDocument, validateFeature, ValidationError } from "./validate.js";
+import {
+  validateDocument,
+  validateFeature,
+  ValidationError,
+} from "./validate.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -44,7 +48,8 @@ const IMAGE_MAGIC: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
   },
   {
     mime: "image/jpeg",
-    test: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+    test: (b) =>
+      b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
   },
   {
     mime: "image/webp",
@@ -55,15 +60,27 @@ const IMAGE_MAGIC: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
   },
 ];
 
-const EXPORTERS: Record<ExportRequest["format"], {
-  mime: string;
-  write: (bodies: NamedBody[], doc: CadDocument, quality: number) => Buffer;
-}> = {
-  stl: { mime: "model/stl", write: (bodies, _doc, quality) => writeStl(bodies, quality) },
+const EXPORTERS: Record<
+  ExportRequest["format"],
+  {
+    mime: string;
+    write: (bodies: NamedBody[], doc: CadDocument, quality: number) => Buffer;
+  }
+> = {
+  stl: {
+    mime: "model/stl",
+    write: (bodies, _doc, quality) => writeStl(bodies, quality),
+  },
   "3mf": {
     mime: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
     write: (bodies, doc, quality) =>
-      write3mf(bodies.map((b) => ({ body: b, name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId })), quality),
+      write3mf(
+        bodies.map((b) => ({
+          body: b,
+          name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId,
+        })),
+        quality,
+      ),
   },
 };
 
@@ -84,7 +101,7 @@ export function createApiRouter(store: ProjectStore): Router {
       result.catch((err) => {
         const status =
           err instanceof StoreError || err instanceof ValidationError
-            ? (err as any).status ?? 400
+            ? ((err as any).status ?? 400)
             : 500;
         if (status === 500) console.error(err);
         res.status(status).json({ error: err.message ?? String(err) });
@@ -95,7 +112,11 @@ export function createApiRouter(store: ProjectStore): Router {
   function evaluationPosition(req: any, doc: CadDocument): number | undefined {
     if (req.query.position === undefined) return undefined;
     const position = Number(req.query.position);
-    if (!Number.isInteger(position) || position < 0 || position > doc.features.length)
+    if (
+      !Number.isInteger(position) ||
+      position < 0 ||
+      position > doc.features.length
+    )
       throw new ValidationError("invalid evaluation position");
     return position;
   }
@@ -125,7 +146,12 @@ export function createApiRouter(store: ProjectStore): Router {
   }
 
   router.get("/health", (_req, res) => {
-    res.json({ ok: true, version, schemaVersion: SCHEMA_VERSION, commit: process.env.ROCKETT_COMMIT || null });
+    res.json({
+      ok: true,
+      version,
+      schemaVersion: SCHEMA_VERSION,
+      commit: process.env.ROCKETT_COMMIT || null,
+    });
   });
 
   // ----- projects -----
@@ -134,7 +160,7 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects",
     wrap(async (_req, res) => {
       res.json(await store.list());
-    })
+    }),
   );
 
   router.post(
@@ -143,7 +169,7 @@ export function createApiRouter(store: ProjectStore): Router {
       const name = String(req.body?.name ?? "Untitled").slice(0, 200);
       const doc = await store.create(name);
       res.json({ document: doc });
-    })
+    }),
   );
 
   router.get(
@@ -151,7 +177,7 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       res.json({ document: doc });
-    })
+    }),
   );
 
   router.delete(
@@ -160,7 +186,7 @@ export function createApiRouter(store: ProjectStore): Router {
       await store.remove(req.params.id);
       dropEngine(req.params.id);
       res.json({ ok: true });
-    })
+    }),
   );
 
   router.post(
@@ -168,10 +194,10 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const copy = await store.duplicate(
         req.params.id,
-        req.body?.name ? String(req.body.name).slice(0, 200) : undefined
+        req.body?.name ? String(req.body.name).slice(0, 200) : undefined,
       );
       res.json({ document: copy });
-    })
+    }),
   );
 
   router.post(
@@ -181,7 +207,7 @@ export function createApiRouter(store: ProjectStore): Router {
       doc.name = String(req.body?.name ?? doc.name).slice(0, 200);
       await store.save(doc);
       res.json({ document: doc });
-    })
+    }),
   );
 
   // ----- evaluation -----
@@ -190,9 +216,12 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/evaluate",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const evaluation = await evaluateAndSync(doc, evaluationPosition(req, doc));
+      const evaluation = await evaluateAndSync(
+        doc,
+        evaluationPosition(req, doc),
+      );
       res.json(evaluation);
-    })
+    }),
   );
 
   // ----- document-level replace (undo/redo restore) -----
@@ -211,34 +240,61 @@ export function createApiRouter(store: ProjectStore): Router {
       await store.save(incoming);
       const evaluation = await evaluateAndSync(incoming, position);
       res.json({ document: incoming, evaluation });
-    })
+    }),
   );
 
   // ----- features -----
-  const stepUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }).single("file");
-  const receiveStep = (req: any, res: any, next: any) => stepUpload(req, res, (error: any) => {
-    if (error) res.status(400).json({ error: "Upload one STEP file (.step or .stp), up to 10 MB." });
-    else next();
-  });
+  const stepUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  }).single("file");
+  const receiveStep = (req: any, res: any, next: any) =>
+    stepUpload(req, res, (error: any) => {
+      if (error)
+        res.status(400).json({
+          error: "Upload one STEP file (.step or .stp), up to 10 MB.",
+        });
+      else next();
+    });
   const importStep = wrap(async (req, res) => {
-    if (!req.file || !/\.(step|stp)$/i.test(req.file.originalname)) throw new ValidationError("Choose a .step or .stp file");
-    const filename = req.file.originalname.replace(/^.*[\\/]/, "").slice(0, 255);
-    const feature: Feature = { id: newId("import"), type: "importStep", name: filename.slice(0, 120),
-      suppressed: false, filename, data: req.file.buffer.toString("utf8").replace(/^\uFEFF/, "") };
+    if (!req.file || !/\.(step|stp)$/i.test(req.file.originalname))
+      throw new ValidationError("Choose a .step or .stp file");
+    const filename = req.file.originalname
+      .replace(/^.*[\\/]/, "")
+      .slice(0, 255);
+    const feature: Feature = {
+      id: newId("import"),
+      type: "importStep",
+      name: filename.slice(0, 120),
+      suppressed: false,
+      filename,
+      data: req.file.buffer.toString("utf8").replace(/^\uFEFF/, ""),
+    };
     validateFeature(feature);
     // Reject bad geometry before creating a project or changing its history.
-    try { readStep(feature.data).delete(); }
-    catch (error) { throw new ValidationError((error as Error).message); }
+    try {
+      readStep(feature.data).delete();
+    } catch (error) {
+      throw new ValidationError((error as Error).message);
+    }
     const created = !req.params.id;
-    const doc = created ? await store.create(filename.replace(/\.(step|stp)$/i, "")) : await store.load(req.params.id);
+    const doc = created
+      ? await store.create(filename.replace(/\.(step|stp)$/i, ""))
+      : await store.load(req.params.id);
     try {
       const at = Math.min(doc.timelinePosition, doc.features.length);
-      doc.features.splice(at, 0, feature); doc.timelinePosition = at + 1;
+      doc.features.splice(at, 0, feature);
+      doc.timelinePosition = at + 1;
       if (Buffer.byteLength(JSON.stringify(doc), "utf8") > 40 * 1024 * 1024)
-        throw new ValidationError("This import would exceed the 40 MB project limit. Start a separate project for this STEP file.");
+        throw new ValidationError(
+          "This import would exceed the 40 MB project limit. Start a separate project for this STEP file.",
+        );
       const evaluation = engineFor(doc.id).evaluate(doc);
-      const status = evaluation.featureStatuses.find(s => s.featureId === feature.id);
-      if (status?.status !== "ok") throw new ValidationError(status?.error ?? "STEP import failed");
+      const status = evaluation.featureStatuses.find(
+        (s) => s.featureId === feature.id,
+      );
+      if (status?.status !== "ok")
+        throw new ValidationError(status?.error ?? "STEP import failed");
       await store.save(doc);
       res.json({ document: doc, evaluation: await evaluateAndSync(doc) });
     } catch (error) {
@@ -270,7 +326,7 @@ export function createApiRouter(store: ProjectStore): Router {
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
       res.json({ document: doc, evaluation });
-    })
+    }),
   );
 
   router.put(
@@ -285,34 +341,62 @@ export function createApiRouter(store: ProjectStore): Router {
       if (patch.type !== undefined && patch.type !== doc.features[idx].type) {
         throw new ValidationError("feature type cannot change");
       }
-      const updated = { ...doc.features[idx], ...patch, id: doc.features[idx].id };
+      const updated = {
+        ...doc.features[idx],
+        ...patch,
+        id: doc.features[idx].id,
+      };
       validateFeature(updated as Feature);
       doc.features[idx] = updated as Feature;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc, position);
       res.json({ document: doc, evaluation });
-    })
+    }),
   );
 
   // Resolve against geometry BEFORE the sketch, so projections cannot depend
   // on their own extrude or another downstream feature. This is read-only.
-  router.post("/projects/:id/features/:fid/project", wrap(async (req, res) => {
-    const doc = await store.load(req.params.id);
-    const index = doc.features.findIndex(f => f.id === req.params.fid);
-    const sketch = doc.features[index];
-    if (!sketch || sketch.type !== "sketch") throw new ValidationError("Sketch not found");
-    const { edge: ref, entityId } = req.body ?? {};
-    if (ref?.kind !== "edge" || typeof ref.bodyId !== "string" || typeof ref.edgeName !== "string"
-      || typeof entityId !== "string" || !entityId || entityId.length > 100)
-      throw new ValidationError("An edge reference and entity ID are required");
-    const state = engineFor(doc.id).stateAt(doc, index);
-    const body = state.bodies.get(ref.bodyId);
-    const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
-    if (!edge) throw new ValidationError("This edge is not available before the sketch. Choose geometry from an earlier feature.");
-    try {
-      res.json({ entities: projectEdge(curveInfo(edge), resolvePlaneFrame(state, sketch.plane), entityId, ref) });
-    } catch (error) { throw new ValidationError((error as Error).message); }
-  }));
+  router.post(
+    "/projects/:id/features/:fid/project",
+    wrap(async (req, res) => {
+      const doc = await store.load(req.params.id);
+      const index = doc.features.findIndex((f) => f.id === req.params.fid);
+      const sketch = doc.features[index];
+      if (!sketch || sketch.type !== "sketch")
+        throw new ValidationError("Sketch not found");
+      const { edge: ref, entityId } = req.body ?? {};
+      if (
+        ref?.kind !== "edge" ||
+        typeof ref.bodyId !== "string" ||
+        typeof ref.edgeName !== "string" ||
+        typeof entityId !== "string" ||
+        !entityId ||
+        entityId.length > 100
+      )
+        throw new ValidationError(
+          "An edge reference and entity ID are required",
+        );
+      const state = engineFor(doc.id).stateAt(doc, index);
+      const body = state.bodies.get(ref.bodyId);
+      const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
+      if (!edge)
+        throw new ValidationError(
+          "This edge is not available before the sketch. Choose geometry from an earlier feature.",
+        );
+      try {
+        res.json({
+          entities: projectEdge(
+            curveInfo(edge),
+            resolvePlaneFrame(state, sketch.plane),
+            entityId,
+            ref,
+          ),
+        });
+      } catch (error) {
+        throw new ValidationError((error as Error).message);
+      }
+    }),
+  );
 
   router.delete(
     "/projects/:id/features/:fid",
@@ -325,7 +409,7 @@ export function createApiRouter(store: ProjectStore): Router {
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
       res.json({ document: doc, evaluation });
-    })
+    }),
   );
 
   router.post(
@@ -344,23 +428,37 @@ export function createApiRouter(store: ProjectStore): Router {
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
       res.json({ document: doc, evaluation });
-    })
+    }),
   );
 
   // ----- bodies -----
-  router.post("/projects/:id/tangent-edges", wrap(async (req, res) => {
-    const doc = await store.load(req.params.id);
-    const { edge, beforeFeatureId } = req.body ?? {};
-    if (edge?.kind !== "edge" || typeof edge.bodyId !== "string" || typeof edge.edgeName !== "string")
-      throw new ValidationError("An edge reference is required");
-    const index = beforeFeatureId === undefined ? undefined : doc.features.findIndex(f => f.id === beforeFeatureId);
-    if (index === -1) throw new ValidationError("Feature not found");
-    const state = engineFor(doc.id).stateAt(doc, index);
-    const body = state.bodies.get(edge.bodyId);
-    if (!body) throw new ValidationError("Body not found before this feature");
-    try { res.json({ edges: tangentEdges(body, [edge]) }); }
-    catch (error) { throw new ValidationError((error as Error).message); }
-  }));
+  router.post(
+    "/projects/:id/tangent-edges",
+    wrap(async (req, res) => {
+      const doc = await store.load(req.params.id);
+      const { edge, beforeFeatureId } = req.body ?? {};
+      if (
+        edge?.kind !== "edge" ||
+        typeof edge.bodyId !== "string" ||
+        typeof edge.edgeName !== "string"
+      )
+        throw new ValidationError("An edge reference is required");
+      const index =
+        beforeFeatureId === undefined
+          ? undefined
+          : doc.features.findIndex((f) => f.id === beforeFeatureId);
+      if (index === -1) throw new ValidationError("Feature not found");
+      const state = engineFor(doc.id).stateAt(doc, index);
+      const body = state.bodies.get(edge.bodyId);
+      if (!body)
+        throw new ValidationError("Body not found before this feature");
+      try {
+        res.json({ edges: tangentEdges(body, [edge]) });
+      } catch (error) {
+        throw new ValidationError((error as Error).message);
+      }
+    }),
+  );
 
   router.put(
     "/projects/:id/bodies/:bodyId",
@@ -377,7 +475,7 @@ export function createApiRouter(store: ProjectStore): Router {
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
       res.json({ document: doc, evaluation });
-    })
+    }),
   );
 
   // ----- measure -----
@@ -393,7 +491,7 @@ export function createApiRouter(store: ProjectStore): Router {
       const engine = engineFor(doc.id);
       const state = engine.stateAt(doc);
       res.json(measure(state, { refs }));
-    })
+    }),
   );
 
   // ----- export -----
@@ -404,12 +502,14 @@ export function createApiRouter(store: ProjectStore): Router {
       const doc = await store.load(req.params.id);
       const format = req.body?.format ?? "stl";
       if (typeof format !== "string" || !Object.hasOwn(EXPORTERS, format)) {
-        throw new ValidationError(`unsupported export format; supported: ${Object.keys(EXPORTERS).join(", ")}`);
+        throw new ValidationError(
+          `unsupported export format; supported: ${Object.keys(EXPORTERS).join(", ")}`,
+        );
       }
       const exporter = EXPORTERS[format as ExportRequest["format"]];
       const quality = Math.min(
         Math.max(Number(req.body?.quality) || 0.05, 0.001),
-        1
+        1,
       );
       const requestedIds: string[] = Array.isArray(req.body?.bodyIds)
         ? req.body.bodyIds.map(String)
@@ -423,16 +523,20 @@ export function createApiRouter(store: ProjectStore): Router {
       if (chosen.length === 0) {
         throw new ValidationError("no bodies to export");
       }
-      const safeName = doc.name.replace(/[^\w-]+/g, "_").slice(0, 60) || "model";
+      const safeName =
+        doc.name.replace(/[^\w-]+/g, "_").slice(0, 60) || "model";
       const data = exporter.write(chosen, doc, quality);
       const fileName = `${safeName}.${format}`;
       res.setHeader("Content-Type", exporter.mime);
       if (req.body?.retain) {
         await store.saveExport(doc.id, fileName, data);
       }
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`,
+      );
       res.send(data);
-    })
+    }),
   );
 
   // ----- assets (reference images) -----
@@ -446,15 +550,17 @@ export function createApiRouter(store: ProjectStore): Router {
       if (!file) throw new ValidationError("image file required");
       const magic = IMAGE_MAGIC.find((m) => m.test(file.buffer));
       if (!magic) {
-        throw new ValidationError("unsupported image type (PNG, JPEG, WebP only)");
+        throw new ValidationError(
+          "unsupported image type (PNG, JPEG, WebP only)",
+        );
       }
       const { assetId } = await store.saveAsset(
         req.params.id,
         file.buffer,
-        magic.mime
+        magic.mime,
       );
       res.json({ assetId });
-    })
+    }),
   );
 
   router.get(
@@ -462,7 +568,7 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const p = await store.assetPath(req.params.id, req.params.assetId);
       res.sendFile(p);
-    })
+    }),
   );
 
   return router;

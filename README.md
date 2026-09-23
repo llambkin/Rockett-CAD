@@ -26,7 +26,7 @@ everything downstream against persistent topology references.
   or offset a single line, circle, or arc. Ctrl-click adds/removes curves to
   choose an explicit chain; curves can be selected in any order.
 - **Solid features** — extrude (new body / join / cut / intersect, symmetric,
-  two-sided, from sketch profiles *or* planar faces), revolve, sweep, loft,
+  two-sided, from sketch profiles _or_ planar faces), revolve, sweep, loft,
   emboss/deboss.
 - **Modify** — fillet, chamfer, shell, boolean combine, split body,
   press/pull (offset face).
@@ -73,15 +73,15 @@ See [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Documentation
 
-| Doc | Contents |
-| --- | --- |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, layers, technology choices |
-| [CAD_MODEL.md](CAD_MODEL.md) | B-Rep representation, topology naming, regeneration, tessellation |
-| [FEATURE_TIMELINE.md](FEATURE_TIMELINE.md) | Timeline semantics, rollback, dependency handling |
-| [API.md](API.md) | REST API reference |
-| [DOCKER.md](DOCKER.md) | Deployment (Docker / Compose / Unraid) |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Repo layout, workflows, testing |
-| [ROADMAP.md](ROADMAP.md) | Current status and planned work |
+| Doc                                        | Contents                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| [ARCHITECTURE.md](ARCHITECTURE.md)         | System overview, layers, technology choices                       |
+| [CAD_MODEL.md](CAD_MODEL.md)               | B-Rep representation, topology naming, regeneration, tessellation |
+| [FEATURE_TIMELINE.md](FEATURE_TIMELINE.md) | Timeline semantics, rollback, dependency handling                 |
+| [API.md](API.md)                           | REST API reference                                                |
+| [DOCKER.md](DOCKER.md)                     | Deployment (Docker / Compose / Unraid)                            |
+| [DEVELOPMENT.md](DEVELOPMENT.md)           | Repo layout, workflows, testing                                   |
+| [ROADMAP.md](ROADMAP.md)                   | Current status and planned work                                   |
 
 ## Viewport controls
 
@@ -97,15 +97,15 @@ back to that sketch. **Finish Sketch** regenerates the model at the previously
 saved timeline position. Entering edit mode does not change the saved marker or
 create an undo step.
 
-| Action | Input |
-| --- | --- |
-| Select | Left click (Ctrl adds; Alt+click cycles overlapping picks) |
-| Context menu | Right click on geometry |
-| Orbit | Right-drag, Shift+middle-drag, or drag the ViewCube |
-| Pan | Middle-drag |
-| Zoom | Scroll wheel (to cursor) |
-| Named views / fit / ortho–persp | Toolbar (right side) and ViewCube |
-| Shortcuts | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
+| Action                          | Input                                                                                                                                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Select                          | Left click (Ctrl adds; Alt+click cycles overlapping picks)                                                                                                                              |
+| Context menu                    | Right click on geometry                                                                                                                                                                 |
+| Orbit                           | Right-drag, Shift+middle-drag, or drag the ViewCube                                                                                                                                     |
+| Pan                             | Middle-drag                                                                                                                                                                             |
+| Zoom                            | Scroll wheel (to cursor)                                                                                                                                                                |
+| Named views / fit / ortho–persp | Toolbar (right side) and ViewCube                                                                                                                                                       |
+| Shortcuts                       | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
 
 ## License note
 

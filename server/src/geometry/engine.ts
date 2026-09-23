@@ -51,7 +51,7 @@ class DocumentEngine {
     const t0 = performance.now();
     const upTo = Math.min(
       position ?? doc.timelinePosition,
-      doc.features.length
+      doc.features.length,
     );
 
     // Drop snapshots from the first stale feature on. Valid snapshots past
@@ -161,7 +161,10 @@ class DocumentEngine {
   /** Access the evaluated state at the current cache tip (for measure/export). */
   stateAt(doc: CadDocument, position?: number): EvalState {
     this.evaluate(doc, position);
-    const upTo = Math.min(position ?? doc.timelinePosition, doc.features.length);
+    const upTo = Math.min(
+      position ?? doc.timelinePosition,
+      doc.features.length,
+    );
     if (upTo === 0) return emptyState();
     return this.snapshots[upTo - 1].state;
   }

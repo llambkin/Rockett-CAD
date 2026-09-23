@@ -32,7 +32,7 @@ export function renderSketches(
   viewport: CadViewport,
   sketches: SketchRenderInput[],
   selection: Selection[],
-  hover: Selection | null
+  hover: Selection | null,
 ): void {
   const root = viewport.getSketchRoot();
   root.clear();
@@ -74,14 +74,18 @@ export function renderSketches(
         const mesh = new THREE.Mesh(
           geom,
           new THREE.MeshBasicMaterial({
-            color: isSel ? COLORS.selected : isHover ? COLORS.hover : COLORS.profileFill,
+            color: isSel
+              ? COLORS.selected
+              : isHover
+                ? COLORS.hover
+                : COLORS.profileFill,
             transparent: true,
             opacity: isSel ? 0.55 : isHover ? 0.4 : used ? 0.06 : 0.18,
             side: THREE.DoubleSide,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -1,
-          })
+          }),
         );
         mesh.applyMatrix4(frameMatrix(sk.frame));
         mesh.userData.profileId = p.id;
@@ -107,7 +111,7 @@ export function renderSketches(
         for (let i = 0; i <= 64; i++) {
           const t = (i / 64) * Math.PI * 2;
           positions.push(
-            to3(c.x + e.radius * Math.cos(t), c.y + e.radius * Math.sin(t))
+            to3(c.x + e.radius * Math.cos(t), c.y + e.radius * Math.sin(t)),
           );
         }
       } else if (e.kind === "arc") {
@@ -130,13 +134,13 @@ export function renderSketches(
           ? COLORS.hover
           : e.external
             ? 0xbb88ff
-          : e.construction
-            ? COLORS.sketchConstruction
-            : sk.active
-              ? COLORS.sketchLine
-              : sk.dim
-                ? 0x566478
-                : 0x7a92a8;
+            : e.construction
+              ? COLORS.sketchConstruction
+              : sk.active
+                ? COLORS.sketchLine
+                : sk.dim
+                  ? 0x566478
+                  : 0x7a92a8;
       const pickable = sk.curvesPickable !== false;
       const geom = new THREE.BufferGeometry().setFromPoints(positions);
       const line = new THREE.Line(
@@ -146,7 +150,7 @@ export function renderSketches(
           transparent: !sk.active,
           opacity: sk.active ? 1 : sk.dim ? 0.5 : 0.8,
           depthTest: false,
-        })
+        }),
       );
       if (e.construction) {
         // dashed look for construction geometry
@@ -157,7 +161,7 @@ export function renderSketches(
             dashSize: 2,
             gapSize: 1.5,
             depthTest: false,
-          })
+          }),
         );
         dashedLine.computeLineDistances();
         if (pickable) {
@@ -187,11 +191,15 @@ export function renderSketches(
         const pt = new THREE.Points(
           geom,
           new THREE.PointsMaterial({
-            color: isSel ? COLORS.selected : isHover ? COLORS.hover : COLORS.sketchPoint,
+            color: isSel
+              ? COLORS.selected
+              : isHover
+                ? COLORS.hover
+                : COLORS.sketchPoint,
             size: isSel || isHover ? 9 : 6,
             sizeAttenuation: false,
             depthTest: false,
-          })
+          }),
         );
         pt.userData.sketchEntityId = e.id;
         pt.userData.sketchId = sk.sketchId;
@@ -208,7 +216,7 @@ function frameMatrix(frame: PlaneFrame): THREE.Matrix4 {
   m.makeBasis(
     new THREE.Vector3(...frame.xAxis),
     new THREE.Vector3(...frame.yAxis),
-    new THREE.Vector3(...frame.normal)
+    new THREE.Vector3(...frame.normal),
   );
   m.setPosition(new THREE.Vector3(...frame.origin));
   return m;

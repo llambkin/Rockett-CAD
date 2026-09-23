@@ -19,7 +19,8 @@ export interface MutationResponse {
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers:
+      body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -37,8 +38,14 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 
 export const api = {
   async importStep(file: File, projectId?: string): Promise<MutationResponse> {
-    const form = new FormData(); form.append("file", file);
-    const res = await fetch(projectId ? `/api/projects/${projectId}/import-step` : "/api/projects/import-step", { method: "POST", body: form });
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(
+      projectId
+        ? `/api/projects/${projectId}/import-step`
+        : "/api/projects/import-step",
+      { method: "POST", body: form },
+    );
     const result = await res.json();
     if (!res.ok) throw new Error(result.error ?? "STEP import failed");
     return result;
@@ -50,31 +57,61 @@ export const api = {
     req<{ document: CadDocument }>("GET", `/projects/${id}`),
   deleteProject: (id: string) => req<{ ok: true }>("DELETE", `/projects/${id}`),
   duplicateProject: (id: string, name?: string) =>
-    req<{ document: CadDocument }>("POST", `/projects/${id}/duplicate`, { name }),
+    req<{ document: CadDocument }>("POST", `/projects/${id}/duplicate`, {
+      name,
+    }),
   renameProject: (id: string, name: string) =>
     req<{ document: CadDocument }>("POST", `/projects/${id}/rename`, { name }),
 
-  evaluate: (id: string, position?: number) => req<EvaluateResult>("GET", `/projects/${id}/evaluate${position === undefined ? "" : `?position=${position}`}`),
+  evaluate: (id: string, position?: number) =>
+    req<EvaluateResult>(
+      "GET",
+      `/projects/${id}/evaluate${position === undefined ? "" : `?position=${position}`}`,
+    ),
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
-    req<{ edges: EdgeRef[] }>("POST", `/projects/${id}/tangent-edges`, { edge, beforeFeatureId }),
+    req<{ edges: EdgeRef[] }>("POST", `/projects/${id}/tangent-edges`, {
+      edge,
+      beforeFeatureId,
+    }),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
-    req<{ entities: SketchEntity[] }>("POST", `/projects/${id}/features/${fid}/project`, { edge, entityId }),
+    req<{ entities: SketchEntity[] }>(
+      "POST",
+      `/projects/${id}/features/${fid}/project`,
+      { edge, entityId },
+    ),
 
   addFeature: (id: string, feature: Feature) =>
     req<MutationResponse>("POST", `/projects/${id}/features`, { feature }),
-  updateFeature: (id: string, fid: string, feature: Partial<Feature>, position?: number) =>
-    req<MutationResponse>("PUT", `/projects/${id}/features/${fid}${position === undefined ? "" : `?position=${position}`}`, { feature }),
+  updateFeature: (
+    id: string,
+    fid: string,
+    feature: Partial<Feature>,
+    position?: number,
+  ) =>
+    req<MutationResponse>(
+      "PUT",
+      `/projects/${id}/features/${fid}${position === undefined ? "" : `?position=${position}`}`,
+      { feature },
+    ),
   deleteFeature: (id: string, fid: string) =>
     req<MutationResponse>("DELETE", `/projects/${id}/features/${fid}`),
   setTimeline: (id: string, position: number) =>
     req<MutationResponse>("POST", `/projects/${id}/timeline`, { position }),
   replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    req<MutationResponse>("PUT", `/projects/${id}/document${position === undefined ? "" : `?position=${position}`}`, { document }),
-  updateBody: (id: string, bodyId: string, patch: { name?: string; visible?: boolean }) =>
+    req<MutationResponse>(
+      "PUT",
+      `/projects/${id}/document${position === undefined ? "" : `?position=${position}`}`,
+      { document },
+    ),
+  updateBody: (
+    id: string,
+    bodyId: string,
+    patch: { name?: string; visible?: boolean },
+  ) =>
     req<MutationResponse>(
       "PUT",
       `/projects/${id}/bodies/${encodeURIComponent(bodyId)}`,
-      patch
+      patch,
     ),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
@@ -84,7 +121,7 @@ export const api = {
     id: string,
     format: "stl" | "3mf",
     bodyIds: string[],
-    quality?: number
+    quality?: number,
   ): Promise<{ blob: Blob; fileName: string }> {
     const res = await fetch(`/api/projects/${id}/export`, {
       method: "POST",
@@ -117,5 +154,6 @@ export const api = {
     return res.json();
   },
 
-  assetUrl: (id: string, assetId: string) => `/api/projects/${id}/assets/${assetId}`,
+  assetUrl: (id: string, assetId: string) =>
+    `/api/projects/${id}/assets/${assetId}`,
 };

@@ -8,20 +8,61 @@ const plane = { kind: "origin", plane: "XY" } as const;
 
 const cases: Array<{ valid: Feature; invalid: Feature }> = [
   {
-    valid: { ...base, type: "sweep", profiles: [profile], pathSketchId: "path", operation: "newBody" },
-    invalid: { ...base, type: "sweep", profiles: [], pathSketchId: "path", operation: "newBody" },
+    valid: {
+      ...base,
+      type: "sweep",
+      profiles: [profile],
+      pathSketchId: "path",
+      operation: "newBody",
+    },
+    invalid: {
+      ...base,
+      type: "sweep",
+      profiles: [],
+      pathSketchId: "path",
+      operation: "newBody",
+    },
   },
   {
-    valid: { ...base, type: "loft", sections: [profile, profile], operation: "newBody" },
-    invalid: { ...base, type: "loft", sections: [profile], operation: "newBody" },
+    valid: {
+      ...base,
+      type: "loft",
+      sections: [profile, profile],
+      operation: "newBody",
+    },
+    invalid: {
+      ...base,
+      type: "loft",
+      sections: [profile],
+      operation: "newBody",
+    },
   },
   {
-    valid: { ...base, type: "combine", operation: "cut", targetBody: "b1", toolBodies: ["b2"], keepTools: false },
-    invalid: { ...base, type: "combine", operation: "cut", targetBody: "b1", toolBodies: Array(65).fill("b2"), keepTools: false },
+    valid: {
+      ...base,
+      type: "combine",
+      operation: "cut",
+      targetBody: "b1",
+      toolBodies: ["b2"],
+      keepTools: false,
+    },
+    invalid: {
+      ...base,
+      type: "combine",
+      operation: "cut",
+      targetBody: "b1",
+      toolBodies: Array(65).fill("b2"),
+      keepTools: false,
+    },
   },
   {
     valid: { ...base, type: "splitBody", body: "b1", tool: plane },
-    invalid: { ...base, type: "splitBody", body: "b1", tool: { kind: "bogus" } as any },
+    invalid: {
+      ...base,
+      type: "splitBody",
+      body: "b1",
+      tool: { kind: "bogus" } as any,
+    },
   },
   {
     valid: { ...base, type: "mirror", bodies: ["b1"], plane, combine: false },
@@ -45,11 +86,13 @@ describe("validateFeature", () => {
       { ...base, type: "move", translation: [0, 0, 1] },
       { ...base, type: "move", bodies: ["b1"] },
     ];
-    for (const f of missing) expect(() => validateFeature(f as any)).toThrow(ValidationError);
+    for (const f of missing)
+      expect(() => validateFeature(f as any)).toThrow(ValidationError);
   });
 
   it("rejects an unknown feature type", () => {
-    expect(() => validateFeature({ ...base, type: "cam" } as unknown as Feature))
-      .toThrow(/unknown feature type cam/);
+    expect(() =>
+      validateFeature({ ...base, type: "cam" } as unknown as Feature),
+    ).toThrow(/unknown feature type cam/);
   });
 });

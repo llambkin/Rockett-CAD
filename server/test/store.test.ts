@@ -15,7 +15,10 @@ async function tempStore(): Promise<ProjectStore> {
 
 describe("project store", () => {
   it("upgrades legacy documents without changing feature history", () => {
-    const legacy = { ...createEmptyDocument("legacy", "Legacy"), schemaVersion: 1 };
+    const legacy = {
+      ...createEmptyDocument("legacy", "Legacy"),
+      schemaVersion: 1,
+    };
     const upgraded = migrateDocument(legacy);
     expect(upgraded.schemaVersion).toBe(SCHEMA_VERSION);
     expect(upgraded.features).toEqual(legacy.features);
@@ -24,8 +27,13 @@ describe("project store", () => {
   it("keeps concurrent saves atomic without temporary-file collisions", async () => {
     const store = await tempStore();
     const doc = await store.create("Concurrent");
-    const versions = Array.from({ length: 12 }, (_, i) => ({ ...doc, name: `Version ${i}` }));
-    const results = await Promise.allSettled(versions.map((version) => store.save(version)));
+    const versions = Array.from({ length: 12 }, (_, i) => ({
+      ...doc,
+      name: `Version ${i}`,
+    }));
+    const results = await Promise.allSettled(
+      versions.map((version) => store.save(version)),
+    );
     expect(results.filter((r) => r.status === "rejected")).toEqual([]);
     const loaded = await store.load(doc.id);
     expect(loaded.name).toBe("Version 11");
@@ -67,7 +75,7 @@ describe("project store", () => {
     const copy = await store.duplicate(a.id, "A2");
     expect(copy.id).not.toBe(a.id);
     expect(copy.name).toBe("A2");
-    expect((await store.list())).toHaveLength(3);
+    expect(await store.list()).toHaveLength(3);
   });
 
   it("rejects path-traversal project ids", async () => {

@@ -4,24 +4,49 @@ import { initKernel } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
 import { evaluateFeature } from "../src/geometry/features.js";
 
-vi.mock("../src/geometry/features.js", async importOriginal => {
-  const actual = await importOriginal<typeof import("../src/geometry/features.js")>();
+vi.mock("../src/geometry/features.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/geometry/features.js")>();
   return { ...actual, evaluateFeature: vi.fn(actual.evaluateFeature) };
 });
 
 beforeAll(initKernel, 120000);
 
 const evaluated = vi.mocked(evaluateFeature);
-beforeEach(() => { evaluated.mockClear(); });
+beforeEach(() => {
+  evaluated.mockClear();
+});
 const evaluatedIds = () => evaluated.mock.calls.map(([, f]) => f.id);
 
 function square(id: string, size: number): SketchFeature {
-  const pts = [[0, 0], [size, 0], [size, size], [0, size]];
-  return { id, name: id, type: "sketch", suppressed: false, plane: { kind: "origin", plane: "XY" }, constraints: [],
+  const pts = [
+    [0, 0],
+    [size, 0],
+    [size, size],
+    [0, size],
+  ];
+  return {
+    id,
+    name: id,
+    type: "sketch",
+    suppressed: false,
+    plane: { kind: "origin", plane: "XY" },
+    constraints: [],
     entities: [
-      ...pts.map(([x, y], i) => ({ id: `p${i}`, kind: "point" as const, x, y })),
-      ...pts.map((_, i) => ({ id: `l${i}`, kind: "line" as const, p1: `p${i}`, p2: `p${(i + 1) % pts.length}` })),
-    ] };
+      ...pts.map(([x, y], i) => ({
+        id: `p${i}`,
+        kind: "point" as const,
+        x,
+        y,
+      })),
+      ...pts.map((_, i) => ({
+        id: `l${i}`,
+        kind: "line" as const,
+        p1: `p${i}`,
+        p2: `p${(i + 1) % pts.length}`,
+      })),
+    ],
+  };
 }
 
 function fourSketchDoc(id: string) {
@@ -32,7 +57,9 @@ function fourSketchDoc(id: string) {
 }
 
 it("keeps downstream snapshots when a query evaluates an earlier position", () => {
-  const id = "cache-rewind", doc = fourSketchDoc(id), engine = engineFor(id);
+  const id = "cache-rewind",
+    doc = fourSketchDoc(id),
+    engine = engineFor(id);
   engine.evaluate(doc);
   expect(evaluatedIds()).toEqual(["s0", "s1", "s2", "s3"]);
 
@@ -41,12 +68,19 @@ it("keeps downstream snapshots when a query evaluates an earlier position", () =
   engine.stateAt(doc, 2);
   const full = engine.evaluate(doc);
   expect(evaluatedIds()).toEqual([]);
-  expect(full.featureStatuses.map(s => s.status)).toEqual(["ok", "ok", "ok", "ok"]);
+  expect(full.featureStatuses.map((s) => s.status)).toEqual([
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+  ]);
   dropEngine(id);
 });
 
 it("still re-evaluates from an edited feature onward", () => {
-  const id = "cache-edit", doc = fourSketchDoc(id), engine = engineFor(id);
+  const id = "cache-edit",
+    doc = fourSketchDoc(id),
+    engine = engineFor(id);
   engine.evaluate(doc);
   doc.features[1] = square("s1", 7);
 

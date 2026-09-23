@@ -44,14 +44,21 @@ export class ViewCube {
 
   constructor(
     container: HTMLElement,
-    private viewport: CadViewport
+    private viewport: CadViewport,
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.OrthographicCamera(-1.15, 1.15, 1.15, -1.15, 0.1, 10);
+    this.camera = new THREE.OrthographicCamera(
+      -1.15,
+      1.15,
+      1.15,
+      -1.15,
+      0.1,
+      10,
+    );
     this.camera.position.set(0, 0, 4);
 
     // Cube faces: three.js BoxGeometry material order is +x,-x,+y,-y,+z,-z.
@@ -65,13 +72,13 @@ export class ViewCube {
       ["BOTTOM", Math.PI],
     ];
     const materials = mats.map(
-      ([l, rot]) => new THREE.MeshBasicMaterial({ map: faceTexture(l, rot) })
+      ([l, rot]) => new THREE.MeshBasicMaterial({ map: faceTexture(l, rot) }),
     );
     this.cube = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), materials);
     this.scene.add(this.cube);
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(this.cube.geometry as THREE.BoxGeometry),
-      new THREE.LineBasicMaterial({ color: 0x767f8a })
+      new THREE.LineBasicMaterial({ color: 0x767f8a }),
     );
     this.cube.add(edges);
 
@@ -148,7 +155,7 @@ export class ViewCube {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      (-(e.clientY - rect.top) / rect.height) * 2 + 1
+      (-(e.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObject(this.cube, false);
@@ -169,10 +176,7 @@ export class ViewCube {
       Math.abs(dir.z) > 0.95
         ? new THREE.Vector3(0, dir.z > 0 ? 1 : -1, 0)
         : new THREE.Vector3(0, 0, 1);
-    this.viewport.setView(
-      [dir.x, dir.y, dir.z],
-      [up.x, up.y, up.z]
-    );
+    this.viewport.setView([dir.x, dir.y, dir.z], [up.x, up.y, up.z]);
   }
 
   goHome() {

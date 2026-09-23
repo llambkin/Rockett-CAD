@@ -5,7 +5,10 @@
 
 import { useState } from "react";
 import { useStore, selectionKey, type Selection } from "../store";
-import { viewportHandle, alignCameraToActiveSketch as alignToSketch } from "../viewportRef";
+import {
+  viewportHandle,
+  alignCameraToActiveSketch as alignToSketch,
+} from "../viewportRef";
 import { openFeatureEditor } from "./Timeline";
 import { freeProfileIds, sketchUsage } from "../sketchUsage";
 
@@ -16,7 +19,10 @@ export function ModelTree() {
   const toggleSelection = useStore((s) => s.toggleSelection);
   const setBodyMeta = useStore((s) => s.setBodyMeta);
   const [originVisible, setOriginVisible] = useState(true);
-  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [renaming, setRenaming] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [treeMenu, setTreeMenu] = useState<{
     x: number;
@@ -52,7 +58,7 @@ export function ModelTree() {
           void s.startSketchOnPlane(sel.ref).then(() => alignToSketch());
           return;
         }
-        toggleSelection(sel, (e.ctrlKey || e.metaKey));
+        toggleSelection(sel, e.ctrlKey || e.metaKey);
       }}
     >
       <span className="tree-icon">▱</span>
@@ -67,7 +73,9 @@ export function ModelTree() {
     const s = useStore.getState();
     const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
     const profiles = sk?.profiles ?? [];
-    const free = s.document ? freeProfileIds(sketchUsage(s.document), sketchId, profiles) : [];
+    const free = s.document
+      ? freeProfileIds(sketchUsage(s.document), sketchId, profiles)
+      : [];
     const ids = free.length > 0 ? free : profiles.map((p) => p.id);
     const sels: Selection[] = ids.map((id) => ({
       kind: "profile" as const,
@@ -76,8 +84,12 @@ export function ModelTree() {
     }));
     s.setSelection(sels);
   };
-  const planes = document_.features.filter((f) => f.type === "constructionPlane");
-  const canvases = document_.features.filter((f) => f.type === "referenceImage");
+  const planes = document_.features.filter(
+    (f) => f.type === "constructionPlane",
+  );
+  const canvases = document_.features.filter(
+    (f) => f.type === "referenceImage",
+  );
   const bodies = evaluation?.bodies ?? [];
 
   return (
@@ -89,18 +101,33 @@ export function ModelTree() {
         "origin",
         "Origin",
         <>
-          <div className="tree-item" onClick={() => {
-            const v = !originVisible;
-            setOriginVisible(v);
-            viewportHandle.current?.setOriginVisible(v);
-          }}>
+          <div
+            className="tree-item"
+            onClick={() => {
+              const v = !originVisible;
+              setOriginVisible(v);
+              viewportHandle.current?.setOriginVisible(v);
+            }}
+          >
             <span className="tree-icon">{originVisible ? "👁" : "◌"}</span>
             Show origin
           </div>
-          {planeRow("XY Plane", { kind: "plane", ref: { kind: "origin", plane: "XY" }, label: "XY Plane" })}
-          {planeRow("XZ Plane", { kind: "plane", ref: { kind: "origin", plane: "XZ" }, label: "XZ Plane" })}
-          {planeRow("YZ Plane", { kind: "plane", ref: { kind: "origin", plane: "YZ" }, label: "YZ Plane" })}
-        </>
+          {planeRow("XY Plane", {
+            kind: "plane",
+            ref: { kind: "origin", plane: "XY" },
+            label: "XY Plane",
+          })}
+          {planeRow("XZ Plane", {
+            kind: "plane",
+            ref: { kind: "origin", plane: "XZ" },
+            label: "XZ Plane",
+          })}
+          {planeRow("YZ Plane", {
+            kind: "plane",
+            ref: { kind: "origin", plane: "YZ" },
+            label: "YZ Plane",
+          })}
+        </>,
       )}
 
       {planes.length > 0 &&
@@ -113,8 +140,12 @@ export function ModelTree() {
               className={`tree-item ${selKeys.has(`plane:${JSON.stringify({ kind: "construction", featureId: f.id })}`) ? "selected" : ""}`}
               onClick={(e) =>
                 toggleSelection(
-                  { kind: "plane", ref: { kind: "construction", featureId: f.id }, label: f.name },
-                  (e.ctrlKey || e.metaKey)
+                  {
+                    kind: "plane",
+                    ref: { kind: "construction", featureId: f.id },
+                    label: f.name,
+                  },
+                  e.ctrlKey || e.metaKey,
                 )
               }
               onDoubleClick={() => openFeatureEditor(f)}
@@ -131,7 +162,7 @@ export function ModelTree() {
               </span>
               {f.name}
             </div>
-          ))
+          )),
         )}
 
       {canvases.length > 0 &&
@@ -139,19 +170,25 @@ export function ModelTree() {
           "canvases",
           "Canvases",
           canvases.map((f: any) => (
-            <div key={f.id} className="tree-item" onDoubleClick={() => openFeatureEditor(f)}>
+            <div
+              key={f.id}
+              className="tree-item"
+              onDoubleClick={() => openFeatureEditor(f)}
+            >
               <span
                 className="tree-icon eye"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void useStore.getState().updateFeature(f.id, { visible: !f.visible } as any);
+                  void useStore
+                    .getState()
+                    .updateFeature(f.id, { visible: !f.visible } as any);
                 }}
               >
                 {f.visible ? "👁" : "◌"}
               </span>
               {f.name}
             </div>
-          ))
+          )),
         )}
 
       {sketches.length > 0 &&
@@ -180,12 +217,14 @@ export function ModelTree() {
             >
               <span
                 className="tree-icon eye"
-                title={(f as any).visible === false ? "Show sketch" : "Hide sketch"}
+                title={
+                  (f as any).visible === false ? "Show sketch" : "Hide sketch"
+                }
                 onClick={(e) => {
                   e.stopPropagation();
-                  void useStore
-                    .getState()
-                    .updateFeature(f.id, { visible: (f as any).visible === false } as any);
+                  void useStore.getState().updateFeature(f.id, {
+                    visible: (f as any).visible === false,
+                  } as any);
                 }}
               >
                 {(f as any).visible === false ? "◌" : "👁"}
@@ -196,7 +235,9 @@ export function ModelTree() {
                   autoFocus
                   className="tree-rename"
                   value={renaming.value}
-                  onChange={(e) => setRenaming({ id: f.id, value: e.target.value })}
+                  onChange={(e) =>
+                    setRenaming({ id: f.id, value: e.target.value })
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       void useStore
@@ -213,7 +254,7 @@ export function ModelTree() {
                 f.name
               )}
             </div>
-          ))
+          )),
         )}
 
       {section(
@@ -226,13 +267,17 @@ export function ModelTree() {
             const sel: Selection = { kind: "body", bodyId: b.bodyId };
             const isSel =
               selKeys.has(selectionKey(sel)) ||
-              selection.some((s) => "bodyId" in s && (s as any).bodyId === b.bodyId);
+              selection.some(
+                (s) => "bodyId" in s && (s as any).bodyId === b.bodyId,
+              );
             return (
               <div
                 key={b.bodyId}
                 className={`tree-item ${isSel ? "selected" : ""}`}
-                onClick={(e) => toggleSelection(sel, (e.ctrlKey || e.metaKey))}
-                onDoubleClick={() => setRenaming({ id: b.bodyId, value: b.name })}
+                onClick={(e) => toggleSelection(sel, e.ctrlKey || e.metaKey)}
+                onDoubleClick={() =>
+                  setRenaming({ id: b.bodyId, value: b.name })
+                }
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setTreeMenu({
@@ -259,10 +304,14 @@ export function ModelTree() {
                     autoFocus
                     className="tree-rename"
                     value={renaming.value}
-                    onChange={(e) => setRenaming({ id: b.bodyId, value: e.target.value })}
+                    onChange={(e) =>
+                      setRenaming({ id: b.bodyId, value: e.target.value })
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        void setBodyMeta(b.bodyId, { name: renaming.value || b.name });
+                        void setBodyMeta(b.bodyId, {
+                          name: renaming.value || b.name,
+                        });
                         setRenaming(null);
                       }
                       if (e.key === "Escape") setRenaming(null);
@@ -276,7 +325,7 @@ export function ModelTree() {
               </div>
             );
           })
-        )
+        ),
       )}
 
       {treeMenu && (
@@ -320,7 +369,9 @@ export function ModelTree() {
                     const b = useStore
                       .getState()
                       .evaluation?.bodies.find((x) => x.bodyId === treeMenu.id);
-                    void setBodyMeta(treeMenu.id, { visible: !(b?.visible ?? true) });
+                    void setBodyMeta(treeMenu.id, {
+                      visible: !(b?.visible ?? true),
+                    });
                     setTreeMenu(null);
                   }}
                 >
@@ -328,7 +379,8 @@ export function ModelTree() {
                 </button>
                 <button
                   onClick={() => {
-                    const evalBodies = useStore.getState().evaluation?.bodies ?? [];
+                    const evalBodies =
+                      useStore.getState().evaluation?.bodies ?? [];
                     for (const other of evalBodies) {
                       void setBodyMeta(other.bodyId, {
                         visible: other.bodyId === treeMenu.id,
@@ -341,7 +393,8 @@ export function ModelTree() {
                 </button>
                 <button
                   onClick={() => {
-                    const evalBodies = useStore.getState().evaluation?.bodies ?? [];
+                    const evalBodies =
+                      useStore.getState().evaluation?.bodies ?? [];
                     for (const other of evalBodies) {
                       void setBodyMeta(other.bodyId, { visible: true });
                     }
@@ -356,7 +409,10 @@ export function ModelTree() {
               <>
                 <button
                   onClick={() => {
-                    void useStore.getState().editSketch(treeMenu.id).then(alignToSketch);
+                    void useStore
+                      .getState()
+                      .editSketch(treeMenu.id)
+                      .then(alignToSketch);
                     setTreeMenu(null);
                   }}
                 >
@@ -365,7 +421,9 @@ export function ModelTree() {
                 <button
                   onClick={() => {
                     selectSketchRegions(treeMenu.id);
-                    useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
+                    useStore
+                      .getState()
+                      .setMode({ name: "dialog", dialog: "extrude" });
                     setTreeMenu(null);
                   }}
                 >
@@ -374,7 +432,9 @@ export function ModelTree() {
                 <button
                   onClick={() => {
                     selectSketchRegions(treeMenu.id);
-                    useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
+                    useStore
+                      .getState()
+                      .setMode({ name: "dialog", dialog: "revolve" });
                     setTreeMenu(null);
                   }}
                 >

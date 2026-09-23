@@ -1,7 +1,7 @@
 # Architecture
 
 Rockett CAD follows the layered architecture the project brief prescribes: the
-rendered triangle mesh is only a *visualisation* of the CAD model — the
+rendered triangle mesh is only a _visualisation_ of the CAD model — the
 authoritative geometry is always the B-Rep model produced by the OpenCascade
 kernel from the parametric document.
 
@@ -21,12 +21,12 @@ B-Rep model (TopoDS solids, faces, edges, vertices)
 
 ## Repository layout
 
-| Path | Role |
-| --- | --- |
+| Path      | Role                                                                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `shared/` | The document schema (`model.ts`), the sketch constraint solver (`solver.ts`), profile/region detection (`profiles.ts`), API DTOs (`api.ts`). Runs identically in browser and server. |
-| `server/` | Express REST API, project store, and the geometry layer: kernel bootstrap, feature evaluators, persistent-naming, regeneration engine, tessellation, exporters, measurement. |
-| `client/` | React + three.js UI: viewport, sketcher, timeline, model tree, feature dialogs. |
-| `docker/` | Unraid template. |
+| `server/` | Express REST API, project store, and the geometry layer: kernel bootstrap, feature evaluators, persistent-naming, regeneration engine, tessellation, exporters, measurement.         |
+| `client/` | React + three.js UI: viewport, sketcher, timeline, model tree, feature dialogs.                                                                                                      |
+| `docker/` | Unraid template.                                                                                                                                                                     |
 
 ## Key decisions
 
@@ -48,7 +48,7 @@ snapshots restored through a full-document endpoint — deliberately distinct
 from the CAD timeline (see FEATURE_TIMELINE.md).
 
 **Shared parametric code.** The constraint solver and profile detection are
-plain TypeScript used by *both* sides: the browser solves interactively while
+plain TypeScript used by _both_ sides: the browser solves interactively while
 dragging sketch geometry; the server re-solves authoritatively during
 regeneration. There is exactly one implementation of each, so they cannot
 drift.
@@ -56,7 +56,7 @@ drift.
 **Two-tier interactivity.** Cheap interactive feedback (sketch drag solving,
 profile highlighting, selection) happens client-side; committed CAD operations
 run through the kernel. The engine caches per-feature snapshots and
-tessellations so an edit to feature *k* re-evaluates only features *k..end*
+tessellations so an edit to feature _k_ re-evaluates only features _k..end_
 (see CAD_MODEL.md, "Regeneration").
 
 **Units.** All geometry is internally millimetres. `Units` on the document is
@@ -65,7 +65,7 @@ stored geometry.
 
 ## Security posture
 
-- The API exposes *controlled modelling operations only* — no arbitrary
+- The API exposes _controlled modelling operations only_ — no arbitrary
   command execution surface.
 - All modelling parameters are validated (`server/src/api/validate.ts`)
   before reaching the kernel; document/feature ids are pattern-checked.

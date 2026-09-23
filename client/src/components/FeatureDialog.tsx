@@ -22,10 +22,22 @@ import { DraggablePanel } from "./DraggablePanel";
 export function FeatureDialog() {
   const mode = useStore((s) => s.mode);
   if (mode.name !== "dialog") return null;
-  return <DialogBody key={mode.dialog + (mode.editFeatureId ?? "")} dialog={mode.dialog} editId={mode.editFeatureId} />;
+  return (
+    <DialogBody
+      key={mode.dialog + (mode.editFeatureId ?? "")}
+      dialog={mode.dialog}
+      editId={mode.editFeatureId}
+    />
+  );
 }
 
-function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string }) {
+function DialogBody({
+  dialog,
+  editId,
+}: {
+  dialog: DialogType;
+  editId?: string;
+}) {
   const selection = useStore((s) => s.selection);
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
@@ -58,14 +70,14 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
     { kind: "plane" }
   >[];
   // selected sketch LINES (axis candidates for revolve / circular pattern)
-  const sketchLines = (selection.filter((s) => s.kind === "sketchEntity") as any[]).filter(
-    (s) => {
-      const sk = document_?.features.find(
-        (f) => f.id === s.sketchId && f.type === "sketch"
-      ) as any;
-      return sk?.entities.find((x: any) => x.id === s.entityId)?.kind === "line";
-    }
-  );
+  const sketchLines = (
+    selection.filter((s) => s.kind === "sketchEntity") as any[]
+  ).filter((s) => {
+    const sk = document_?.features.find(
+      (f) => f.id === s.sketchId && f.type === "sketch",
+    ) as any;
+    return sk?.entities.find((x: any) => x.id === s.entityId)?.kind === "line";
+  });
 
   const p = (key: string, dflt: any) => params[key] ?? dflt;
   const num = (key: string, dflt: number) => {
@@ -75,10 +87,17 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
 
   // Picking an edge or sketch line in an axis-based dialog switches the axis
   // to it — the dropdown alone gave no hint the pick was registered.
-  const axisDialogs: DialogType[] = ["revolve", "linearPattern", "circularPattern"];
+  const axisDialogs: DialogType[] = [
+    "revolve",
+    "linearPattern",
+    "circularPattern",
+  ];
   useEffect(() => {
     if (!axisDialogs.includes(dialog)) return;
-    if ((edges.length > 0 || sketchLines.length > 0) && params.axisSource !== "edge") {
+    if (
+      (edges.length > 0 || sketchLines.length > 0) &&
+      params.axisSource !== "edge"
+    ) {
       setParams({ axisSource: "edge" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,9 +106,17 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
   const profileRefs = (): ProfileRef[] =>
     profiles.map((x) => ({ sketchId: x.sketchId, profileId: x.profileId }));
   const edgeRefs = (): EdgeRef[] =>
-    edges.map((x) => ({ kind: "edge", bodyId: x.bodyId, edgeName: x.edgeName }));
+    edges.map((x) => ({
+      kind: "edge",
+      bodyId: x.bodyId,
+      edgeName: x.edgeName,
+    }));
   const faceRefs = (): FaceRef[] =>
-    faces.map((x) => ({ kind: "face", bodyId: x.bodyId, faceName: x.faceName }));
+    faces.map((x) => ({
+      kind: "face",
+      bodyId: x.bodyId,
+      faceName: x.faceName,
+    }));
   const planeRef = (): PlaneRef | null => {
     if (planes.length > 0) return planes[0].ref;
     if (faces.length > 0) return { kind: "face", face: faceRefs()[0] };
@@ -155,8 +182,10 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
     extrudeSign.current = sign;
     if (prev === null || prev === sign) return;
     const op = params.operation ?? "join";
-    if (sign < 0 && op === "join") setParams({ operation: "cut", autoCut: true });
-    else if (sign > 0 && op === "cut" && params.autoCut) setParams({ operation: "join", autoCut: false });
+    if (sign < 0 && op === "join")
+      setParams({ operation: "cut", autoCut: true });
+    else if (sign > 0 && op === "cut" && params.autoCut)
+      setParams({ operation: "join", autoCut: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.distance, dialog]);
 
@@ -183,15 +212,31 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
 
   switch (dialog) {
     case "importStep": {
-      const feature = document_?.features.find(f => f.id === editId);
-      return <DraggablePanel title="Imported STEP">
-        <div className="dialog-body">
-          <p>{feature?.type === "importStep" ? feature.filename : "STEP import"}</p>
-          <p>Imported solid bodies are the starting geometry. Add sketches, cuts, fillets, and other features to modify them.</p>
-          <p>The originating CAD program’s sketches and feature history are not included in STEP files.</p>
-        </div>
-        <div className="dialog-actions"><button className="btn" onClick={close}>Close</button></div>
-      </DraggablePanel>;
+      const feature = document_?.features.find((f) => f.id === editId);
+      return (
+        <DraggablePanel title="Imported STEP">
+          <div className="dialog-body">
+            <p>
+              {feature?.type === "importStep"
+                ? feature.filename
+                : "STEP import"}
+            </p>
+            <p>
+              Imported solid bodies are the starting geometry. Add sketches,
+              cuts, fillets, and other features to modify them.
+            </p>
+            <p>
+              The originating CAD program’s sketches and feature history are not
+              included in STEP files.
+            </p>
+          </div>
+          <div className="dialog-actions">
+            <button className="btn" onClick={close}>
+              Close
+            </button>
+          </div>
+        </DraggablePanel>
+      );
     }
     case "extrude": {
       title = "Extrude";
@@ -202,10 +247,23 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
             count={profiles.length + faces.length}
             hint="click sketch regions or planar faces"
           />
-          <NumField label="Start offset (mm)" value={p("startOffset", 0)} onChange={(v) => setParams({ startOffset: v })} />
-          <div className="field-hint">0 = start on the sketch / face; ± moves the start plane along its normal</div>
-          <NumField label="Distance (mm)" value={p("distance", 10)} onChange={(v) => setParams({ distance: v })} />
-          <div className="field-hint">Negative = the other side (switches to Cut)</div>
+          <NumField
+            label="Start offset (mm)"
+            value={p("startOffset", 0)}
+            onChange={(v) => setParams({ startOffset: v })}
+          />
+          <div className="field-hint">
+            0 = start on the sketch / face; ± moves the start plane along its
+            normal
+          </div>
+          <NumField
+            label="Distance (mm)"
+            value={p("distance", 10)}
+            onChange={(v) => setParams({ distance: v })}
+          />
+          <div className="field-hint">
+            Negative = the other side (switches to Cut)
+          </div>
           <SelectField
             label="Direction"
             value={p("direction", "normal")}
@@ -218,7 +276,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
             onChange={(v) => setParams({ direction: v })}
           />
           {p("direction", "normal") === "twoSided" && (
-            <NumField label="Distance 2 (mm)" value={p("distance2", 5)} onChange={(v) => setParams({ distance2: v })} />
+            <NumField
+              label="Distance 2 (mm)"
+              value={p("distance2", 5)}
+              onChange={(v) => setParams({ distance2: v })}
+            />
           )}
           <SelectField
             label="Operation"
@@ -237,11 +299,17 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
         if (
           !requireSel(
             profiles.length + faces.length > 0,
-            "Select at least one profile or planar face"
+            "Select at least one profile or planar face",
           )
         )
           return;
-        if (!requireSel(num("distance", 10) !== 0, "Extrude distance must be non-zero")) return;
+        if (
+          !requireSel(
+            num("distance", 10) !== 0,
+            "Extrude distance must be non-zero",
+          )
+        )
+          return;
         await commit({
           id: editId ?? newId("extrude"),
           type: "extrude",
@@ -262,7 +330,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Revolve";
       body = (
         <>
-          <SelInfo label="Profiles" count={profiles.length} hint="click sketch regions" />
+          <SelInfo
+            label="Profiles"
+            count={profiles.length}
+            hint="click sketch regions"
+          />
           <SelInfo
             label="Axis"
             count={edges.length + sketchLines.length}
@@ -270,7 +342,9 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
           />
           <SelectField
             label="Axis"
-            value={p("axisSource", "origin") === "edge" ? "edge" : p("axis", "Z")}
+            value={
+              p("axisSource", "origin") === "edge" ? "edge" : p("axis", "Z")
+            }
             options={[
               ["X", "X axis"],
               ["Y", "Y axis"],
@@ -283,7 +357,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
                 : setParams({ axisSource: "origin", axis: v })
             }
           />
-          <NumField label="Angle (°)" value={p("angle", 360)} onChange={(v) => setParams({ angle: v })} />
+          <NumField
+            label="Angle (°)"
+            value={p("angle", 360)}
+            onChange={(v) => setParams({ angle: v })}
+          />
           <SelectField
             label="Operation"
             value={p("operation", "join")}
@@ -298,7 +376,8 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
         </>
       );
       onOk = async () => {
-        if (!requireSel(profiles.length > 0, "Select at least one profile")) return;
+        if (!requireSel(profiles.length > 0, "Select at least one profile"))
+          return;
         await commit({
           id: editId ?? newId("revolve"),
           type: "revolve",
@@ -317,9 +396,21 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       body = (
         <>
           <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
-          <NumField label="X (mm)" value={p("tx", 0)} onChange={(v) => setParams({ tx: v })} />
-          <NumField label="Y (mm)" value={p("ty", 0)} onChange={(v) => setParams({ ty: v })} />
-          <NumField label="Z (mm)" value={p("tz", 0)} onChange={(v) => setParams({ tz: v })} />
+          <NumField
+            label="X (mm)"
+            value={p("tx", 0)}
+            onChange={(v) => setParams({ tx: v })}
+          />
+          <NumField
+            label="Y (mm)"
+            value={p("ty", 0)}
+            onChange={(v) => setParams({ ty: v })}
+          />
+          <NumField
+            label="Z (mm)"
+            value={p("tz", 0)}
+            onChange={(v) => setParams({ tz: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -337,14 +428,23 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
     }
     case "sweep": {
       title = "Sweep";
-      const sketches = (document_?.features ?? []).filter((f) => f.type === "sketch");
+      const sketches = (document_?.features ?? []).filter(
+        (f) => f.type === "sketch",
+      );
       body = (
         <>
-          <SelInfo label="Profile" count={profiles.length} hint="click a sketch region" />
+          <SelInfo
+            label="Profile"
+            count={profiles.length}
+            hint="click a sketch region"
+          />
           <SelectField
             label="Path sketch"
             value={p("pathSketchId", "")}
-            options={[["", "— choose —"], ...sketches.map((s) => [s.id, s.name] as [string, string])]}
+            options={[
+              ["", "— choose —"],
+              ...sketches.map((s) => [s.id, s.name] as [string, string]),
+            ]}
             onChange={(v) => setParams({ pathSketchId: v })}
           />
           <SelectField
@@ -361,7 +461,8 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       );
       onOk = async () => {
         if (!requireSel(profiles.length > 0, "Select a profile")) return;
-        if (!requireSel(!!p("pathSketchId", ""), "Choose a path sketch")) return;
+        if (!requireSel(!!p("pathSketchId", ""), "Choose a path sketch"))
+          return;
         await commit({
           id: editId ?? newId("sweep"),
           type: "sweep",
@@ -378,7 +479,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Loft";
       body = (
         <>
-          <SelInfo label="Sections (in order)" count={profiles.length} hint="click 2+ profiles" />
+          <SelInfo
+            label="Sections (in order)"
+            count={profiles.length}
+            hint="click 2+ profiles"
+          />
           <SelectField
             label="Operation"
             value={p("operation", "join")}
@@ -392,7 +497,13 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
         </>
       );
       onOk = async () => {
-        if (!requireSel(profiles.length >= 2, "Select at least two section profiles")) return;
+        if (
+          !requireSel(
+            profiles.length >= 2,
+            "Select at least two section profiles",
+          )
+        )
+          return;
         await commit({
           id: editId ?? newId("loft"),
           type: "loft",
@@ -408,8 +519,16 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Emboss";
       body = (
         <>
-          <SelInfo label="Profiles" count={profiles.length} hint="sketch on a face, then pick regions" />
-          <NumField label="Depth (mm)" value={p("depth", 1)} onChange={(v) => setParams({ depth: v })} />
+          <SelInfo
+            label="Profiles"
+            count={profiles.length}
+            hint="sketch on a face, then pick regions"
+          />
+          <NumField
+            label="Depth (mm)"
+            value={p("depth", 1)}
+            onChange={(v) => setParams({ depth: v })}
+          />
           <SelectField
             label="Mode"
             value={p("embossMode", "emboss")}
@@ -439,10 +558,27 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Fillet";
       body = (
         <>
-          <SelInfo label="Edges" count={edges.length} hint="click model edges" />
-          <label><input type="checkbox" checked={p("tangentChain", true)} onChange={e => setParams({ tangentChain: e.target.checked })} /> Select tangent chain</label>
-          <small>Smooth curves chain together; sharp corners stop the selection.</small>
-          <NumField label="Radius (mm)" value={p("radius", 2)} onChange={(v) => setParams({ radius: v })} />
+          <SelInfo
+            label="Edges"
+            count={edges.length}
+            hint="click model edges"
+          />
+          <label>
+            <input
+              type="checkbox"
+              checked={p("tangentChain", true)}
+              onChange={(e) => setParams({ tangentChain: e.target.checked })}
+            />{" "}
+            Select tangent chain
+          </label>
+          <small>
+            Smooth curves chain together; sharp corners stop the selection.
+          </small>
+          <NumField
+            label="Radius (mm)"
+            value={p("radius", 2)}
+            onChange={(v) => setParams({ radius: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -463,10 +599,27 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Chamfer";
       body = (
         <>
-          <SelInfo label="Edges" count={edges.length} hint="click model edges" />
-          <label><input type="checkbox" checked={p("tangentChain", true)} onChange={e => setParams({ tangentChain: e.target.checked })} /> Select tangent chain</label>
-          <small>Smooth curves chain together; sharp corners stop the selection.</small>
-          <NumField label="Distance (mm)" value={p("distance", 1)} onChange={(v) => setParams({ distance: v })} />
+          <SelInfo
+            label="Edges"
+            count={edges.length}
+            hint="click model edges"
+          />
+          <label>
+            <input
+              type="checkbox"
+              checked={p("tangentChain", true)}
+              onChange={(e) => setParams({ tangentChain: e.target.checked })}
+            />{" "}
+            Select tangent chain
+          </label>
+          <small>
+            Smooth curves chain together; sharp corners stop the selection.
+          </small>
+          <NumField
+            label="Distance (mm)"
+            value={p("distance", 1)}
+            onChange={(v) => setParams({ distance: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -487,8 +640,16 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Shell";
       body = (
         <>
-          <SelInfo label="Faces to remove" count={faces.length} hint="click faces to open" />
-          <NumField label="Thickness (mm)" value={p("thickness", 2)} onChange={(v) => setParams({ thickness: v })} />
+          <SelInfo
+            label="Faces to remove"
+            count={faces.length}
+            hint="click faces to open"
+          />
+          <NumField
+            label="Thickness (mm)"
+            value={p("thickness", 2)}
+            onChange={(v) => setParams({ thickness: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -522,11 +683,21 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
             ]}
             onChange={(v) => setParams({ operation: v })}
           />
-          <CheckField label="Keep tools" value={!!p("keepTools", false)} onChange={(v) => setParams({ keepTools: v })} />
+          <CheckField
+            label="Keep tools"
+            value={!!p("keepTools", false)}
+            onChange={(v) => setParams({ keepTools: v })}
+          />
         </>
       );
       onOk = async () => {
-        if (!requireSel(bodies.length >= 2, "Select a target body then tool bodies")) return;
+        if (
+          !requireSel(
+            bodies.length >= 2,
+            "Select a target body then tool bodies",
+          )
+        )
+          return;
         await commit({
           id: editId ?? newId("combine"),
           type: "combine",
@@ -544,7 +715,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Split Body";
       body = (
         <>
-          <SelInfo label="Body" count={bodies.length} hint="click the body to split" />
+          <SelInfo
+            label="Body"
+            count={bodies.length}
+            hint="click the body to split"
+          />
           <SelInfo
             label="Split plane"
             count={planes.length + faces.length}
@@ -571,7 +746,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
       title = "Press / Pull";
       body = (
         <>
-          <SelInfo label="Faces" count={faces.length} hint="click planar faces" />
+          <SelInfo
+            label="Faces"
+            count={faces.length}
+            hint="click planar faces"
+          />
           <NumField
             label="Distance (mm, − = inward)"
             value={p("distance", 5)}
@@ -602,7 +781,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
             count={planes.length + faces.length}
             hint="origin/construction plane or planar face"
           />
-          <CheckField label="Join with source" value={!!p("combine", true)} onChange={(v) => setParams({ combine: v })} />
+          <CheckField
+            label="Join with source"
+            value={!!p("combine", true)}
+            onChange={(v) => setParams({ combine: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -628,7 +811,9 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
           <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
           <SelectField
             label="Direction"
-            value={p("axisSource", "origin") === "edge" ? "edge" : p("axis", "X")}
+            value={
+              p("axisSource", "origin") === "edge" ? "edge" : p("axis", "X")
+            }
             options={[
               ["X", "X axis"],
               ["Y", "Y axis"],
@@ -641,9 +826,22 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
                 : setParams({ axisSource: "origin", axis: v })
             }
           />
-          <NumField label="Quantity" value={p("count", 3)} onChange={(v) => setParams({ count: v })} int />
-          <NumField label="Spacing (mm)" value={p("spacing", 20)} onChange={(v) => setParams({ spacing: v })} />
-          <CheckField label="Join instances" value={!!p("combine", false)} onChange={(v) => setParams({ combine: v })} />
+          <NumField
+            label="Quantity"
+            value={p("count", 3)}
+            onChange={(v) => setParams({ count: v })}
+            int
+          />
+          <NumField
+            label="Spacing (mm)"
+            value={p("spacing", 20)}
+            onChange={(v) => setParams({ spacing: v })}
+          />
+          <CheckField
+            label="Join instances"
+            value={!!p("combine", false)}
+            onChange={(v) => setParams({ combine: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -673,7 +871,9 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
           <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
           <SelectField
             label="Axis"
-            value={p("axisSource", "origin") === "edge" ? "edge" : p("axis", "Z")}
+            value={
+              p("axisSource", "origin") === "edge" ? "edge" : p("axis", "Z")
+            }
             options={[
               ["X", "X axis"],
               ["Y", "Y axis"],
@@ -686,9 +886,22 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
                 : setParams({ axisSource: "origin", axis: v })
             }
           />
-          <NumField label="Quantity" value={p("count", 6)} onChange={(v) => setParams({ count: v })} int />
-          <NumField label="Total angle (°)" value={p("totalAngle", 360)} onChange={(v) => setParams({ totalAngle: v })} />
-          <CheckField label="Join instances" value={!!p("combine", false)} onChange={(v) => setParams({ combine: v })} />
+          <NumField
+            label="Quantity"
+            value={p("count", 6)}
+            onChange={(v) => setParams({ count: v })}
+            int
+          />
+          <NumField
+            label="Total angle (°)"
+            value={p("totalAngle", 360)}
+            onChange={(v) => setParams({ totalAngle: v })}
+          />
+          <CheckField
+            label="Join instances"
+            value={!!p("combine", false)}
+            onChange={(v) => setParams({ combine: v })}
+          />
         </>
       );
       onOk = async () => {
@@ -726,17 +939,34 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
             onChange={(v) => setParams({ method: v })}
           />
           {p("method", "offset") === "offset" && (
-            <NumField label="Offset (mm)" value={p("distance", 10)} onChange={(v) => setParams({ distance: v })} />
+            <NumField
+              label="Offset (mm)"
+              value={p("distance", 10)}
+              onChange={(v) => setParams({ distance: v })}
+            />
           )}
         </>
       );
       onOk = async () => {
         const refs: PlaneRef[] = [
           ...planes.map((x) => x.ref),
-          ...faces.map((f) => ({ kind: "face" as const, face: { kind: "face" as const, bodyId: f.bodyId, faceName: f.faceName } })),
+          ...faces.map((f) => ({
+            kind: "face" as const,
+            face: {
+              kind: "face" as const,
+              bodyId: f.bodyId,
+              faceName: f.faceName,
+            },
+          })),
         ];
         if (p("method", "offset") === "midplane") {
-          if (!requireSel(refs.length >= 2, "Select two references for a midplane")) return;
+          if (
+            !requireSel(
+              refs.length >= 2,
+              "Select two references for a midplane",
+            )
+          )
+            return;
           await commit({
             id: editId ?? newId("plane"),
             type: "constructionPlane",
@@ -745,13 +975,18 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
             method: { kind: "midplane", a: refs[0], b: refs[1] },
           });
         } else {
-          if (!requireSel(refs.length >= 1, "Select a base plane or face")) return;
+          if (!requireSel(refs.length >= 1, "Select a base plane or face"))
+            return;
           await commit({
             id: editId ?? newId("plane"),
             type: "constructionPlane",
             name: p("name", ""),
             suppressed: false,
-            method: { kind: "offset", base: refs[0], distance: num("distance", 10) },
+            method: {
+              kind: "offset",
+              base: refs[0],
+              distance: num("distance", 10),
+            },
           });
         }
       };
@@ -777,7 +1012,11 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
     <DraggablePanel title={title}>
       <div className="dialog-body">{body}</div>
       <div className="dialog-actions">
-        <button className="btn primary" disabled={pending} onClick={() => onOk && void onOk()}>
+        <button
+          className="btn primary"
+          disabled={pending}
+          onClick={() => onOk && void onOk()}
+        >
           OK
         </button>
         <button className="btn" disabled={pending} onClick={cancel}>
@@ -871,13 +1110,25 @@ function CheckField({
 }) {
   return (
     <label className="field check">
-      <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span>{label}</span>
     </label>
   );
 }
 
-function SelInfo({ label, count, hint }: { label: string; count: number; hint: string }) {
+function SelInfo({
+  label,
+  count,
+  hint,
+}: {
+  label: string;
+  count: number;
+  hint: string;
+}) {
   return (
     <div className={`sel-info ${count > 0 ? "have" : ""}`}>
       <span>{label}</span>
@@ -912,7 +1163,9 @@ function ReferenceImagePanel({
     : null;
   const [opacity, setOpacity] = useState<number>(existing?.opacity ?? 0.6);
   const [scale, setScale] = useState<number>(existing?.transform.scale ?? 0.5);
-  const [rotation, setRotation] = useState<number>(existing?.transform.rotation ?? 0);
+  const [rotation, setRotation] = useState<number>(
+    existing?.transform.rotation ?? 0,
+  );
   const [u, setU] = useState<number>(existing?.transform.u ?? 0);
   const [v, setV] = useState<number>(existing?.transform.v ?? 0);
   const [calibrating, setCalibrating] = useState(false);
@@ -951,14 +1204,20 @@ function ReferenceImagePanel({
         setError("Choose an image file (PNG, JPEG, WebP)");
         return;
       }
-      const plane = planeRef() ?? { kind: "origin" as const, plane: "XY" as const };
+      const plane = planeRef() ?? {
+        kind: "origin" as const,
+        plane: "XY" as const,
+      };
       const { assetId } = await api.uploadImage(document_!.id, file);
       const img = new Image();
-      const dims = await new Promise<{ w: number; h: number }>((resolve, reject) => {
-        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-        img.onerror = reject;
-        img.src = URL.createObjectURL(file);
-      });
+      const dims = await new Promise<{ w: number; h: number }>(
+        (resolve, reject) => {
+          img.onload = () =>
+            resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
+        },
+      );
       await addFeature({
         id: newId("canvas"),
         type: "referenceImage",
@@ -1006,10 +1265,10 @@ function ReferenceImagePanel({
         const d = Math.hypot(
           clicks[1].x - clicks[0].x,
           clicks[1].y - clicks[0].y,
-          clicks[1].z - clicks[0].z
+          clicks[1].z - clicks[0].z,
         );
         const desired = Number(
-          window.prompt("Real distance between the two points (mm):", "100")
+          window.prompt("Real distance between the two points (mm):", "100"),
         );
         setCalibrating(false);
         if (Number.isFinite(desired) && desired > 0 && d > 1e-9) {
@@ -1028,7 +1287,11 @@ function ReferenceImagePanel({
           <>
             <div className={`sel-info ${selection.length > 0 ? "have" : ""}`}>
               <span>Plane</span>
-              <b>{selection.length > 0 ? "selected" : "click a plane/face (default XY)"}</b>
+              <b>
+                {selection.length > 0
+                  ? "selected"
+                  : "click a plane/face (default XY)"}
+              </b>
             </div>
             <label className="field">
               <span>Image file</span>
@@ -1042,19 +1305,39 @@ function ReferenceImagePanel({
         )}
         <label className="field">
           <span>Scale (mm / pixel)</span>
-          <input type="number" step="any" value={scale} onChange={(e) => setScale(Number(e.target.value))} />
+          <input
+            type="number"
+            step="any"
+            value={scale}
+            onChange={(e) => setScale(Number(e.target.value))}
+          />
         </label>
         <label className="field">
           <span>Rotation (°)</span>
-          <input type="number" step="any" value={rotation} onChange={(e) => setRotation(Number(e.target.value))} />
+          <input
+            type="number"
+            step="any"
+            value={rotation}
+            onChange={(e) => setRotation(Number(e.target.value))}
+          />
         </label>
         <label className="field">
           <span>Position U (mm)</span>
-          <input type="number" step="any" value={u} onChange={(e) => setU(Number(e.target.value))} />
+          <input
+            type="number"
+            step="any"
+            value={u}
+            onChange={(e) => setU(Number(e.target.value))}
+          />
         </label>
         <label className="field">
           <span>Position V (mm)</span>
-          <input type="number" step="any" value={v} onChange={(e) => setV(Number(e.target.value))} />
+          <input
+            type="number"
+            step="any"
+            value={v}
+            onChange={(e) => setV(Number(e.target.value))}
+          />
         </label>
         <label className="field">
           <span>Opacity</span>
@@ -1068,13 +1351,23 @@ function ReferenceImagePanel({
           />
         </label>
         {existing && (
-          <button className="btn" disabled={calibrating} onClick={() => void calibrate()}>
-            {calibrating ? "Click two points on the image…" : "Calibrate (2 points)"}
+          <button
+            className="btn"
+            disabled={calibrating}
+            onClick={() => void calibrate()}
+          >
+            {calibrating
+              ? "Click two points on the image…"
+              : "Calibrate (2 points)"}
           </button>
         )}
       </div>
       <div className="dialog-actions">
-        <button className="btn primary" disabled={pending} onClick={() => void onOk()}>
+        <button
+          className="btn primary"
+          disabled={pending}
+          onClick={() => void onOk()}
+        >
           OK
         </button>
         <button
@@ -1107,7 +1400,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
 
   const selectedBodies = useMemo(
     () => selection.filter((s) => s.kind === "body").map((s: any) => s.bodyId),
-    [selection]
+    [selection],
   );
 
   const doExport = async () => {
@@ -1118,7 +1411,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
         document_.id,
         format,
         selectedBodies,
-        quality
+        quality,
       );
       const a = window.document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -1146,14 +1439,20 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
         </div>
         <label className="field">
           <span>Format</span>
-          <select value={format} onChange={(e) => setFormat(e.target.value as any)}>
+          <select
+            value={format}
+            onChange={(e) => setFormat(e.target.value as any)}
+          >
             <option value="stl">STL (binary)</option>
             <option value="3mf">3MF (multi-body, named)</option>
           </select>
         </label>
         <label className="field">
           <span>Quality (mm deviation)</span>
-          <select value={quality} onChange={(e) => setQuality(Number(e.target.value))}>
+          <select
+            value={quality}
+            onChange={(e) => setQuality(Number(e.target.value))}
+          >
             <option value={0.1}>Draft (0.1)</option>
             <option value={0.05}>Standard (0.05)</option>
             <option value={0.01}>Fine (0.01)</option>
@@ -1161,7 +1460,11 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
         </label>
       </div>
       <div className="dialog-actions">
-        <button className="btn primary" disabled={pending} onClick={() => void doExport()}>
+        <button
+          className="btn primary"
+          disabled={pending}
+          onClick={() => void doExport()}
+        >
           {pending ? "Exporting…" : "Download"}
         </button>
         <button className="btn" onClick={onClose}>

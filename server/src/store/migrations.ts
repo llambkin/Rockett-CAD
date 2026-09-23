@@ -25,14 +25,14 @@ export function migrateDocument(doc: any): CadDocument {
     const step = MIGRATIONS[current.schemaVersion];
     if (!step) {
       throw new Error(
-        `no migration path from schema ${current.schemaVersion} to ${SCHEMA_VERSION}`
+        `no migration path from schema ${current.schemaVersion} to ${SCHEMA_VERSION}`,
       );
     }
     current = step(current);
   }
   if (current.schemaVersion > SCHEMA_VERSION) {
     throw new Error(
-      `project uses schema ${current.schemaVersion}, newer than this server (${SCHEMA_VERSION}) — upgrade the application`
+      `project uses schema ${current.schemaVersion}, newer than this server (${SCHEMA_VERSION}) — upgrade the application`,
     );
   }
   return current as CadDocument;

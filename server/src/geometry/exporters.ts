@@ -9,7 +9,12 @@
  */
 
 import { zipSync, strToU8 } from "fflate";
-import { getKernel, faces as facesOf, shapeHash, type Shape } from "./kernel.js";
+import {
+  getKernel,
+  faces as facesOf,
+  shapeHash,
+  type Shape,
+} from "./kernel.js";
 import type { NamedBody } from "./naming.js";
 
 interface Mesh {
@@ -25,7 +30,7 @@ export function exportMesh(body: NamedBody, quality = 0.05): Mesh {
     quality,
     false,
     0.3,
-    false
+    false,
   );
   mesh.delete();
 
@@ -125,7 +130,7 @@ function xmlEscape(s: string): string {
 /** 3MF: one <object> per body, names preserved, units = millimeter. */
 export function write3mf(
   bodies: { body: NamedBody; name: string }[],
-  quality = 0.05
+  quality = 0.05,
 ): Buffer {
   const objectsXml: string[] = [];
   const itemsXml: string[] = [];
@@ -135,17 +140,17 @@ export function write3mf(
     const verts: string[] = [];
     for (let v = 0; v < mesh.positions.length; v += 3) {
       verts.push(
-        `<vertex x="${mesh.positions[v].toFixed(6)}" y="${mesh.positions[v + 1].toFixed(6)}" z="${mesh.positions[v + 2].toFixed(6)}"/>`
+        `<vertex x="${mesh.positions[v].toFixed(6)}" y="${mesh.positions[v + 1].toFixed(6)}" z="${mesh.positions[v + 2].toFixed(6)}"/>`,
       );
     }
     const tris: string[] = [];
     for (let t = 0; t < mesh.indices.length; t += 3) {
       tris.push(
-        `<triangle v1="${mesh.indices[t]}" v2="${mesh.indices[t + 1]}" v3="${mesh.indices[t + 2]}"/>`
+        `<triangle v1="${mesh.indices[t]}" v2="${mesh.indices[t + 1]}" v3="${mesh.indices[t + 2]}"/>`,
       );
     }
     objectsXml.push(
-      `<object id="${id}" name="${xmlEscape(name)}" type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`
+      `<object id="${id}" name="${xmlEscape(name)}" type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`,
     );
     itemsXml.push(`<item objectid="${id}"/>`);
   });

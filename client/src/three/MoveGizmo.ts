@@ -41,7 +41,7 @@ export class MoveGizmo {
     private viewport: CadViewport,
     origin: THREE.Vector3,
     initial: [number, number, number],
-    ghostSources: MoveGhostSource[]
+    ghostSources: MoveGhostSource[],
   ) {
     this.origin.copy(origin);
     this.offset.set(...initial);
@@ -53,8 +53,14 @@ export class MoveGizmo {
         transparent: true,
         opacity: 0.95,
       });
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 12), mat);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 16), mat.clone());
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(1, 1, 1, 12),
+        mat,
+      );
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(1, 1, 16),
+        mat.clone(),
+      );
       shaft.renderOrder = 20;
       cone.renderOrder = 20;
       this.group.add(shaft, cone);
@@ -63,7 +69,10 @@ export class MoveGizmo {
 
     for (const src of ghostSources) {
       const geom = new THREE.BufferGeometry();
-      geom.setAttribute("position", new THREE.Float32BufferAttribute(src.positions, 3));
+      geom.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(src.positions, 3),
+      );
       geom.setIndex(src.indices);
       const mesh = new THREE.Mesh(
         geom,
@@ -73,7 +82,7 @@ export class MoveGizmo {
           opacity: 0.22,
           depthWrite: false,
           side: THREE.DoubleSide,
-        })
+        }),
       );
       mesh.renderOrder = 4;
       this.ghosts.push(mesh);
@@ -106,7 +115,7 @@ export class MoveGizmo {
       const dir = AXES[i];
       const quat = new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 1, 0),
-        dir
+        dir,
       );
       shaft.position.copy(base).add(dir.clone().multiplyScalar(len / 2));
       shaft.quaternion.copy(quat);
@@ -132,7 +141,7 @@ export class MoveGizmo {
     const rect = this.viewport.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.viewport.camera);
     const wpp = this.viewport.worldPerPixel();
@@ -155,7 +164,9 @@ export class MoveGizmo {
   setHover(axis: number) {
     for (let i = 0; i < 3; i++) {
       const c = i === axis ? AXIS_HOVER : AXIS_COLORS[i];
-      (this.arrows[i].shaft.material as THREE.MeshBasicMaterial).color.setHex(c);
+      (this.arrows[i].shaft.material as THREE.MeshBasicMaterial).color.setHex(
+        c,
+      );
       (this.arrows[i].cone.material as THREE.MeshBasicMaterial).color.setHex(c);
     }
   }
@@ -163,14 +174,15 @@ export class MoveGizmo {
   /** Begin a drag on the given axis at the pointer position. */
   beginDrag(axis: number, clientX: number, clientY: number) {
     this.dragAxis = axis;
-    this.grabDelta = this.offset.getComponent(axis) - this.rawParam(axis, clientX, clientY);
+    this.grabDelta =
+      this.offset.getComponent(axis) - this.rawParam(axis, clientX, clientY);
   }
 
   private rawParam(axis: number, clientX: number, clientY: number): number {
     const rect = this.viewport.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1
+      (-(clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.viewport.camera);
     const ray = this.raycaster.ray;
@@ -186,10 +198,11 @@ export class MoveGizmo {
 
   /** New offset for the current drag; snapped to the zoom step. */
   dragOffset(clientX: number, clientY: number): [number, number, number] {
-    if (this.dragAxis < 0) return this.offset.toArray() as [number, number, number];
+    if (this.dragAxis < 0)
+      return this.offset.toArray() as [number, number, number];
     const t = this.rawParam(this.dragAxis, clientX, clientY) + this.grabDelta;
     const step = snapStep(this.viewport.worldPerPixel());
-    const snapped = Math.round((Math.round(t / step) * step) * 1e6) / 1e6;
+    const snapped = Math.round(Math.round(t / step) * step * 1e6) / 1e6;
     const out = this.offset.clone();
     out.setComponent(this.dragAxis, snapped);
     return out.toArray() as [number, number, number];

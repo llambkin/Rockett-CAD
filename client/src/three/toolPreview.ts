@@ -37,7 +37,7 @@ function ghostLine(pts: THREE.Vector3[]): THREE.Line {
       transparent: true,
       opacity: 0.9,
       depthTest: false,
-    })
+    }),
   );
 }
 
@@ -51,7 +51,7 @@ export function updateToolPreview(
   tool: SketchTool,
   clicks: UV[],
   cursor: UV,
-  polygonSides = 6
+  polygonSides = 6,
 ): boolean {
   clearToolPreview(viewport);
   const g = ensureGroup(viewport);
@@ -82,7 +82,7 @@ export function updateToolPreview(
           P(cursor.x, cursor.y),
           P(a.x, cursor.y),
           P(a.x, a.y),
-        ])
+        ]),
       );
       return true;
     }
@@ -98,7 +98,7 @@ export function updateToolPreview(
           P(c.x + w, c.y + h),
           P(c.x - w, c.y + h),
           P(c.x - w, c.y - h),
-        ])
+        ]),
       );
       return true;
     }
@@ -179,13 +179,13 @@ export function updateToolPreview(
           ghostLine([
             P(c1.x + nx * r, c1.y + ny * r),
             P(c2.x + nx * r, c2.y + ny * r),
-          ])
+          ]),
         );
         g.add(
           ghostLine([
             P(c1.x - nx * r, c1.y - ny * r),
             P(c2.x - nx * r, c2.y - ny * r),
-          ])
+          ]),
         );
         g.add(ghostLine(circlePts(c1.x, c1.y, r)));
         g.add(ghostLine(circlePts(c2.x, c2.y, r)));

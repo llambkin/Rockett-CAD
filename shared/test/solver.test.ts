@@ -30,7 +30,9 @@ describe("sketch solver", () => {
     ];
     const res = solveSketch({ entities, constraints });
     expect(res.converged).toBe(true);
-    const P = new Map(res.entities.filter((e) => e.kind === "point").map((e: any) => [e.id, e]));
+    const P = new Map(
+      res.entities.filter((e) => e.kind === "point").map((e: any) => [e.id, e]),
+    );
     expect(P.get("a")!.x).toBeCloseTo(0, 6);
     expect(P.get("b")!.x).toBeCloseTo(100, 5);
     expect(P.get("b")!.y).toBeCloseTo(0, 5);

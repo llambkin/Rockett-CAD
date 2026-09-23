@@ -305,7 +305,8 @@ export interface MirrorFeature extends FeatureBase {
 export interface LinearPatternFeature extends FeatureBase {
   type: "linearPattern";
   bodies: string[];
-  direction: { kind: "axis"; axis: "X" | "Y" | "Z" } | { kind: "edge"; edge: EdgeRef };
+  direction:
+    { kind: "axis"; axis: "X" | "Y" | "Z" } | { kind: "edge"; edge: EdgeRef };
   count: number;
   spacing: number; // mm
   combine: boolean;
@@ -494,5 +495,9 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
 
 /** Features that can produce/modify solid bodies (used for dependency logic). */
 export function featureProducesGeometry(f: Feature): boolean {
-  return f.type !== "sketch" && f.type !== "constructionPlane" && f.type !== "referenceImage";
+  return (
+    f.type !== "sketch" &&
+    f.type !== "constructionPlane" &&
+    f.type !== "referenceImage"
+  );
 }

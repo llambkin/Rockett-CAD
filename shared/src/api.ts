@@ -2,11 +2,7 @@
  * API DTOs shared between server and client.
  */
 
-import type {
-  CadDocument,
-  SketchSolveStatus,
-  SketchEntity,
-} from "./model.js";
+import type { CadDocument, SketchSolveStatus, SketchEntity } from "./model.js";
 import type { Profile } from "./profiles.js";
 
 export type Vec3 = [number, number, number];
@@ -41,7 +37,15 @@ export interface EdgeInfo {
   length: number;
   curve:
     | { type: "line"; a: Vec3; b: Vec3 }
-    | { type: "circle"; center: Vec3; axis: Vec3; radius: number; start?: Vec3; end?: Vec3; sweep?: number }
+    | {
+        type: "circle";
+        center: Vec3;
+        axis: Vec3;
+        radius: number;
+        start?: Vec3;
+        end?: Vec3;
+        sweep?: number;
+      }
     | { type: "other" };
 }
 

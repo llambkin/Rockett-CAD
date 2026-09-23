@@ -42,7 +42,7 @@ export interface NamedBody {
 export function finalizeNames(
   shape: Shape,
   provisional: NameMap,
-  featureId: string
+  featureId: string,
 ): NameMap {
   const allFaces = faces(shape);
   // Group by provisional name
@@ -98,7 +98,7 @@ export function propagateNames(
   op: any,
   inputs: Array<{ shape: Shape; names: NameMap }>,
   resultShape: Shape,
-  featureId: string
+  featureId: string,
 ): NameMap {
   const provisional: NameMap = new Map();
   for (const input of inputs) {
@@ -141,7 +141,7 @@ export function historyNames(
   history: any,
   input: { shape: Shape; names: NameMap },
   resultShape: Shape,
-  featureId: string
+  featureId: string,
 ): NameMap {
   const candidates = new Map<number, string[]>();
   for (const f of faces(input.shape)) {
@@ -169,7 +169,7 @@ export function historyNames(
 export function transformNames(
   transformOp: any,
   input: { shape: Shape; names: NameMap },
-  prefix: string
+  prefix: string,
 ): NameMap {
   const out: NameMap = new Map();
   for (const f of faces(input.shape)) {
@@ -208,7 +208,7 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
     body.shape,
     k.TopAbs_ShapeEnum.TopAbs_EDGE,
     k.TopAbs_ShapeEnum.TopAbs_FACE,
-    map
+    map,
   );
   interface Entry {
     edge: Shape;
@@ -222,9 +222,7 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
     const faceList = listToArray(map.FindFromIndex(i));
     const faceNames = [
       ...new Set(
-        faceList.map(
-          (f: Shape) => body.names.get(shapeHash(f)) ?? "?"
-        )
+        faceList.map((f: Shape) => body.names.get(shapeHash(f)) ?? "?"),
       ),
     ].sort();
     const base =
@@ -259,7 +257,7 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
         (a, b) =>
           a.centroid[0] - b.centroid[0] ||
           a.centroid[1] - b.centroid[1] ||
-          a.centroid[2] - b.centroid[2]
+          a.centroid[2] - b.centroid[2],
       );
       group.forEach((e, i) => {
         const name = `${base}~${i + 1}`;
@@ -278,7 +276,7 @@ export function computeVertexNames(body: NamedBody): VertexNames {
     body.shape,
     k.TopAbs_ShapeEnum.TopAbs_VERTEX,
     k.TopAbs_ShapeEnum.TopAbs_FACE,
-    map
+    map,
   );
   interface Entry {
     vertex: Shape;
@@ -292,7 +290,7 @@ export function computeVertexNames(body: NamedBody): VertexNames {
     const faceList = listToArray(map.FindFromIndex(i));
     const faceNames = [
       ...new Set(
-        faceList.map((f: Shape) => body.names.get(shapeHash(f)) ?? "?")
+        faceList.map((f: Shape) => body.names.get(shapeHash(f)) ?? "?"),
       ),
     ].sort();
     const p = k.BRep_Tool.Pnt(vertex);
@@ -316,7 +314,8 @@ export function computeVertexNames(body: NamedBody): VertexNames {
       byName.set(base, group[0].vertex);
     } else {
       group.sort(
-        (a, b) => a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2]
+        (a, b) =>
+          a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2],
       );
       group.forEach((e, i) => {
         const name = `${base}~${i + 1}`;

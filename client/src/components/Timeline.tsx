@@ -5,7 +5,12 @@
 
 import { useState } from "react";
 import type { Feature } from "@rockett/shared";
-import { useStore, sketchEditingPosition, type DialogType, type Selection } from "../store";
+import {
+  useStore,
+  sketchEditingPosition,
+  type DialogType,
+  type Selection,
+} from "../store";
 import { alignCameraToActiveSketch } from "../viewportRef";
 
 const TYPE_ICONS: Record<string, string> = {
@@ -33,18 +38,24 @@ const TYPE_ICONS: Record<string, string> = {
 export function Timeline() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
-  const mode = useStore(s => s.mode);
-  const busy = useStore(s => s.busy);
+  const mode = useStore((s) => s.mode);
+  const busy = useStore((s) => s.busy);
   const rollTimeline = useStore((s) => s.rollTimeline);
-  const [menu, setMenu] = useState<{ x: number; y: number; feature: Feature } | null>(
-    null
-  );
-  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    feature: Feature;
+  } | null>(null);
+  const [renaming, setRenaming] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
 
   if (!document_) return null;
-  const pos = sketchEditingPosition(document_, mode) ?? document_.timelinePosition;
+  const pos =
+    sketchEditingPosition(document_, mode) ?? document_.timelinePosition;
   const statuses = new Map(
-    (evaluation?.featureStatuses ?? []).map((s) => [s.featureId, s])
+    (evaluation?.featureStatuses ?? []).map((s) => [s.featureId, s]),
   );
 
   const openEditor = (f: Feature) => {
@@ -53,7 +64,11 @@ export function Timeline() {
 
   return (
     <div className="timeline" onClick={() => setMenu(null)}>
-      <fieldset className="tl-controls" disabled={busy || mode.name === "sketch"} style={{ border: 0, margin: 0, padding: 0 }}>
+      <fieldset
+        className="tl-controls"
+        disabled={busy || mode.name === "sketch"}
+        style={{ border: 0, margin: 0, padding: 0 }}
+      >
         <button title="Roll to start" onClick={() => void rollTimeline(0)}>
           ⏮
         </button>
@@ -65,7 +80,9 @@ export function Timeline() {
         </button>
         <button
           title="Step forward"
-          onClick={() => void rollTimeline(Math.min(document_.features.length, pos + 1))}
+          onClick={() =>
+            void rollTimeline(Math.min(document_.features.length, pos + 1))
+          }
         >
           ▶
         </button>
@@ -109,7 +126,9 @@ export function Timeline() {
                     autoFocus
                     className="tl-rename"
                     value={renaming.value}
-                    onChange={(e) => setRenaming({ id: f.id, value: e.target.value })}
+                    onChange={(e) =>
+                      setRenaming({ id: f.id, value: e.target.value })
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         void useStore
@@ -200,10 +219,18 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   const anyF = f as any;
   const selection: Selection[] = [];
   for (const p of anyF.profiles ?? []) {
-    selection.push({ kind: "profile", sketchId: p.sketchId, profileId: p.profileId });
+    selection.push({
+      kind: "profile",
+      sketchId: p.sketchId,
+      profileId: p.profileId,
+    });
   }
   for (const p of anyF.sections ?? []) {
-    selection.push({ kind: "profile", sketchId: p.sketchId, profileId: p.profileId });
+    selection.push({
+      kind: "profile",
+      sketchId: p.sketchId,
+      profileId: p.profileId,
+    });
   }
   for (const e of anyF.edges ?? []) {
     selection.push({ kind: "edge", bodyId: e.bodyId, edgeName: e.edgeName });
@@ -211,7 +238,8 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   for (const fa of anyF.faces ?? anyF.openFaces ?? []) {
     selection.push({ kind: "face", bodyId: fa.bodyId, faceName: fa.faceName });
   }
-  if (anyF.targetBody) selection.push({ kind: "body", bodyId: anyF.targetBody });
+  if (anyF.targetBody)
+    selection.push({ kind: "body", bodyId: anyF.targetBody });
   for (const b of anyF.toolBodies ?? anyF.bodies ?? []) {
     selection.push({ kind: "body", bodyId: b });
   }
@@ -220,10 +248,18 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   /** Reselect an edge or sketch-line axis so OK rebuilds the same axis. */
   const pushAxis = (axis: any) => {
     if (axis?.kind === "edge") {
-      selection.push({ kind: "edge", bodyId: axis.edge.bodyId, edgeName: axis.edge.edgeName });
+      selection.push({
+        kind: "edge",
+        bodyId: axis.edge.bodyId,
+        edgeName: axis.edge.edgeName,
+      });
     }
     if (axis?.kind === "sketchLine") {
-      selection.push({ kind: "sketchEntity", sketchId: axis.sketchId, entityId: axis.entityId });
+      selection.push({
+        kind: "sketchEntity",
+        sketchId: axis.sketchId,
+        entityId: axis.entityId,
+      });
     }
   };
 
@@ -257,23 +293,33 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       Object.assign(params, { operation: anyF.operation });
       break;
     case "fillet":
-      Object.assign(params, { radius: anyF.radius, tangentChain: anyF.tangentChain ?? false });
+      Object.assign(params, {
+        radius: anyF.radius,
+        tangentChain: anyF.tangentChain ?? false,
+      });
       break;
     case "chamfer":
-      Object.assign(params, { distance: anyF.distance, tangentChain: anyF.tangentChain ?? false });
+      Object.assign(params, {
+        distance: anyF.distance,
+        tangentChain: anyF.tangentChain ?? false,
+      });
       break;
     case "shell":
       Object.assign(params, { thickness: anyF.thickness });
       break;
     case "combine":
-      Object.assign(params, { operation: anyF.operation, keepTools: anyF.keepTools });
+      Object.assign(params, {
+        operation: anyF.operation,
+        keepTools: anyF.keepTools,
+      });
       break;
     case "offsetFace":
       Object.assign(params, { distance: anyF.distance });
       break;
     case "mirror":
       Object.assign(params, { combine: anyF.combine });
-      if (anyF.plane?.kind) selection.push({ kind: "plane", ref: anyF.plane, label: "Plane" });
+      if (anyF.plane?.kind)
+        selection.push({ kind: "plane", ref: anyF.plane, label: "Plane" });
       break;
     case "linearPattern":
       Object.assign(params, {
@@ -296,7 +342,8 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       pushAxis(anyF.axis);
       break;
     case "splitBody":
-      if (anyF.tool) selection.push({ kind: "plane", ref: anyF.tool, label: "Tool" });
+      if (anyF.tool)
+        selection.push({ kind: "plane", ref: anyF.tool, label: "Tool" });
       break;
     case "constructionPlane":
       Object.assign(params, {
@@ -324,7 +371,11 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
     default:
       break;
   }
-  s.setMode({ name: "dialog", dialog: f.type as DialogType, editFeatureId: f.id });
+  s.setMode({
+    name: "dialog",
+    dialog: f.type as DialogType,
+    editFeatureId: f.id,
+  });
   s.setDialogParams(params);
   s.setSelection(selection);
 }

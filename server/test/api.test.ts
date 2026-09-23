@@ -53,32 +53,58 @@ async function api(method: string, url: string, body?: unknown): Promise<any> {
 
 describe("REST API MVP workflow", () => {
   it("evaluates and edits at a temporary sketch position without changing the timeline marker", async () => {
-    const { document } = await api("POST", "/projects", { name: "Temporary rollback" });
+    const { document } = await api("POST", "/projects", {
+      name: "Temporary rollback",
+    });
     const prefix = `/projects/${document.id}`;
-    await api("POST", `${prefix}/features`, { feature: {
-      id: "sk", type: "sketch", name: "Sketch", suppressed: false, plane: { kind: "origin", plane: "XY" },
-      entities: [{ id: "p", kind: "point", x: 0, y: 0 }, { id: "c", kind: "circle", center: "p", radius: 10 }], constraints: [],
-    } });
+    await api("POST", `${prefix}/features`, {
+      feature: {
+        id: "sk",
+        type: "sketch",
+        name: "Sketch",
+        suppressed: false,
+        plane: { kind: "origin", plane: "XY" },
+        entities: [
+          { id: "p", kind: "point", x: 0, y: 0 },
+          { id: "c", kind: "circle", center: "p", radius: 10 },
+        ],
+        constraints: [],
+      },
+    });
     const before = await api("GET", `${prefix}/evaluate`);
-    await api("POST", `${prefix}/features`, { feature: {
-      id: "ext", type: "extrude", name: "Extrude", suppressed: false,
-      profiles: [{ sketchId: "sk", profileId: before.sketches[0].profiles[0].id }],
-      distance: 5, direction: "normal", operation: "newBody",
-    } });
+    await api("POST", `${prefix}/features`, {
+      feature: {
+        id: "ext",
+        type: "extrude",
+        name: "Extrude",
+        suppressed: false,
+        profiles: [
+          { sketchId: "sk", profileId: before.sketches[0].profiles[0].id },
+        ],
+        distance: 5,
+        direction: "normal",
+        operation: "newBody",
+      },
+    });
     const preview = await api("GET", `${prefix}/evaluate?position=1`);
     expect(preview.bodies).toHaveLength(0);
     expect(preview.featureStatuses[1].status).toBe("rolledBack");
     expect((await api("GET", prefix)).document.timelinePosition).toBe(2);
-    const edited = await api("PUT", `${prefix}/features/sk?position=1`, { feature: { name: "Edited sketch" } });
+    const edited = await api("PUT", `${prefix}/features/sk?position=1`, {
+      feature: { name: "Edited sketch" },
+    });
     expect(edited.document.timelinePosition).toBe(2);
     expect(edited.evaluation.bodies).toHaveLength(0);
     expect((await api("GET", `${prefix}/evaluate`)).bodies).toHaveLength(1);
-    await expect(api("GET", `${prefix}/evaluate?position=100`)).rejects.toThrow(/400/);
+    await expect(api("GET", `${prefix}/evaluate?position=100`)).rejects.toThrow(
+      /400/,
+    );
   });
 
   it("starts a project from STEP and imports into an existing project with undoable history", async () => {
     const upload = async (url: string, contents: string) => {
-      const form = new FormData(); form.append("file", new Blob([contents]), "Fixture.stp");
+      const form = new FormData();
+      form.append("file", new Blob([contents]), "Fixture.stp");
       return fetch(base + url, { method: "POST", body: form });
     };
     const source = stepFixture();
@@ -90,40 +116,90 @@ describe("REST API MVP workflow", () => {
     expect(imported.document.features[0].data).toBe(source);
     const url = `/projects/${imported.document.id}`;
     const copy = await api("POST", url + "/duplicate");
-    expect((await api("GET", `/projects/${copy.document.id}/evaluate`)).bodies).toHaveLength(1);
+    expect(
+      (await api("GET", `/projects/${copy.document.id}/evaluate`)).bodies,
+    ).toHaveLength(1);
     const added = await upload(url + "/import-step", source);
     expect(added.status).toBe(200);
     expect((await added.json()).evaluation.bodies).toHaveLength(2);
-    const undone = await api("PUT", url + "/document", { document: imported.document });
+    const undone = await api("PUT", url + "/document", {
+      document: imported.document,
+    });
     expect(undone.evaluation.bodies).toHaveLength(1);
     const before = await api("GET", "/projects");
-    expect((await upload("/projects/import-step", "ISO-10303-21; broken")).status).toBe(400);
+    expect(
+      (await upload("/projects/import-step", "ISO-10303-21; broken")).status,
+    ).toBe(400);
     expect(await api("GET", "/projects")).toEqual(before);
   });
   it("prepares projections from earlier geometry only, without changing the document", async () => {
-    const { document } = await api("POST", "/projects", { name: "Projection test" });
+    const { document } = await api("POST", "/projects", {
+      name: "Projection test",
+    });
     const url = `/projects/${document.id}`;
-    const baseSketch = { id: "base", name: "Base", type: "sketch", suppressed: false,
-      plane: { kind: "origin", plane: "XY" }, constraints: [], entities: [
-        { id: "a", kind: "point", x: 0, y: 0 }, { id: "b", kind: "point", x: 20, y: 0 },
-        { id: "c", kind: "point", x: 20, y: 10 }, { id: "d", kind: "point", x: 0, y: 10 },
-        { id: "ab", kind: "line", p1: "a", p2: "b" }, { id: "bc", kind: "line", p1: "b", p2: "c" },
-        { id: "cd", kind: "line", p1: "c", p2: "d" }, { id: "da", kind: "line", p1: "d", p2: "a" },
-      ] };
+    const baseSketch = {
+      id: "base",
+      name: "Base",
+      type: "sketch",
+      suppressed: false,
+      plane: { kind: "origin", plane: "XY" },
+      constraints: [],
+      entities: [
+        { id: "a", kind: "point", x: 0, y: 0 },
+        { id: "b", kind: "point", x: 20, y: 0 },
+        { id: "c", kind: "point", x: 20, y: 10 },
+        { id: "d", kind: "point", x: 0, y: 10 },
+        { id: "ab", kind: "line", p1: "a", p2: "b" },
+        { id: "bc", kind: "line", p1: "b", p2: "c" },
+        { id: "cd", kind: "line", p1: "c", p2: "d" },
+        { id: "da", kind: "line", p1: "d", p2: "a" },
+      ],
+    };
     let m = await api("POST", url + "/features", { feature: baseSketch });
-    m = await api("POST", url + "/features", { feature: { id: "solid", name: "Solid", type: "extrude", suppressed: false,
-      profiles: [{ sketchId: "base", profileId: m.evaluation.sketches[0].profiles[0].id }],
-      direction: "normal", distance: 10, operation: "newBody" } });
-    const sourceEdge = m.evaluation.bodies[0].edges.find((e: any) => e.curve.type === "line" && Math.abs(e.curve.a[0] - e.curve.b[0]) > 1);
+    m = await api("POST", url + "/features", {
+      feature: {
+        id: "solid",
+        name: "Solid",
+        type: "extrude",
+        suppressed: false,
+        profiles: [
+          {
+            sketchId: "base",
+            profileId: m.evaluation.sketches[0].profiles[0].id,
+          },
+        ],
+        direction: "normal",
+        distance: 10,
+        operation: "newBody",
+      },
+    });
+    const sourceEdge = m.evaluation.bodies[0].edges.find(
+      (e: any) =>
+        e.curve.type === "line" && Math.abs(e.curve.a[0] - e.curve.b[0]) > 1,
+    );
     const edge = { kind: "edge", bodyId: "b:solid", edgeName: sourceEdge.name };
-    await api("POST", url + "/features", { feature: { ...baseSketch, id: "target", name: "Target", entities: [] } });
+    await api("POST", url + "/features", {
+      feature: { ...baseSketch, id: "target", name: "Target", entities: [] },
+    });
     const before = await api("GET", url);
-    const prepared = await api("POST", url + "/features/target/project", { edge, entityId: "reference" });
-    expect(prepared.entities.at(-1)).toMatchObject({ id: "reference", projection: edge, external: true });
+    const prepared = await api("POST", url + "/features/target/project", {
+      edge,
+      entityId: "reference",
+    });
+    expect(prepared.entities.at(-1)).toMatchObject({
+      id: "reference",
+      projection: edge,
+      external: true,
+    });
     expect(await api("GET", url)).toEqual(before);
-    await expect(api("POST", url + "/features/base/project", { edge, entityId: "cyclic" })).rejects.toThrow(/earlier feature/);
-    await expect(api("PUT", url + "/features/target", { feature: { entities: [baseSketch.entities[0], baseSketch.entities[0]] } }))
-      .rejects.toThrow(/duplicate sketch entity/);
+    await expect(
+      api("POST", url + "/features/base/project", { edge, entityId: "cyclic" }),
+    ).rejects.toThrow(/earlier feature/);
+    await expect(
+      api("PUT", url + "/features/target", {
+        feature: { entities: [baseSketch.entities[0], baseSketch.entities[0]] },
+      }),
+    ).rejects.toThrow(/duplicate sketch entity/);
     expect(await api("GET", url)).toEqual(before);
   });
   it("preserves overlapping feature additions and recovers after invalid requests", async () => {
@@ -136,22 +212,32 @@ describe("REST API MVP workflow", () => {
       return doc;
     });
     try {
-      const results = await Promise.allSettled(Array.from({ length: 6 }, (_, i) =>
-        api("POST", `/projects/${document.id}/features`, {
-          feature: {
-            id: `concurrent${i}`, type: "sketch", name: "", suppressed: false,
-            plane: { kind: "origin", plane: "XY" }, entities: [], constraints: [],
-          },
-        })
-      ));
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, (_, i) =>
+          api("POST", `/projects/${document.id}/features`, {
+            feature: {
+              id: `concurrent${i}`,
+              type: "sketch",
+              name: "",
+              suppressed: false,
+              plane: { kind: "origin", plane: "XY" },
+              entities: [],
+              constraints: [],
+            },
+          }),
+        ),
+      );
       expect(results.every((r) => r.status === "fulfilled")).toBe(true);
       const { document: saved } = await api("GET", `/projects/${document.id}`);
       expect(saved.features).toHaveLength(6);
       expect(new Set(saved.features.map((f: any) => f.name)).size).toBe(6);
       expect(saved.timelinePosition).toBe(6);
-      await expect(api("POST", `/projects/${document.id}/timeline`, { position: -1 }))
-        .rejects.toThrow(/400/);
-      const renamed = await api("POST", `/projects/${document.id}/rename`, { name: "Recovered" });
+      await expect(
+        api("POST", `/projects/${document.id}/timeline`, { position: -1 }),
+      ).rejects.toThrow(/400/);
+      const renamed = await api("POST", `/projects/${document.id}/rename`, {
+        name: "Recovered",
+      });
       expect(renamed.document.name).toBe("Recovered");
     } finally {
       spy.mockRestore();
@@ -161,8 +247,9 @@ describe("REST API MVP workflow", () => {
   it("does not recreate a deleted project when an old document is restored", async () => {
     const { document } = await api("POST", "/projects", { name: "Deleted" });
     await api("DELETE", `/projects/${document.id}`);
-    await expect(api("PUT", `/projects/${document.id}/document`, { document }))
-      .rejects.toThrow(/404/);
+    await expect(
+      api("PUT", `/projects/${document.id}/document`, { document }),
+    ).rejects.toThrow(/404/);
     await expect(api("GET", `/projects/${document.id}`)).rejects.toThrow(/404/);
   });
 
@@ -204,7 +291,10 @@ describe("REST API MVP workflow", () => {
     });
 
     // find profile id
-    let evaluation: EvaluateResult = await api("GET", `/projects/${id}/evaluate`);
+    let evaluation: EvaluateResult = await api(
+      "GET",
+      `/projects/${id}/evaluate`,
+    );
     const profileId = evaluation.sketches[0].profiles[0].id;
 
     // extrude 20mm
@@ -223,7 +313,7 @@ describe("REST API MVP workflow", () => {
     expect(r.evaluation.bodies).toHaveLength(1);
     expect(r.evaluation.bodies[0].name).toBe("Body1");
     const topFace = r.evaluation.bodies[0].faces.find(
-      (f: any) => f.name === "f:ext1:cap:end"
+      (f: any) => f.name === "f:ext1:cap:end",
     );
     expect(topFace).toBeTruthy();
 
@@ -265,7 +355,7 @@ describe("REST API MVP workflow", () => {
       },
     });
     expect(
-      r.evaluation.featureStatuses.every((s: any) => s.status === "ok")
+      r.evaluation.featureStatuses.every((s: any) => s.status === "ok"),
     ).toBe(true);
 
     // fillet a corner edge
@@ -306,7 +396,7 @@ describe("REST API MVP workflow", () => {
     // return to end of timeline
     r = await api("POST", `/projects/${id}/timeline`, { position: 5 });
     expect(
-      r.evaluation.featureStatuses.every((s: any) => s.status === "ok")
+      r.evaluation.featureStatuses.every((s: any) => s.status === "ok"),
     ).toBe(true);
     expect(Math.round(r.evaluation.bodies[0].bbox.max[0])).toBe(120);
 
@@ -317,13 +407,13 @@ describe("REST API MVP workflow", () => {
       (v: any) =>
         Math.abs(v.position[0]) < 1e-6 &&
         Math.abs(v.position[1] - 50) < 1e-6 &&
-        Math.abs(v.position[2] - 20) < 1e-6
+        Math.abs(v.position[2] - 20) < 1e-6,
     );
     const v1 = verts.find(
       (v: any) =>
         Math.abs(v.position[0] - 120) < 1e-6 &&
         Math.abs(v.position[1]) < 1e-6 &&
-        Math.abs(v.position[2] - 20) < 1e-6
+        Math.abs(v.position[2] - 20) < 1e-6,
     );
     expect(v0 && v1).toBeTruthy();
     const m = await api("POST", `/projects/${id}/measure`, {
@@ -360,7 +450,7 @@ describe("REST API MVP workflow", () => {
       "fillet",
     ]);
     expect(
-      reloaded.features[0].constraints.find((c: any) => c.id === "cd1").value
+      reloaded.features[0].constraints.find((c: any) => c.id === "cd1").value,
     ).toBe(120);
     expect(reloaded.bodyMeta["b:ext1"].name).toBe("Body1");
   }, 120_000);
@@ -379,26 +469,46 @@ describe("REST API MVP workflow", () => {
           direction: "normal",
           operation: "newBody",
         },
-      })
+      }),
     ).rejects.toThrow(/400/);
     await expect(api("GET", "/projects/../../etc")).rejects.toThrow();
     const url = `/projects/${document.id}`;
-    await expect(api("POST", `${url}/features`, { feature: { id: "cam1", type: "cam", name: "x", suppressed: false } }))
-      .rejects.toThrow(/400.*unknown feature type cam/);
-    await api("POST", `${url}/features`, { feature: {
-      id: "sk", type: "sketch", name: "Sketch", suppressed: false, plane: { kind: "origin", plane: "XY" }, entities: [], constraints: [],
-    } });
-    await expect(api("PUT", `${url}/features/sk`, { feature: { type: "extrude" } }))
-      .rejects.toThrow(/400.*type cannot change/);
+    await expect(
+      api("POST", `${url}/features`, {
+        feature: { id: "cam1", type: "cam", name: "x", suppressed: false },
+      }),
+    ).rejects.toThrow(/400.*unknown feature type cam/);
+    await api("POST", `${url}/features`, {
+      feature: {
+        id: "sk",
+        type: "sketch",
+        name: "Sketch",
+        suppressed: false,
+        plane: { kind: "origin", plane: "XY" },
+        entities: [],
+        constraints: [],
+      },
+    });
+    await expect(
+      api("PUT", `${url}/features/sk`, { feature: { type: "extrude" } }),
+    ).rejects.toThrow(/400.*type cannot change/);
     const { document: saved } = await api("GET", url);
     expect(saved.features.map((f: any) => f.type)).toEqual(["sketch"]);
-    await expect(api("POST", `${url}/export`, { format: "step", bodyIds: [] }))
-      .rejects.toThrow(/400.*supported: stl, 3mf/);
+    await expect(
+      api("POST", `${url}/export`, { format: "step", bodyIds: [] }),
+    ).rejects.toThrow(/400.*supported: stl, 3mf/);
   });
 
   it("reports version, schema version and commit on health", async () => {
     const health = await api("GET", "/health");
-    const root = JSON.parse(await fs.readFile(new URL("../../package.json", import.meta.url), "utf8"));
-    expect(health).toEqual({ ok: true, version: root.version, schemaVersion: SCHEMA_VERSION, commit: process.env.ROCKETT_COMMIT || null });
+    const root = JSON.parse(
+      await fs.readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    );
+    expect(health).toEqual({
+      ok: true,
+      version: root.version,
+      schemaVersion: SCHEMA_VERSION,
+      commit: process.env.ROCKETT_COMMIT || null,
+    });
   });
 });

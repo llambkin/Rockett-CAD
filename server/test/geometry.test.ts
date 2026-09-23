@@ -7,15 +7,16 @@ import type {
   SketchEntity,
   SketchFeature,
 } from "@rockett/shared";
-import { createEmptyDocument, projectEdge, modifySketch, offsetSketch } from "@rockett/shared";
+import {
+  createEmptyDocument,
+  projectEdge,
+  modifySketch,
+  offsetSketch,
+} from "@rockett/shared";
 import { initKernel, volumeOf } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
 
-function rectSketch(
-  id: string,
-  w: number,
-  h: number
-): SketchFeature {
+function rectSketch(id: string, w: number, h: number): SketchFeature {
   const entities: SketchEntity[] = [
     { id: `${id}-pa`, kind: "point", x: 0, y: 0 },
     { id: `${id}-pb`, kind: "point", x: w, y: 0 },
@@ -59,58 +60,140 @@ beforeAll(async () => {
 
 describe("geometry pipeline", () => {
   it("builds real solids from trimmed arcs and offset loops", () => {
-    const arcEntities: SketchEntity[] = [{ id: "center", kind: "point", x: 0, y: 0 },
+    const arcEntities: SketchEntity[] = [
+      { id: "center", kind: "point", x: 0, y: 0 },
       { id: "circle", kind: "circle", center: "center", radius: 5 },
-      { id: "p1", kind: "point", x: 0, y: -10 }, { id: "p2", kind: "point", x: 0, y: 10 },
-      { id: "axis", kind: "line", p1: "p1", p2: "p2" }];
-    const trimmed = modifySketch(arcEntities, [], "circle", { x: 5, y: 0 }, "trim");
+      { id: "p1", kind: "point", x: 0, y: -10 },
+      { id: "p2", kind: "point", x: 0, y: 10 },
+      { id: "axis", kind: "line", p1: "p1", p2: "p2" },
+    ];
+    const trimmed = modifySketch(
+      arcEntities,
+      [],
+      "circle",
+      { x: 5, y: 0 },
+      "trim",
+    );
     const rectangle = rectSketch("rectangle", 20, 10);
-    const offset = offsetSketch(rectangle.entities, [], "rectangle-l1", 2).entities.slice(rectangle.entities.length);
-    for (const [entities, expectedVolume] of [[trimmed.entities, Math.PI * 25 * 5], [offset, 16 * 6 * 10]] as const) {
-      const sketch: SketchFeature = { ...rectangle, id: "profile", entities, constraints: [] };
-      const extrude: ExtrudeFeature = { id: "solid", name: "Solid", type: "extrude", suppressed: false,
-        profiles: [], distance: 10, direction: "normal", operation: "newBody" };
-      const doc = docWith([sketch, extrude]), engine = engineFor("modified-profile");
+    const offset = offsetSketch(
+      rectangle.entities,
+      [],
+      "rectangle-l1",
+      2,
+    ).entities.slice(rectangle.entities.length);
+    for (const [entities, expectedVolume] of [
+      [trimmed.entities, Math.PI * 25 * 5],
+      [offset, 16 * 6 * 10],
+    ] as const) {
+      const sketch: SketchFeature = {
+        ...rectangle,
+        id: "profile",
+        entities,
+        constraints: [],
+      };
+      const extrude: ExtrudeFeature = {
+        id: "solid",
+        name: "Solid",
+        type: "extrude",
+        suppressed: false,
+        profiles: [],
+        distance: 10,
+        direction: "normal",
+        operation: "newBody",
+      };
+      const doc = docWith([sketch, extrude]),
+        engine = engineFor("modified-profile");
       const profiles = engine.evaluate(doc, 1).sketches[0].profiles;
       expect(profiles).toHaveLength(1);
       extrude.profiles = [{ sketchId: "profile", profileId: profiles[0].id }];
       expect(engine.evaluate(doc).featureStatuses).toEqual([
-        { featureId: "profile", status: "ok" }, { featureId: "solid", status: "ok" }]);
-      expect(volumeOf(engine.stateAt(doc).bodies.get("b:solid")!.shape)).toBeCloseTo(expectedVolume, 3);
+        { featureId: "profile", status: "ok" },
+        { featureId: "solid", status: "ok" },
+      ]);
+      expect(
+        volumeOf(engine.stateAt(doc).bodies.get("b:solid")!.shape),
+      ).toBeCloseTo(expectedVolume, 3);
       dropEngine("modified-profile");
     }
   });
   it("regenerates a projected model edge and its midpoint constraint after upstream resizing", () => {
     const sketch = rectSketch("source", 100, 50);
-    const extrude: ExtrudeFeature = { id: "solid", type: "extrude", name: "Solid", suppressed: false,
-      profiles: [], distance: 20, direction: "normal", operation: "newBody" };
+    const extrude: ExtrudeFeature = {
+      id: "solid",
+      type: "extrude",
+      name: "Solid",
+      suppressed: false,
+      profiles: [],
+      distance: 20,
+      direction: "normal",
+      operation: "newBody",
+    };
     const doc = docWith([sketch, extrude]);
     const engine = engineFor("projection-regression");
-    extrude.profiles = [{ sketchId: sketch.id, profileId: engine.evaluate(doc, 1).sketches[0].profiles[0].id }];
+    extrude.profiles = [
+      {
+        sketchId: sketch.id,
+        profileId: engine.evaluate(doc, 1).sketches[0].profiles[0].id,
+      },
+    ];
     let result = engine.evaluate(doc);
-    const edge = result.bodies[0].edges.find(e => e.name.includes("cap:end") && e.name.includes("source-l1"))!;
+    const edge = result.bodies[0].edges.find(
+      (e) => e.name.includes("cap:end") && e.name.includes("source-l1"),
+    )!;
     expect(edge).toBeTruthy();
-    const frame = { origin: [0, 0, 20], xAxis: [1, 0, 0], yAxis: [0, 1, 0], normal: [0, 0, 1] } as any;
-    const projected: SketchFeature = { id: "projected", type: "sketch", name: "Projected", suppressed: false,
-      plane: { kind: "face", face: { kind: "face", bodyId: "b:solid", faceName: "f:solid:cap:end" } },
-      entities: [...projectEdge(edge.curve, frame, "reference", { kind: "edge", bodyId: "b:solid", edgeName: edge.name }),
-        { id: "mid", kind: "point", x: 50, y: 0 }],
-      constraints: [{ id: "midpoint", type: "midpoint", point: "mid", line: "reference" }] };
-    doc.features.push(projected); doc.timelinePosition++;
+    const frame = {
+      origin: [0, 0, 20],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 1, 0],
+      normal: [0, 0, 1],
+    } as any;
+    const projected: SketchFeature = {
+      id: "projected",
+      type: "sketch",
+      name: "Projected",
+      suppressed: false,
+      plane: {
+        kind: "face",
+        face: { kind: "face", bodyId: "b:solid", faceName: "f:solid:cap:end" },
+      },
+      entities: [
+        ...projectEdge(edge.curve, frame, "reference", {
+          kind: "edge",
+          bodyId: "b:solid",
+          edgeName: edge.name,
+        }),
+        { id: "mid", kind: "point", x: 50, y: 0 },
+      ],
+      constraints: [
+        { id: "midpoint", type: "midpoint", point: "mid", line: "reference" },
+      ],
+    };
+    doc.features.push(projected);
+    doc.timelinePosition++;
     result = engine.evaluate(doc);
-    expect(result.featureStatuses.every(s => s.status === "ok")).toBe(true);
-    (sketch.constraints.find(c => c.id === "source-d1") as any).value = 120;
+    expect(result.featureStatuses.every((s) => s.status === "ok")).toBe(true);
+    (sketch.constraints.find((c) => c.id === "source-d1") as any).value = 120;
     result = engine.evaluate(doc);
-    expect(result.featureStatuses.every(s => s.status === "ok")).toBe(true);
-    const mid = result.sketches.find(s => s.featureId === "projected")!.entities.find(e => e.id === "mid") as any;
+    expect(result.featureStatuses.every((s) => s.status === "ok")).toBe(true);
+    const mid = result.sketches
+      .find((s) => s.featureId === "projected")!
+      .entities.find((e) => e.id === "mid") as any;
     expect(mid.x).toBeCloseTo(60, 4);
     // Serialization and a cold engine must produce the same regenerated location.
     dropEngine("projection-regression");
-    result = engineFor("projection-regression").evaluate(JSON.parse(JSON.stringify(doc)));
-    expect((result.sketches.at(-1)!.entities.find(e => e.id === "mid") as any).x).toBeCloseTo(60, 4);
-    (projected.entities.find(e => e.id === "reference") as any).projection.edgeName = "missing";
+    result = engineFor("projection-regression").evaluate(
+      JSON.parse(JSON.stringify(doc)),
+    );
+    expect(
+      (result.sketches.at(-1)!.entities.find((e) => e.id === "mid") as any).x,
+    ).toBeCloseTo(60, 4);
+    (
+      projected.entities.find((e) => e.id === "reference") as any
+    ).projection.edgeName = "missing";
     result = engineFor("projection-regression").evaluate(doc);
-    expect(result.featureStatuses.at(-1)!.error).toMatch(/Projected edge.*missing/);
+    expect(result.featureStatuses.at(-1)!.error).toMatch(
+      /Projected edge.*missing/,
+    );
     expect(result.bodies).toHaveLength(1);
     dropEngine("projection-regression");
   });
@@ -275,7 +358,7 @@ describe("geometry pipeline", () => {
     const newVol = volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape);
     expect(newVol).toBeCloseTo(
       120 * 50 * 20 - Math.PI * 25 * 20 - filletRemoved,
-      1
+      1,
     );
   });
 
@@ -354,7 +437,7 @@ describe("geometry pipeline", () => {
     // body remains intact from before the failed feature
     expect(result.bodies).toHaveLength(1);
     expect(
-      volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape)
+      volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape),
     ).toBeCloseTo(30 * 30 * 10, 3);
   });
 });

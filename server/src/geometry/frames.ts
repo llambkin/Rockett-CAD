@@ -61,7 +61,10 @@ export function uvTo3d(frame: PlaneFrame, u: number, v: number): Vec3 {
 }
 
 /** Project a 3D point into sketch (u, v[, w]) coordinates. */
-export function pointToUV(frame: PlaneFrame, p: Vec3): { u: number; v: number; w: number } {
+export function pointToUV(
+  frame: PlaneFrame,
+  p: Vec3,
+): { u: number; v: number; w: number } {
   const d = V.sub(p, frame.origin);
   return {
     u: V.dot(d, frame.xAxis),

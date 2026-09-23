@@ -3,10 +3,7 @@
  * entities + constraints. Interaction state lives in the viewport component.
  */
 
-import type {
-  SketchConstraint,
-  SketchEntity,
-} from "@rockett/shared";
+import type { SketchConstraint, SketchEntity } from "@rockett/shared";
 import { newId } from "@rockett/shared";
 
 export interface Created {
@@ -44,7 +41,7 @@ export function rayLineIntersection(
   r: { x: number; y: number },
   a: { x: number; y: number },
   b: { x: number; y: number },
-  slack = 0
+  slack = 0,
 ): { x: number; y: number } | null {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -78,7 +75,7 @@ export function perpendicularSnap(
   from: UV,
   cursor: { x: number; y: number },
   entities: SketchEntity[],
-  minLen = 0
+  minLen = 0,
 ): UV | null {
   const dx = cursor.x - from.x;
   const dy = cursor.y - from.y;
@@ -89,10 +86,13 @@ export function perpendicularSnap(
   const touches = (pid: string) => {
     if (from.snapPointId && pid === from.snapPointId) return true;
     const p = pts.get(pid);
-    return !!p && Math.abs(p.x - from.x) < 1e-9 && Math.abs(p.y - from.y) < 1e-9;
+    return (
+      !!p && Math.abs(p.x - from.x) < 1e-9 && Math.abs(p.y - from.y) < 1e-9
+    );
   };
   const maxSin = Math.sin((PERP_SNAP_DEG * Math.PI) / 180);
-  let best: { lineId: string; off: number; lx: number; ly: number } | null = null;
+  let best: { lineId: string; off: number; lx: number; ly: number } | null =
+    null;
   for (const e of entities) {
     if (e.kind !== "line") continue;
     if (!touches(e.p1) && !touches(e.p2)) continue;
@@ -105,7 +105,8 @@ export function perpendicularSnap(
     const ly = (b.y - a.y) / ll;
     // |cos| of the angle between the two lines = sin of the deviation from 90°
     const off = Math.abs((dx * lx + dy * ly) / len);
-    if (off < maxSin && (!best || off < best.off)) best = { lineId: e.id, off, lx, ly };
+    if (off < maxSin && (!best || off < best.off))
+      best = { lineId: e.id, off, lx, ly };
   }
   if (!best) return null;
   // perpendicular direction, on the cursor's side
@@ -115,11 +116,19 @@ export function perpendicularSnap(
   const axisTol = 1e-9;
   if (Math.abs(best.lx) < axisTol) {
     // reference is vertical → new line exactly horizontal
-    return { x: from.x + (dx < 0 ? -len : len), y: from.y, snapKind: "perpendicular" };
+    return {
+      x: from.x + (dx < 0 ? -len : len),
+      y: from.y,
+      snapKind: "perpendicular",
+    };
   }
   if (Math.abs(best.ly) < axisTol) {
     // reference is horizontal → new line exactly vertical
-    return { x: from.x, y: from.y + (dy < 0 ? -len : len), snapKind: "perpendicular" };
+    return {
+      x: from.x,
+      y: from.y + (dy < 0 ? -len : len),
+      snapKind: "perpendicular",
+    };
   }
   return {
     x: from.x + sgn * len * nx,
@@ -133,7 +142,7 @@ function pointOrExisting(
   uv: UV,
   construction: boolean | undefined,
   out: SketchEntity[],
-  constraints?: SketchConstraint[]
+  constraints?: SketchConstraint[],
 ): string {
   if (uv.snapPointId) return uv.snapPointId;
   const id = newId("pt");
@@ -160,7 +169,11 @@ function pointOrExisting(
         point: id,
         circle: uv.snapCircleId,
       });
-    } else if (uv.snapKind === "origin" || uv.snapKind === "midpoint" || uv.snapKind === "point") {
+    } else if (
+      uv.snapKind === "origin" ||
+      uv.snapKind === "midpoint" ||
+      uv.snapKind === "point"
+    ) {
       // Face corners/midpoints and the origin have no sketch entity to
       // constrain against. Preserve their snapped position during solving.
       // Sketch references above retain their relational constraints instead.
@@ -185,7 +198,12 @@ export function createLine(a: UV, b: UV, construction?: boolean): Created {
     constraints.push({ id: newId("c"), type: "horizontal", line: lineId });
   } else if (b.snapPerpLineId) {
     // snapped to 90° from a connected line: keep it that way
-    constraints.push({ id: newId("c"), type: "perpendicular", a: b.snapPerpLineId, b: lineId });
+    constraints.push({
+      id: newId("c"),
+      type: "perpendicular",
+      a: b.snapPerpLineId,
+      b: lineId,
+    });
   }
   return { entities, constraints, chainPointId: p2 };
 }
@@ -220,13 +238,27 @@ export function createCenterRect(center: UV, corner: UV): Created {
   const a: UV = { x: center.x - w / 2, y: center.y - h / 2 };
   const b: UV = { x: center.x + w / 2, y: center.y + h / 2 };
   const rect = createRect(a, b);
-  const centerId = pointOrExisting(center, true, rect.entities, rect.constraints);
-  const sides = rect.entities.filter(e => e.kind === "line");
+  const centerId = pointOrExisting(
+    center,
+    true,
+    rect.entities,
+    rect.constraints,
+  );
+  const sides = rect.entities.filter((e) => e.kind === "line");
   const diagonalId = newId("ln");
   rect.entities.push({
-    id: diagonalId, kind: "line", p1: sides[0].p1, p2: sides[1].p2, construction: true,
+    id: diagonalId,
+    kind: "line",
+    p1: sides[0].p1,
+    p2: sides[1].p2,
+    construction: true,
   });
-  rect.constraints.push({ id: newId("c"), type: "midpoint", point: centerId, line: diagonalId });
+  rect.constraints.push({
+    id: newId("c"),
+    type: "midpoint",
+    point: centerId,
+    line: diagonalId,
+  });
   return rect;
 }
 
@@ -263,7 +295,13 @@ export function createArc3(start: UV, end: UV, on: UV): Created | null {
   const entities: SketchEntity[] = [];
   const arcConstraints: SketchConstraint[] = [];
   const centerId = newId("pt");
-  entities.push({ id: centerId, kind: "point", x: ux, y: uy, construction: true });
+  entities.push({
+    id: centerId,
+    kind: "point",
+    x: ux,
+    y: uy,
+    construction: true,
+  });
   const s = pointOrExisting(start, undefined, entities, arcConstraints);
   const e = pointOrExisting(end, undefined, entities, arcConstraints);
   // arc goes CCW from start to end; flip when the on-point lies the other way
@@ -312,7 +350,12 @@ export function createPolygon(center: UV, vertex: UV, sides: number): Created {
     lineIds.push(id);
   }
   for (let i = 1; i < sides; i++) {
-    constraints.push({ id: newId("c"), type: "equal", a: lineIds[0], b: lineIds[i] });
+    constraints.push({
+      id: newId("c"),
+      type: "equal",
+      a: lineIds[0],
+      b: lineIds[i],
+    });
   }
   return { entities, constraints };
 }
@@ -342,8 +385,20 @@ export function createSlot(c1: UV, c2: UV, r: number): Created {
   entities.push({ id: lt, kind: "line", p1: a1, p2: b1 });
   entities.push({ id: lb, kind: "line", p1: b2, p2: a2 });
   // arc at c2 from b1 to b2 (ccw), arc at c1 from a2 to a1
-  entities.push({ id: newId("arc"), kind: "arc", center: cB, start: b1, end: b2 });
-  entities.push({ id: newId("arc"), kind: "arc", center: cA, start: a2, end: a1 });
+  entities.push({
+    id: newId("arc"),
+    kind: "arc",
+    center: cB,
+    start: b1,
+    end: b2,
+  });
+  entities.push({
+    id: newId("arc"),
+    kind: "arc",
+    center: cA,
+    start: a2,
+    end: a1,
+  });
   constraints.push({ id: newId("c"), type: "parallel", a: lt, b: lb });
   return { entities, constraints };
 }
@@ -355,7 +410,7 @@ export function createPoint(at: UV, construction?: boolean): Created {
     { ...at, snapPointId: undefined },
     construction,
     entities,
-    constraints
+    constraints,
   );
   return { entities, constraints };
 }
@@ -371,7 +426,7 @@ export function dimensionFor(
     | { kind: "circle"; id: string }
     | { kind: "arc"; id: string }
   >,
-  value: number
+  value: number,
 ): SketchConstraint | null {
   if (targets.length === 1) {
     const t = targets[0];
@@ -386,7 +441,14 @@ export function dimensionFor(
   if (targets.length === 2) {
     const [a, b] = targets;
     if (a.kind === "point" && b.kind === "point") {
-      return { id: newId("c"), type: "distance", a: a.id, b: b.id, axis: null, value };
+      return {
+        id: newId("c"),
+        type: "distance",
+        a: a.id,
+        b: b.id,
+        axis: null,
+        value,
+      };
     }
     if (a.kind === "line" && b.kind === "line") {
       return { id: newId("c"), type: "angle", a: a.id, b: b.id, value };
@@ -433,11 +495,13 @@ export function dimensionKey(c: SketchConstraint): string | null {
 /** The existing dimension measuring the same thing as `candidate`, if any. */
 export function findExistingDimension(
   constraints: SketchConstraint[],
-  candidate: SketchConstraint
+  candidate: SketchConstraint,
 ): SketchConstraint | undefined {
   const key = dimensionKey(candidate);
   if (!key) return undefined;
-  return constraints.find((c) => c.id !== candidate.id && dimensionKey(c) === key);
+  return constraints.find(
+    (c) => c.id !== candidate.id && dimensionKey(c) === key,
+  );
 }
 
 /**
@@ -447,7 +511,7 @@ export function findExistingDimension(
  */
 export function dedupeDimensions(
   constraints: SketchConstraint[],
-  keepId?: string
+  keepId?: string,
 ): SketchConstraint[] {
   const winners = new Map<string, string>();
   for (const c of constraints) {
@@ -507,7 +571,7 @@ export function dimFieldsFor(tool: string): DimField[] | null {
 export function liveDimValues(
   tool: string,
   a: UV,
-  c: UV
+  c: UV,
 ): Partial<Record<DimKey, number>> {
   const dx = c.x - a.x;
   const dy = c.y - a.y;
@@ -548,7 +612,7 @@ export function resolveDimCursor(
   tool: string,
   a: UV,
   c: UV,
-  fields: DimField[]
+  fields: DimField[],
 ): UV {
   const dx = c.x - a.x;
   const dy = c.y - a.y;
@@ -576,7 +640,10 @@ export function resolveDimCursor(
         };
       }
       const rad = (A * Math.PI) / 180;
-      return { x: a.x + length * Math.cos(rad), y: a.y + length * Math.sin(rad) };
+      return {
+        x: a.x + length * Math.cos(rad),
+        y: a.y + length * Math.sin(rad),
+      };
     }
     case "rect":
     case "centerRect": {
@@ -602,7 +669,7 @@ export function resolveDimCursor(
 export function dimConstraintsFor(
   tool: string,
   created: Created,
-  fields: DimField[]
+  fields: DimField[],
 ): SketchConstraint[] {
   const out: SketchConstraint[] = [];
   const lines = created.entities.filter((e) => e.kind === "line");
@@ -614,8 +681,10 @@ export function dimConstraintsFor(
     // createRect order: l1 = first horizontal side, l2 = first vertical side
     const W = lockedValue(fields, "width");
     const H = lockedValue(fields, "height");
-    if (W !== null) out.push({ id: newId("c"), type: "length", line: lines[0].id, value: W });
-    if (H !== null) out.push({ id: newId("c"), type: "length", line: lines[1].id, value: H });
+    if (W !== null)
+      out.push({ id: newId("c"), type: "length", line: lines[0].id, value: W });
+    if (H !== null)
+      out.push({ id: newId("c"), type: "length", line: lines[1].id, value: H });
   }
   const D = lockedValue(fields, "diameter");
   const circle = created.entities.find((e) => e.kind === "circle");

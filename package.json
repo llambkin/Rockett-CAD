@@ -9,17 +9,20 @@
     "client"
   ],
   "scripts": {
-    "dev": "npm-run-all --parallel dev:server dev:client",
-    "dev:server": "npm run dev --workspace server",
-    "dev:client": "npm run dev --workspace client",
     "build": "npm run build --workspace shared --if-present && npm run build --workspace server && npm run build --workspace client",
-    "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
+    "dev": "npm-run-all --parallel dev:server dev:client",
+    "dev:client": "npm run dev --workspace client",
+    "dev:server": "npm run dev --workspace server",
+    "format:check": "prettier --check .",
+    "start": "npm run start --workspace server",
     "test": "npm run typecheck && npm run test --workspace shared && npm run test --workspace server && npm run test:client",
     "test:client": "vitest run client/test",
-    "start": "npm run start --workspace server"
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
   },
   "devDependencies": {
     "npm-run-all2": "9.0.3",
+    "prettier": "3.9.6",
+    "prettier-plugin-packagejson": "3.0.2",
     "typescript": "7.0.2",
     "vitest": "5.0.1"
   },

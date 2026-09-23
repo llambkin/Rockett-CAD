@@ -199,8 +199,13 @@ button.doc-name:hover .doc-name-pen {
   margin-top: 10px;
   white-space: nowrap;
 }
-.toolbar.sketch label .tb-input { margin-top: 0; width: 60px; }
-.toolbar.sketch > .tb-group:last-child { margin-left: auto; }
+.toolbar.sketch label .tb-input {
+  margin-top: 0;
+  width: 60px;
+}
+.toolbar.sketch > .tb-group:last-child {
+  margin-left: auto;
+}
 
 .tb-title {
   position: absolute;
@@ -670,14 +675,45 @@ button.doc-name:hover .doc-name-pen {
   justify-content: flex-end;
 }
 
-.panel-reset { padding: 2px 5px; color: var(--text-dim); border-radius: 3px; }
-.panel-reset:hover { color: var(--text); background: var(--bg3); }
-button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.error-toast { display: flex; align-items: flex-start; gap: 12px; max-width: min(640px, calc(100vw - 32px)); }
-.error-toast span { overflow-wrap: anywhere; user-select: text; }
-.error-toast button { flex-shrink: 0; padding: 2px 4px; }
-.shortcut-help { line-height: 1.5; }
-kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; background: var(--bg0); }
+.panel-reset {
+  padding: 2px 5px;
+  color: var(--text-dim);
+  border-radius: 3px;
+}
+.panel-reset:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.error-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: min(640px, calc(100vw - 32px));
+}
+.error-toast span {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.error-toast button {
+  flex-shrink: 0;
+  padding: 2px 4px;
+}
+.shortcut-help {
+  line-height: 1.5;
+}
+kbd {
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  background: var(--bg0);
+}
 
 .field {
   display: flex;
@@ -940,8 +976,8 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
   padding: 8px 18px;
   border-radius: 5px;
   z-index: 100;
-    cursor: default;
-    max-width: min(640px, calc(100vw - 32px));
+  cursor: default;
+  max-width: min(640px, calc(100vw - 32px));
 }
 
 .error-banner {

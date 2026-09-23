@@ -4,7 +4,10 @@ export class ProjectQueue {
 
   run<T>(id: string, operation: () => Promise<T>): Promise<T> {
     const result = (this.pending.get(id) ?? Promise.resolve()).then(operation);
-    const tail = result.then(() => {}, () => {});
+    const tail = result.then(
+      () => {},
+      () => {},
+    );
     this.pending.set(id, tail);
     void tail.then(() => {
       if (this.pending.get(id) === tail) this.pending.delete(id);
