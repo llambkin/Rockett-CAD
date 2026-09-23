@@ -37,6 +37,7 @@ export type Selection =
   | { kind: "vertex"; bodyId: string; vertexName: string }
   | { kind: "plane"; ref: PlaneRef; label: string }
   | { kind: "profile"; sketchId: string; profileId: string }
+  | { kind: "sketch"; sketchId: string }
   | { kind: "sketchEntity"; sketchId: string; entityId: string }
   | { kind: "sketchPoint"; sketchId: string; entityId: string };
 
@@ -54,6 +55,8 @@ export function selectionKey(s: Selection): string {
       return `plane:${JSON.stringify(s.ref)}`;
     case "profile":
       return `profile:${s.sketchId}:${s.profileId}`;
+    case "sketch":
+      return `sketch:${s.sketchId}`;
     case "sketchEntity":
       return `se:${s.sketchId}:${s.entityId}`;
     case "sketchPoint":

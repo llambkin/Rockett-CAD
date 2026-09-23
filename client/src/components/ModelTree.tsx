@@ -3,7 +3,7 @@
  * Bodies — with visibility toggles, rename, isolate and selection sync.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Feature, PlaneRef } from "@rockett/shared";
 import { useStore, selectionKey, type Selection } from "../store";
 import {
@@ -13,6 +13,16 @@ import {
 import { openFeatureEditor } from "./Timeline";
 import { freeProfileIds, sketchUsage } from "../sketchUsage";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import {
+  deleteFeatures,
+  setBodiesVisible,
+  setSketchesVisible,
+  treeClick,
+  treeIds,
+} from "../treeSelection";
+
+type PlaneSelection = Extract<Selection, { kind: "plane" }>;
+type BodySelection = Extract<Selection, { kind: "body" }>;
 
 const sketchOn = (ref: PlaneRef) =>
   void useStore
@@ -46,12 +56,30 @@ const canvasMenu = (f: Feature): MenuItem[] => [
   deleteItem(f.id),
 ];
 
+/** Select a sketch's free regions (all of them when every one is used). */
+const selectSketchRegions = (sketchId: string) => {
+  const s = useStore.getState();
+  const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
+  const profiles = sk?.profiles ?? [];
+  const free = s.document
+    ? freeProfileIds(sketchUsage(s.document), sketchId, profiles)
+    : [];
+  const ids = free.length > 0 ? free : profiles.map((p) => p.id);
+  const sels: Selection[] = ids.map((id) => ({
+    kind: "profile" as const,
+    sketchId,
+    profileId: id,
+  }));
+  s.setSelection(sels);
+};
+
 export function ModelTree() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const selection = useStore((s) => s.selection);
   const toggleSelection = useStore((s) => s.toggleSelection);
   const setBodyMeta = useStore((s) => s.setBodyMeta);
+  const anchor = useRef<Selection | null>(null);
   const [originVisible, setOriginVisible] = useState(true);
   const [renaming, setRenaming] = useState<{
     id: string;
@@ -70,6 +98,31 @@ export function ModelTree() {
     if (items.length > 0) setTreeMenu({ x: e.clientX, y: e.clientY, items });
   };
   const selKeys = new Set(selection.map(selectionKey));
+  const pick = (
+    e: React.MouseEvent,
+    sel: Selection,
+    order: Selection[],
+    plain: () => void,
+  ) => {
+    const range = e.shiftKey;
+    const toggle = e.ctrlKey || e.metaKey;
+    const current = anchor.current;
+    const from =
+      range &&
+      current &&
+      order.some((o) => selectionKey(o) === selectionKey(current))
+        ? current
+        : sel;
+    anchor.current = from;
+    const s = useStore.getState();
+    if (!range && !toggle) plain();
+    else if (!range && s.mode.name === "dialog") toggleSelection(sel, true);
+    else s.setSelection(treeClick(s.selection, sel, order, from, range));
+  };
+  const chosen = (kind: "body" | "sketch", id: string) => {
+    const ids = treeIds(selection, kind);
+    return ids.includes(id) ? ids : [id];
+  };
 
   const section = (key: string, label: string, children: React.ReactNode) => (
     <div className="tree-section">
@@ -84,115 +137,141 @@ export function ModelTree() {
     </div>
   );
 
-  const planeRow = (
-    label: string,
-    sel: Extract<Selection, { kind: "plane" }>,
-  ) => (
+  const originPlanes = (["XY", "XZ", "YZ"] as const).map(
+    (plane): PlaneSelection => ({
+      kind: "plane",
+      ref: { kind: "origin", plane },
+      label: `${plane} Plane`,
+    }),
+  );
+  const planeRow = (sel: PlaneSelection) => (
     <div
-      key={label}
+      key={sel.label}
       className={`tree-item ${selKeys.has(selectionKey(sel)) ? "selected" : ""}`}
       onClick={(e) => {
         if (useStore.getState().mode.name === "pickPlane") {
           sketchOn(sel.ref);
           return;
         }
-        toggleSelection(sel, e.ctrlKey || e.metaKey);
+        pick(e, sel, originPlanes, () => toggleSelection(sel, false));
       }}
       onContextMenu={(e) => openMenu(e, planeMenu(sel.ref))}
     >
       <span className="tree-icon">▱</span>
-      {label}
+      {sel.label}
     </div>
   );
 
   const sketches = document_.features.filter((f) => f.type === "sketch");
 
-  /** Select a sketch's free regions (all of them when every one is used). */
-  const selectSketchRegions = (sketchId: string) => {
-    const s = useStore.getState();
-    const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
-    const profiles = sk?.profiles ?? [];
-    const free = s.document
-      ? freeProfileIds(sketchUsage(s.document), sketchId, profiles)
-      : [];
-    const ids = free.length > 0 ? free : profiles.map((p) => p.id);
-    const sels: Selection[] = ids.map((id) => ({
-      kind: "profile" as const,
-      sketchId,
-      profileId: id,
-    }));
-    s.setSelection(sels);
-  };
   const planes = document_.features.filter(
     (f) => f.type === "constructionPlane",
   );
+  const planeSels = planes.map((f): Selection => ({
+    kind: "plane",
+    ref: { kind: "construction", featureId: f.id },
+    label: f.name,
+  }));
+  const sketchSels = sketches.map((f): Selection => ({
+    kind: "sketch",
+    sketchId: f.id,
+  }));
   const canvases = document_.features.filter(
     (f) => f.type === "referenceImage",
   );
   const bodies = evaluation?.bodies ?? [];
+  const bodySels = bodies.map((b): BodySelection => ({
+    kind: "body",
+    bodyId: b.bodyId,
+  }));
 
-  const sketchMenu = (f: Feature): MenuItem[] => [
-    {
-      label: "Edit sketch",
-      action: () =>
-        void useStore.getState().editSketch(f.id).then(alignToSketch),
-    },
-    {
-      label: "Extrude regions…",
-      action: () => {
-        selectSketchRegions(f.id);
-        useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
+  const sketchMenu = (f: Feature): MenuItem[] => {
+    const ids = chosen("sketch", f.id);
+    if (ids.length > 1)
+      return [
+        {
+          label: "Show / Hide",
+          action: () =>
+            void setSketchesVisible(
+              ids,
+              !sketches.some(
+                (x) => ids.includes(x.id) && (x as any).visible !== false,
+              ),
+            ),
+        },
+        {
+          label: "Delete",
+          danger: true,
+          action: () => void deleteFeatures(ids),
+        },
+      ];
+    return [
+      {
+        label: "Edit sketch",
+        action: () =>
+          void useStore.getState().editSketch(f.id).then(alignToSketch),
       },
-    },
-    {
-      label: "Revolve regions…",
-      action: () => {
-        selectSketchRegions(f.id);
-        useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
+      {
+        label: "Extrude regions…",
+        action: () => {
+          selectSketchRegions(f.id);
+          useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
+        },
       },
-    },
-    {
-      label: "Rename",
-      action: () => setRenaming({ id: f.id, value: f.name }),
-    },
-    deleteItem(f.id),
-  ];
+      {
+        label: "Revolve regions…",
+        action: () => {
+          selectSketchRegions(f.id);
+          useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
+        },
+      },
+      {
+        label: "Rename",
+        action: () => setRenaming({ id: f.id, value: f.name }),
+      },
+      deleteItem(f.id),
+    ];
+  };
 
-  const bodyMenu = (b: (typeof bodies)[number]): MenuItem[] => [
-    {
-      label: "Move…",
-      action: () => {
-        const s = useStore.getState();
-        s.setMode({ name: "dialog", dialog: "move" });
-        s.setSelection([{ kind: "body", bodyId: b.bodyId }]);
-        s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
+  const bodyMenu = (b: (typeof bodies)[number]): MenuItem[] => {
+    const ids = chosen("body", b.bodyId);
+    const visibility = (visible: (id: string) => boolean) =>
+      void setBodiesVisible(
+        Object.fromEntries(bodies.map((x) => [x.bodyId, visible(x.bodyId)])),
+      );
+    const shown = bodies.some((x) => ids.includes(x.bodyId) && x.visible);
+    return [
+      {
+        label: "Move…",
+        action: () => {
+          const s = useStore.getState();
+          s.setMode({ name: "dialog", dialog: "move" });
+          s.setSelection(bodySels.filter((x) => ids.includes(x.bodyId)));
+          s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
+        },
       },
-    },
-    {
-      label: "Rename",
-      action: () => setRenaming({ id: b.bodyId, value: b.name }),
-    },
-    {
-      label: "Show / Hide",
-      action: () => void setBodyMeta(b.bodyId, { visible: !b.visible }),
-    },
-    {
-      label: "Isolate",
-      action: () => {
-        for (const other of bodies)
-          void setBodyMeta(other.bodyId, {
-            visible: other.bodyId === b.bodyId,
-          });
+      ...(ids.length > 1
+        ? []
+        : [
+            {
+              label: "Rename",
+              action: () => setRenaming({ id: b.bodyId, value: b.name }),
+            },
+          ]),
+      {
+        label: "Show / Hide",
+        action: () =>
+          void setBodiesVisible(
+            Object.fromEntries(ids.map((id) => [id, !shown])),
+          ),
       },
-    },
-    {
-      label: "Show all bodies",
-      action: () => {
-        for (const other of bodies)
-          void setBodyMeta(other.bodyId, { visible: true });
+      {
+        label: "Isolate",
+        action: () => visibility((id) => ids.includes(id)),
       },
-    },
-  ];
+      { label: "Show all bodies", action: () => visibility(() => true) },
+    ];
+  };
 
   return (
     <div className="model-tree">
@@ -214,21 +293,7 @@ export function ModelTree() {
             <span className="tree-icon">{originVisible ? "👁" : "◌"}</span>
             Show origin
           </div>
-          {planeRow("XY Plane", {
-            kind: "plane",
-            ref: { kind: "origin", plane: "XY" },
-            label: "XY Plane",
-          })}
-          {planeRow("XZ Plane", {
-            kind: "plane",
-            ref: { kind: "origin", plane: "XZ" },
-            label: "XZ Plane",
-          })}
-          {planeRow("YZ Plane", {
-            kind: "plane",
-            ref: { kind: "origin", plane: "YZ" },
-            label: "YZ Plane",
-          })}
+          {originPlanes.map((p) => planeRow(p))}
         </>,
       )}
 
@@ -236,18 +301,13 @@ export function ModelTree() {
         section(
           "construction",
           "Construction",
-          planes.map((f) => (
+          planes.map((f, i) => (
             <div
               key={f.id}
-              className={`tree-item ${selKeys.has(`plane:${JSON.stringify({ kind: "construction", featureId: f.id })}`) ? "selected" : ""}`}
+              className={`tree-item ${selKeys.has(selectionKey(planeSels[i]!)) ? "selected" : ""}`}
               onClick={(e) =>
-                toggleSelection(
-                  {
-                    kind: "plane",
-                    ref: { kind: "construction", featureId: f.id },
-                    label: f.name,
-                  },
-                  e.ctrlKey || e.metaKey,
+                pick(e, planeSels[i]!, planeSels, () =>
+                  toggleSelection(planeSels[i]!, false),
                 )
               }
               onDoubleClick={() => openFeatureEditor(f)}
@@ -297,11 +357,15 @@ export function ModelTree() {
         section(
           "sketches",
           "Sketches",
-          sketches.map((f) => (
+          sketches.map((f, i) => (
             <div
               key={f.id}
-              className="tree-item"
-              onClick={() => selectSketchRegions(f.id)}
+              className={`tree-item ${selKeys.has(selectionKey(sketchSels[i]!)) || selection.some((s) => s.kind === "profile" && s.sketchId === f.id) ? "selected" : ""}`}
+              onClick={(e) =>
+                pick(e, sketchSels[i]!, sketchSels, () =>
+                  selectSketchRegions(f.id),
+                )
+              }
               onDoubleClick={() => {
                 void useStore.getState().editSketch(f.id).then(alignToSketch);
               }}
@@ -356,8 +420,8 @@ export function ModelTree() {
         bodies.length === 0 ? (
           <div className="tree-empty">No bodies yet</div>
         ) : (
-          bodies.map((b) => {
-            const sel: Selection = { kind: "body", bodyId: b.bodyId };
+          bodies.map((b, i) => {
+            const sel = bodySels[i]!;
             const isSel =
               selKeys.has(selectionKey(sel)) ||
               selection.some(
@@ -367,7 +431,9 @@ export function ModelTree() {
               <div
                 key={b.bodyId}
                 className={`tree-item ${isSel ? "selected" : ""}`}
-                onClick={(e) => toggleSelection(sel, e.ctrlKey || e.metaKey)}
+                onClick={(e) =>
+                  pick(e, sel, bodySels, () => toggleSelection(sel, false))
+                }
                 onDoubleClick={() =>
                   setRenaming({ id: b.bodyId, value: b.name })
                 }

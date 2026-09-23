@@ -224,6 +224,11 @@ function Workspace() {
                 <kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view
               </p>
               <p>
+                In the model tree, <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds
+                or removes a body or sketch and <kbd>Shift</kbd> + click selects
+                a range; right-click a selected row to act on all of them.
+              </p>
+              <p>
                 <b>Modelling</b>
               </p>
               <p>
