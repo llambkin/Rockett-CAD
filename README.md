@@ -159,4 +159,7 @@ or chamfer along a smooth contour as required by its native operation.
 ## License note
 
 Rockett CAD bundles [opencascade.js](https://github.com/donalffons/opencascade.js)
-(LGPL-2.1), the WASM build of Open CASCADE Technology.
+(LGPL-2.1-only), the WASM build of Open CASCADE Technology.
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every third-party
+package in the image and the client bundle, with its version, licence and the
+obligations to meet before distribution.
