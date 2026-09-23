@@ -29,13 +29,17 @@ import { RenameInput } from "./RenameInput";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
 
+type Point = { x: number; y: number };
+
 interface RowAction {
   label: string;
   glyph: string;
   title?: string;
   danger?: boolean;
-  run: () => void;
+  run: (at: Point) => void;
 }
+
+type Moving = { item: Item; at: Point } | null;
 
 type Menu = { x: number; y: number; items: MenuItem[] } | null;
 
@@ -156,7 +160,7 @@ function ItemRow({
             ...(onOpen ? [{ label: "Open", action: onOpen }] : []),
             ...actions.map((a) => ({
               label: a.label,
-              action: a.run,
+              action: () => a.run({ x: e.clientX, y: e.clientY }),
               danger: a.danger ?? false,
             })),
           ],
@@ -196,7 +200,10 @@ function ItemRow({
           className={a.danger ? "icon-btn danger" : "icon-btn"}
           title={a.title ?? a.label}
           aria-label={`${a.label} ${item.name}`}
-          onClick={a.run}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            a.run({ x: r.left, y: r.bottom });
+          }}
         >
           {a.glyph}
         </button>
@@ -264,10 +271,10 @@ const confirmIntoBrowser = (name: string) =>
     `Move "${name}" to this browser? Other users lose access, and clearing this site's data deletes it.`,
   );
 
-const moveTo = (item: Item, open: (item: Item) => void): RowAction => ({
+const moveTo = (item: Item, open: (moving: Moving) => void): RowAction => ({
   label: "Move to…",
   glyph: "⇥",
-  run: () => open(item),
+  run: (at) => open({ item, at }),
 });
 
 export function ProjectItems({
@@ -294,7 +301,7 @@ export function ProjectItems({
   run: Run;
 }) {
   const [menu, setMenu] = useState<Menu>(null);
-  const [moving, setMoving] = useState<Item | null>(null);
+  const [moving, setMoving] = useState<Moving>(null);
   const move = (item: Item, target: string | null) =>
     target !== THIS_BROWSER
       ? run(
@@ -412,10 +419,11 @@ export function ProjectItems({
       {moving && (
         <MoveDialog
           tree={tree}
-          item={moving}
+          item={moving.item}
+          at={moving.at}
           onMove={(t) => {
             setMoving(null);
-            move(moving, t);
+            move(moving.item, t);
           }}
           onClose={() => setMoving(null)}
         />
@@ -454,7 +462,7 @@ export function BrowserItems({
   run: Run;
 }) {
   const [menu, setMenu] = useState<Menu>(null);
-  const [moving, setMoving] = useState<Item | null>(null);
+  const [moving, setMoving] = useState<Moving>(null);
   return (
     <>
       <Breadcrumb
@@ -503,10 +511,11 @@ export function BrowserItems({
       {moving && (
         <MoveDialog
           tree={tree}
-          item={moving}
+          item={moving.item}
+          at={moving.at}
           onMove={(t) => {
             setMoving(null);
-            const r = records.find((x) => x.key === moving.id);
+            const r = records.find((x) => x.key === moving.item.id);
             if (r) onMove(r, t);
           }}
           onClose={() => setMoving(null)}

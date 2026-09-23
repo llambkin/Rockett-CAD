@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { FolderTree } from "@rockett/shared";
 import {
   canMoveTo,
@@ -13,16 +13,24 @@ import { DialogFooter } from "./form/DialogFooter";
 export function MoveDialog({
   tree,
   item,
+  at,
   onMove,
   onClose,
 }: {
   tree: FolderTree;
   item: Item;
+  at: { x: number; y: number };
   onMove: (target: string | null) => void;
   onClose: () => void;
 }) {
   const [target, setTarget] = useState<string | null>();
   const here = parentOf(tree, item);
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const first = (el?: Element | null) =>
+      el?.querySelector<HTMLElement>("button:not(:disabled)");
+    (first(body.current) ?? first(body.current?.nextElementSibling))?.focus();
+  }, []);
   const row = (id: string | null, name: string) => {
     const allowed = canMoveTo(tree, item, id);
     const self = item.kind === "folder" && id === item.id;
@@ -46,8 +54,8 @@ export function MoveDialog({
       </Fragment>
     ));
   return (
-    <DraggablePanel title={`Move "${item.name}"`}>
-      <div className="dialog-body">
+    <DraggablePanel title={`Move "${item.name}"`} at={at}>
+      <div className="dialog-body" ref={body}>
         <div className="move-tree">
           {row(null, "Projects")}
           <div className="tree-children">{branch(null)}</div>

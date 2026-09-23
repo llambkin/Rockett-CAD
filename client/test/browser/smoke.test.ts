@@ -277,3 +277,34 @@ it("drags a project into a folder and Back to projects returns there", async () 
   expect(failures).toEqual([]);
   expect(app.serverErrors).toEqual([]);
 });
+
+it("opens Move to at the right-click and inside a short window", async () => {
+  await page.setViewportSize({ width: 1400, height: 420 });
+  await page.goto(app.origin);
+  const folder = page.locator(".project-row", { hasText: "Brackets" });
+  const row = (await folder.boundingBox())!;
+  const click = {
+    x: Math.round(row.x + 40),
+    y: Math.round(row.y + row.height - 3),
+  };
+  await page.mouse.click(click.x, click.y, { button: "right" });
+  await page
+    .locator(".context-menu")
+    .getByRole("button", { name: "Move to…" })
+    .click();
+  const dialog = page.locator(".dialog-panel");
+  const box = (await dialog.boundingBox())!;
+
+  expect(box.x).toBe(click.x);
+  expect(box.y).toBeLessThanOrEqual(click.y);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(420);
+  expect(click.y + box.height).toBeGreaterThan(420);
+  expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(
+    true,
+  );
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  expect(failures).toEqual([]);
+});

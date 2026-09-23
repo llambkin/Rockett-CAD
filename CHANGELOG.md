@@ -60,6 +60,8 @@ change gets a `Schema N` line in the section that ships it.
   `/data` is the only path the app writes.
 - The container healthcheck tolerates a long regeneration: a busy container
   turns unhealthy after about five minutes of failed probes, not 1.5.
+- Move to on the project list opens at the click, inside the window, with
+  focus in it. Before, it opened at the top of the page.
 
 ### Changed
 

@@ -17,13 +17,16 @@ const clamp = (v: number, lo: number, hi: number) =>
 export function DraggablePanel({
   title,
   className,
+  at,
   children,
 }: {
   title: string;
   className?: string;
+  at?: { x: number; y: number };
   children: React.ReactNode;
 }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
+    if (at) return at;
     // discard a remembered position that no longer fits the window
     if (
       lastPos &&
@@ -38,7 +41,7 @@ export function DraggablePanel({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const reset = () => {
     lastPos = null;
-    setPos(null);
+    setPos(at ?? null);
   };
   useLayoutEffect(() => {
     const fit = () =>
@@ -108,7 +111,9 @@ export function DraggablePanel({
               top: pos.y,
               right: "auto",
               bottom: "auto",
-              maxHeight: `calc(100vh - ${pos.y + 4}px)`,
+              maxHeight: at
+                ? "calc(100vh - 8px)"
+                : `calc(100vh - ${pos.y + 4}px)`,
             }
           : undefined
       }

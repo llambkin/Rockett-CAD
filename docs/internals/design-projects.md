@@ -48,7 +48,9 @@ Folder row:   | Open | Rename | Move to... | Delete |
 
 ## Move to
 
-A `DraggablePanel` dialog with `tree-item` rows and `DialogFooter`.
+A `DraggablePanel` dialog with `tree-item` rows and `DialogFooter`. It opens
+at the right-click or under the row's Move to button, kept inside the window,
+with focus on the first row it can pick.
 
 ```
 +-- Move "Plates" -------------------- x --+

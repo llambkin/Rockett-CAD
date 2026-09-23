@@ -1,6 +1,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import type { Folder, ProjectSummary } from "@rockett/shared";
 import { App } from "../../src/App";
 import { useStore } from "../../src/store";
@@ -245,6 +245,54 @@ it("dims the current folder, the moved folder and its descendants in Move to", a
   );
   await click(button("Cancel", host.querySelector(".dialog-panel")!));
   expect(host.querySelector(".dialog-panel")).toBeNull();
+});
+
+it("opens Move to at the click, inside the window, with focus in it", async () => {
+  const spy = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("dialog-panel")
+        ? new DOMRect(0, 0, 265, 240)
+        : new DOMRect(300, 600, 28, 24);
+    });
+  onTestFinished(() => spy.mockRestore());
+  await renderAt("/");
+  const panel = () => host.querySelector<HTMLElement>(".dialog-panel");
+  const placed = () => [panel()!.style.left, panel()!.style.top];
+  const openAt = async (clientX: number, clientY: number) => {
+    await act(async () => {
+      row("Motor mount").dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX,
+          clientY,
+        }),
+      );
+    });
+    await click(button("Move to…", host.querySelector(".context-menu")!));
+  };
+  const right = `${window.innerWidth - 265 - 4}px`;
+  const bottom = `${window.innerHeight - 240 - 4}px`;
+
+  await openAt(120, 200);
+  expect(placed()).toEqual(["120px", "200px"]);
+  expect(panel()!.contains(document.activeElement)).toBe(true);
+  await act(async () => {
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  expect(panel()).toBeNull();
+
+  await openAt(window.innerWidth - 20, window.innerHeight - 20);
+  expect(placed()).toEqual([right, bottom]);
+  await click(button("Cancel", panel()!));
+
+  await click(
+    row("Motor mount").querySelector<HTMLElement>('[title="Move to…"]')!,
+  );
+  expect(placed()).toEqual(["300px", bottom]);
 });
 
 it("shows the server's refusal for a folder with items and confirms an empty one", async () => {
