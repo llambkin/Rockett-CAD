@@ -23,6 +23,40 @@ import { migrateDocument } from "./migrations.js";
 import { ProjectQueue } from "./projectQueue.js";
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const ASSET_ID_RE = /^[a-f0-9]{16}\.(png|jpg|webp)$/;
+const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+export const IMAGE_LIMIT_MB = 25;
+
+const IMAGE_TYPES: Array<{ ext: string; test: (b: Buffer) => boolean }> = [
+  {
+    ext: "png",
+    test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
+  },
+  {
+    ext: "jpg",
+    test: (b) =>
+      b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  },
+  {
+    ext: "webp",
+    test: (b) =>
+      b.length > 12 &&
+      b.toString("ascii", 0, 4) === "RIFF" &&
+      b.toString("ascii", 8, 12) === "WEBP",
+  },
+];
+
+function imageExt(data: Buffer, label: string): string {
+  if (data.length > IMAGE_LIMIT_MB * 1024 * 1024)
+    throw new StoreError(`${label}image is over ${IMAGE_LIMIT_MB} MB`);
+  const type = IMAGE_TYPES.find((t) => t.test(data));
+  if (!type)
+    throw new StoreError(
+      `${label}unsupported image type (PNG, JPEG, WebP only)`,
+    );
+  return type.ext;
+}
 
 export class StoreError extends Error {
   constructor(
@@ -173,22 +207,50 @@ export class ProjectStore {
   async saveAsset(
     projectId: string,
     data: Buffer,
-    mime: string,
   ): Promise<{ assetId: string }> {
-    const ext =
-      mime === "image/png" ? "png" : mime === "image/jpeg" ? "jpg" : "webp";
-    const assetId = `${crypto.randomBytes(8).toString("hex")}.${ext}`;
-    const dir = path.join(this.projectDir(projectId), "assets");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, assetId), data);
+    const assetId = `${crypto.randomBytes(8).toString("hex")}.${imageExt(data, "")}`;
+    await this.writeAsset(projectId, assetId, data, "");
     return { assetId };
   }
 
-  async assetPath(projectId: string, assetId: string): Promise<string> {
-    if (!/^[a-f0-9]{16}\.(png|jpg|webp)$/.test(assetId)) {
-      throw new StoreError("invalid asset id");
+  async importProject(
+    doc: CadDocument,
+    assets: ReadonlyMap<string, Buffer>,
+  ): Promise<CadDocument> {
+    const { id } = await this.create(doc.name);
+    try {
+      for (const [assetId, data] of assets)
+        await this.writeAsset(id, assetId, data, `asset ${assetId}: `);
+      const imported = { ...doc, id };
+      await this.save(imported);
+      return imported;
+    } catch (error) {
+      await this.remove(id);
+      throw error;
     }
-    const p = path.join(this.projectDir(projectId), "assets", assetId);
+  }
+
+  private async writeAsset(
+    projectId: string,
+    assetId: string,
+    data: Buffer,
+    label: string,
+  ): Promise<void> {
+    const file = this.assetFile(projectId, assetId, label);
+    if (path.extname(assetId) !== `.${imageExt(data, label)}`)
+      throw new StoreError(`${label}extension does not match the image type`);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, data);
+  }
+
+  private assetFile(projectId: string, assetId: string, label = ""): string {
+    if (!ASSET_ID_RE.test(assetId))
+      throw new StoreError(`${label}invalid asset id`);
+    return path.join(this.projectDir(projectId), "assets", assetId);
+  }
+
+  async assetPath(projectId: string, assetId: string): Promise<string> {
+    const p = this.assetFile(projectId, assetId);
     try {
       await fs.access(p);
     } catch {

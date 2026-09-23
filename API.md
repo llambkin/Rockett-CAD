@@ -49,6 +49,26 @@ snapshots sent by different clients.
 | `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied)                                                                                                                  |
 | `POST /projects/:id/rename`    | `{ name }`  | `{ document }`                                                                                                                                  |
 
+### Project file
+
+A project travels as one `.rockett` file, JSON of shape
+`{ format: "rockett-project", version: 1, document, assets }`. `assets` maps
+each asset id the document's reference images use to its bytes in base64, so
+a file holds only the assets the document references.
+
+`GET /projects/:id/file` returns the file as an attachment named after the
+project: an ASCII `filename` plus a UTF-8 `filename*`.
+
+`POST /projects/file` takes multipart field `file`, up to 64 MB, and returns
+`{ document }` for a new project with a new id. An older document schema is
+migrated as a saved project is on load, then the document is validated as
+`PUT /projects/:id/document` validates it. Every asset must be referenced by
+the document, carry a valid asset id, decode from base64 and pass the image
+upload rules, and every referenced asset must be present. A file with a newer
+`version` or `schemaVersion` gets 400 naming both versions. Any failure
+returns 400 and creates nothing: a project half made when an asset fails is
+removed.
+
 ## Model
 
 ### STEP import

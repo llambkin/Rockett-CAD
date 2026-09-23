@@ -26,7 +26,7 @@ import {
 } from "@rockett/shared";
 import { version } from "../../../package.json";
 import type { ProjectStore } from "../store/projectStore.js";
-import { StoreError } from "../store/projectStore.js";
+import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { engineFor, dropEngine } from "../geometry/engine.js";
 import { measure } from "../geometry/measure.js";
@@ -43,6 +43,11 @@ import {
   validateDocument,
   validateFeature,
 } from "./validate.js";
+import {
+  downloadProjectFile,
+  safeFileName,
+  uploadProjectFile,
+} from "./projectFile.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -100,35 +105,19 @@ function multipart(field: string, megabytes: number, error: string) {
 
 const receiveImage = multipart(
   "image",
-  25,
-  "Upload one PNG, JPEG or WebP image, up to 25 MB.",
+  IMAGE_LIMIT_MB,
+  `Upload one PNG, JPEG or WebP image, up to ${IMAGE_LIMIT_MB} MB.`,
 );
 const receiveStep = multipart(
   "file",
   10,
   "Upload one STEP file (.step or .stp), up to 10 MB.",
 );
-
-const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
-
-const IMAGE_MAGIC: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
-  {
-    mime: "image/png",
-    test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
-  },
-  {
-    mime: "image/jpeg",
-    test: (b) =>
-      b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-  },
-  {
-    mime: "image/webp",
-    test: (b) =>
-      b.length > 12 &&
-      b.toString("ascii", 0, 4) === "RIFF" &&
-      b.toString("ascii", 8, 12) === "WEBP",
-  },
-];
+const receiveProjectFile = multipart(
+  "file",
+  64,
+  "Upload one .rockett project file, up to 64 MB.",
+);
 
 const EXPORTERS: Record<
   ExportRequest["format"],
@@ -239,6 +228,13 @@ export function createApiRouter(store: ProjectStore): Router {
       const doc = await store.create(name);
       res.json({ document: doc });
     }),
+  );
+
+  on(ROUTES.downloadProjectFile, wrap(downloadProjectFile(store)));
+  on(
+    ROUTES.uploadProjectFile,
+    receiveProjectFile,
+    wrap(uploadProjectFile(store)),
   );
 
   on(
@@ -547,8 +543,7 @@ export function createApiRouter(store: ProjectStore): Router {
       if (chosen.length === 0) {
         throw new ValidationError("no bodies to export");
       }
-      const safeName =
-        doc.name.replace(/[^\w-]+/g, "_").slice(0, 60) || "model";
+      const safeName = safeFileName(doc.name) || "model";
       const data = exporter.write(
         chosen,
         doc,
@@ -574,19 +569,8 @@ export function createApiRouter(store: ProjectStore): Router {
     receiveImage,
     wrap(async (req, res) => {
       await store.load(req.params.id); // ensure project exists
-      const file = req.file;
-      if (!file) throw new ValidationError("image file required");
-      const magic = IMAGE_MAGIC.find((m) => m.test(file.buffer));
-      if (!magic) {
-        throw new ValidationError(
-          "unsupported image type (PNG, JPEG, WebP only)",
-        );
-      }
-      const { assetId } = await store.saveAsset(
-        req.params.id,
-        file.buffer,
-        magic.mime,
-      );
+      if (!req.file) throw new ValidationError("image file required");
+      const { assetId } = await store.saveAsset(req.params.id, req.file.buffer);
       res.json({ assetId });
     }),
   );

@@ -15,6 +15,23 @@ export interface MutationResponse {
   evaluation: EvaluateResult;
 }
 
+export const PROJECT_FILE_FORMAT = "rockett-project";
+export const PROJECT_FILE_VERSION = 1;
+
+export interface ProjectFile {
+  format: typeof PROJECT_FILE_FORMAT;
+  version: typeof PROJECT_FILE_VERSION;
+  document: CadDocument;
+  assets: Record<string, string>;
+}
+
+export const projectFileEnvelope = Type.Object({
+  format: Type.Literal(PROJECT_FILE_FORMAT),
+  version: Type.Integer({ minimum: 1 }),
+  document: Type.Object({ schemaVersion: Type.Integer({ minimum: 1 }) }),
+  assets: Type.Record(Type.String(), Type.String()),
+});
+
 export interface Health {
   version: string;
   schemaVersion: number;
@@ -79,6 +96,10 @@ export const ROUTES = {
     "POST",
     "/projects/import-step",
   ),
+  uploadProjectFile: route<FormData, ProjectResponse>()(
+    "POST",
+    "/projects/file",
+  ),
   getProject: route<never, ProjectResponse>()("GET", "/projects/:id"),
   deleteProject: route<never, { ok: true }>()("DELETE", "/projects/:id"),
   duplicateProject: route<{ name?: string | undefined }, ProjectResponse>()(
@@ -91,6 +112,7 @@ export const ROUTES = {
     "/projects/:id/rename",
     name,
   ),
+  downloadProjectFile: route<never, Blob>()("GET", "/projects/:id/file"),
   evaluate: route<never, EvaluateResult>()("GET", "/projects/:id/evaluate"),
   replaceDocument: route<{ document: CadDocument }, MutationResponse>()(
     "PUT",
