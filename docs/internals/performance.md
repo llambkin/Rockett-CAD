@@ -260,10 +260,11 @@ sends several moves a frame, PERF-029's one hover pick per frame covers it.
 
 ## Client benches
 
-`client/test/viewport.bench.ts` runs with `npm run bench:client`, in the `dom`
-project only, so happy-dom provides the document. `vitest.config.ts` gives the
-`node` and `browser` projects no bench files. Method, sample plan and printed
-lines match the server benches. No JSON report is written.
+`client/test/viewport.bench.ts` and `client/test/tree.bench.ts` run with
+`npm run bench:client`, in the `dom` project only, so happy-dom provides the
+document. `vitest.config.ts` gives the `node` and `browser` projects no bench
+files. Method, sample plan and printed lines match the server benches. No JSON
+report is written.
 
 The viewport is a real `CadViewport` in a 1280 by 800 pixel container.
 `client/test/helpers/fakeRenderer.ts` replaces `THREE.WebGLRenderer`: it
@@ -304,12 +305,19 @@ Benches:
   evicted. The printed byte count is the RGBA8 size of every texture the scene
   holds, with the full mip chain, as `TextureLoader` textures generate
   mipmaps. The median column holds bytes; the sync time is in the text.
+- `tree rerender many-body`: `ModelTree` with the many-body payloads, then a
+  new evaluation of copies of the same bodies each sample.
+- `tree select many-body`: the same tree, selecting one of two bodies in
+  turn.
 
 ### Client baselines
 
 Ranges span five runs of `npm run bench:client` on 2026-09-23 with a one-minute
 load average of 17 to 22 from other agents. The PERF-034 row spans three runs
-on 2026-09-23 at a load average of 38 to 42.
+on 2026-09-23 at a load average of 38 to 42. The PERF-037 rows span three runs
+on 2026-09-23 at a load average of 22 to 24, interleaved with three runs of the
+tree before PERF-037: 18.6 to 20.1 ms a new evaluation and 14.3 to 14.9 ms a
+selection.
 
 | metric                          | fixture               | hardware class | runtime                         | warm-up | repetitions | median              | p95                 | budget                      | row      |
 | ------------------------------- | --------------------- | -------------- | ------------------------------- | ------- | ----------- | ------------------- | ------------------- | --------------------------- | -------- |
@@ -319,6 +327,8 @@ on 2026-09-23 at a load average of 38 to 42.
 | highlight face many-body        | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.034 to 0.053 ms   | 0.049 to 0.081 ms   | median 2 ms, p95 8 ms       | PERF-004 |
 | sketch hover 2000 entities      | square sketch         | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 54.7 to 59.7 ms     | 62.3 to 71.9 ms     | median 16 ms, p95 50 ms     | PERF-004 |
 | texture scene bytes             | 50 images 4096 x 4096 | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 4,473,924,200 bytes | 4,473,924,200 bytes | at most 4,473,924,200 bytes | PERF-004 |
+| tree rerender many-body         | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 8.0 to 10.3 ms      | 19.1 to 23.0 ms     | median 16 ms, p95 50 ms     | PERF-037 |
+| tree select many-body           | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 3.4 to 4.5 ms       | 4.5 to 22.9 ms      | median 16 ms, p95 50 ms     | PERF-037 |
 
 `sketch hover 2000 entities` misses its budget. Every hover rebuilds all 2,250
 sketch objects and reruns `detectProfiles`; PERF-032 owns that. The texture

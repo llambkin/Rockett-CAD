@@ -3,7 +3,15 @@
  * Bodies — with visibility toggles, rename, isolate and selection sync.
  */
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Feature, PlaneRef, TreeGroup } from "@rockett/shared";
 import { useStore, selectionKey, type Selection } from "../store";
 import {
@@ -63,7 +71,63 @@ const canvasMenu = (f: Feature): MenuItem[] => [
   deleteItem(f.id),
 ];
 
-export function ModelTree() {
+type BodyActions = {
+  click: (e: React.MouseEvent, bodyId: string) => void;
+  menu: (e: React.MouseEvent, bodyId: string) => void;
+  rename: (bodyId: string) => void;
+  show: (bodyId: string, visible: boolean) => void;
+  commit: (bodyId: string, name: string) => void;
+  cancel: () => void;
+};
+
+const BodyRow = memo(function BodyRow({
+  bodyId,
+  name,
+  visible,
+  selected,
+  renaming,
+  actions,
+}: {
+  bodyId: string;
+  name: string;
+  visible: boolean;
+  selected: boolean;
+  renaming: boolean;
+  actions: BodyActions;
+}) {
+  return (
+    <div
+      className={`tree-item ${selected ? "selected" : ""}`}
+      onClick={(e) => actions.click(e, bodyId)}
+      onDoubleClick={() => actions.rename(bodyId)}
+      onContextMenu={(e) => actions.menu(e, bodyId)}
+      title="Click to select · right-click for actions"
+    >
+      <span
+        className="tree-icon eye"
+        onClick={(e) => {
+          e.stopPropagation();
+          actions.show(bodyId, !visible);
+        }}
+      >
+        {visible ? "👁" : "◌"}
+      </span>
+      {renaming ? (
+        <RenameInput
+          value={name}
+          className="tree-rename"
+          label="Name"
+          onCommit={(next) => actions.commit(bodyId, next)}
+          onCancel={actions.cancel}
+        />
+      ) : (
+        <span className={visible ? "" : "dimmed"}>{name}</span>
+      )}
+    </div>
+  );
+});
+
+export const ModelTree = memo(function ModelTree() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const selection = useStore((s) => s.selection);
@@ -78,6 +142,18 @@ export function ModelTree() {
     y: number;
     items: MenuItem[];
   } | null>(null);
+  const latest = useRef<BodyActions | null>(null);
+  const bodyActions = useMemo(
+    (): BodyActions => ({
+      click: (e, bodyId) => latest.current!.click(e, bodyId),
+      menu: (e, bodyId) => latest.current!.menu(e, bodyId),
+      rename: (bodyId) => latest.current!.rename(bodyId),
+      show: (bodyId, visible) => latest.current!.show(bodyId, visible),
+      commit: (bodyId, name) => latest.current!.commit(bodyId, name),
+      cancel: () => latest.current!.cancel(),
+    }),
+    [],
+  );
   const startGroup = async (kind: Kind, ids: string[]) => {
     const group = await groupItems(kind, ids);
     if (group) setRenaming(group.id);
@@ -265,8 +341,8 @@ export function ModelTree() {
     ];
   };
 
-  const bodyMenu = (b: (typeof bodies)[number]): MenuItem[] => {
-    const ids = chosen("body", b.bodyId);
+  const bodyMenu = (bodyId: string): MenuItem[] => {
+    const ids = chosen("body", bodyId);
     const visibility = (visible: (id: string) => boolean) =>
       void setBodiesVisible(
         Object.fromEntries(bodies.map((x) => [x.bodyId, visible(x.bodyId)])),
@@ -283,7 +359,7 @@ export function ModelTree() {
       },
       ids.length > 1
         ? groupItem("body", ids)
-        : { label: "Rename", action: () => setRenaming(b.bodyId) },
+        : { label: "Rename", action: () => setRenaming(bodyId) },
       { label: "Show / Hide", action: () => showHide("body", ids) },
       {
         label: "Isolate",
@@ -391,39 +467,34 @@ export function ModelTree() {
     );
   };
 
-  const bodyRow = (b: (typeof bodies)[number]) => {
-    const sel = bodySel(b);
-    const isSel =
-      selKeys.has(selectionKey(sel)) ||
-      selection.some((s) => "bodyId" in s && (s as any).bodyId === b.bodyId);
-    return (
-      <div
-        key={b.bodyId}
-        className={`tree-item ${isSel ? "selected" : ""}`}
-        onClick={(e) =>
-          pick(e, sel, bodyParts.order, () => toggleSelection(sel, false))
-        }
-        onDoubleClick={() => setRenaming(b.bodyId)}
-        onContextMenu={(e) => openMenu(e, bodyMenu(b))}
-        title="Click to select · right-click for actions"
-      >
-        <span
-          className="tree-icon eye"
-          onClick={(e) => {
-            e.stopPropagation();
-            void setBodyMeta(b.bodyId, { visible: !b.visible });
-          }}
-        >
-          {b.visible ? "👁" : "◌"}
-        </span>
-        {named(
-          b.bodyId,
-          b.name,
-          (name) => void setBodyMeta(b.bodyId, { name }),
-        ) ?? <span className={b.visible ? "" : "dimmed"}>{b.name}</span>}
-      </div>
-    );
+  latest.current = {
+    click: (e, bodyId) => {
+      const sel = bodySel({ bodyId });
+      pick(e, sel, bodyParts.order, () => toggleSelection(sel, false));
+    },
+    menu: (e, bodyId) => openMenu(e, bodyMenu(bodyId)),
+    rename: (bodyId) => setRenaming(bodyId),
+    show: (bodyId, visible) => void setBodyMeta(bodyId, { visible }),
+    commit: (bodyId, name) => {
+      setRenaming(null);
+      void setBodyMeta(bodyId, { name });
+    },
+    cancel: () => setRenaming(null),
   };
+  const selectedBodies = new Set(
+    selection.flatMap((s) => ("bodyId" in s ? [s.bodyId] : [])),
+  );
+  const bodyRow = (b: (typeof bodies)[number]) => (
+    <BodyRow
+      key={b.bodyId}
+      bodyId={b.bodyId}
+      name={b.name}
+      visible={b.visible}
+      selected={selectedBodies.has(b.bodyId)}
+      renaming={renaming === b.bodyId}
+      actions={bodyActions}
+    />
+  );
 
   return (
     <div className="model-tree">
@@ -532,4 +603,4 @@ export function ModelTree() {
       )}
     </div>
   );
-}
+});
