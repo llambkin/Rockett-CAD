@@ -85,7 +85,10 @@ persistence tests and was smoke-tested against a live container.
 
 ## Security
 
-- Runs as the non-root `rockett` user.
+- Runs as the non-root `rockett` user. `/app` is root-owned, so the app
+  cannot change its own code. `/data` is the only path it writes; it needs no
+  ephemeral writable path, and `--read-only` with the `/data` volume serves.
+  The base image's `/tmp` stays world-writable unless the root is read-only.
 - No outbound network use; no cloud services; fully offline-capable.
 - Single-user by design for v1 — put it behind your reverse proxy
   (basic auth, Authelia, Cloudflare Access, …) if it is reachable beyond your

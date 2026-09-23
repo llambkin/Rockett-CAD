@@ -44,7 +44,7 @@ COPY --from=build /app/client/dist client/dist
 
 # Non-root user; /data is the single persistent volume.
 RUN groupadd -r rockett && useradd -r -g rockett rockett \
-  && mkdir -p /data && chown -R rockett:rockett /data /app
+  && mkdir -p /data && chown rockett:rockett /data
 USER rockett
 VOLUME /data
 EXPOSE 8788
