@@ -12,6 +12,7 @@ import { initKernel } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
 import { write3mf, writeStl } from "../src/geometry/exporters.js";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { validateDocument } from "../src/api/validate.js";
 import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
 import { LocalStorage } from "../src/store/storage.js";
@@ -26,7 +27,7 @@ beforeAll(async () => {
   await initKernel();
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-export-"));
   const storage = new LocalStorage(dir, fs);
-  store = new ProjectStore(storage);
+  store = new ProjectStore(storage, validateDocument);
   const app = express();
   app.use("/api", createApiRouter(store, new FolderStore(storage)));
   const listening = app.listen(0);

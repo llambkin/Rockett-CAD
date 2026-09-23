@@ -366,7 +366,7 @@ export const documentSchema = Type.Refine(
     units: Type.Enum(Object.keys(UNIT_TO_MM) as Units[]),
     createdAt: text,
     modifiedAt: text,
-    features: Type.Array(Type.Unknown(), { maxItems: 2000 }),
+    features: Type.Array(Type.Unknown()),
     timelinePosition: Type.Integer({ minimum: 0 }),
     bodyMeta: Type.Record(
       Type.String(),

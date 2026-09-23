@@ -13,6 +13,7 @@ import type { AddressInfo } from "node:net";
 import { SCHEMA_VERSION } from "@rockett/shared";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
+import { validateDocument } from "./api/validate.js";
 import { FolderStore } from "./store/folderStore.js";
 import { LocalStorage } from "./store/storage.js";
 import { createApp, scheduleSweep } from "./app.js";
@@ -38,7 +39,7 @@ async function main() {
   console.log(`[rockett] kernel ready in ${Date.now() - t0}ms`);
 
   const storage = new LocalStorage(DATA_DIR, fs.promises);
-  const store = new ProjectStore(storage);
+  const store = new ProjectStore(storage, validateDocument);
   console.log(`[rockett] data dir: ${DATA_DIR}`);
   const { recovered, outdated, failed } = await store.inventory();
   for (const id of recovered)

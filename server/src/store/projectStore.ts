@@ -1,13 +1,12 @@
 import path from "node:path";
 import crypto from "node:crypto";
 import {
-  SCHEMA_VERSION,
   createEmptyDocument,
   type CadDocument,
   type ProjectSummary,
 } from "@rockett/shared";
 import { JsonStore, StoreError, type Inventory } from "./jsonStore.js";
-import { documentMigrations } from "./migrations.js";
+import { documentMigrations, TooNewError } from "./migrations.js";
 import type { Storage } from "./storage.js";
 
 export { StoreError };
@@ -58,6 +57,7 @@ export class ProjectStore {
 
   constructor(
     private readonly storage: Storage,
+    private readonly validate: (doc: CadDocument) => void,
     private readonly now: () => number = Date.now,
   ) {
     this.documents = new JsonStore({
@@ -68,12 +68,7 @@ export class ProjectStore {
       file: "document.json",
       migrations: documentMigrations,
       unbacked: (id) => this.isTemporary(id),
-      validate: (doc) => {
-        if (doc.schemaVersion !== SCHEMA_VERSION)
-          throw new StoreError(
-            `document schema ${doc.schemaVersion} does not match ${SCHEMA_VERSION}`,
-          );
-      },
+      validate,
     });
   }
 
@@ -93,9 +88,24 @@ export class ProjectStore {
           createdAt: doc.createdAt,
           modifiedAt: doc.modifiedAt,
           featureCount: doc.features.length,
+          status: "ok",
         });
-      } catch {
-        // skip unreadable projects rather than failing the listing
+      } catch (err) {
+        if (err instanceof StoreError && err.code === "not_found") continue;
+        const raw = (await this.documents
+          .stored(id)
+          .catch(() => ({}))) as Partial<Record<keyof CadDocument, unknown>>;
+        const text = (v: unknown, fallback: string) =>
+          typeof v === "string" ? v : fallback;
+        out.push({
+          id,
+          name: text(raw.name, id),
+          createdAt: text(raw.createdAt, ""),
+          modifiedAt: text(raw.modifiedAt, ""),
+          featureCount: Array.isArray(raw.features) ? raw.features.length : 0,
+          status: err instanceof TooNewError ? "tooNew" : "invalid",
+          error: (err as Error).message,
+        });
       }
     }
     out.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
@@ -109,8 +119,17 @@ export class ProjectStore {
     return doc;
   }
 
-  load(id: string): Promise<CadDocument> {
-    return this.documents.read(id);
+  async load(id: string): Promise<CadDocument> {
+    const doc = await this.documents.read(id);
+    try {
+      this.validate(doc);
+    } catch (err) {
+      throw new StoreError(
+        `project ${id} is invalid: ${(err as Error).message}`,
+        "unprocessable",
+      );
+    }
+    return doc;
   }
 
   async save(doc: CadDocument): Promise<void> {

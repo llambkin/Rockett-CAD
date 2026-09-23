@@ -56,6 +56,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   not_found: 404,
   too_large: 413,
   conflict: 409,
+  unprocessable: 422,
   kernel: 503,
   internal: 500,
 };

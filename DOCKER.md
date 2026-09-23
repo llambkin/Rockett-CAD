@@ -118,6 +118,10 @@ deletes it after 24 hours without a request. Backups are never pruned. To
 restore one by hand, stop the container, run `sha256sum -c ../SHA256SUMS`
 inside its `files/` directory, and copy `files/` over the project directory.
 
+Every project is validated when it is opened. One that fails, or one saved by
+a newer schema, stays in the project list with its reason and is never
+rewritten; opening an invalid one is refused with its first failure.
+
 Documents, assets and retained exports are written atomically (temp file,
 fsync, rename, directory fsync), so a crash or container kill never corrupts a
 project. **The container is

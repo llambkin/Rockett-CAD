@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { validateDocument } from "../src/api/validate.js";
 import { LocalStorage } from "../src/store/storage.js";
 import {
   documentMigrations,
@@ -18,7 +19,7 @@ const png = Buffer.from(
 
 async function tempStore(): Promise<ProjectStore> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
-  return new ProjectStore(new LocalStorage(dir, fs));
+  return new ProjectStore(new LocalStorage(dir, fs), validateDocument);
 }
 
 describe("project store", () => {
@@ -35,12 +36,45 @@ describe("project store", () => {
 
   it("refuses to load a document from a newer schema", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
-    const store = new ProjectStore(new LocalStorage(dir, fs));
+    const store = new ProjectStore(new LocalStorage(dir, fs), validateDocument);
     const doc = await store.create("Future");
     const file = path.join(dir, "projects", doc.id, "document.json");
     await fs.writeFile(file, JSON.stringify({ ...doc, schemaVersion: 99 }));
     await expect(store.load(doc.id)).rejects.toBeInstanceOf(TooNewError);
+    expect(await store.list()).toEqual([
+      expect.objectContaining({
+        id: doc.id,
+        name: "Future",
+        status: "tooNew",
+        error: expect.stringMatching(/version 99 is newer/),
+      }),
+    ]);
   });
+
+  it("rejects an invalid stored document with 422 and lists it", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
+    const store = new ProjectStore(new LocalStorage(dir, fs), validateDocument);
+    const good = await store.create("Good");
+    const bad = await store.create("Broken");
+    const file = path.join(dir, "projects", bad.id, "document.json");
+    await fs.writeFile(
+      file,
+      JSON.stringify({ ...bad, features: [{ id: "f1", type: "nope" }] }),
+    );
+    await expect(store.load(bad.id)).rejects.toMatchObject({
+      code: "unprocessable",
+      message: `project ${bad.id} is invalid: unknown feature type nope`,
+    });
+    const list = await store.list();
+    expect(list.find((p) => p.id === good.id)?.status).toBe("ok");
+    expect(list.find((p) => p.id === bad.id)).toMatchObject({
+      name: "Broken",
+      featureCount: 1,
+      status: "invalid",
+      error: `project ${bad.id} is invalid: unknown feature type nope`,
+    });
+  });
+
   it("keeps concurrent saves atomic without temporary-file collisions", async () => {
     const store = await tempStore();
     const doc = await store.create("Concurrent");
@@ -121,7 +155,10 @@ describe("project store", () => {
         });
       },
     } as typeof fs;
-    const store = new ProjectStore(new LocalStorage(dir, failing));
+    const store = new ProjectStore(
+      new LocalStorage(dir, failing),
+      validateDocument,
+    );
     const doc = await store.create("Assets");
     await expect(store.saveAsset(doc.id, png)).rejects.toThrow("disk full");
     const assets = path.join(dir, "projects", doc.id, "assets");

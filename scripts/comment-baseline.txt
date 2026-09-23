@@ -43,7 +43,6 @@ server/src/geometry/tangentEdges.ts 6
 server/src/geometry/tessellate.ts 12
 server/src/index.ts 8
 server/src/store/projectQueue.ts 1
-server/src/store/projectStore.ts 1
 server/test/api.test.ts 21
 server/test/chamferEnvelope.test.ts 7
 server/test/export.test.ts 1

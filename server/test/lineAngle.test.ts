@@ -9,7 +9,7 @@ import {
   type SketchFeature,
   ValidationError,
 } from "@rockett/shared";
-import { validateFeature } from "../src/api/validate.js";
+import { validateFeature, validateDocument } from "../src/api/validate.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { LocalStorage } from "../src/store/storage.js";
 
@@ -49,7 +49,7 @@ describe("line angle constraint", () => {
 
   it("migrates a schema 4 project to 5 and round-trips the angle", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-angle-"));
-    const store = new ProjectStore(new LocalStorage(dir, fs));
+    const store = new ProjectStore(new LocalStorage(dir, fs), validateDocument);
     const legacy = {
       ...createEmptyDocument("legacy4", "Legacy"),
       schemaVersion: 4,

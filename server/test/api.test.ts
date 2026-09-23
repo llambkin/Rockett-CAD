@@ -21,6 +21,7 @@ import type { AddressInfo } from "node:net";
 import { SCHEMA_VERSION, type EvaluateResult } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { validateDocument } from "../src/api/validate.js";
 import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
 import { LocalStorage } from "../src/store/storage.js";
@@ -35,7 +36,7 @@ beforeAll(async () => {
   await initKernel();
   storeDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-api-"));
   const storage = new LocalStorage(storeDir, fs);
-  store = new ProjectStore(storage);
+  store = new ProjectStore(storage, validateDocument);
   const app = express();
   app.use("/api", createApiRouter(store, new FolderStore(storage)));
   await new Promise<void>((resolve) => {
@@ -609,10 +610,21 @@ describe("REST API MVP workflow", () => {
         code: "too_large",
       },
     });
-    await fs.writeFile(
-      path.join(storeDir, "projects", document.id, "document.json"),
-      "{ broken",
+    const stored = path.join(
+      storeDir,
+      "projects",
+      document.id,
+      "document.json",
     );
+    await fs.writeFile(stored, JSON.stringify({ ...document, units: "ft" }));
+    expect(await call(`/projects/${document.id}`)).toEqual({
+      status: 422,
+      body: {
+        error: `project ${document.id} is invalid: units must be equal to one of the allowed values`,
+        code: "unprocessable",
+      },
+    });
+    await fs.writeFile(stored, "{ broken");
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     onTestFinished(() => logged.mockRestore());
     expect(await call(`/projects/${document.id}`)).toEqual({

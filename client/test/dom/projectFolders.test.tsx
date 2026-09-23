@@ -11,6 +11,7 @@ const summary = (id: string, name: string): ProjectSummary => ({
   featureCount: 3,
   createdAt: "2026-09-23T00:00:00Z",
   modifiedAt: "2026-09-23T00:00:00Z",
+  status: "ok",
 });
 
 let projects: ProjectSummary[];

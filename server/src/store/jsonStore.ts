@@ -58,7 +58,7 @@ export class JsonStore<T> {
     return path.posix.join(this.backups(key), "migrating.json");
   }
 
-  private async stored(key: string): Promise<unknown> {
+  async stored(key: string): Promise<unknown> {
     const file = this.file(key);
     let raw: string;
     try {

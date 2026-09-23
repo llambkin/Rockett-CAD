@@ -169,6 +169,7 @@ it("duplicates a project from its row menu and confirms a delete", async () => {
       featureCount: 2,
       createdAt: "2026-09-23T00:00:00Z",
       modifiedAt: "2026-09-23T00:00:00Z",
+      status: "ok",
     },
   ]);
   vi.mocked(api.duplicateProject).mockResolvedValue({} as any);

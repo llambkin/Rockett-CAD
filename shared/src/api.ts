@@ -109,6 +109,8 @@ export interface ProjectSummary {
   modifiedAt: string;
   createdAt: string;
   featureCount: number;
+  status: "ok" | "invalid" | "tooNew";
+  error?: string;
 }
 
 export interface Folder {
@@ -158,7 +160,13 @@ export interface ExportRequest {
 }
 
 export type ApiErrorCode =
-  "validation" | "not_found" | "too_large" | "conflict" | "kernel" | "internal";
+  | "validation"
+  | "not_found"
+  | "too_large"
+  | "conflict"
+  | "unprocessable"
+  | "kernel"
+  | "internal";
 
 export interface ApiErrorBody {
   error: string;

@@ -14,14 +14,15 @@ Route errors return `ApiErrorBody`: `{ "error": string, "code": ApiErrorCode,
 "detail"?: string }`. `error` is a message for the user. The code fixes the
 status:
 
-| Code         | Status | Meaning                                                   |
-| ------------ | ------ | --------------------------------------------------------- |
-| `validation` | 400    | The request, upload or feature is invalid.                |
-| `not_found`  | 404    | The project, folder, feature, body or asset is missing.   |
-| `too_large`  | 413    | An upload is over its limit.                              |
-| `conflict`   | 409    | The request conflicts with current state.                 |
-| `kernel`     | 503    | The geometry kernel cannot serve the request.             |
-| `internal`   | 500    | Server fault. The message is generic; the log has detail. |
+| Code            | Status | Meaning                                                   |
+| --------------- | ------ | --------------------------------------------------------- |
+| `validation`    | 400    | The request, upload or feature is invalid.                |
+| `not_found`     | 404    | The project, folder, feature, body or asset is missing.   |
+| `too_large`     | 413    | An upload is over its limit.                              |
+| `conflict`      | 409    | The request conflicts with current state.                 |
+| `unprocessable` | 422    | A stored project fails validation.                        |
+| `kernel`        | 503    | The geometry kernel cannot serve the request.             |
+| `internal`      | 500    | Server fault. The message is generic; the log has detail. |
 
 Mutating endpoints return `{ document, evaluation }`: the updated document
 plus a fresh incremental evaluation (bodies with tagged tessellation, feature
@@ -55,6 +56,10 @@ snapshots sent by different clients.
 | `DELETE /projects/:id`         | none                   | `{ ok }`                                                                                                                                        |
 | `POST /projects/:id/duplicate` | `{ name? }`            | `{ document }` (assets copied)                                                                                                                  |
 | `POST /projects/:id/rename`    | `{ name }`             | `{ document }`                                                                                                                                  |
+
+Every stored project is listed. `status` is `ok`, `invalid` or `tooNew`, and
+the last two carry `error`. Loading a project validates it after migration;
+an invalid one is 422 naming the first failure.
 
 ### Project file
 

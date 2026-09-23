@@ -10,10 +10,11 @@ import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
 import { LocalStorage } from "../src/store/storage.js";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { validateDocument } from "../src/api/validate.js";
 
 function registered(): string[] {
   const router = createApiRouter(
-    new ProjectStore(new LocalStorage(os.tmpdir(), fs)),
+    new ProjectStore(new LocalStorage(os.tmpdir(), fs), validateDocument),
     new FolderStore(new LocalStorage(os.tmpdir(), fs)),
   );
   return router.stack.flatMap((layer) => {
@@ -70,7 +71,7 @@ beforeAll(async () => {
   const app = express().use(
     "/api",
     createApiRouter(
-      new ProjectStore(new LocalStorage(dataDir, fs)),
+      new ProjectStore(new LocalStorage(dataDir, fs), validateDocument),
       new FolderStore(new LocalStorage(dataDir, fs)),
     ),
   );

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { validateDocument } from "../src/api/validate.js";
 import { documentMigrations, migrate } from "../src/store/migrations.js";
 import { LocalStorage, type Storage } from "../src/store/storage.js";
 import { MemoryStorage } from "./helpers/memoryStorage.js";
@@ -174,7 +175,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
   it("backs up the complete old project before the first save migrates it", async () => {
     const { failing: storage } = await make(0, "before");
     await seed(storage);
-    const store = new ProjectStore(storage);
+    const store = new ProjectStore(storage, validateDocument);
     await store.save(await edit(store));
 
     const [backup, ...others] = await backups(storage);
@@ -193,7 +194,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
     for (const [name, data] of await snapshot(storage, `${dir}/files`))
       await restored.writeAtomic(`${project}/${name}`, data);
     expect(await snapshot(restored, project)).toEqual(original);
-    const reopened = new ProjectStore(restored);
+    const reopened = new ProjectStore(restored, validateDocument);
     const loaded = await reopened.load(id);
     expect(loaded.features).toEqual(fixture.features);
     expect(loaded.bodyMeta).toEqual(fixture.bodyMeta);
@@ -206,7 +207,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
   it("keeps a separate backup for a different original at the same schema", async () => {
     const { failing: storage } = await make(0, "before");
     await seed(storage);
-    const store = new ProjectStore(storage);
+    const store = new ProjectStore(storage, validateDocument);
     await store.save(await edit(store));
     const [first] = await backups(storage);
     const firstFiles = await snapshot(storage, `backups/${project}/${first}`);
@@ -230,7 +231,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
     async () => {
       const counting = await make(0, "before");
       await seed(counting.clean);
-      const store = new ProjectStore(counting.failing);
+      const store = new ProjectStore(counting.failing, validateDocument);
       await store.save(await edit(store));
       const total = counting.ops();
       expect(total).toBeGreaterThan(6);
@@ -240,12 +241,12 @@ describe.each(backends)("project migration on %s", (_, make) => {
           const label = `failure ${when} op ${n}`;
           const backend = await make(n, when);
           await seed(backend.clean);
-          const failing = new ProjectStore(backend.failing);
+          const failing = new ProjectStore(backend.failing, validateDocument);
           await expect(failing.save(await edit(failing))).rejects.toThrow(
             "injected",
           );
 
-          const restarted = new ProjectStore(backend.clean);
+          const restarted = new ProjectStore(backend.clean, validateDocument);
           expect((await restarted.inventory()).failed).toEqual([]);
           expect(
             generation(await snapshot(backend.clean, project)),
@@ -275,7 +276,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
     async () => {
       const counting = await make(0, "before");
       await seed(counting.clean);
-      const store = new ProjectStore(counting.failing);
+      const store = new ProjectStore(counting.failing, validateDocument);
       await store.save(await edit(store));
       const total = counting.ops();
 
@@ -283,7 +284,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
         for (const when of ["before", "after"] as const) {
           const backend = await make(n, when);
           await seed(backend.clean);
-          const retried = new ProjectStore(backend.failing);
+          const retried = new ProjectStore(backend.failing, validateDocument);
           await expect(retried.save(await edit(retried))).rejects.toThrow(
             "injected",
           );
@@ -320,7 +321,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
         await clean.writeAtomic(file, data);
       },
     };
-    const store = new ProjectStore(storage);
+    const store = new ProjectStore(storage, validateDocument);
 
     await store.save(await edit(store));
     await exported;
@@ -341,7 +342,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
   it("inventories outdated projects at boot without migrating them", async () => {
     const { clean: storage } = await make(0, "before");
     await seed(storage);
-    const store = new ProjectStore(storage);
+    const store = new ProjectStore(storage, validateDocument);
     await store.create("Fresh");
     expect(await store.inventory()).toEqual({
       recovered: [],

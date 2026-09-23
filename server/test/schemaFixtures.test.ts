@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { SCHEMA_VERSION } from "@rockett/shared";
 import { ProjectStore } from "../src/store/projectStore.js";
+import { validateDocument } from "../src/api/validate.js";
 import { LocalStorage } from "../src/store/storage.js";
 
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
@@ -23,9 +24,10 @@ describe("schema fixtures", () => {
       await fs.mkdir(projectDir, { recursive: true });
       await fs.writeFile(path.join(projectDir, "document.json"), raw);
 
-      const loaded = await new ProjectStore(new LocalStorage(dir, fs)).load(
-        fixture.id,
-      );
+      const loaded = await new ProjectStore(
+        new LocalStorage(dir, fs),
+        validateDocument,
+      ).load(fixture.id);
 
       expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
       expect(loaded.features).toEqual(fixture.features);
