@@ -6,21 +6,6 @@
   padding: 0;
 }
 
-:root {
-  --bg0: #1e2124;
-  --bg1: #26292d;
-  --bg2: #2e3237;
-  --bg3: #383d43;
-  --border: #43494f;
-  --text: #d6dae0;
-  --text-dim: #9aa2ab;
-  --accent: #3ba1e8;
-  --accent-dim: #2b7fb8;
-  --ok: #47b04b;
-  --warn: #e8a33b;
-  --err: #e85a4f;
-}
-
 html,
 body,
 #root {
@@ -230,7 +215,7 @@ button.doc-name:hover .doc-name-pen {
 
 .tb-btn.active {
   background: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
 }
 
 .tb-btn.primary {
@@ -329,7 +314,7 @@ button.doc-name:hover .doc-name-pen {
 
 .tree-item.selected {
   background: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
 }
 
 .tree-icon {
@@ -404,7 +389,7 @@ button.doc-name:hover .doc-name-pen {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(30, 33, 36, 0.85);
+  background: var(--hint-fill);
   border: 1px solid var(--border);
   padding: 4px 14px;
   border-radius: 4px;
@@ -451,7 +436,7 @@ button.doc-name:hover .doc-name-pen {
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
-  background: rgba(38, 41, 45, 0.9);
+  background: var(--label-fill);
   border: 1px solid var(--accent-dim);
   color: var(--text);
   padding: 0 5px;
@@ -462,7 +447,7 @@ button.doc-name:hover .doc-name-pen {
 
 .dim-label:hover {
   border-color: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .dim-edit {
@@ -487,8 +472,8 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .dim-edit-delete:hover {
-  color: var(--danger, #ff5a5a);
-  border-color: var(--danger, #ff5a5a);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* typed sizes while drawing: follows the cursor, digits lock the active field */
@@ -499,7 +484,7 @@ button.doc-name:hover .doc-name-pen {
   align-items: center;
   gap: 4px;
   padding: 3px 5px;
-  background: rgba(38, 41, 45, 0.92);
+  background: var(--entry-fill);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
@@ -519,7 +504,7 @@ button.doc-name:hover .doc-name-pen {
 
 .dim-field.active {
   border-color: var(--accent);
-  background: rgba(59, 161, 232, 0.14);
+  background: var(--accent-wash);
 }
 
 .dim-field.locked .dim-val {
@@ -558,7 +543,7 @@ button.doc-name:hover .doc-name-pen {
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-bottom: 11px solid var(--accent);
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+  filter: drop-shadow(0 0 2px var(--shadow-strong));
   transform: translate(-50%, -55%);
 }
 
@@ -566,8 +551,8 @@ button.doc-name:hover .doc-name-pen {
   width: 9px;
   height: 9px;
   background: var(--accent);
-  outline: 1px solid #fff;
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  outline: 1px solid var(--on-accent);
+  box-shadow: 0 0 3px var(--shadow-strong);
 }
 
 .snap-marker.curve {
@@ -575,7 +560,7 @@ button.doc-name:hover .doc-name-pen {
   height: 11px;
   border: 2.5px solid var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 3px var(--shadow-strong);
 }
 
 .snap-marker.perpendicular {
@@ -584,7 +569,7 @@ button.doc-name:hover .doc-name-pen {
   border-left: 2.5px solid var(--accent);
   border-bottom: 2.5px solid var(--accent);
   transform: translate(-20%, -80%);
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+  filter: drop-shadow(0 0 2px var(--shadow-strong));
 }
 
 .snap-marker.perpendicular::after {
@@ -603,7 +588,7 @@ button.doc-name:hover .doc-name-pen {
   height: 10px;
   border: 2.5px solid var(--ok);
   transform: translate(-50%, -50%) rotate(45deg);
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 3px var(--shadow-strong);
 }
 
 .mode-banner {
@@ -612,7 +597,7 @@ button.doc-name:hover .doc-name-pen {
   left: 50%;
   transform: translateX(-50%);
   background: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
   padding: 4px 16px;
   border-radius: 4px;
   z-index: 20;
@@ -629,7 +614,7 @@ button.doc-name:hover .doc-name-pen {
   border: 1px solid var(--border);
   border-radius: 6px;
   z-index: 15;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 24px var(--shadow-panel);
   display: flex;
   flex-direction: column;
   max-height: calc(100% - 140px);
@@ -778,7 +763,7 @@ kbd {
 .btn.primary {
   background: var(--accent-dim);
   border-color: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -937,7 +922,7 @@ kbd {
   border-radius: 4px;
   z-index: 50;
   min-width: 130px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px var(--shadow-menu);
   display: flex;
   flex-direction: column;
   padding: 3px;
@@ -970,9 +955,9 @@ kbd {
   bottom: 54px;
   left: 50%;
   transform: translateX(-50%);
-  background: #4a2622;
+  background: var(--err-fill);
   border: 1px solid var(--err);
-  color: #f4c7c3;
+  color: var(--err-fill-text);
   padding: 8px 18px;
   border-radius: 5px;
   z-index: 100;
@@ -981,9 +966,9 @@ kbd {
 }
 
 .error-banner {
-  background: #4a2622;
+  background: var(--err-fill);
   border: 1px solid var(--err);
-  color: #f4c7c3;
+  color: var(--err-fill-text);
   padding: 6px 12px;
   border-radius: 4px;
   margin-bottom: 10px;
@@ -996,7 +981,7 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at top, #2a2f36, var(--bg0));
+  background: radial-gradient(ellipse at top, var(--bg-glow), var(--bg0));
 }
 
 .project-list-card {
@@ -1083,9 +1068,9 @@ kbd {
   color: var(--err);
 }
 .dim-label.offset-label {
-  border: 1px solid #d6a74d;
-  color: #ffcc66;
-  background: #282b30;
+  border: 1px solid var(--offset-border);
+  color: var(--offset);
+  background: var(--offset-fill);
   cursor: pointer;
   white-space: nowrap;
   padding: 3px 7px;
