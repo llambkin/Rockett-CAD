@@ -1,6 +1,7 @@
 import {
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_VERSION,
+  referencedAssets,
   type CadDocument,
   type ProjectFile,
 } from "@rockett/shared";
@@ -18,6 +19,12 @@ export interface BrowserProject {
 
 const STORE = "projects";
 
+export class StaleRecord extends Error {
+  constructor() {
+    super("Project not found");
+  }
+}
+
 let database: Promise<IDBDatabase> | undefined;
 
 function open(): Promise<IDBDatabase> {
@@ -26,7 +33,7 @@ function open(): Promise<IDBDatabase> {
     req.onupgradeneeded = () =>
       req.result.createObjectStore(STORE, { keyPath: "key" });
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.addEventListener("error", () => reject(req.error));
   }).catch((e) => {
     database = undefined;
     throw e;
@@ -42,7 +49,7 @@ async function transact<T>(
   return new Promise<T>((resolve, reject) => {
     let result: T;
     tx.oncomplete = () => resolve(result);
-    tx.onabort = () => reject(tx.error ?? new Error("Project not found"));
+    tx.addEventListener("abort", () => reject(tx.error ?? new StaleRecord()));
     work(tx.objectStore(STORE), (value) => (result = value));
   });
 }
@@ -86,20 +93,49 @@ export function listBrowserProjects(): Promise<BrowserProject[]> {
   });
 }
 
+export const getBrowserProject = (key: string) =>
+  transact<BrowserProject>("readonly", (store, done) => {
+    const req = store.get(key);
+    req.onsuccess = () =>
+      req.result ? done(req.result) : store.transaction.abort();
+  });
+
 function rewrite(
   key: string,
-  change: (r: BrowserProject, now: string) => BrowserProject,
+  change: (r: BrowserProject, now: string) => BrowserProject | null,
 ): Promise<BrowserProject> {
   return transact<BrowserProject>("readwrite", (store, done) => {
     const req = store.get(key);
     req.onsuccess = () => {
-      if (!req.result) return store.transaction.abort();
-      const next = change(req.result, new Date().toISOString());
+      const next = req.result && change(req.result, new Date().toISOString());
+      if (!next) return store.transaction.abort();
       store.put(next);
       done(next);
     };
   });
 }
+
+export const saveBrowserDocument = (
+  key: string,
+  revision: number,
+  document: CadDocument,
+  added: Record<string, Blob>,
+) =>
+  rewrite(key, (r) =>
+    r.revision === revision
+      ? record(
+          key,
+          revision + 1,
+          document,
+          Object.fromEntries(
+            [...referencedAssets(document)].map((name) => [
+              name,
+              added[name] ?? r.assets[name]!,
+            ]),
+          ),
+        )
+      : null,
+  );
 
 export const renameBrowserProject = (key: string, name: string) =>
   rewrite(key, (r, now) =>

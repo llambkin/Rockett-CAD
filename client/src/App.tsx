@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { followPath, useStore } from "./store";
+import { useStore } from "./store";
+import { dropBrowserCopy, followPath } from "./browserSession";
 import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
@@ -26,7 +27,11 @@ export function App() {
   useEffect(() => {
     void followPath();
     window.addEventListener("popstate", followPath);
-    return () => window.removeEventListener("popstate", followPath);
+    window.addEventListener("pagehide", dropBrowserCopy);
+    return () => {
+      window.removeEventListener("popstate", followPath);
+      window.removeEventListener("pagehide", dropBrowserCopy);
+    };
   }, []);
   return projectId ? <Workspace /> : <ProjectList />;
 }
@@ -94,7 +99,7 @@ function Workspace() {
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
   const busy = useStore((s) => s.busy);
-  const document_ = useStore((s) => s.document);
+  const projectName = useStore((s) => s.document?.name ?? "");
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
   const mode = useStore((s) => s.mode);
@@ -180,7 +185,7 @@ function Workspace() {
         >
           ⬢ Rockett CAD
         </button>
-        <ProjectName name={document_?.name ?? ""} />
+        <ProjectName name={projectName} />
         <UndoRedoButtons />
         {busy && <span className="busy-indicator">⟳ working…</span>}
         <span

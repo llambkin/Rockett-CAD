@@ -4,9 +4,9 @@ import {
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_VERSION,
   projectFileEnvelope,
+  referencedAssets,
   SCHEMA_VERSION,
   ValidationError,
-  type CadDocument,
   type ProjectFile,
 } from "@rockett/shared";
 import type { Request, Response } from "express";
@@ -32,14 +32,6 @@ function attachment(name: string, ext: string): string {
     .join("");
   const ascii = safeFileName(name) || "project";
   return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${utf8}`;
-}
-
-function referencedAssets(doc: CadDocument): Set<string> {
-  return new Set(
-    doc.features.flatMap((f) =>
-      f.type === "referenceImage" ? [f.assetId] : [],
-    ),
-  );
 }
 
 function readJson(bytes: Buffer): unknown {

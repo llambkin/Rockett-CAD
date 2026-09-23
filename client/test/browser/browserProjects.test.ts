@@ -5,6 +5,7 @@ import {
   type Browser,
   type BrowserContext,
   type Page,
+  type Response,
 } from "playwright-core";
 import type { ProjectFile, ProjectSummary } from "@rockett/shared";
 import { startBuiltApp, type BuiltApp } from "./builtApp";
@@ -88,7 +89,7 @@ async function seed(p: Page, file: ProjectFile) {
         const open = indexedDB.open("rockett", 1);
         open.onupgradeneeded = () =>
           open.result.createObjectStore("projects", { keyPath: "key" });
-        open.onerror = () => reject(open.error);
+        open.addEventListener("error", () => reject(open.error));
         open.onsuccess = () => {
           const assets = Object.fromEntries(
             Object.entries(f.assets).map(([name, b64]) => [
@@ -115,7 +116,7 @@ async function seed(p: Page, file: ProjectFile) {
             open.result.close();
             resolve();
           };
-          tx.onerror = () => reject(tx.error);
+          tx.addEventListener("error", () => reject(tx.error));
         };
       }),
     file,
@@ -127,7 +128,7 @@ const stored = (p: Page) =>
     () =>
       new Promise<string[]>((resolve, reject) => {
         const open = indexedDB.open("rockett", 1);
-        open.onerror = () => reject(open.error);
+        open.addEventListener("error", () => reject(open.error));
         open.onsuccess = () => {
           const req = open.result
             .transaction("projects")
@@ -140,6 +141,65 @@ const stored = (p: Page) =>
         };
       }),
   );
+
+const kept = (p: Page, key: string) =>
+  p.evaluate(
+    (k) =>
+      new Promise<any>((resolve, reject) => {
+        const open = indexedDB.open("rockett", 1);
+        open.addEventListener("error", () => reject(open.error));
+        open.onsuccess = () => {
+          const req = open.result
+            .transaction("projects")
+            .objectStore("projects")
+            .get(k);
+          req.onsuccess = () => {
+            open.result.close();
+            const { name, revision, document } = req.result;
+            resolve({
+              name,
+              revision,
+              features: document.features.map((f: any) => f.name),
+            });
+          };
+        };
+      }),
+    key,
+  );
+
+const poll = <T>(read: () => Promise<T>) =>
+  expect.poll(read, { timeout: 10_000 });
+
+function copied(p: Page): Promise<string> {
+  const evaluated = new Set<string>();
+  const onResponse = (r: Response) => {
+    const id = new URL(r.url()).pathname.match(
+      /^\/api\/projects\/([^/]+)\/evaluate$/,
+    )?.[1];
+    if (id) evaluated.add(id);
+  };
+  p.on("response", onResponse);
+  return p
+    .waitForResponse(
+      (r) =>
+        r.url().endsWith("/api/projects/file") &&
+        r.request().method() === "POST",
+    )
+    .then(async (r) => {
+      const id: string = (await r.json()).document.id;
+      await poll(async () => evaluated.has(id)).toBe(true);
+      p.off("response", onResponse);
+      return id;
+    });
+}
+
+const chips = (p: Page) => p.locator(".tl-chip .tl-name").allTextContents();
+
+async function renameOpen(p: Page, name: string) {
+  await p.locator(".doc-name").click();
+  await p.locator(".doc-rename").fill(name);
+  await p.locator(".doc-rename").press("Enter");
+}
 
 const rowNames = (p: Page) =>
   p.locator(".project-row .project-open b").allTextContents();
@@ -197,6 +257,7 @@ it("renames, duplicates, downloads and deletes in IndexedDB without calling the 
 
   await row(page, "Motor bracket").click({ button: "right" });
   expect(await page.locator(".context-menu button").allTextContents()).toEqual([
+    "Open",
     "Rename",
     "Duplicate",
     "Download",
@@ -217,7 +278,7 @@ it("renames, duplicates, downloads and deletes in IndexedDB without calling the 
   await page
     .getByRole("button", { name: "Delete Motor bracket (copy)" })
     .click();
-  await expect.poll(() => rowNames(page)).toEqual(["Motor bracket"]);
+  await poll(() => rowNames(page)).toEqual(["Motor bracket"]);
   expect(prompts).toEqual(['Delete project "Motor bracket (copy)"?']);
   expect(await stored(page)).toEqual(["Motor bracket"]);
 
@@ -258,4 +319,146 @@ it("a second page shows a rename after it regains focus", async () => {
   await row(other, "Motor plate").waitFor();
   expect(failures).toEqual([]);
   expect(app.serverErrors).toEqual([]);
+});
+
+it("opens a browser project through a temporary copy that writes back each edit", async () => {
+  await page.goto(`${app.origin}/browser`);
+  const opened = copied(page);
+  await row(page, "Motor plate").locator(".project-open").click();
+  const id = await opened;
+  await poll(() => chips(page)).toEqual(["Photo"]);
+  expect(new URL(page.url()).pathname).toBe("/browser/k1");
+  const listed: ProjectSummary[] = await api("/projects");
+  expect(listed.map((p) => p.id)).not.toContain(id);
+
+  await page.locator(".tree-item", { hasText: "XY Plane" }).click();
+  await page.getByRole("button", { name: "Create Sketch" }).click();
+  await page.getByRole("button", { name: "Rect", exact: true }).click();
+  const box = (await page.locator(".viewport-container").boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx - 5, cy + 5);
+  await page.mouse.move(cx, cy, { steps: 3 });
+  await page.mouse.click(cx, cy);
+  await page.mouse.move(cx + 60, cy - 40, { steps: 4 });
+  await page.keyboard.type("40");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("20");
+  await page.keyboard.press("Enter");
+  await page.getByText("Fully constrained").waitFor();
+  await page.getByRole("button", { name: "Finish Sketch" }).click();
+  await page.locator(".tree-item", { hasText: "Sketch1" }).click();
+  await page.getByRole("button", { name: "Extrude", exact: true }).click();
+  await page.getByLabel("Distance (mm)").fill("10");
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  const all = ["Photo", "Sketch1", "Extrude1"];
+  await poll(async () => (await kept(page, "k1")).features).toEqual(all);
+
+  const reopened = copied(page);
+  await page.reload();
+  const again = await reopened;
+  await poll(() => chips(page)).toEqual(all);
+  expect(new URL(page.url()).pathname).toBe("/browser/k1");
+  await poll(
+    async () => (await fetch(`${app.origin}/api/projects/${id}`)).status,
+  ).toBe(404);
+
+  await page.getByTitle("Back to projects").click();
+  await row(page, "Motor plate").getByText("3 features").waitFor();
+  expect(new URL(page.url()).pathname).toBe("/browser");
+  await poll(
+    async () => (await fetch(`${app.origin}/api/projects/${again}`)).status,
+  ).toBe(404);
+  expect((await api("/projects")).map((p: ProjectSummary) => p.name)).toEqual([
+    "Motor bracket",
+  ]);
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
+});
+
+it("recreates a swept copy from the record once", async () => {
+  const opened = copied(page);
+  await row(page, "Motor plate").locator(".project-open").click();
+  const id = await opened;
+  await poll(() => chips(page)).toEqual(["Photo", "Sketch1", "Extrude1"]);
+  await api(`/projects/${id}`, { method: "DELETE" });
+
+  const recreated = copied(page);
+  await renameOpen(page, "Lost rename");
+  const next = await recreated;
+  expect(next).not.toBe(id);
+  await poll(() => chips(page)).toEqual(["Photo", "Sketch1", "Extrude1"]);
+  await page.locator(".doc-name", { hasText: "Motor plate" }).waitFor();
+  await renameOpen(page, "Motor base");
+  await poll(async () => (await kept(page, "k1")).name).toBe("Motor base");
+  expect(new URL(page.url()).pathname).toBe("/browser/k1");
+  expect(failures.filter((f) => !f.includes("404"))).toEqual([]);
+  failures.length = 0;
+});
+
+it("stops writing when another tab wrote the record first", async () => {
+  const other = watch(await context.newPage());
+  const otherOpened = copied(other);
+  await other.goto(`${app.origin}/browser/k1`);
+  await otherOpened;
+  await poll(() => chips(other)).toEqual(["Photo", "Sketch1", "Extrude1"]);
+  await renameOpen(other, "Motor cover");
+  await poll(async () => (await kept(other, "k1")).name).toBe("Motor cover");
+  const { revision } = await kept(other, "k1");
+
+  await page.bringToFront();
+  await page.getByTitle("Roll to after Sketch1").click();
+  await page
+    .locator(".error-toast")
+    .getByText('"Motor base" changed in another tab. Reload to continue.')
+    .waitFor();
+  expect(await kept(page, "k1")).toMatchObject({
+    name: "Motor cover",
+    revision,
+  });
+  await other.close();
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
+});
+
+it("keeps the copy when a 404 names something inside it", async () => {
+  const opened = copied(page);
+  await page.goto(`${app.origin}/browser/k1`);
+  const id = await opened;
+  await page.route(`**/api/projects/${id}/rename`, (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "feature not found", code: "not_found" }),
+    }),
+  );
+  projectRequests.length = 0;
+  await renameOpen(page, "Stale");
+  await page.locator(".error-toast").getByText("feature not found").waitFor();
+  await page.waitForTimeout(500);
+  await page.unroute(`**/api/projects/${id}/rename`);
+  expect(projectRequests).not.toContain("/api/projects/file");
+  expect(new URL(page.url()).pathname).toBe("/browser/k1");
+  failures.length = 0;
+});
+
+it("shows the error after the recreated copy goes missing too", async () => {
+  const opened = copied(page);
+  await page.goto(`${app.origin}/browser/k1`);
+  const first = await opened;
+  await api(`/projects/${first}`, { method: "DELETE" });
+  const recreated = copied(page);
+  await renameOpen(page, "Lost once");
+  const second = await recreated;
+
+  projectRequests.length = 0;
+  await api(`/projects/${second}`, { method: "DELETE" });
+  await renameOpen(page, "Lost twice");
+  const missing = page.locator(".error-toast").getByText(/not found/);
+  await missing.waitFor();
+  await page.waitForTimeout(500);
+  expect(projectRequests).not.toContain("/api/projects/file");
+  await missing.waitFor();
+  expect((await kept(page, "k1")).name).toBe("Motor cover");
+  failures.length = 0;
 });

@@ -185,7 +185,7 @@ interface State {
   previewBaseline: CadDocument | null;
 
   // actions
-  openProject: (id: string) => Promise<void>;
+  openProject: (id: string, path?: string) => Promise<void>;
   closeProject: () => void;
   applyMutation: (m: MutationResponse) => void;
   mutate: (fn: () => Promise<MutationResponse>) => Promise<void>;
@@ -353,7 +353,7 @@ export const useStore = create<State>((set, get) => ({
   redoStack: [],
   previewBaseline: null,
 
-  async openProject(id) {
+  async openProject(id, path = projectPath(id)) {
     void get().cancelPreview();
     set({ busy: true, error: null });
     try {
@@ -372,7 +372,7 @@ export const useStore = create<State>((set, get) => ({
         previewBaseline: null,
         busy: false,
       });
-      showPath(projectPath(id));
+      showPath(path);
     } catch (e: any) {
       window.history.replaceState(null, "", "/");
       get().closeProject();

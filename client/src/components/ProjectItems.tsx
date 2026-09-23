@@ -8,6 +8,7 @@ import {
   renameBrowserProject,
   type BrowserProject,
 } from "../browserProjects";
+import { openBrowserProject } from "../browserSession";
 import { ICONS } from "../icons";
 import {
   canMoveTo,
@@ -423,6 +424,7 @@ export function BrowserItems({
               download: () => downloadBrowserProject(r),
               remove: () => deleteBrowserProject(r.key),
             })}
+            onOpen={() => void openBrowserProject(r.key)}
             onRename={(name) => {
               setRenaming(null);
               if (name !== null) run(renameBrowserProject(r.key, name));

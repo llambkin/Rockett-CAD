@@ -48,6 +48,26 @@ async function toApiError(res: Response): Promise<ApiError> {
 interface RequestOptions {
   body?: unknown;
   signal?: AbortSignal | undefined;
+  keepalive?: boolean;
+}
+
+export interface ProjectWatch {
+  id: string;
+  onDocument: (document: CadDocument) => void;
+  onMissing: () => void;
+}
+
+let watched: ProjectWatch | null = null;
+
+export function watchProject(watch: ProjectWatch | null): void {
+  watched = watch;
+}
+
+function watching(path: string): ProjectWatch | null {
+  const root = watched && `/projects/${encodeURIComponent(watched.id)}`;
+  return root !== null && (path === root || path.startsWith(`${root}/`))
+    ? watched
+    : null;
 }
 
 export interface Download {
@@ -68,18 +88,34 @@ export function request(
 export async function request(
   method: string,
   path: string,
-  { body, signal, response }: RequestOptions & { response?: "blob" } = {},
+  {
+    body,
+    signal,
+    keepalive,
+    response,
+  }: RequestOptions & { response?: "blob" } = {},
 ): Promise<unknown> {
   const form = body instanceof FormData;
+  const watch = watching(path);
   const res = await fetch(API + path, {
     method,
     ...(body !== undefined &&
       !form && { headers: { "Content-Type": "application/json" } }),
     ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
     ...(signal && { signal }),
+    ...(keepalive && { keepalive }),
   });
-  if (!res.ok) throw await toApiError(res);
-  if (response !== "blob") return res.json();
+  if (!res.ok) {
+    const error = await toApiError(res);
+    if (res.status === 404) watch?.onMissing();
+    throw error;
+  }
+  if (response !== "blob") {
+    const json = await res.json();
+    if (method !== "GET" && json?.document?.id === watch?.id)
+      watch?.onDocument(json.document);
+    return json;
+  }
   const disposition = res.headers.get("Content-Disposition") ?? "";
   const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   return {
@@ -140,7 +176,12 @@ export const api = {
       { body: folderId === null ? { name } : { name, folderId } },
     ),
   getProject: (id: string) => send(ROUTES.getProject, { id }),
-  deleteProject: (id: string) => send(ROUTES.deleteProject, { id }),
+  deleteProject: (id: string, keepalive = false) =>
+    request<{ ok: true }>(
+      ROUTES.deleteProject.method,
+      pathFor(ROUTES.deleteProject, { id }),
+      { keepalive },
+    ),
   duplicateProject: (id: string, name?: string) =>
     send(ROUTES.duplicateProject, { id }, { body: { name } }),
   renameProject: (id: string, name: string) =>
@@ -149,8 +190,15 @@ export const api = {
     const route = ROUTES.downloadProjectFile;
     return request(route.method, pathFor(route, { id }), { response: "blob" });
   },
-  uploadProjectFile: (file: File) =>
-    send(ROUTES.uploadProjectFile, {}, { body: fileForm("file", file) }),
+  uploadProjectFile: (
+    file: File,
+    fields: { temporary?: "true"; folderId?: string } = {},
+  ) => {
+    const form = fileForm("file", file);
+    for (const [name, value] of Object.entries(fields))
+      form.append(name, value);
+    return send(ROUTES.uploadProjectFile, {}, { body: form });
+  },
   placeProject: (id: string, folderId: string | null) =>
     send(ROUTES.placeProject, { id }, { body: { folderId } }),
 
@@ -211,6 +259,11 @@ export const api = {
 
   uploadImage: (id: string, file: File, signal?: AbortSignal) =>
     send(ROUTES.uploadImage, { id }, { body: fileForm("image", file), signal }),
+
+  readAsset: (id: string, assetId: string) =>
+    request(ROUTES.asset.method, pathFor(ROUTES.asset, { id, assetId }), {
+      response: "blob",
+    }).then((d) => d.blob),
 
   assetUrl: (id: string, assetId: string) =>
     API + pathFor(ROUTES.asset, { id, assetId }),

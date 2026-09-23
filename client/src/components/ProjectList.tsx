@@ -3,6 +3,7 @@ import { api } from "../api";
 import { listBrowserProjects } from "../browserProjects";
 import {
   BROWSER_PATH,
+  browserKeyFromPath,
   folderIdFromPath,
   folderPath,
   isBrowserPath,
@@ -10,17 +11,23 @@ import {
 } from "../paths";
 import { EMPTY_TREE, folderOf } from "../projectTree";
 import { useStore } from "../store";
+import { leaveBrowserProject } from "../browserSession";
 import { BrowserItems, ProjectItems, type Renaming } from "./ProjectItems";
 import { StepImportButton } from "./StepImportButton";
 import { VersionLabel } from "./VersionLabel";
 
 export async function backToProjects(): Promise<void> {
   const { projectId, closeProject } = useStore.getState();
-  const folderId = await api.listFolders().then(
-    (tree) => (projectId === null ? null : folderOf(tree, projectId)),
-    () => null,
-  );
-  showPath(folderPath(folderId));
+  if (leaveBrowserProject()) showPath(BROWSER_PATH);
+  else
+    showPath(
+      folderPath(
+        await api.listFolders().then(
+          (tree) => (projectId === null ? null : folderOf(tree, projectId)),
+          () => null,
+        ),
+      ),
+    );
   closeProject();
 }
 
@@ -70,7 +77,7 @@ function usePlace() {
     setPath(to);
   };
   return {
-    inBrowser: isBrowserPath(path),
+    inBrowser: isBrowserPath(path) || browserKeyFromPath(path) !== null,
     folderId: folderIdFromPath(path),
     openFolder: (id: string | null) => go(folderPath(id)),
     openBrowser: () => go(BROWSER_PATH),

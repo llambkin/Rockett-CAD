@@ -39,6 +39,14 @@ export interface ProjectFile {
   assets: Record<string, string>;
 }
 
+export function referencedAssets(doc: CadDocument): Set<string> {
+  return new Set(
+    doc.features.flatMap((f) =>
+      f.type === "referenceImage" ? [f.assetId] : [],
+    ),
+  );
+}
+
 export const projectFileEnvelope = Type.Object({
   format: Type.Literal(PROJECT_FILE_FORMAT),
   version: Type.Integer({ minimum: 1 }),

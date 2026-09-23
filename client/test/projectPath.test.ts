@@ -1,9 +1,16 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { createEmptyDocument } from "@rockett/shared";
-import { followPath, useStore } from "../src/store";
+import { useStore } from "../src/store";
+import { followPath } from "../src/browserSession";
 import { api } from "../src/api";
 import { backToProjects } from "../src/components/ProjectList";
-import { folderIdFromPath, isBrowserPath } from "../src/paths";
+import {
+  browserKeyFromPath,
+  browserProjectPath,
+  folderIdFromPath,
+  isBrowserPath,
+  projectIdFromPath,
+} from "../src/paths";
 vi.mock("../src/api", () => ({
   api: { getProject: vi.fn(), evaluate: vi.fn(), listFolders: vi.fn() },
 }));
@@ -75,6 +82,13 @@ it("/browser is neither a folder nor a project, and closes an open project", asy
   await followPath();
   expect(useStore.getState().projectId).toBeNull();
   expect(history.pushState).toHaveBeenCalledTimes(1);
+});
+
+it("a browser project path names its record, not a project", () => {
+  expect(browserProjectPath("k 1")).toBe("/browser/k%201");
+  expect(browserKeyFromPath("/browser/k%201")).toBe("k 1");
+  expect(browserKeyFromPath("/browser")).toBeNull();
+  expect(projectIdFromPath("/browser/k1")).toBeNull();
 });
 
 it("a store started at a project path opens that project without a new entry", async () => {
