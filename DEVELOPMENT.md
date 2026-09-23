@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js ≥ 24
+- Node.js 24, the line the Docker image pins (`node:24-trixie-slim`)
 - npm ≥ 10 (workspaces)
 - Docker (only for container builds)
 
