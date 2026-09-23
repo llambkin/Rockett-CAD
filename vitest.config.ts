@@ -11,6 +11,7 @@ export const projects = [
       "modules/*/test/**/*.test.ts",
     ],
     exclude: ["**/test/dom/**", "**/test/browser/**"],
+    benchmark: { include: [] },
   },
   {
     name: "dom",
@@ -21,6 +22,7 @@ export const projects = [
     ],
     exclude: [],
     setupFiles: ["client/test/dom/setup.ts"],
+    benchmark: { include: ["client/test/**/*.bench.ts"] },
   },
   {
     name: "browser",
@@ -29,6 +31,7 @@ export const projects = [
     exclude: [],
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    benchmark: { include: [] },
   },
 ];
 

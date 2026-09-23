@@ -231,18 +231,10 @@ describe("reference images", () => {
   });
 });
 
-vi.mock("three", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("three")>();
-  class WebGLRenderer {
-    domElement = document.createElement("canvas");
-    setPixelRatio() {}
-    setClearColor() {}
-    setSize() {}
-    render() {}
-    dispose() {}
-  }
-  return { ...actual, WebGLRenderer };
-});
+vi.mock("three", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("three")>()),
+  WebGLRenderer: (await import("../helpers/fakeRenderer")).FakeWebGLRenderer,
+}));
 
 async function mountViewport() {
   const { CadViewport } = await import("../../src/three/CadViewport");

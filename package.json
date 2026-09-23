@@ -9,6 +9,7 @@
     "client"
   ],
   "scripts": {
+    "bench:client": "vitest bench --run --reporter=default client/test",
     "build": "npm run build --workspace shared --if-present && npm run build --workspace server && npm run build --workspace client",
     "check": "run-s lint format:check lint:comments lint:cost lint:writing lint:readme lint:pins lint:notices build test test:browser && sh scripts/check-work-order.sh",
     "cost": "node scripts/cost.mjs",

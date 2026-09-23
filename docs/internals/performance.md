@@ -142,6 +142,70 @@ The payload size moves by a byte with the digit count of `kernelMs`. Its
 the feature count: one probe of `manyFeaturePart(25)` took 10 s cold, so 4
 times the pockets costs about 14 times the time.
 
+## Client benches
+
+`client/test/viewport.bench.ts` runs with `npm run bench:client`, in the `dom`
+project only, so happy-dom provides the document. `vitest.config.ts` gives the
+`node` and `browser` projects no bench files. Method, sample plan and printed
+lines match the server benches. No JSON report is written.
+
+The viewport is a real `CadViewport` in a 1280 by 800 pixel container.
+`client/test/helpers/fakeRenderer.ts` replaces `THREE.WebGLRenderer`: it
+draws nothing, and its `render` only updates world matrices. The figures are
+CPU time in Node for scene building, raycasts and bookkeeping. They say
+nothing about frame time, GPU memory or draw cost. Real-browser WebGL evidence
+at a stated viewport and workload is separate, and no texture-scale claim
+rests on these benches.
+
+`client/test/helpers/perfFixtures.ts` builds the inputs:
+
+- `manyBodyPayloads()`: 1,000 synthetic `BodyPayload`s in a 25 by 40 grid,
+  15 mm apart. Each is a 10 x 10 x 5 mm box, every side a 13 by 13 grid of
+  quads: 2,028 triangles, 6 faces, 12 edges of 14 points, 8 vertices.
+- `squareSketch()`: 250 squares of 6 mm at a 10 mm pitch on XY, 1,000 points
+  and 1,000 lines, drawn as the active sketch with profiles on and no
+  precomputed profiles, as `ViewportView.tsx` passes the draft.
+- `imageScene(id)`: 50 reference images of 4096 by 4096 pixels on XY. The
+  bench stubs `THREE.ImageLoader` to hand back an unloaded `img` of that size
+  once the sync returns, so no pixels exist.
+
+Benches:
+
+- `sync bodies many-body`: `syncBodies` with new payload objects each sample,
+  so all 1,000 bodies are disposed and rebuilt, as after a re-evaluation.
+- `pick hover many-body`: a hover pick for faces, edges and vertices at the
+  canvas centre after `zoomToFit`. The bench checks it hits.
+- `highlight face many-body`: `clearHighlights` then a hover `addHighlight`,
+  alternating between two faces of one body.
+- `sketch hover 2000 entities`: from the top view, zoomed to half the fit, a
+  sketch-entity pick alternating between two lines, the `renderSketches`
+  rebuild with that hover, then `render`. The bench checks each pick hovers
+  the intended line.
+- `texture scene bytes`: `syncReferenceImages` for a new document id, so all
+  50 textures are new, then the fake loads settle and the previous 50 are
+  evicted. The printed byte count is the RGBA8 size of every texture the scene
+  holds, with the full mip chain, as `TextureLoader` textures generate
+  mipmaps. The median column holds bytes; the sync time is in the text.
+
+### Client baselines
+
+Ranges span five runs of `npm run bench:client` on 2026-09-23 with a one-minute
+load average of 17 to 22 from other agents.
+
+| metric                     | fixture               | hardware class | runtime                         | warm-up | repetitions | median              | p95                 | budget                      | row      |
+| -------------------------- | --------------------- | -------------- | ------------------------------- | ------- | ----------- | ------------------- | ------------------- | --------------------------- | -------- |
+| sync bodies many-body      | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 71.3 to 76.4 ms     | 80.4 to 88.1 ms     | median 1 s, p95 2 s         | PERF-004 |
+| pick hover many-body       | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.614 to 0.729 ms   | 0.917 to 2.571 ms   | median 4 ms, p95 16 ms      | PERF-004 |
+| highlight face many-body   | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.034 to 0.053 ms   | 0.049 to 0.081 ms   | median 2 ms, p95 8 ms       | PERF-004 |
+| sketch hover 2000 entities | square sketch         | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 54.7 to 59.7 ms     | 62.3 to 71.9 ms     | median 16 ms, p95 50 ms     | PERF-004 |
+| texture scene bytes        | 50 images 4096 x 4096 | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 4,473,924,200 bytes | 4,473,924,200 bytes | at most 4,473,924,200 bytes | PERF-004 |
+
+`sketch hover 2000 entities` misses its budget. Every hover rebuilds all 2,250
+sketch objects and reruns `detectProfiles`; PERF-032 owns that. The texture
+budget is one mip chain per image, so any texture kept past eviction shows as
+a larger figure. The texture sync took a median of 1.46 to 1.69 ms, p95 1.79
+to 7.24 ms. The pick hover median is under DEC-202's 4 ms.
+
 ## Cost table
 
 `npm run cost` prints what each large file and plugin costs, so tidy-up
