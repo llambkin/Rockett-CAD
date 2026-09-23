@@ -44,6 +44,7 @@ import {
   getKernel,
   kernelCall,
   listToArray,
+  planarFacePlane,
   pnt,
   progress,
   shapeHash,
@@ -139,23 +140,9 @@ export function resolvePlaneFrame(state: EvalState, ref: PlaneRef): PlaneFrame {
       `face ${ref.face.faceName} no longer exists on ${ref.face.bodyId}`,
     );
   }
-  const k = getKernel();
-  const surf = new k.BRepAdaptor_Surface_2(face, false);
-  if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
-    surf.delete();
-    throw new Error(`face ${ref.face.faceName} is not planar`);
-  }
-  const pln = surf.Plane();
-  const axis = pln.Axis();
-  const d = axis.Direction();
-  const loc = pln.Location();
-  const reversed =
-    face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED;
-  const sgn = reversed ? -1 : 1;
-  const normal: Vec3 = [sgn * d.X(), sgn * d.Y(), sgn * d.Z()];
-  const point: Vec3 = [loc.X(), loc.Y(), loc.Z()];
-  surf.delete();
-  return frameFromPlane(point, normal);
+  const plane = planarFacePlane(face);
+  if (!plane) throw new Error(`face ${ref.face.faceName} is not planar`);
+  return frameFromPlane(plane.origin, plane.normal);
 }
 
 function resolveAxis(
@@ -547,24 +534,14 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
   }
 
   // Planar body faces used directly as profiles (face extrude).
-  const k0 = getKernel();
   for (const ref of faceRefs) {
     const body = state.bodies.get(ref.bodyId);
     if (!body) throw new Error(`body ${ref.bodyId} no longer exists`);
     const face = findFace(body, ref.faceName);
     if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
-    const surf = new k0.BRepAdaptor_Surface_2(face, false);
-    if (surf.GetType() !== k0.GeomAbs_SurfaceType.GeomAbs_Plane) {
-      surf.delete();
-      throw new Error(`face ${ref.faceName} is not planar`);
-    }
-    const pln = surf.Plane();
-    const d = pln.Axis().Direction();
-    const reversed =
-      face.Orientation_1() === k0.TopAbs_Orientation.TopAbs_REVERSED;
-    const sgn = reversed ? -1 : 1;
-    const n: Vec3 = [sgn * d.X(), sgn * d.Y(), sgn * d.Z()];
-    surf.delete();
+    const plane = planarFacePlane(face);
+    if (!plane) throw new Error(`face ${ref.faceName} is not planar`);
+    const n = plane.normal;
     // Sketch regions drawn on this face split it (Fusion-style). Regions
     // also selected as profiles in this feature get their own prism and
     // fuse back in below.
@@ -1001,25 +978,6 @@ function chamferByEnvelope(
     }
   }
   const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  /** Plane of a face with the normal pointing out of the solid. */
-  const planeOf = (face: Shape): { origin: Vec3; normal: Vec3 } | null => {
-    const surf = new k.BRepAdaptor_Surface_2(face, false);
-    if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
-      surf.delete();
-      return null;
-    }
-    const pln = surf.Plane();
-    const d = pln.Axis().Direction();
-    const loc = pln.Location();
-    const sgn =
-      face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
-    const out = {
-      origin: [loc.X(), loc.Y(), loc.Z()] as Vec3,
-      normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as Vec3,
-    };
-    surf.delete();
-    return out;
-  };
 
   // caps: planar faces whose whole OUTER outline is selected, ringed by
   // perpendicular planar walls. Holes in the cap are left alone — the
@@ -1035,14 +993,14 @@ function chamferByEnvelope(
     const fe = edgesOf(k.BRepTools.OuterWire(face));
     if (fe.length === 0 || !fe.every((e) => selHashes.has(shapeHash(e))))
       continue;
-    const plane = planeOf(face);
+    const plane = planarFacePlane(face);
     if (!plane) return null;
     for (const e of fe) {
       const h = shapeHash(e);
       const wall = (edgeFaces.get(h) ?? []).find(
         (w) => shapeHash(w) !== shapeHash(face),
       );
-      const wp = wall ? planeOf(wall) : null;
+      const wp = wall ? planarFacePlane(wall) : null;
       if (!wall || !wp || Math.abs(dot(wp.normal, plane.normal)) > 1e-6)
         return null;
       // the chamfer may use up the wall exactly, but not cut past it
@@ -1447,19 +1405,9 @@ function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
     for (const ref of f.faces) {
       const face = findFace(current, ref.faceName);
       if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
-      const surf = new k.BRepAdaptor_Surface_2(face, false);
-      if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
-        surf.delete();
-        throw new Error("offset face requires a planar face");
-      }
-      const pln = surf.Plane();
-      const axis = pln.Axis();
-      const d = axis.Direction();
-      const reversed =
-        face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED;
-      const sgn = reversed ? -1 : 1;
-      const normal: Vec3 = [sgn * d.X(), sgn * d.Y(), sgn * d.Z()];
-      surf.delete();
+      const plane = planarFacePlane(face);
+      if (!plane) throw new Error("offset face requires a planar face");
+      const normal = plane.normal;
 
       // Press-pull: prism the face by |distance| outward (fuse) or inward (cut)
       const outward = f.distance > 0;

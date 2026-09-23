@@ -197,6 +197,34 @@ export function faceCentroid(face: Shape): [number, number, number] {
   return out;
 }
 
+export function planarFacePlane(face: Shape): {
+  origin: [number, number, number];
+  normal: [number, number, number];
+} | null {
+  const k = getKernel();
+  const surf = new k.BRepAdaptor_Surface_2(face, false);
+  if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
+    surf.delete();
+    return null;
+  }
+  const pln = surf.Plane();
+  const axis = pln.Axis();
+  const d = axis.Direction();
+  const loc = pln.Location();
+  const sgn =
+    face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+  const out = {
+    origin: [loc.X(), loc.Y(), loc.Z()] as [number, number, number],
+    normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as [number, number, number],
+  };
+  loc.delete();
+  d.delete();
+  axis.delete();
+  pln.delete();
+  surf.delete();
+  return out;
+}
+
 export function edgeCentroid(edge: Shape): [number, number, number] {
   const k = getKernel();
   const props = new k.GProp_GProps_1();
