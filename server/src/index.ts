@@ -10,6 +10,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
+import type { AddressInfo } from "node:net";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { createApiRouter } from "./api/routes.js";
@@ -32,6 +33,9 @@ async function main() {
   const app = express();
   app.disable("x-powered-by");
   app.use("/api", createApiRouter(store));
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
 
   // static client (production build)
   const candidates = [
@@ -54,8 +58,9 @@ async function main() {
     );
   }
 
-  app.listen(PORT, () => {
-    console.log(`[rockett] listening on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, () => {
+    const { port } = server.address() as AddressInfo;
+    console.log(`[rockett] listening on http://0.0.0.0:${port}`);
   });
 }
 

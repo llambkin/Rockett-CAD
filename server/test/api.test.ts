@@ -16,6 +16,7 @@ import express from "express";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import type { AddressInfo } from "node:net";
 import { SCHEMA_VERSION, type EvaluateResult } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
@@ -534,5 +535,56 @@ describe("REST API MVP workflow", () => {
       commit: "2267c0d5a1b2c3d4e5f60718293a4b5c6d7e8f90",
       describe: "v0.1.0-12-g2267c0d",
     });
+  });
+});
+
+describe("built app", () => {
+  const root = path.resolve(import.meta.dirname, "../..");
+  let child: ChildProcess | undefined;
+  let origin = "";
+  let dataDir = "";
+
+  beforeAll(async () => {
+    execFileSync("npm", ["run", "build"], { cwd: root, stdio: "ignore" });
+    dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-built-"));
+    const proc = spawn(process.execPath, ["server/dist/server.js"], {
+      cwd: root,
+      env: { ...process.env, ROCKETT_PORT: "0", DATA_DIR: dataDir },
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    child = proc;
+    origin = await new Promise<string>((resolve, reject) => {
+      let out = "";
+      proc.stdout.on("data", (chunk) => {
+        out += chunk;
+        const port = /listening on http:\/\/0\.0\.0\.0:(\d+)/.exec(out)?.[1];
+        if (port) resolve(`http://127.0.0.1:${port}`);
+      });
+      proc.once("exit", (code) =>
+        reject(new Error(`built server exited with ${code}`)),
+      );
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    if (child && child.exitCode === null) {
+      const exited = new Promise((resolve) => child!.once("exit", resolve));
+      child.kill();
+      await exited;
+    }
+    if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("serves the built client for an SPA deep link", async () => {
+    const res = await fetch(`${origin}/projects/x`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toMatch(/src="\/assets\/index-[\w-]+\.js"/);
+  });
+
+  it("answers an unknown API path with a JSON 404", async () => {
+    const res = await fetch(`${origin}/api/nope`);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not found" });
   });
 });
