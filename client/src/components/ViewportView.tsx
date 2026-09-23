@@ -14,6 +14,7 @@ import type {
 import { newId, modifySketch } from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
+import { worldToClient } from "../three/screen";
 import { renderSketches, type SketchRenderInput } from "../three/sketchRender";
 import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
@@ -239,18 +240,16 @@ export function ViewportView() {
     vp.onRender = () => {
       const layer = labelLayerRef.current;
       if (!layer) return;
-      const rect = vp.renderer.domElement.getBoundingClientRect();
+      const rect = vp.canvasRect();
       const cam = vp.camera;
       const children = layer.children;
       for (let i = 0; i < children.length; i++) {
         const el = children[i] as HTMLElement;
         const label = dimLabelsRef.current[i];
         if (!label) continue;
-        const p = label.world.clone().project(cam);
-        const x = ((p.x + 1) / 2) * rect.width;
-        const y = ((1 - p.y) / 2) * rect.height;
-        el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
-        el.style.display = p.z < 1 ? "block" : "none";
+        const p = worldToClient(rect, cam, label.world);
+        el.style.transform = `translate(${p.x - rect.left}px, ${p.y - rect.top}px) translate(-50%, -50%)`;
+        el.style.display = p.inFront ? "block" : "none";
       }
     };
 
@@ -1639,12 +1638,7 @@ export function ViewportView() {
     const vp = viewportRef.current;
     const frame = activeSketchFrame();
     if (!vp || !frame) return null;
-    const p = uv3(frame, u, v).project(vp.camera);
-    const rect = vp.renderer.domElement.getBoundingClientRect();
-    return {
-      x: rect.left + ((p.x + 1) / 2) * rect.width,
-      y: rect.top + ((1 - p.y) / 2) * rect.height,
-    };
+    return worldToClient(vp.canvasRect(), vp.camera, uv3(frame, u, v));
   }
 
   /** Show/hide the snap glyph for the current pointer result. */

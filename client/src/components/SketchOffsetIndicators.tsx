@@ -3,6 +3,7 @@ import { sketchOffsetAnchor } from "@rockett/shared";
 import { useStore } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
+import { worldToClient } from "../three/screen";
 
 /** Screen-space badges remain attached to the sketch while panning and zooming. */
 export function SketchOffsetIndicators() {
@@ -21,7 +22,7 @@ export function SketchOffsetIndicators() {
     const update = () => {
       const vp = viewportHandle.current;
       if (vp && layer.current) {
-        const rect = vp.renderer.domElement.getBoundingClientRect();
+        const rect = vp.canvasRect();
         for (const child of Array.from(layer.current.children)) {
           const el = child as HTMLButtonElement;
           const offset = draft.offsets?.find((o) => o.id === el.dataset.offset);
@@ -30,9 +31,13 @@ export function SketchOffsetIndicators() {
             el.style.display = "none";
             continue;
           }
-          const p = uv3(frame, anchor.x, anchor.y).project(vp.camera);
-          el.style.display = p.z >= -1 && p.z <= 1 ? "block" : "none";
-          el.style.transform = `translate(${((p.x + 1) * rect.width) / 2}px, ${((1 - p.y) * rect.height) / 2 - 18}px) translate(-50%, -100%)`;
+          const p = worldToClient(
+            rect,
+            vp.camera,
+            uv3(frame, anchor.x, anchor.y),
+          );
+          el.style.display = p.inFront ? "block" : "none";
+          el.style.transform = `translate(${p.x - rect.left}px, ${p.y - rect.top - 18}px) translate(-50%, -100%)`;
         }
       }
       handle = requestAnimationFrame(update);

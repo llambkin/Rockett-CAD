@@ -15,6 +15,7 @@ import type {
   Vec3,
 } from "@rockett/shared";
 import type { Selection } from "../store";
+import { clientToNdc } from "./screen";
 
 export const COLORS = {
   bg: 0x2a2d30,
@@ -324,12 +325,7 @@ export class CadViewport {
     clientY: number,
     frame: PlaneFrame | null,
   ): THREE.Vector3 | null {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.camera);
+    const ray = this.rayFromClient(clientX, clientY);
     let plane: THREE.Plane;
     if (frame) {
       const n = new THREE.Vector3(...frame.normal);
@@ -341,7 +337,19 @@ export class CadViewport {
       plane = new THREE.Plane(n, -n.dot(this.target));
     }
     const out = new THREE.Vector3();
-    return this.raycaster.ray.intersectPlane(plane, out) ? out : null;
+    return ray.intersectPlane(plane, out) ? out : null;
+  }
+
+  canvasRect(): DOMRect {
+    return this.renderer.domElement.getBoundingClientRect();
+  }
+
+  rayFromClient(clientX: number, clientY: number): THREE.Ray {
+    this.raycaster.setFromCamera(
+      clientToNdc(this.canvasRect(), clientX, clientY),
+      this.camera,
+    );
+    return this.raycaster.ray;
   }
 
   setView(direction: Vec3, up: Vec3, animate = true) {
@@ -650,12 +658,7 @@ export class CadViewport {
       depth?: number; // alt-click cycling
     },
   ): PickResult | null {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.camera);
+    this.rayFromClient(clientX, clientY);
     const pxTol = this.worldPerPixel() * 7;
     this.raycaster.params.Line = { threshold: pxTol };
     this.raycaster.params.Points = { threshold: pxTol * 1.4 };
