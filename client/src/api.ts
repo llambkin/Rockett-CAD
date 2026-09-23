@@ -80,10 +80,21 @@ export async function request(
   if (!res.ok) throw await toApiError(res);
   if (response !== "blob") return res.json();
   const disposition = res.headers.get("Content-Disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   return {
     blob: await res.blob(),
-    fileName: disposition.match(/filename="([^"]+)"/)?.[1],
+    fileName: encoded
+      ? decodeURIComponent(encoded)
+      : disposition.match(/filename="([^"]+)"/)?.[1],
   };
+}
+
+export function saveDownload({ blob, fileName }: Download): void {
+  const a = window.document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName ?? "";
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function send<P extends string, Req, Res>(
@@ -129,6 +140,12 @@ export const api = {
     send(ROUTES.duplicateProject, { id }, { body: { name } }),
   renameProject: (id: string, name: string) =>
     send(ROUTES.renameProject, { id }, { body: { name } }),
+  downloadProjectFile: (id: string) => {
+    const route = ROUTES.downloadProjectFile;
+    return request(route.method, pathFor(route, { id }), { response: "blob" });
+  },
+  uploadProjectFile: (file: File) =>
+    send(ROUTES.uploadProjectFile, {}, { body: fileForm("file", file) }),
 
   evaluate: (id: string, position?: number) =>
     send(ROUTES.evaluate, { id }, { position }),

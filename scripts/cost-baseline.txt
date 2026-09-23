@@ -1,10 +1,11 @@
-client/src/App.tsx 544
-client/src/App.tsx ProjectList 145
+client/src/App.tsx 589
+client/src/App.tsx ProjectList 190
 client/src/App.tsx Workspace 249
+client/src/App.tsx projects.map() 83
 client/src/components/DraggablePanel.tsx DraggablePanel 125
-client/src/components/FeatureDialog.tsx 1485
+client/src/components/FeatureDialog.tsx 1482
 client/src/components/FeatureDialog.tsx DialogBody 1008
-client/src/components/FeatureDialog.tsx ExportPanel 84
+client/src/components/FeatureDialog.tsx ExportPanel 81
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 240
 client/src/components/ModelTree.tsx ModelTree 377
 client/src/components/SketchOffsetPanel.tsx OffsetBody 252

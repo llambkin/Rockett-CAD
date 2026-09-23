@@ -15,7 +15,7 @@ import type {
 } from "@rockett/shared";
 import { newId } from "@rockett/shared";
 import { useStore, type DialogType, type Selection } from "../store";
-import { api } from "../api";
+import { api, saveDownload } from "../api";
 import { viewportHandle } from "../viewportRef";
 import { DraggablePanel } from "./DraggablePanel";
 
@@ -1417,16 +1417,13 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
     if (!document_) return;
     setPending(true);
     try {
-      const { blob, fileName } = await api.exportModel(document_.id, {
-        format,
-        bodyIds: selectedBodies,
-        quality,
-      });
-      const a = window.document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      saveDownload(
+        await api.exportModel(document_.id, {
+          format,
+          bodyIds: selectedBodies,
+          quality,
+        }),
+      );
       onClose();
     } catch (e: any) {
       setError(e.message);

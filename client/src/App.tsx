@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProjectSummary } from "@rockett/shared";
-import { api } from "./api";
+import { api, saveDownload } from "./api";
 import { followPath, useStore } from "./store";
 import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
@@ -57,6 +57,26 @@ function ProjectList() {
 
   const duplicate = (p: ProjectSummary) =>
     void api.duplicateProject(p.id).then(refresh);
+  const download = (p: ProjectSummary) =>
+    void api
+      .downloadProjectFile(p.id)
+      .then(saveDownload)
+      .catch((e) => setError(e.message));
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const openFile = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { document } = await api.uploadProjectFile(file);
+      await openProject(document.id);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
   const remove = (p: ProjectSummary) => {
     if (window.confirm(`Delete project "${p.name}"?`))
       void api.deleteProject(p.id).then(refresh);
@@ -93,6 +113,22 @@ function ProjectList() {
         </div>
         <div className="projects">
           <StepImportButton newProject onError={setError} />
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".rockett"
+            hidden
+            aria-label="Project file"
+            onChange={(e) => void openFile(e.target.files?.[0])}
+          />
+          <button
+            className="btn"
+            disabled={uploading}
+            title="Open a .rockett project file as a new project"
+            onClick={() => fileInput.current?.click()}
+          >
+            {uploading ? "Opening project file…" : "Open project file"}
+          </button>
           {projects.map((p) => (
             <div
               key={p.id}
@@ -106,6 +142,7 @@ function ProjectList() {
                     { label: "Open", action: () => void openProject(p.id) },
                     { label: "Rename", action: () => setRenamingId(p.id) },
                     { label: "Duplicate", action: () => duplicate(p) },
+                    { label: "Download", action: () => download(p) },
                     { label: "Delete", danger: true, action: () => remove(p) },
                   ],
                 });
@@ -157,6 +194,14 @@ function ProjectList() {
                 onClick={() => duplicate(p)}
               >
                 ⎘
+              </button>
+              <button
+                className="icon-btn"
+                title="Download project file"
+                aria-label={`Download ${p.name}`}
+                onClick={() => download(p)}
+              >
+                ⤓
               </button>
               <button
                 className="icon-btn danger"

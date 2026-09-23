@@ -177,7 +177,13 @@ it("duplicates a project from its row menu and confirms a delete", async () => {
   await act(async () => {});
 
   await rightClick(host.querySelector(".project-row")!);
-  expect(labels()).toEqual(["Open", "Rename", "Duplicate", "Delete"]);
+  expect(labels()).toEqual([
+    "Open",
+    "Rename",
+    "Duplicate",
+    "Download",
+    "Delete",
+  ]);
   await choose("Duplicate");
   expect(api.duplicateProject).toHaveBeenCalledWith("p1");
   expect(menu()).toBeNull();
