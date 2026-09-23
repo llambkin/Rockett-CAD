@@ -3,6 +3,7 @@ import { createEmptyDocument } from "@rockett/shared";
 import { followPath, useStore } from "../src/store";
 import { api } from "../src/api";
 import { backToProjects } from "../src/components/ProjectList";
+import { folderIdFromPath, isBrowserPath } from "../src/paths";
 vi.mock("../src/api", () => ({
   api: { getProject: vi.fn(), evaluate: vi.fn(), listFolders: vi.fn() },
 }));
@@ -60,6 +61,17 @@ it("Back to projects returns to the project's folder, or the root when it is mis
 it("a folder path closes an open project without a new entry", async () => {
   await useStore.getState().openProject("p1");
   location.pathname = "/folders/f1";
+  await followPath();
+  expect(useStore.getState().projectId).toBeNull();
+  expect(history.pushState).toHaveBeenCalledTimes(1);
+});
+
+it("/browser is neither a folder nor a project, and closes an open project", async () => {
+  expect(isBrowserPath("/browser")).toBe(true);
+  expect(isBrowserPath("/browser/k1")).toBe(false);
+  expect(folderIdFromPath("/browser")).toBeNull();
+  await useStore.getState().openProject("p1");
+  location.pathname = "/browser";
   await followPath();
   expect(useStore.getState().projectId).toBeNull();
   expect(history.pushState).toHaveBeenCalledTimes(1);

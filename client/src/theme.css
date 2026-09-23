@@ -1074,8 +1074,12 @@ kbd {
   text-align: left;
 }
 
-.project-open:hover {
+.project-open:enabled:hover {
   border-color: var(--accent);
+}
+
+.project-open:disabled {
+  cursor: default;
 }
 
 .project-open span {
@@ -1129,6 +1133,12 @@ kbd {
 
 .folder-open .tree-icon {
   font-size: 14px;
+}
+
+.folder-open .tree-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .drop-target {

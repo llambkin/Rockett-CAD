@@ -1,6 +1,14 @@
 import { useState, type DragEvent, type ReactNode } from "react";
 import type { Folder, FolderTree, ProjectSummary } from "@rockett/shared";
-import { api, saveDownload } from "../api";
+import { api, saveDownload, type Download } from "../api";
+import {
+  deleteBrowserProject,
+  downloadBrowserProject,
+  duplicateBrowserProject,
+  renameBrowserProject,
+  type BrowserProject,
+} from "../browserProjects";
+import { ICONS } from "../icons";
 import {
   canMoveTo,
   itemCount,
@@ -75,7 +83,7 @@ function Breadcrumb({
   onOpen,
   target,
 }: {
-  folders: Folder[];
+  folders: Pick<Folder, "id" | "name">[];
   onOpen: (id: string | null) => void;
   target: (id: string | null) => DropTarget;
 }) {
@@ -104,34 +112,31 @@ function Breadcrumb({
 function ItemRow({
   item,
   meta,
-  renaming,
+  glyph,
+  renaming = false,
   actions,
-  drop,
+  drop = { active: false },
   onOpen,
-  onRename,
+  onRename = () => {},
   onMenu,
   drag,
 }: {
   item: Item;
   meta: ReactNode;
-  renaming: boolean;
+  glyph?: ReactNode;
+  renaming?: boolean;
   actions: RowAction[];
-  drop: DropTarget;
-  onOpen: () => void;
-  onRename: (name: string | null) => void;
+  drop?: DropTarget;
+  onOpen?: () => void;
+  onRename?: (name: string | null) => void;
   onMenu: (menu: Menu) => void;
-  drag: ReturnType<ReturnType<typeof useDragMove>["source"]>;
+  drag?: ReturnType<ReturnType<typeof useDragMove>["source"]>;
 }) {
   const { active, ...dropHandlers } = drop;
-  const glyph = item.kind === "folder" && (
-    <span className="tree-icon" aria-hidden="true">
-      ▣
-    </span>
-  );
   return (
     <div
       className={active ? "project-row drop-target" : "project-row"}
-      draggable={!renaming}
+      draggable={drag !== undefined && !renaming}
       {...drag}
       {...dropHandlers}
       onContextMenu={(e) => {
@@ -140,7 +145,7 @@ function ItemRow({
           x: e.clientX,
           y: e.clientY,
           items: [
-            { label: "Open", action: onOpen },
+            ...(onOpen ? [{ label: "Open", action: onOpen }] : []),
             ...actions.map((a) => ({
               label: a.label,
               action: a.run,
@@ -163,11 +168,16 @@ function ItemRow({
         </div>
       ) : (
         <button
-          className={`project-open${item.kind === "folder" ? " folder-open" : ""}`}
+          className={`project-open${glyph ? " folder-open" : ""}`}
+          disabled={!onOpen}
           onClick={onOpen}
           onDoubleClick={(e) => e.preventDefault()}
         >
-          {glyph}
+          {glyph && (
+            <span className="tree-icon" aria-hidden="true">
+              {glyph}
+            </span>
+          )}
           <b>{item.name}</b>
           <span>{meta}</span>
         </button>
@@ -187,29 +197,77 @@ function ItemRow({
   );
 }
 
-const features = (p: ProjectSummary) =>
+const features = (p: Pick<ProjectSummary, "featureCount" | "modifiedAt">) =>
   `${p.featureCount} features · ${new Date(p.modifiedAt).toLocaleString()}`;
 
-const items = (n: number) => `${n} item${n === 1 ? "" : "s"}`;
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+function size(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB"];
+  let n = bytes;
+  let unit = 0;
+  for (; n >= 1024 && unit < units.length - 1; unit++) n /= 1024;
+  return unit === 0 ? `${n} B` : `${n.toFixed(1)} ${units[unit]}`;
+}
+
+type Run = (work: Promise<unknown>) => void;
+
+function projectActions(
+  name: string,
+  run: Run,
+  ops: {
+    rename: () => void;
+    duplicate: () => Promise<unknown>;
+    download: () => Promise<Download>;
+    remove: () => Promise<unknown>;
+  },
+  moveTo: RowAction[] = [],
+): RowAction[] {
+  return [
+    { label: "Rename", glyph: "✎", run: ops.rename },
+    { label: "Duplicate", glyph: "⎘", run: () => run(ops.duplicate()) },
+    {
+      label: "Download",
+      glyph: "⤓",
+      title: "Download project file",
+      run: () => run(ops.download().then(saveDownload)),
+    },
+    ...moveTo,
+    {
+      label: "Delete",
+      glyph: "✕",
+      danger: true,
+      run: () => {
+        if (window.confirm(`Delete project "${name}"?`)) run(ops.remove());
+      },
+    },
+  ];
+}
+
+const BrowserGlyph = ICONS.browser;
 
 export function ProjectItems({
   projects,
   tree,
   folderId,
+  kept,
   renaming,
   setRenaming,
   onOpenFolder,
+  onOpenBrowser,
   onOpenProject,
   run,
 }: {
   projects: ProjectSummary[];
   tree: FolderTree;
   folderId: string | null;
+  kept: number | null;
   renaming: Renaming;
   setRenaming: (r: Renaming) => void;
   onOpenFolder: (id: string | null) => void;
+  onOpenBrowser: () => void;
   onOpenProject: (id: string) => void;
-  run: (work: Promise<unknown>) => void;
+  run: Run;
 }) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Item | null>(null);
@@ -234,11 +292,9 @@ export function ProjectItems({
       key={`${item.kind}:${item.id}`}
       item={item}
       meta={meta}
+      glyph={item.kind === "folder" && "▣"}
       renaming={renaming?.kind === item.kind && renaming.id === item.id}
-      actions={[
-        { label: "Rename", glyph: "✎", run: () => setRenaming(item) },
-        ...actions,
-      ]}
+      actions={actions}
       drop={item.kind === "folder" ? target(item.id) : { active: false }}
       onOpen={() =>
         item.kind === "folder" ? onOpenFolder(item.id) : onOpenProject(item.id)
@@ -255,6 +311,7 @@ export function ProjectItems({
   });
   const folders = subfolders(tree, folderId);
   const here = projectsIn(tree, projects, folderId);
+  const pinned = folderId === null ? kept : null;
   return (
     <>
       <Breadcrumb
@@ -262,17 +319,28 @@ export function ProjectItems({
         onOpen={onOpenFolder}
         target={target}
       />
+      {pinned !== null && (
+        <ItemRow
+          item={{ kind: "folder", id: "browser", name: "This browser" }}
+          meta={count(pinned, "project")}
+          glyph={<BrowserGlyph />}
+          actions={[]}
+          onOpen={onOpenBrowser}
+          onMenu={setMenu}
+        />
+      )}
       {folders.map((f) => {
         const item: Item = { kind: "folder", ...f };
-        const count = itemCount(tree, projects, f.id);
-        return row(item, items(count), [
+        const n = itemCount(tree, projects, f.id);
+        return row(item, count(n, "item"), [
+          { label: "Rename", glyph: "✎", run: () => setRenaming(item) },
           moveTo(item),
           {
             label: "Delete",
             glyph: "✕",
             danger: true,
             run: () => {
-              if (count === 0 && !window.confirm(`Delete folder "${f.name}"?`))
+              if (n === 0 && !window.confirm(`Delete folder "${f.name}"?`))
                 return;
               run(api.deleteFolder(f.id));
             },
@@ -281,31 +349,23 @@ export function ProjectItems({
       })}
       {here.map((p) => {
         const item: Item = { kind: "project", ...p };
-        return row(item, features(p), [
-          {
-            label: "Duplicate",
-            glyph: "⎘",
-            run: () => run(api.duplicateProject(p.id)),
-          },
-          {
-            label: "Download",
-            glyph: "⤓",
-            title: "Download project file",
-            run: () => run(api.downloadProjectFile(p.id).then(saveDownload)),
-          },
-          moveTo(item),
-          {
-            label: "Delete",
-            glyph: "✕",
-            danger: true,
-            run: () => {
-              if (window.confirm(`Delete project "${p.name}"?`))
-                run(api.deleteProject(p.id));
+        return row(
+          item,
+          features(p),
+          projectActions(
+            p.name,
+            run,
+            {
+              rename: () => setRenaming(item),
+              duplicate: () => api.duplicateProject(p.id),
+              download: () => api.downloadProjectFile(p.id),
+              remove: () => api.deleteProject(p.id),
             },
-          },
-        ]);
+            [moveTo(item)],
+          ),
+        );
       })}
-      {folders.length + here.length === 0 && (
+      {folders.length + here.length + (pinned ?? 0) === 0 && (
         <div className="tree-empty">
           {folderId === null
             ? "No projects yet"
@@ -324,6 +384,57 @@ export function ProjectItems({
           onClose={() => setMoving(null)}
         />
       )}
+    </>
+  );
+}
+
+export function BrowserItems({
+  records,
+  renaming,
+  setRenaming,
+  onOpenFolder,
+  run,
+}: {
+  records: BrowserProject[];
+  renaming: Renaming;
+  setRenaming: (r: Renaming) => void;
+  onOpenFolder: (id: string | null) => void;
+  run: Run;
+}) {
+  const [menu, setMenu] = useState<Menu>(null);
+  return (
+    <>
+      <Breadcrumb
+        folders={[{ id: "browser", name: "This browser" }]}
+        onOpen={onOpenFolder}
+        target={() => ({ active: false })}
+      />
+      {records.map((r) => {
+        const item: Item = { kind: "project", id: r.key, name: r.name };
+        return (
+          <ItemRow
+            key={r.key}
+            item={item}
+            meta={`${features(r)} · ${size(r.size)}`}
+            renaming={renaming?.kind === "project" && renaming.id === r.key}
+            actions={projectActions(r.name, run, {
+              rename: () => setRenaming(item),
+              duplicate: () => duplicateBrowserProject(r.key),
+              download: () => downloadBrowserProject(r),
+              remove: () => deleteBrowserProject(r.key),
+            })}
+            onRename={(name) => {
+              setRenaming(null);
+              if (name !== null) run(renameBrowserProject(r.key, name));
+            }}
+            onMenu={setMenu}
+          />
+        );
+      })}
+      {records.length === 0 && (
+        <div className="tree-empty">No projects in this browser yet.</div>
+      )}
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </>
   );
 }

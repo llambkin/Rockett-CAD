@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FolderTree, ProjectSummary } from "@rockett/shared";
 import { api } from "../api";
-import { folderIdFromPath, folderPath, showPath } from "../paths";
+import { listBrowserProjects } from "../browserProjects";
+import {
+  BROWSER_PATH,
+  folderIdFromPath,
+  folderPath,
+  isBrowserPath,
+  showPath,
+} from "../paths";
 import { EMPTY_TREE, folderOf } from "../projectTree";
 import { useStore } from "../store";
-import { ProjectItems, type Renaming } from "./ProjectItems";
+import { BrowserItems, ProjectItems, type Renaming } from "./ProjectItems";
 import { StepImportButton } from "./StepImportButton";
 import { VersionLabel } from "./VersionLabel";
 
@@ -20,16 +26,14 @@ export async function backToProjects(): Promise<void> {
 
 type Load = "loading" | "ready" | { failed: string };
 
-function useProjects() {
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [tree, setTree] = useState<FolderTree>(EMPTY_TREE);
+function useLoaded<T>(read: () => Promise<T>, empty: T) {
+  const [value, setValue] = useState(empty);
   const [load, setLoad] = useState<Load>("loading");
   const refresh = useCallback(
     () =>
-      Promise.all([api.listProjects(), api.listFolders()]).then(
-        ([p, t]) => {
-          setProjects(p);
-          setTree(t);
+      read().then(
+        (v) => {
+          setValue(v);
           setLoad("ready");
         },
         (e) => setLoad({ failed: e.message }),
@@ -37,23 +41,40 @@ function useProjects() {
     [],
   );
   useEffect(() => void refresh(), [refresh]);
-  return { projects, tree, load, refresh };
+  return { value, load, refresh };
 }
 
-const here = () => folderIdFromPath(window.location.pathname);
+const readProjects = () =>
+  Promise.all([api.listProjects(), api.listFolders()]).then(
+    ([projects, tree]) => ({ projects, tree }),
+  );
 
-function useFolderPath() {
-  const [folderId, setFolderId] = useState(here);
+function useBrowserProjects() {
+  const kept = useLoaded(listBrowserProjects, []);
   useEffect(() => {
-    const follow = () => setFolderId(here());
+    window.addEventListener("focus", kept.refresh);
+    return () => window.removeEventListener("focus", kept.refresh);
+  }, [kept.refresh]);
+  return kept;
+}
+
+function usePlace() {
+  const [path, setPath] = useState(() => window.location.pathname);
+  useEffect(() => {
+    const follow = () => setPath(window.location.pathname);
     window.addEventListener("popstate", follow);
     return () => window.removeEventListener("popstate", follow);
   }, []);
-  const go = (id: string | null) => {
-    showPath(folderPath(id));
-    setFolderId(id);
+  const go = (to: string) => {
+    showPath(to);
+    setPath(to);
   };
-  return [folderId, go] as const;
+  return {
+    inBrowser: isBrowserPath(path),
+    folderId: folderIdFromPath(path),
+    openFolder: (id: string | null) => go(folderPath(id)),
+    openBrowser: () => go(BROWSER_PATH),
+  };
 }
 
 function OpenProjectFile({ onError }: { onError: (e: string) => void }) {
@@ -96,8 +117,11 @@ function OpenProjectFile({ onError }: { onError: (e: string) => void }) {
 }
 
 export function ProjectList() {
-  const { projects, tree, load, refresh } = useProjects();
-  const [folderId, openFolder] = useFolderPath();
+  const server = useLoaded(readProjects, { projects: [], tree: EMPTY_TREE });
+  const { projects, tree } = server.value;
+  const kept = useBrowserProjects();
+  const { inBrowser, folderId, openFolder, openBrowser } = usePlace();
+  const { load, refresh } = inBrowser ? kept : server;
   const [name, setName] = useState("");
   const [listError, setError] = useState<string | null>(null);
   const loadError = useStore((s) => s.error);
@@ -116,10 +140,11 @@ export function ProjectList() {
     setError("Folder not found.");
   }, [missing]);
 
-  const run = (work: Promise<unknown>) => {
+  const runThen = (reread: () => unknown) => (work: Promise<unknown>) => {
     setError(null);
-    void work.then(refresh, (e) => setError(e.message));
+    void work.then(reread, (e) => setError(e.message));
   };
+  const run = runThen(server.refresh);
   const create = () =>
     api
       .createProject(name || "Untitled", folderId)
@@ -169,18 +194,29 @@ export function ProjectList() {
           {load === "loading" && (
             <div className="tree-empty">Loading projects…</div>
           )}
-          {load === "ready" && (
-            <ProjectItems
-              projects={projects}
-              tree={tree}
-              folderId={folderId}
-              renaming={renaming}
-              setRenaming={setRenaming}
-              onOpenFolder={openFolder}
-              onOpenProject={(id) => void openProject(id)}
-              run={run}
-            />
-          )}
+          {load === "ready" &&
+            (inBrowser ? (
+              <BrowserItems
+                records={kept.value}
+                renaming={renaming}
+                setRenaming={setRenaming}
+                onOpenFolder={openFolder}
+                run={runThen(kept.refresh)}
+              />
+            ) : (
+              <ProjectItems
+                projects={projects}
+                tree={tree}
+                folderId={folderId}
+                kept={kept.load === "ready" ? kept.value.length : null}
+                renaming={renaming}
+                setRenaming={setRenaming}
+                onOpenFolder={openFolder}
+                onOpenBrowser={openBrowser}
+                onOpenProject={(id) => void openProject(id)}
+                run={run}
+              />
+            ))}
         </div>
       </div>
       <VersionLabel />

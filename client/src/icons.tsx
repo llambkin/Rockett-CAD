@@ -409,6 +409,12 @@ export const ICONS = {
       </g>
     </>,
   ),
+  browser: svg(
+    <>
+      <rect x="3" y="4.5" width="18" height="15" rx="1.5" />
+      <path d="M3 8.5h18M6 6.5h.01M8.5 6.5h.01" />
+    </>,
+  ),
   fix: svg(
     <>
       <rect x="5" y="11" width="14" height="10" rx="2" />

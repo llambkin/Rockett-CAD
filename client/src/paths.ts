@@ -16,6 +16,10 @@ function idFromPath(kind: string, path: string): string | null {
   }
 }
 
+export const BROWSER_PATH = "/browser";
+
+export const isBrowserPath = (path: string) => /^\/browser\/?$/.test(path);
+
 export const projectIdFromPath = (path: string) => idFromPath("projects", path);
 export const folderIdFromPath = (path: string) => idFromPath("folders", path);
 
