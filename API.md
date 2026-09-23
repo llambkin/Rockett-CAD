@@ -1,8 +1,20 @@
 # REST API
 
-Base path: `/api`. All bodies are JSON unless noted. Errors return
-`{ "error": string }` with an appropriate 4xx/5xx status. Types live in
+Base path: `/api`. All bodies are JSON unless noted. Types live in
 `shared/src/api.ts` and `shared/src/model.ts`.
+
+Route errors return `ApiErrorBody`: `{ "error": string, "code": ApiErrorCode,
+"detail"?: string }`. `error` is a message for the user. The code fixes the
+status:
+
+| Code         | Status | Meaning                                                   |
+| ------------ | ------ | --------------------------------------------------------- |
+| `validation` | 400    | The request, upload or feature is invalid.                |
+| `not_found`  | 404    | The project, feature, body or asset does not exist.       |
+| `too_large`  | 413    | An upload is over its limit.                              |
+| `conflict`   | 409    | The request conflicts with current state.                 |
+| `kernel`     | 503    | The geometry kernel cannot serve the request.             |
+| `internal`   | 500    | Server fault. The message is generic; the log has detail. |
 
 Mutating endpoints return `{ document, evaluation }`: the updated document
 plus a fresh incremental evaluation (bodies with tagged tessellation, feature

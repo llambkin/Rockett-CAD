@@ -12,7 +12,7 @@ import {
 } from "@rockett/shared";
 
 export class ValidationError extends Error {
-  status = 400;
+  readonly code = "validation";
 }
 
 function num(v: unknown, label: string, min?: number, max?: number): void {

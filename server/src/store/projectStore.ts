@@ -15,6 +15,7 @@ import crypto from "node:crypto";
 import {
   SCHEMA_VERSION,
   createEmptyDocument,
+  type ApiErrorCode,
   type CadDocument,
   type ProjectSummary,
 } from "@rockett/shared";
@@ -26,7 +27,7 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export class StoreError extends Error {
   constructor(
     message: string,
-    public status = 400,
+    readonly code: ApiErrorCode = "validation",
   ) {
     super(message);
   }
@@ -43,7 +44,7 @@ export class ProjectStore {
 
   /** Validated project directory — rejects path traversal. */
   private projectDir(id: string): string {
-    if (!ID_RE.test(id)) throw new StoreError(`invalid project id`, 400);
+    if (!ID_RE.test(id)) throw new StoreError(`invalid project id`);
     return path.join(this.projectsDir(), id);
   }
 
@@ -95,13 +96,13 @@ export class ProjectStore {
     try {
       raw = await fs.readFile(file, "utf8");
     } catch {
-      throw new StoreError(`project ${id} not found`, 404);
+      throw new StoreError(`project ${id} not found`, "not_found");
     }
     let doc: CadDocument;
     try {
       doc = JSON.parse(raw);
     } catch {
-      throw new StoreError(`project ${id} is corrupted`, 500);
+      throw new StoreError(`project ${id} is corrupted`, "internal");
     }
     return migrateDocument(doc);
   }
@@ -118,7 +119,6 @@ export class ProjectStore {
     if (doc.schemaVersion !== SCHEMA_VERSION) {
       throw new StoreError(
         `document schema ${doc.schemaVersion} does not match ${SCHEMA_VERSION}`,
-        400,
       );
     }
     doc.modifiedAt = new Date().toISOString();
@@ -186,13 +186,13 @@ export class ProjectStore {
 
   async assetPath(projectId: string, assetId: string): Promise<string> {
     if (!/^[a-f0-9]{16}\.(png|jpg|webp)$/.test(assetId)) {
-      throw new StoreError("invalid asset id", 400);
+      throw new StoreError("invalid asset id");
     }
     const p = path.join(this.projectDir(projectId), "assets", assetId);
     try {
       await fs.access(p);
     } catch {
-      throw new StoreError("asset not found", 404);
+      throw new StoreError("asset not found", "not_found");
     }
     return p;
   }

@@ -13,6 +13,8 @@ import {
   newId,
   projectEdge,
   SCHEMA_VERSION,
+  type ApiErrorBody,
+  type ApiErrorCode,
   type CadDocument,
   type ExportRequest,
   type Feature,
@@ -39,6 +41,19 @@ import {
   ValidationError,
 } from "./validate.js";
 
+const STATUS: Record<ApiErrorCode, number> = {
+  validation: 400,
+  not_found: 404,
+  too_large: 413,
+  conflict: 409,
+  kernel: 503,
+  internal: 500,
+};
+
+function sendError(res: any, body: ApiErrorBody) {
+  res.status(STATUS[body.code]).json(body);
+}
+
 function multipart(field: string, megabytes: number, error: string) {
   const receive = multer({
     storage: multer.memoryStorage(),
@@ -47,7 +62,10 @@ function multipart(field: string, megabytes: number, error: string) {
   return (req: any, res: any, next: any) =>
     receive(req, res, (err: any) => {
       if (!err) return next();
-      res.status(err.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error });
+      sendError(res, {
+        error,
+        code: err.code === "LIMIT_FILE_SIZE" ? "too_large" : "validation",
+      });
     });
 }
 
@@ -121,12 +139,14 @@ export function createApiRouter(store: ProjectStore): Router {
         ? projects.run(req.params.id, () => fn(req, res))
         : fn(req, res);
       result.catch((err) => {
-        const status =
+        const code: ApiErrorCode =
           err instanceof StoreError || err instanceof ValidationError
-            ? ((err as any).status ?? 400)
-            : 500;
-        if (status === 500) console.error(err);
-        res.status(status).json({ error: err.message ?? String(err) });
+            ? err.code
+            : "internal";
+        if (code !== "internal")
+          return sendError(res, { error: err.message, code });
+        console.error(err);
+        sendError(res, { error: "Internal server error", code });
       });
     };
 
@@ -343,7 +363,7 @@ export function createApiRouter(store: ProjectStore): Router {
       const doc = await store.load(req.params.id);
       const position = evaluationPosition(req, doc);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
-      if (idx < 0) throw new StoreError("feature not found", 404);
+      if (idx < 0) throw new StoreError("feature not found", "not_found");
       const patch = req.body?.feature as Partial<Feature>;
       record(patch, "feature");
       if (patch.type !== undefined && patch.type !== doc.features[idx].type) {
@@ -405,7 +425,7 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
-      if (idx < 0) throw new StoreError("feature not found", 404);
+      if (idx < 0) throw new StoreError("feature not found", "not_found");
       doc.features.splice(idx, 1);
       if (doc.timelinePosition > idx) doc.timelinePosition--;
       await store.save(doc);
@@ -462,7 +482,7 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const meta = doc.bodyMeta[req.params.bodyId];
-      if (!meta) throw new StoreError("body not found", 404);
+      if (!meta) throw new StoreError("body not found", "not_found");
       if (typeof req.body?.name === "string") {
         meta.name = req.body.name.slice(0, 120);
       }

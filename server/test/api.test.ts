@@ -572,6 +572,53 @@ describe("REST API MVP workflow", () => {
     expect(await api("GET", "/projects")).toEqual(before);
   });
 
+  it("answers every error with a coded body", async () => {
+    const { document } = await api("POST", "/projects", { name: "Codes" });
+    const call = async (url: string, init?: RequestInit) => {
+      const res = await fetch(base + url, init);
+      return { status: res.status, body: await res.json() };
+    };
+    const badFeature = await call(`/projects/${document.id}/features`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feature: { id: "x", type: "nope" } }),
+    });
+    expect(badFeature).toEqual({
+      status: 400,
+      body: { error: expect.any(String), code: "validation" },
+    });
+    expect(await call("/projects/missing")).toEqual({
+      status: 404,
+      body: { error: "project missing not found", code: "not_found" },
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array(11 * 1024 * 1024)]),
+      "big.step",
+    );
+    expect(
+      await call("/projects/import-step", { method: "POST", body: form }),
+    ).toEqual({
+      status: 413,
+      body: {
+        error: "Upload one STEP file (.step or .stp), up to 10 MB.",
+        code: "too_large",
+      },
+    });
+    await fs.writeFile(
+      path.join(storeDir, "projects", document.id, "document.json"),
+      "{ broken",
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    expect(await call(`/projects/${document.id}`)).toEqual({
+      status: 500,
+      body: { error: "Internal server error", code: "internal" },
+    });
+    expect(logged).toHaveBeenCalledOnce();
+  });
+
   it("accepts only known feature keys", async () => {
     const { document } = await api("POST", "/projects", { name: "Keys" });
     const url = `/projects/${document.id}`;

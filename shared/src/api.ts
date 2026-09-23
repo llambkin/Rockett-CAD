@@ -144,8 +144,12 @@ export interface ExportRequest {
   retain?: boolean;
 }
 
-export interface ApiError {
+export type ApiErrorCode =
+  "validation" | "not_found" | "too_large" | "conflict" | "kernel" | "internal";
+
+export interface ApiErrorBody {
   error: string;
+  code: ApiErrorCode;
   detail?: string;
 }
 
