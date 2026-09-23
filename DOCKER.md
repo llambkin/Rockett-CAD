@@ -1,24 +1,76 @@
-# Deployment (Docker / Unraid)
+# Docker deployment
 
-Rockett CAD ships as a single container: Node 20 serving the API and the
+Rockett CAD ships as a single container: Node 24 serving the API and the
 built client, with the OpenCascade kernel embedded as WebAssembly (no native
 dependencies). All persistent state lives under **one volume: `/data`**.
 
-## Docker Compose
+## Compose
 
 ```bash
-docker compose up -d
-# → http://localhost:8788
+ROCKETT_ALLOWED_ORIGINS=https://cad.example.com \
+ROCKETT_COMMIT=$(git rev-parse HEAD) \
+ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
+  docker compose up -d --build
+# → http://127.0.0.1:8788
 ```
 
-`docker-compose.yml` builds the image locally and bind-mounts `./data`.
+`docker-compose.yml` builds the image locally and keeps `/data` in a named
+volume. It publishes on `127.0.0.1` unless `ROCKETT_BIND` says otherwise;
+the header of the file lists every variable. The server will not start
+without `ROCKETT_ALLOWED_ORIGINS`; set it to the origin you browse to.
+
+### Several instances on one host
+
+`-p` names the instance, so containers, volumes and data stay separate. Both
+instances run `rockett-cad:<tag>` images from the same engine.
+
+Prod never builds. Dev builds one image, tagged with the short SHA of the
+commit it bakes in, and prod runs that image once dev has verified it.
+
+```bash
+# dev: build and run the image from a clean checkout
+COMMIT=$(git rev-parse HEAD)
+REV=$(git rev-parse --short "$COMMIT")
+git diff --quiet HEAD &&
+ROCKETT_ALLOWED_ORIGINS="$DEV_ORIGIN" \
+ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_HOST_PORT="$DEV_PORT" ROCKETT_TAG=$REV \
+ROCKETT_COMMIT=$COMMIT ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
+  docker compose -p rockett-cad-dev up -d --build
+
+# prod: promote the image dev verified
+docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+  rockett-cad:$REV
+ROCKETT_ALLOWED_ORIGINS="$PROD_ORIGIN" \
+ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_TAG=$REV \
+  docker compose -p rockett-cad-prod up -d --no-build
+```
+
+`git diff --quiet HEAD` refuses a tree that `describe` would mark `-dirty`,
+so the tag, the image revision label and `/api/health` all name `COMMIT`.
+`REV` uses the same abbreviation as `describe`, so the corner label
+`v0.1.0-4-g1a2b3c4` runs as `rockett-cad:1a2b3c4`; on a tagged commit the
+label shows the tag and its tooltip the commit. Before promoting,
+`docker image inspect` must print `COMMIT`. If prod uses another engine, move
+the image there with `docker save` and `docker load`; do not rebuild it.
+
+Roll prod back by rerunning the prod command with the previous `REV`; keep
+that image until the new one is trusted. Confirm what is running with
+`curl http://<host>:<port>/api/health`, whose `commit` must match the intended
+revision. The UI shows the same build in its bottom-right corner: `describe`
+when set, else the version and short commit, else `dev`.
+
+Back up an instance's data with
+`docker compose -p rockett-cad-prod exec -T rockett-cad tar czf - -C /data . > rockett-prod.tgz`
 
 ## Manual
 
 ```bash
-docker build -t rockett-cad:latest .
+docker build -t rockett-cad:latest \
+  --build-arg ROCKETT_COMMIT=$(git rev-parse HEAD) \
+  --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) .
 docker run -d --name rockett-cad \
   -p 8788:8788 \
+  -e ROCKETT_ALLOWED_ORIGINS=https://cad.example.com \
   -v /path/to/appdata/rockett-cad:/data \
   --restart unless-stopped \
   rockett-cad:latest
@@ -31,38 +83,87 @@ docker run -d --name rockett-cad \
 2. Copy `docker/unraid-rockett-cad.xml` to
    `/boot/config/plugins/dockerMan/templates-user/` on the Unraid box.
 3. Add the container from the template. Defaults: WebUI port `8788`, data path
-   `/mnt/user/appdata/rockett-cad`.
+   `/mnt/user/appdata/rockett-cad`. Add the `ROCKETT_ALLOWED_ORIGINS`
+   variable; the template does not carry it yet.
 
 ## Persistent layout (`/data`)
 
 ```
 /data
+├── backups/
+│   └── projects/{projectId}/
+│       └── v{schema}-{hash}/   # the project as it was before a migration
+│           ├── SHA256SUMS      # written last; the backup is complete once it exists
+│           └── files/          # byte-for-byte copy of the project directory
+├── folders/
+│   └── folders.json        # the shared folder tree and project placement
+├── uploads/                # model imports while they stream in; each is removed when its request ends
 └── projects/
     └── {projectId}/
         ├── document.json   # the parametric document (full history)
-        ├── assets/         # uploaded reference images
+        ├── view.json       # hidden bodies and features, outside the document
+        ├── temporary.json  # present only on a temporary copy of a browser project
+        ├── blobs/          # reference images and STEP, IGES and BREP sources, each named by its sha256
         └── exports/        # server-retained exports (opt-in per export)
 ```
 
-Documents are written atomically (tmp file + rename), so a crash or container
-kill never corrupts a project. **The container is stateless outside `/data`**
-— recreating it (upgrades, host moves) loses nothing; this is verified by the
-persistence tests and was smoke-tested against a live container.
+A project saved by an older schema is migrated on disk by its next save.
+Before that write, the whole project directory is copied to `backups/`, named
+by the old schema and a hash of its contents, so a second migration of
+different contents never overwrites the first backup. A migration that moves
+data out of `document.json` into `blobs/` writes those blobs before the backup,
+so the backup also holds them; the old document never reads them, and a retry
+finds the same files and reuses the same backup. A project from before schema
+9 keeps its reference images in `assets/`; the migration copies them into
+`blobs/`, and `assets/` is removed only after the backup reads back intact
+and the migrated document is written. While the migration runs,
+`backups/projects/{projectId}/migrating.json` records it; at startup, and before
+the next save, a project with that record is restored from its backup. Startup
+also logs how many projects still predate the current schema. A temporary
+project, the server copy of a project kept in the browser, is never backed up
+before migration and its backups directory is never created; the server
+deletes it after 24 hours without a request. Backups are never pruned. To
+restore one by hand, stop the container, run `sha256sum -c ../SHA256SUMS`
+inside its `files/` directory, and copy `files/` over the project directory.
+Any other namespace under `/data`, such as `folders/`, follows the same rule
+when its format changes: its directory is backed up to
+`backups/<namespace>/v{version}-{hash}/` and restored the same way.
+
+Every project is validated when it is opened. One that fails, or one saved by
+a newer schema, stays in the project list with its reason and is never
+rewritten; opening an invalid one is refused with its first failure.
+
+Documents, blobs and retained exports are written atomically (temp file,
+fsync, rename, directory fsync), so a crash or container kill never corrupts a
+project. **The container is
+stateless outside `/data`**. Recreating it (upgrades, host moves) loses
+nothing; this is verified by the persistence tests and was smoke-tested against
+a live container.
 
 ## Environment
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `ROCKETT_PORT` | `8788` | HTTP port inside the container |
-| `DATA_DIR` | `/data` | Persistent root |
+| Variable                  | Default  | Purpose                                                                                                         |
+| ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `ROCKETT_ALLOWED_ORIGINS` | required | Comma-separated bare origins, such as `https://cad.example.com`; writes to `/api` from any other origin get 403 |
+| `ROCKETT_PORT`            | `8788`   | HTTP port inside the container                                                                                  |
+| `DATA_DIR`                | `/data`  | Persistent root                                                                                                 |
+| `ROCKETT_COMMIT`          | empty    | Git revision reported by `/api/health` (build arg)                                                              |
+| `ROCKETT_DESCRIBE`        | empty    | `git describe --tags --always --dirty` reported by `/api/health` (build arg)                                    |
 
 ## Security
 
-- Runs as the non-root `rockett` user.
+- Runs as the non-root `rockett` user. `/app` is root-owned, so the app
+  cannot change its own code. `/data` is the only path it writes; it needs no
+  ephemeral writable path, and `--read-only` with the `/data` volume serves.
+  The base image's `/tmp` stays world-writable unless the root is read-only.
 - No outbound network use; no cloud services; fully offline-capable.
-- Single-user by design for v1 — put it behind your reverse proxy
+- Single-user by design for v1. Put it behind your reverse proxy
   (basic auth, Authelia, Cloudflare Access, …) if it is reachable beyond your
   LAN. The auth layer is intentionally separable from the CAD logic
   (see ARCHITECTURE.md).
-- Healthcheck hits `/api/health` (60 s start period — the WASM kernel takes a
-  few seconds to load on first boot).
+- Healthcheck hits `/api/health` (60 s start period, because the WASM
+  kernel takes a few seconds to load on first boot). A long regeneration
+  blocks the event loop, so each probe waits 5 s, inside Docker's 10 s
+  limit, and then exits rather than piling up. The container turns
+  unhealthy only after 10 failed probes in a row, 30 s apart: about five
+  minutes.

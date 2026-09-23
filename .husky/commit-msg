@@ -1,0 +1,13 @@
+#!/bin/sh
+awk '
+NR == 1 { subject = $0; next }
+/^# -+ >8 -+$/ { exit }
+/^#/ { next }
+/[^[:space:]]/ { body = 1 }
+END {
+    if (subject ~ /^(Merge|Revert|fixup!|squash!)/) exit 0
+    if (subject ~ /^(feat|fix|refactor)(\([^)]*\))?!?:/ && !body) {
+        print "commit-msg: a feat, fix or refactor commit states its why in the body" > "/dev/stderr"
+        exit 1
+    }
+}' "$1"

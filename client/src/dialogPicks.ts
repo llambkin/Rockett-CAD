@@ -37,7 +37,7 @@ export const DIALOG_PICKS: Record<DialogType, DialogPicks> = {
 /** Keep only the selection entries a dialog can use. */
 export function filterSelectionFor(
   dialog: DialogType,
-  selection: Selection[]
+  selection: Selection[],
 ): Selection[] {
   const picks = DIALOG_PICKS[dialog] ?? {};
   return selection.filter((s) => {

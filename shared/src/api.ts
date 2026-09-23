@@ -2,11 +2,7 @@
  * API DTOs shared between server and client.
  */
 
-import type {
-  CadDocument,
-  SketchSolveStatus,
-  SketchEntity,
-} from "./model.js";
+import type { CadDocument, SketchSolveStatus, SketchEntity } from "./model.js";
 import type { Profile } from "./profiles.js";
 
 export type Vec3 = [number, number, number];
@@ -41,7 +37,15 @@ export interface EdgeInfo {
   length: number;
   curve:
     | { type: "line"; a: Vec3; b: Vec3 }
-    | { type: "circle"; center: Vec3; axis: Vec3; radius: number; start?: Vec3; end?: Vec3; sweep?: number }
+    | {
+        type: "circle";
+        center: Vec3;
+        axis: Vec3;
+        radius: number;
+        start?: Vec3;
+        end?: Vec3;
+        sweep?: number;
+      }
     | { type: "other" };
 }
 
@@ -54,6 +58,7 @@ export interface BodyPayload {
   bodyId: string;
   name: string;
   visible: boolean;
+  meshKey: string;
   positions: number[];
   normals: number[];
   indices: number[];
@@ -63,12 +68,23 @@ export interface BodyPayload {
   bbox: { min: Vec3; max: Vec3 };
 }
 
-export type FeatureRunStatus = "ok" | "error" | "suppressed" | "rolledBack";
+export type HeldBodyPayload = Pick<
+  BodyPayload,
+  "bodyId" | "name" | "visible" | "meshKey"
+>;
+
+export interface HeldMeshes {
+  held?: string[];
+}
+
+export type FeatureRunStatus =
+  "ok" | "warning" | "error" | "suppressed" | "rolledBack";
 
 export interface FeatureStatus {
   featureId: string;
   status: FeatureRunStatus;
   error?: string;
+  warning?: string;
 }
 
 export interface SketchPayload {
@@ -97,12 +113,65 @@ export interface EvaluateResult {
   kernelMs: number;
 }
 
+export interface WireEvaluateResult extends Omit<EvaluateResult, "bodies"> {
+  bodies: Array<BodyPayload | HeldBodyPayload>;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
   modifiedAt: string;
   createdAt: string;
   featureCount: number;
+  revision?: number;
+  status: "ok" | "invalid" | "tooNew";
+  error?: string;
+  schemaVersion?: number;
+}
+
+export const VIEW_VERSION = 1;
+
+export interface ProjectView {
+  version: typeof VIEW_VERSION;
+  hidden: { bodies: string[]; features: string[] };
+}
+
+export interface Visibility {
+  bodies: Record<string, boolean>;
+  features: Record<string, boolean>;
+}
+
+export function emptyView(): ProjectView {
+  return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
+}
+
+export function withShown(view: ProjectView, shown: Visibility): ProjectView {
+  const apply = (ids: string[], flags: Record<string, boolean>) => {
+    if (Object.keys(flags).length === 0) return ids;
+    const hidden = new Set(ids);
+    for (const [id, visible] of Object.entries(flags))
+      if (visible) hidden.delete(id);
+      else hidden.add(id);
+    return [...hidden];
+  };
+  return {
+    version: VIEW_VERSION,
+    hidden: {
+      bodies: apply(view.hidden.bodies, shown.bodies),
+      features: apply(view.hidden.features, shown.features),
+    },
+  };
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
+export interface FolderTree {
+  folders: Folder[];
+  placement: Record<string, string>;
 }
 
 export interface MeasureRequest {
@@ -136,12 +205,25 @@ export interface ExportRequest {
   bodyIds: string[]; // empty = all visible bodies
   /** Linear tessellation tolerance in mm (default 0.05). */
   quality?: number;
-  binary?: boolean;
+  /** Also store a copy under the project's exports/ directory. */
+  retain?: boolean;
 }
 
-export interface ApiError {
+export type ApiErrorCode =
+  | "validation"
+  | "not_found"
+  | "too_large"
+  | "conflict"
+  | "precondition_required"
+  | "unprocessable"
+  | "kernel"
+  | "internal";
+
+export interface ApiErrorBody {
   error: string;
+  code: ApiErrorCode;
   detail?: string;
+  revision?: number;
 }
 
 export interface ProjectResponse {

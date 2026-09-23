@@ -4,69 +4,96 @@
  */
 
 import { useStore, type DialogType, type SketchTool } from "../store";
-import { newId, type SketchConstraint } from "@rockett/shared";
+import type { SketchConstraint } from "@rockett/shared";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { NAMED_VIEWS } from "../three/camera";
 import { filterSelectionFor } from "../dialogPicks";
 import { StepImportButton } from "./StepImportButton";
+import { SketchInsertButtons } from "./SketchInsertButtons";
+import { withKey } from "../shortcuts";
+import { ToolButton } from "./ToolButton";
+import { NumField } from "./form/fields";
+import type { IconId } from "../icons";
+import {
+  CONSTRAINTS,
+  constraintFor,
+  sketchSelectionIds,
+  type RelationType,
+} from "../sketchRelations";
 
-const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
-  { id: "extrude", label: "Extrude", title: "Extrude profiles (E)" },
+type DialogButton = { id: DialogType & IconId; label: string; title: string };
+
+const CREATE: DialogButton[] = [
+  {
+    id: "extrude",
+    label: "Extrude",
+    title: withKey("Extrude profiles", "extrude"),
+  },
   { id: "revolve", label: "Revolve", title: "Revolve profiles around an axis" },
   { id: "sweep", label: "Sweep", title: "Sweep a profile along a path" },
   { id: "loft", label: "Loft", title: "Loft between profiles" },
   { id: "emboss", label: "Emboss", title: "Emboss/deboss sketch onto a face" },
 ];
 
-const MODIFY: Array<{ id: DialogType; label: string; title: string }> = [
-  { id: "fillet", label: "Fillet", title: "Fillet edges (F)" },
+const MODIFY: DialogButton[] = [
+  { id: "fillet", label: "Fillet", title: withKey("Fillet edges", "fillet") },
   { id: "chamfer", label: "Chamfer", title: "Chamfer edges" },
-  { id: "shell", label: "Shell", title: "Hollow the body" },
-  { id: "combine", label: "Combine", title: "Boolean join/cut/intersect bodies" },
+  { id: "shell", label: "Shell", title: "Shell: hollow the body" },
+  { id: "combine", label: "Combine", title: "Combine: join, cut or intersect" },
   { id: "splitBody", label: "Split", title: "Split a body with a plane" },
-  { id: "offsetFace", label: "Press/Pull", title: "Offset a planar face" },
-  { id: "move", label: "Move", title: "Move bodies (M)" },
+  { id: "offsetFace", label: "Press/Pull", title: "Press/Pull a planar face" },
+  { id: "move", label: "Move", title: withKey("Move bodies", "move") },
 ];
 
-const PATTERN: Array<{ id: DialogType; label: string; title: string }> = [
+const PATTERN: DialogButton[] = [
   { id: "mirror", label: "Mirror", title: "Mirror bodies across a plane" },
-  { id: "linearPattern", label: "Rect Pattern", title: "Rectangular pattern" },
-  { id: "circularPattern", label: "Circ Pattern", title: "Circular pattern" },
+  {
+    id: "linearPattern",
+    label: "Rect Pattern",
+    title: "Rect Pattern: repeat in rows and columns",
+  },
+  {
+    id: "circularPattern",
+    label: "Circ Pattern",
+    title: "Circ Pattern: repeat around an axis",
+  },
 ];
 
-const SKETCH_TOOLS: Array<{ id: SketchTool; label: string; key?: string }> = [
-  { id: "select", label: "Select", key: "V" },
-  { id: "line", label: "Line", key: "L" },
-  { id: "rect", label: "Rect", key: "R" },
+const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
+  { id: "select", label: "Select" },
+  { id: "line", label: "Line" },
+  { id: "rect", label: "Rect" },
   { id: "centerRect", label: "C-Rect" },
-  { id: "circle", label: "Circle", key: "C" },
+  { id: "circle", label: "Circle" },
   { id: "arc3", label: "Arc" },
   { id: "polygon", label: "Polygon" },
   { id: "slot", label: "Slot" },
   { id: "point", label: "Point" },
-  { id: "dimension", label: "Dimension", key: "D" },
+  { id: "dimension", label: "Dimension" },
   { id: "project", label: "Project" },
   { id: "trim", label: "Trim" },
   { id: "extend", label: "Extend" },
   { id: "offset", label: "Offset" },
 ];
 
-const CONSTRAINTS: Array<{
-  type: string;
-  label: string;
-  title: string;
-}> = [
-  { type: "horizontal", label: "―", title: "Horizontal" },
-  { type: "vertical", label: "|", title: "Vertical" },
-  { type: "coincident", label: "⊙", title: "Coincident (2 points)" },
-  { type: "parallel", label: "∥", title: "Parallel (2 lines)" },
-  { type: "perpendicular", label: "⊥", title: "Perpendicular (2 lines)" },
-  { type: "tangent", label: "⌒", title: "Tangent (line + circle)" },
-  { type: "equal", label: "=", title: "Equal (2 lines / 2 circles)" },
-  { type: "concentric", label: "◎", title: "Concentric (2 circles/arcs)" },
-  { type: "midpoint", label: "⋈", title: "Midpoint (point + line)" },
-  { type: "collinear", label: "≡", title: "Collinear (2 lines)" },
-  { type: "fix", label: "🔒", title: "Fix point" },
-];
+export async function addSketchConstraints(constraints: SketchConstraint[]) {
+  const s = useStore.getState();
+  if (!s.draftSketch) return;
+  s.updateDraftSketch(s.draftSketch.entities, [
+    ...s.draftSketch.constraints,
+    ...constraints,
+  ]);
+  await s.commitDraftSketch();
+  useStore.getState().setSelection([]);
+}
+
+/** Opens a feature dialog, keeping any pre-selected geometry it can use (select-then-command). */
+export function openDialog(dialog: DialogType) {
+  const s = useStore.getState();
+  const kept = filterSelectionFor(dialog, s.selection);
+  s.setMode({ name: "dialog", dialog });
+  s.setSelection(kept);
+}
 
 export function Toolbar() {
   const mode = useStore((s) => s.mode);
@@ -74,14 +101,6 @@ export function Toolbar() {
   const busy = useStore((s) => s.busy);
 
   if (mode.name === "sketch") return <SketchToolbar />;
-
-  const openDialog = (dialog: DialogType) => {
-    // Keep any pre-selected geometry the dialog can use (select-then-command).
-    const s = useStore.getState();
-    const kept = filterSelectionFor(dialog, s.selection);
-    setMode({ name: "dialog", dialog });
-    s.setSelection(kept);
-  };
 
   // A pre-selected plane or planar face starts the sketch there directly;
   // otherwise fall back to pick-a-plane mode.
@@ -111,118 +130,113 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <div className="tb-group">
-        <span className="tb-title">SKETCH</span>
-        <button
-          className="tb-btn primary"
+      <ToolGroup title="SKETCH">
+        <ToolButton
+          icon="sketch"
+          label="Create Sketch"
+          className="primary"
           disabled={busy}
           onClick={() => void createSketch()}
-          title="Create a sketch on a plane or planar face (S)"
-        >
-          Create Sketch
-        </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">CREATE</span>
-        {CREATE.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            title={b.title}
-            disabled={busy}
-            onClick={() => openDialog(b.id)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">MODIFY</span>
-        {MODIFY.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            title={b.title}
-            disabled={busy}
-            onClick={() => openDialog(b.id)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">CONSTRUCT</span>
-        <button
-          className="tb-btn"
+          title={withKey("Create Sketch on a plane or planar face", "sketch")}
+        />
+      </ToolGroup>
+      <DialogGroup title="CREATE" buttons={CREATE} busy={busy} />
+      <DialogGroup title="MODIFY" buttons={MODIFY} busy={busy} />
+      <ToolGroup title="CONSTRUCT">
+        <ToolButton
+          icon="constructionPlane"
+          label="Plane"
           title="Construction plane (offset / midplane)"
           disabled={busy}
           onClick={() => openDialog("constructionPlane")}
-        >
-          Plane
-        </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">PATTERN</span>
-        {PATTERN.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            title={b.title}
-            disabled={busy}
-            onClick={() => openDialog(b.id)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">INSPECT</span>
-        <button
-          className={`tb-btn ${mode.name === "measure" ? "active" : ""}`}
-          title="Measure (M)"
+        />
+      </ToolGroup>
+      <DialogGroup title="PATTERN" buttons={PATTERN} busy={busy} />
+      <ToolGroup title="INSPECT">
+        <ToolButton
+          icon="measure"
+          label="Measure"
+          className={mode.name === "measure" ? "active" : ""}
+          title={withKey("Measure", "measure")}
           onClick={() =>
-            mode.name === "measure"
-              ? setMode({ name: "idle" })
-              : setMode({ name: "measure" })
+            setMode({ name: mode.name === "measure" ? "idle" : "measure" })
           }
-        >
-          Measure
-        </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">INSERT</span>
+        />
+      </ToolGroup>
+      <ToolGroup title="INSERT">
         <StepImportButton />
-        <button
-          className="tb-btn"
-          title="Insert reference image"
+        <ToolButton
+          icon="referenceImage"
+          label="Canvas"
+          title="Canvas: insert a reference image"
           disabled={busy}
           onClick={() => openDialog("referenceImage")}
-        >
-          Canvas
-        </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">EXPORT</span>
-        <button className="tb-btn" disabled={busy} onClick={() => openDialog("export")}>
-          STL / 3MF
-        </button>
-      </div>
+        />
+      </ToolGroup>
+      <ToolGroup title="EXPORT">
+        <ToolButton
+          icon="export"
+          label="STL / 3MF"
+          title="STL / 3MF export"
+          disabled={busy}
+          onClick={() => openDialog("export")}
+        />
+      </ToolGroup>
       <div className="tb-spacer" />
       <ViewButtons />
     </div>
   );
 }
 
+export function toggleProjection() {
+  const vp = viewportHandle.current;
+  if (!vp) return;
+  vp.setProjection(
+    vp.projection === "orthographic" ? "perspective" : "orthographic",
+  );
+}
+
+function ToolGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="tb-group">
+      <span className="tb-title">{title}</span>
+      <div className="tb-row">{children}</div>
+    </div>
+  );
+}
+
+function DialogGroup({
+  title,
+  buttons,
+  busy,
+}: {
+  title: string;
+  buttons: DialogButton[];
+  busy: boolean;
+}) {
+  return (
+    <ToolGroup title={title}>
+      {buttons.map((b) => (
+        <ToolButton
+          key={b.id}
+          icon={b.id}
+          label={b.label}
+          title={b.title}
+          disabled={busy}
+          onClick={() => openDialog(b.id)}
+        />
+      ))}
+    </ToolGroup>
+  );
+}
+
 function ViewButtons() {
-  const views: Array<{ label: string; dir: [number, number, number]; up: [number, number, number] }> = [
-    { label: "Front", dir: [0, -1, 0], up: [0, 0, 1] },
-    { label: "Back", dir: [0, 1, 0], up: [0, 0, 1] },
-    { label: "Left", dir: [-1, 0, 0], up: [0, 0, 1] },
-    { label: "Right", dir: [1, 0, 0], up: [0, 0, 1] },
-    { label: "Top", dir: [0, 0, 1], up: [0, 1, 0] },
-    { label: "Bottom", dir: [0, 0, -1], up: [0, -1, 0] },
-    { label: "Iso", dir: [1, -1, 0.8], up: [0, 0, 1] },
-  ];
   return (
     <div className="tb-group views">
       <select
@@ -230,37 +244,29 @@ function ViewButtons() {
         title="Named views"
         value=""
         onChange={(e) => {
-          const v = views.find((x) => x.label === e.target.value);
+          const v = NAMED_VIEWS.find((x) => x.label === e.target.value);
           if (v) viewportHandle.current?.setView(v.dir, v.up);
         }}
       >
         <option value="" disabled>
           View
         </option>
-        {views.map((v) => (
+        {NAMED_VIEWS.map((v) => (
           <option key={v.label}>{v.label}</option>
         ))}
       </select>
-      <button
-        className="tb-btn"
+      <ToolButton
+        icon="fit"
+        label="Fit"
         title="Zoom to fit (Shift+F)"
         onClick={() => viewportHandle.current?.zoomToFit()}
-      >
-        Fit
-      </button>
-      <button
-        className="tb-btn"
-        title="Toggle orthographic / perspective"
-        onClick={() => {
-          const vp = viewportHandle.current;
-          if (!vp) return;
-          vp.setProjection(
-            vp.projection === "orthographic" ? "perspective" : "orthographic"
-          );
-        }}
-      >
-        Ortho/Persp
-      </button>
+      />
+      <ToolButton
+        icon="projection"
+        label="Ortho/Persp"
+        title="Ortho/Persp: toggle orthographic or perspective"
+        onClick={toggleProjection}
+      />
     </div>
   );
 }
@@ -272,8 +278,6 @@ function SketchToolbar() {
   const setMode = useStore((s) => s.setMode);
   const selection = useStore((s) => s.selection);
   const draft = useStore((s) => s.draftSketch);
-  const updateDraft = useStore((s) => s.updateDraftSketch);
-  const commit = useStore((s) => s.commitDraftSketch);
   const setError = useStore((s) => s.setError);
   const dialogParams = useStore((s) => s.dialogParams);
   const setDialogParams = useStore((s) => s.setDialogParams);
@@ -281,137 +285,86 @@ function SketchToolbar() {
   if (mode.name !== "sketch") return null;
   const tool = mode.tool;
 
-  const applyConstraint = async (type: string) => {
+  const applyConstraint = async (type: RelationType) => {
     if (!draft) return;
-    const entityIds = selection
-      .filter((s) => s.kind === "sketchEntity" || s.kind === "sketchPoint")
-      .map((s: any) => s.entityId);
-    const find = (id: string) => draft.entities.find((e) => e.id === id);
-    const points = entityIds.filter((id) => find(id)?.kind === "point");
-    const lines = entityIds.filter((id) => find(id)?.kind === "line");
-    const circleLikes = entityIds.filter((id) => {
-      const k = find(id)?.kind;
-      return k === "circle" || k === "arc";
-    });
-
-    let c: SketchConstraint | null = null;
-    const id = newId("c");
-    switch (type) {
-      case "horizontal":
-        if (lines.length >= 1) c = { id, type: "horizontal", line: lines[0] };
-        break;
-      case "vertical":
-        if (lines.length >= 1) c = { id, type: "vertical", line: lines[0] };
-        break;
-      case "coincident":
-        if (points.length >= 2)
-          c = { id, type: "coincident", a: points[0], b: points[1] };
-        break;
-      case "parallel":
-        if (lines.length >= 2) c = { id, type: "parallel", a: lines[0], b: lines[1] };
-        break;
-      case "perpendicular":
-        if (lines.length >= 2)
-          c = { id, type: "perpendicular", a: lines[0], b: lines[1] };
-        break;
-      case "tangent":
-        if (lines.length >= 1 && circleLikes.length >= 1)
-          c = { id, type: "tangent", a: lines[0], b: circleLikes[0] };
-        else if (circleLikes.length >= 2)
-          c = { id, type: "tangent", a: circleLikes[0], b: circleLikes[1] };
-        break;
-      case "equal":
-        if (lines.length >= 2) c = { id, type: "equal", a: lines[0], b: lines[1] };
-        else if (circleLikes.length >= 2)
-          c = { id, type: "equal", a: circleLikes[0], b: circleLikes[1] };
-        break;
-      case "concentric":
-        if (circleLikes.length >= 2)
-          c = { id, type: "concentric", a: circleLikes[0], b: circleLikes[1] };
-        break;
-      case "midpoint":
-        if (points.length >= 1 && lines.length >= 1)
-          c = { id, type: "midpoint", point: points[0], line: lines[0] };
-        break;
-      case "collinear":
-        if (lines.length >= 2) c = { id, type: "collinear", a: lines[0], b: lines[1] };
-        break;
-      case "fix":
-        if (points.length >= 1) c = { id, type: "fix", point: points[0] };
-        break;
-    }
+    const c = constraintFor(draft, sketchSelectionIds(selection), type);
     if (!c) {
-      setError(`Selection doesn't match the ${type} constraint — check the tooltip`);
+      setError(
+        `Selection doesn't match the ${type} constraint — check the tooltip`,
+      );
       return;
     }
-    updateDraft(draft.entities, [...draft.constraints, c]);
-    await commit();
-    useStore.getState().setSelection([]);
-  };
-
-  const deleteSelected = async () => {
-    const ids = selection
-      .filter((s) => s.kind === "sketchEntity" || s.kind === "sketchPoint")
-      .map((s: any) => s.entityId);
-    await useStore.getState().deleteSketchEntities(ids);
+    await addSketchConstraints([c]);
   };
 
   return (
     <div className="toolbar sketch">
-      <div className="tb-group">
-        <span className="tb-title">SKETCH</span>
+      <ToolGroup title="SKETCH">
         {SKETCH_TOOLS.map((t) => (
-          <button
+          <ToolButton
             key={t.id}
-            className={`tb-btn ${tool === t.id ? "active" : ""}`}
-            title={t.key ? `${t.label} (${t.key})` : t.label}
+            icon={t.id}
+            label={t.label}
+            className={tool === t.id ? "active" : ""}
+            title={withKey(t.label, t.id)}
             onClick={() => setSketchTool(t.id)}
-          >
-            {t.label}
-          </button>
+          />
         ))}
         {tool === "polygon" && (
-          <input
+          <NumField
             className="tb-input"
-            type="number"
+            title="Polygon sides"
+            ariaLabel="Polygon sides"
+            int
             min={3}
             max={24}
-            value={dialogParams.polygonSides ?? 6}
-            onChange={(e) => setDialogParams({ polygonSides: Number(e.target.value) })}
-            title="Polygon sides"
+            value={Number(dialogParams.polygonSides ?? 6)}
+            onChange={(v) => setDialogParams({ polygonSides: v })}
           />
         )}
-        <button
-          className={`tb-btn ${mode.constructionMode ? "active" : ""}`}
+        <ToolButton
+          icon="construction"
+          label="Construction"
+          className={mode.constructionMode ? "active" : ""}
           title="Toggle construction geometry (X)"
           onClick={() =>
             setMode({ ...mode, constructionMode: !mode.constructionMode })
           }
-        >
-          Construction
-        </button>
-      </div>
-      <div className="tb-group">
-        <span className="tb-title">CONSTRAIN</span>
+        />
+      </ToolGroup>
+      <ToolGroup title="CONSTRAIN">
         {CONSTRAINTS.map((c) => (
-          <button
+          <ToolButton
             key={c.type}
-            className="tb-btn icon"
+            icon={c.type}
+            label={c.label}
+            iconOnly
             title={c.title}
             onClick={() => void applyConstraint(c.type)}
-          >
-            {c.label}
-          </button>
+          />
         ))}
-        <button className="tb-btn" title="Delete selected (Del)" onClick={() => void deleteSelected()}>
-          Delete
-        </button>
-      </div>
+        <ToolButton
+          icon="delete"
+          label="Delete"
+          title="Delete selected (Del)"
+          onClick={() =>
+            void useStore
+              .getState()
+              .deleteSketchEntities(sketchSelectionIds(selection))
+          }
+        />
+      </ToolGroup>
+      <ToolGroup title="INSERT">
+        <SketchInsertButtons />
+      </ToolGroup>
       <div className="tb-spacer" />
       <div className="tb-group">
-        <button className="tb-btn primary" onClick={() => void finishSketch()}>
-          Finish Sketch
-        </button>
+        <ToolButton
+          icon="finishSketch"
+          label="Finish Sketch"
+          className="primary"
+          onClick={() => void finishSketch()}
+        />
       </div>
     </div>
   );

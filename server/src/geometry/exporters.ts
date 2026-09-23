@@ -2,14 +2,16 @@
  * Mesh exporters: binary STL and 3MF.
  *
  * Both operate on fresh tessellations of the B-Rep bodies at export quality
- * (independent of the coarser viewport tessellation).
+ * (independent of the viewport tessellation).
  *
  * 3MF is written directly (OPC zip + 3D/3dmodel.model XML); each body is a
  * separate <object> so multi-body models survive into slicers.
  */
 
 import { zipSync, strToU8 } from "fflate";
-import { getKernel, faces as facesOf, shapeHash, type Shape } from "./kernel.js";
+import { LINEAR_TOL } from "@rockett/shared";
+import { getKernel } from "./kernel.js";
+import { meshShape } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
 
 interface Mesh {
@@ -19,51 +21,24 @@ interface Mesh {
 
 /** Tessellate a body at export quality. */
 export function exportMesh(body: NamedBody, quality = 0.05): Mesh {
-  const k = getKernel();
-  const mesh = new k.BRepMesh_IncrementalMesh_2(
-    body.shape,
-    quality,
-    false,
-    0.3,
-    false
-  );
-  mesh.delete();
-
   const positions: number[] = [];
   const indices: number[] = [];
-  const reversedEnum = k.TopAbs_Orientation.TopAbs_REVERSED;
-
-  for (const face of facesOf(body.shape)) {
-    const loc = new k.TopLoc_Location_1();
-    const triHandle = k.BRep_Tool.Triangulation(face, loc, 0);
-    if (triHandle.IsNull()) {
-      loc.delete();
-      triHandle.delete();
-      continue;
+  const copy = new (getKernel().BRepBuilderAPI_Copy_2)(
+    body.shape,
+    false,
+    false,
+  );
+  try {
+    for (const m of meshShape(copy.Shape(), {
+      linear: quality,
+      angular: 0.3,
+    })) {
+      const offset = positions.length / 3;
+      for (const p of m.positions) positions.push(p);
+      for (const i of m.indices) indices.push(offset + i);
     }
-    const tri = triHandle.get();
-    const trsf = loc.Transformation();
-    const reversed = face.Orientation_1() === reversedEnum;
-    const offset = positions.length / 3;
-    const nbNodes = tri.NbNodes();
-    for (let i = 1; i <= nbNodes; i++) {
-      const p = tri.Node(i).Transformed(trsf);
-      positions.push(p.X(), p.Y(), p.Z());
-      p.delete();
-    }
-    const nbTris = tri.NbTriangles();
-    for (let i = 1; i <= nbTris; i++) {
-      const t = tri.Triangle(i);
-      let a = t.Value(1),
-        b = t.Value(2),
-        c = t.Value(3);
-      t.delete();
-      if (reversed) [b, c] = [c, b];
-      indices.push(offset + a - 1, offset + b - 1, offset + c - 1);
-    }
-    trsf.delete();
-    loc.delete();
-    triHandle.delete();
+  } finally {
+    copy.delete();
   }
   return { positions, indices };
 }
@@ -79,15 +54,15 @@ export function writeStl(bodies: NamedBody[], quality = 0.05): Buffer {
   for (const mesh of meshes) {
     const { positions: P, indices: I } = mesh;
     for (let t = 0; t < I.length; t += 3) {
-      const a = I[t] * 3,
-        b = I[t + 1] * 3,
-        c = I[t + 2] * 3;
-      const ux = P[b] - P[a],
-        uy = P[b + 1] - P[a + 1],
-        uz = P[b + 2] - P[a + 2];
-      const vx = P[c] - P[a],
-        vy = P[c + 1] - P[a + 1],
-        vz = P[c + 2] - P[a + 2];
+      const a = I[t]! * 3,
+        b = I[t + 1]! * 3,
+        c = I[t + 2]! * 3;
+      const ux = P[b]! - P[a]!,
+        uy = P[b + 1]! - P[a + 1]!,
+        uz = P[b + 2]! - P[a + 2]!;
+      const vx = P[c]! - P[a]!,
+        vy = P[c + 1]! - P[a + 1]!,
+        vz = P[c + 2]! - P[a + 2]!;
       let nx = uy * vz - uz * vy,
         ny = uz * vx - ux * vz,
         nz = ux * vy - uy * vx;
@@ -98,15 +73,15 @@ export function writeStl(bodies: NamedBody[], quality = 0.05): Buffer {
       buffer.writeFloatLE(nx, off);
       buffer.writeFloatLE(ny, off + 4);
       buffer.writeFloatLE(nz, off + 8);
-      buffer.writeFloatLE(P[a], off + 12);
-      buffer.writeFloatLE(P[a + 1], off + 16);
-      buffer.writeFloatLE(P[a + 2], off + 20);
-      buffer.writeFloatLE(P[b], off + 24);
-      buffer.writeFloatLE(P[b + 1], off + 28);
-      buffer.writeFloatLE(P[b + 2], off + 32);
-      buffer.writeFloatLE(P[c], off + 36);
-      buffer.writeFloatLE(P[c + 1], off + 40);
-      buffer.writeFloatLE(P[c + 2], off + 44);
+      buffer.writeFloatLE(P[a]!, off + 12);
+      buffer.writeFloatLE(P[a + 1]!, off + 16);
+      buffer.writeFloatLE(P[a + 2]!, off + 20);
+      buffer.writeFloatLE(P[b]!, off + 24);
+      buffer.writeFloatLE(P[b + 1]!, off + 28);
+      buffer.writeFloatLE(P[b + 2]!, off + 32);
+      buffer.writeFloatLE(P[c]!, off + 36);
+      buffer.writeFloatLE(P[c + 1]!, off + 40);
+      buffer.writeFloatLE(P[c + 2]!, off + 44);
       buffer.writeUInt16LE(0, off + 48);
       off += 50;
     }
@@ -122,30 +97,54 @@ function xmlEscape(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function weld({ positions: P, indices }: Mesh): Mesh {
+  const at = new Map<string, number>();
+  const welded: Mesh = { positions: [], indices: [] };
+  const remap: number[] = [];
+  const q = (v: number) => Math.round(P[v]! / LINEAR_TOL);
+  for (let v = 0; v < P.length; v += 3) {
+    const key = `${q(v)},${q(v + 1)},${q(v + 2)}`;
+    let i = at.get(key);
+    if (i === undefined) {
+      i = welded.positions.length / 3;
+      at.set(key, i);
+      welded.positions.push(P[v]!, P[v + 1]!, P[v + 2]!);
+    }
+    remap.push(i);
+  }
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = remap[indices[t]!]!,
+      b = remap[indices[t + 1]!]!,
+      c = remap[indices[t + 2]!]!;
+    if (a !== b && b !== c && c !== a) welded.indices.push(a, b, c);
+  }
+  return welded;
+}
+
 /** 3MF: one <object> per body, names preserved, units = millimeter. */
 export function write3mf(
   bodies: { body: NamedBody; name: string }[],
-  quality = 0.05
+  quality = 0.05,
 ): Buffer {
   const objectsXml: string[] = [];
   const itemsXml: string[] = [];
   bodies.forEach(({ body, name }, i) => {
-    const mesh = exportMesh(body, quality);
+    const mesh = weld(exportMesh(body, quality));
     const id = i + 1;
     const verts: string[] = [];
     for (let v = 0; v < mesh.positions.length; v += 3) {
       verts.push(
-        `<vertex x="${mesh.positions[v].toFixed(6)}" y="${mesh.positions[v + 1].toFixed(6)}" z="${mesh.positions[v + 2].toFixed(6)}"/>`
+        `<vertex x="${mesh.positions[v]!.toFixed(6)}" y="${mesh.positions[v + 1]!.toFixed(6)}" z="${mesh.positions[v + 2]!.toFixed(6)}"/>`,
       );
     }
     const tris: string[] = [];
     for (let t = 0; t < mesh.indices.length; t += 3) {
       tris.push(
-        `<triangle v1="${mesh.indices[t]}" v2="${mesh.indices[t + 1]}" v3="${mesh.indices[t + 2]}"/>`
+        `<triangle v1="${mesh.indices[t]}" v2="${mesh.indices[t + 1]}" v3="${mesh.indices[t + 2]}"/>`,
       );
     }
     objectsXml.push(
-      `<object id="${id}" name="${xmlEscape(name)}" type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`
+      `<object id="${id}" name="${xmlEscape(name)}" type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`,
     );
     itemsXml.push(`<item objectid="${id}"/>`);
   });

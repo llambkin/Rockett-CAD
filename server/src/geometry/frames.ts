@@ -11,7 +11,7 @@
  *   from the plane normal.
  */
 
-import type { PlaneFrame, Vec3 } from "@rockett/shared";
+import type { OriginPlaneName, PlaneFrame, Vec3 } from "@rockett/shared";
 
 export const V = {
   add: (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
@@ -30,7 +30,7 @@ export const V = {
   },
 };
 
-export const ORIGIN_FRAMES: Record<string, PlaneFrame> = {
+export const ORIGIN_FRAMES: Record<OriginPlaneName, PlaneFrame> = {
   XY: {
     origin: [0, 0, 0],
     xAxis: [1, 0, 0],
@@ -61,7 +61,10 @@ export function uvTo3d(frame: PlaneFrame, u: number, v: number): Vec3 {
 }
 
 /** Project a 3D point into sketch (u, v[, w]) coordinates. */
-export function pointToUV(frame: PlaneFrame, p: Vec3): { u: number; v: number; w: number } {
+export function pointToUV(
+  frame: PlaneFrame,
+  p: Vec3,
+): { u: number; v: number; w: number } {
   const d = V.sub(p, frame.origin);
   return {
     u: V.dot(d, frame.xAxis),

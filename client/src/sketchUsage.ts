@@ -21,7 +21,8 @@ export function sketchUsage(document: CadDocument): SketchUsage {
   const sketches = new Set<string>();
   for (const f of document.features) {
     const anyF = f as any;
-    for (const p of anyF.profiles ?? []) profiles.add(profileKey(p.sketchId, p.profileId));
+    for (const p of anyF.profiles ?? [])
+      profiles.add(profileKey(p.sketchId, p.profileId));
     for (const p of anyF.sections ?? []) {
       if (p.profileId) profiles.add(profileKey(p.sketchId, p.profileId));
       else sketches.add(p.sketchId);
@@ -31,15 +32,24 @@ export function sketchUsage(document: CadDocument): SketchUsage {
   return { profiles, sketches };
 }
 
-export function isProfileUsed(usage: SketchUsage, sketchId: string, profileId: string): boolean {
-  return usage.sketches.has(sketchId) || usage.profiles.has(profileKey(sketchId, profileId));
+export function isProfileUsed(
+  usage: SketchUsage,
+  sketchId: string,
+  profileId: string,
+): boolean {
+  return (
+    usage.sketches.has(sketchId) ||
+    usage.profiles.has(profileKey(sketchId, profileId))
+  );
 }
 
 /** Region ids of a sketch no feature has used yet. */
 export function freeProfileIds(
   usage: SketchUsage,
   sketchId: string,
-  profiles: { id: string }[]
+  profiles: { id: string }[],
 ): string[] {
-  return profiles.filter((p) => !isProfileUsed(usage, sketchId, p.id)).map((p) => p.id);
+  return profiles
+    .filter((p) => !isProfileUsed(usage, sketchId, p.id))
+    .map((p) => p.id);
 }

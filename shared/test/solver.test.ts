@@ -30,7 +30,9 @@ describe("sketch solver", () => {
     ];
     const res = solveSketch({ entities, constraints });
     expect(res.converged).toBe(true);
-    const P = new Map(res.entities.filter((e) => e.kind === "point").map((e: any) => [e.id, e]));
+    const P = new Map(
+      res.entities.filter((e) => e.kind === "point").map((e: any) => [e.id, e]),
+    );
     expect(P.get("a")!.x).toBeCloseTo(0, 6);
     expect(P.get("b")!.x).toBeCloseTo(100, 5);
     expect(P.get("b")!.y).toBeCloseTo(0, 5);
@@ -162,5 +164,72 @@ describe("sketch solver", () => {
     const c: any = res.entities.find((e) => e.id === "c");
     const d: any = res.entities.find((e) => e.id === "d");
     expect(Math.abs(d.y - c.y)).toBeLessThan(1e-4); // parallel to horizontal l1
+  });
+});
+
+const line = (x: number, y: number): SketchEntity[] => [
+  pt("a", 0, 0),
+  pt("b", x, y),
+  { id: "l1", kind: "line", p1: "a", p2: "b" },
+];
+const held = (value: number): SketchConstraint[] => [
+  { id: "f", type: "fix", point: "a" },
+  { id: "len", type: "length", line: "l1", value: 10 },
+  { id: "ang", type: "lineAngle", line: "l1", value },
+];
+const end = (entities: SketchEntity[]) => {
+  const b = entities.find((e) => e.id === "b");
+  if (b?.kind !== "point") throw new Error("end point missing");
+  return b;
+};
+
+describe("line angle constraint", () => {
+  it("drives a line to its angle from the +X axis", () => {
+    const res = solveSketch({ entities: line(9, 2), constraints: held(30) });
+    expect(res.converged).toBe(true);
+    expect(end(res.entities).x).toBeCloseTo(8.6603, 4);
+    expect(end(res.entities).y).toBeCloseTo(5, 4);
+    expect(res.status).toBe("fully_constrained");
+    expect(res.dof).toBe(0);
+  });
+
+  it("flips a line drawn at 0 degrees to 180", () => {
+    const res = solveSketch({ entities: line(10, 0), constraints: held(180) });
+    expect(res.converged).toBe(true);
+    expect(end(res.entities).x).toBeCloseTo(-10, 4);
+    expect(end(res.entities).y).toBeCloseTo(0, 4);
+  });
+
+  it("keeps the residual continuous across the 180 degree wrap", () => {
+    const rad = (-179 * Math.PI) / 180;
+    const res = solveSketch({
+      entities: line(10 * Math.cos(rad), 10 * Math.sin(rad)),
+      constraints: held(180),
+    });
+    expect(res.converged).toBe(true);
+    expect(end(res.entities).x).toBeCloseTo(-10, 4);
+    expect(end(res.entities).y).toBeCloseTo(0, 4);
+  });
+
+  it("counts one degree of freedom and reports a conflict", () => {
+    const free = solveSketch({
+      entities: line(9, 2),
+      constraints: [
+        { id: "f", type: "fix", point: "a" },
+        { id: "ang", type: "lineAngle", line: "l1", value: -45 },
+      ],
+    });
+    expect(free.status).toBe("partially_constrained");
+    expect(free.dof).toBe(1);
+    const b = end(free.entities);
+    expect(b.y / b.x).toBeCloseTo(-1, 6);
+    expect(b.x).toBeGreaterThan(0);
+
+    const clash = solveSketch({
+      entities: line(9, 2),
+      constraints: [...held(30), { id: "h", type: "horizontal", line: "l1" }],
+    });
+    expect(clash.converged).toBe(false);
+    expect(clash.status).toBe("over_constrained");
   });
 });

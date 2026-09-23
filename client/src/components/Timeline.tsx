@@ -1,15 +1,19 @@
-/**
- * Feature timeline (bottom bar): chronological feature chips, rollback
- * marker, per-feature context menu (edit/rename/suppress/delete).
- */
-
 import { useState } from "react";
 import type { Feature } from "@rockett/shared";
-import { useStore, sketchEditingPosition, type DialogType, type Selection } from "../store";
+import {
+  useStore,
+  sketchEditingPosition,
+  type DialogType,
+  type Selection,
+} from "../store";
+import { useTimelinePeek } from "../timelinePeek";
 import { alignCameraToActiveSketch } from "../viewportRef";
+import { ContextMenu } from "./ContextMenu";
+import { QuickEdit, quickValues } from "./QuickEdit";
 
 const TYPE_ICONS: Record<string, string> = {
   importStep: "⇩",
+  importMesh: "⇩",
   sketch: "✏",
   extrude: "⬆",
   revolve: "↻",
@@ -27,23 +31,36 @@ const TYPE_ICONS: Record<string, string> = {
   constructionPlane: "▱",
   referenceImage: "🖼",
   emboss: "℘",
+  move: "✥",
 };
 
 export function Timeline() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
-  const mode = useStore(s => s.mode);
-  const busy = useStore(s => s.busy);
+  const mode = useStore((s) => s.mode);
+  const busy = useStore((s) => s.busy);
   const rollTimeline = useStore((s) => s.rollTimeline);
-  const [menu, setMenu] = useState<{ x: number; y: number; feature: Feature } | null>(
-    null
-  );
-  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    feature: Feature;
+    anchor: { left: number; top: number };
+  } | null>(null);
+  const [quick, setQuick] = useState<{
+    feature: Feature;
+    anchor: { left: number; top: number };
+  } | null>(null);
+  const [renaming, setRenaming] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
+  const peek = useTimelinePeek(quick !== null);
 
   if (!document_) return null;
-  const pos = sketchEditingPosition(document_, mode) ?? document_.timelinePosition;
+  const pos =
+    sketchEditingPosition(document_, mode) ?? document_.timelinePosition;
   const statuses = new Map(
-    (evaluation?.featureStatuses ?? []).map((s) => [s.featureId, s])
+    (evaluation?.featureStatuses ?? []).map((s) => [s.featureId, s]),
   );
 
   const openEditor = (f: Feature) => {
@@ -51,8 +68,12 @@ export function Timeline() {
   };
 
   return (
-    <div className="timeline" onClick={() => setMenu(null)}>
-      <fieldset className="tl-controls" disabled={busy || mode.name === "sketch"} style={{ border: 0, margin: 0, padding: 0 }}>
+    <div className="timeline">
+      <fieldset
+        className="tl-controls"
+        disabled={busy || mode.name === "sketch"}
+        style={{ border: 0, margin: 0, padding: 0 }}
+      >
         <button title="Roll to start" onClick={() => void rollTimeline(0)}>
           ⏮
         </button>
@@ -64,7 +85,9 @@ export function Timeline() {
         </button>
         <button
           title="Step forward"
-          onClick={() => void rollTimeline(Math.min(document_.features.length, pos + 1))}
+          onClick={() =>
+            void rollTimeline(Math.min(document_.features.length, pos + 1))
+          }
         >
           ▶
         </button>
@@ -95,11 +118,19 @@ export function Timeline() {
             <span key={f.id} style={{ display: "contents" }}>
               <div
                 className={cls}
-                title={`${f.name} (${f.type})${st?.error ? `\n⚠ ${st.error}` : ""}${f.suppressed ? "\n(suppressed)" : ""}`}
+                title={`${f.name} (${f.type})${st?.error || st?.warning ? `\n⚠ ${st.error ?? st.warning}` : ""}${f.suppressed ? "\n(suppressed)" : ""}`}
                 onDoubleClick={() => openEditor(f)}
+                onMouseEnter={() => peek.enter(f.id)}
+                onMouseLeave={peek.leave}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, feature: f });
+                  const { left, top } = e.currentTarget.getBoundingClientRect();
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    feature: f,
+                    anchor: { left, top },
+                  });
                 }}
               >
                 <span className="tl-icon">{TYPE_ICONS[f.type] ?? "•"}</span>
@@ -108,7 +139,9 @@ export function Timeline() {
                     autoFocus
                     className="tl-rename"
                     value={renaming.value}
-                    onChange={(e) => setRenaming({ id: f.id, value: e.target.value })}
+                    onChange={(e) =>
+                      setRenaming({ id: f.id, value: e.target.value })
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         void useStore
@@ -124,7 +157,9 @@ export function Timeline() {
                 ) : (
                   <span className="tl-name">{f.name}</span>
                 )}
-                {st?.status === "error" && <span className="tl-warn">⚠</span>}
+                {(st?.status === "error" || st?.status === "warning") && (
+                  <span className="tl-warn">⚠</span>
+                )}
               </div>
               <div
                 className={`tl-marker ${pos === i + 1 ? "current" : ""}`}
@@ -136,48 +171,43 @@ export function Timeline() {
         })}
       </div>
       {menu && (
-        <div
-          className="context-menu"
-          style={{ left: menu.x, bottom: window.innerHeight - menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => {
-              openEditor(menu.feature);
-              setMenu(null);
-            }}
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => {
-              setRenaming({ id: menu.feature.id, value: menu.feature.name });
-              setMenu(null);
-            }}
-          >
-            Rename
-          </button>
-          <button
-            onClick={() => {
-              void useStore
-                .getState()
-                .suppressFeature(menu.feature.id, !menu.feature.suppressed);
-              setMenu(null);
-            }}
-          >
-            {menu.feature.suppressed ? "Unsuppress" : "Suppress"}
-          </button>
-          <button
-            className="danger"
-            onClick={() => {
-              // no confirm — Ctrl+Z restores deleted features
-              void useStore.getState().deleteFeature(menu.feature.id);
-              setMenu(null);
-            }}
-          >
-            Delete
-          </button>
-        </div>
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          up
+          onClose={() => setMenu(null)}
+          items={[
+            { label: "Edit", action: () => openEditor(menu.feature) },
+            ...(mode.name === "idle" && quickValues(menu.feature).length > 0
+              ? [{ label: "Quick edit", action: () => setQuick(menu) }]
+              : []),
+            {
+              label: "Rename",
+              action: () =>
+                setRenaming({ id: menu.feature.id, value: menu.feature.name }),
+            },
+            {
+              label: menu.feature.suppressed ? "Unsuppress" : "Suppress",
+              action: () =>
+                void useStore
+                  .getState()
+                  .suppressFeature(menu.feature.id, !menu.feature.suppressed),
+            },
+            {
+              label: "Delete",
+              danger: true,
+              action: () =>
+                void useStore.getState().deleteFeature(menu.feature.id),
+            },
+          ]}
+        />
+      )}
+      {quick && (
+        <QuickEdit
+          feature={quick.feature}
+          anchor={quick.anchor}
+          onClose={() => setQuick(null)}
+        />
       )}
     </div>
   );
@@ -199,10 +229,18 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   const anyF = f as any;
   const selection: Selection[] = [];
   for (const p of anyF.profiles ?? []) {
-    selection.push({ kind: "profile", sketchId: p.sketchId, profileId: p.profileId });
+    selection.push({
+      kind: "profile",
+      sketchId: p.sketchId,
+      profileId: p.profileId,
+    });
   }
   for (const p of anyF.sections ?? []) {
-    selection.push({ kind: "profile", sketchId: p.sketchId, profileId: p.profileId });
+    selection.push({
+      kind: "profile",
+      sketchId: p.sketchId,
+      profileId: p.profileId,
+    });
   }
   for (const e of anyF.edges ?? []) {
     selection.push({ kind: "edge", bodyId: e.bodyId, edgeName: e.edgeName });
@@ -210,11 +248,30 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   for (const fa of anyF.faces ?? anyF.openFaces ?? []) {
     selection.push({ kind: "face", bodyId: fa.bodyId, faceName: fa.faceName });
   }
-  if (anyF.targetBody) selection.push({ kind: "body", bodyId: anyF.targetBody });
+  if (anyF.targetBody)
+    selection.push({ kind: "body", bodyId: anyF.targetBody });
   for (const b of anyF.toolBodies ?? anyF.bodies ?? []) {
     selection.push({ kind: "body", bodyId: b });
   }
   if (anyF.body) selection.push({ kind: "body", bodyId: anyF.body });
+
+  /** Reselect an edge or sketch-line axis so OK rebuilds the same axis. */
+  const pushAxis = (axis: any) => {
+    if (axis?.kind === "edge") {
+      selection.push({
+        kind: "edge",
+        bodyId: axis.edge.bodyId,
+        edgeName: axis.edge.edgeName,
+      });
+    }
+    if (axis?.kind === "sketchLine") {
+      selection.push({
+        kind: "sketchEntity",
+        sketchId: axis.sketchId,
+        entityId: axis.entityId,
+      });
+    }
+  };
 
   const params: Record<string, any> = { name: f.name };
   switch (f.type) {
@@ -234,20 +291,7 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         axisSource: anyF.axis?.kind === "originAxis" ? "origin" : "edge",
         axis: anyF.axis?.kind === "originAxis" ? anyF.axis.axis : "Z",
       });
-      if (anyF.axis?.kind === "edge") {
-        selection.push({
-          kind: "edge",
-          bodyId: anyF.axis.edge.bodyId,
-          edgeName: anyF.axis.edge.edgeName,
-        });
-      }
-      if (anyF.axis?.kind === "sketchLine") {
-        selection.push({
-          kind: "sketchEntity",
-          sketchId: anyF.axis.sketchId,
-          entityId: anyF.axis.entityId,
-        } as any);
-      }
+      pushAxis(anyF.axis);
       break;
     case "sweep":
       Object.assign(params, {
@@ -259,23 +303,33 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       Object.assign(params, { operation: anyF.operation });
       break;
     case "fillet":
-      Object.assign(params, { radius: anyF.radius, tangentChain: anyF.tangentChain ?? false });
+      Object.assign(params, {
+        radius: anyF.radius,
+        tangentChain: anyF.tangentChain ?? false,
+      });
       break;
     case "chamfer":
-      Object.assign(params, { distance: anyF.distance, tangentChain: anyF.tangentChain ?? false });
+      Object.assign(params, {
+        distance: anyF.distance,
+        tangentChain: anyF.tangentChain ?? false,
+      });
       break;
     case "shell":
       Object.assign(params, { thickness: anyF.thickness });
       break;
     case "combine":
-      Object.assign(params, { operation: anyF.operation, keepTools: anyF.keepTools });
+      Object.assign(params, {
+        operation: anyF.operation,
+        keepTools: anyF.keepTools,
+      });
       break;
     case "offsetFace":
       Object.assign(params, { distance: anyF.distance });
       break;
     case "mirror":
       Object.assign(params, { combine: anyF.combine });
-      if (anyF.plane?.kind) selection.push({ kind: "plane", ref: anyF.plane, label: "Plane" });
+      if (anyF.plane?.kind)
+        selection.push({ kind: "plane", ref: anyF.plane, label: "Plane" });
       break;
     case "linearPattern":
       Object.assign(params, {
@@ -285,6 +339,7 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         axisSource: anyF.direction?.kind === "axis" ? "origin" : "edge",
         axis: anyF.direction?.kind === "axis" ? anyF.direction.axis : "X",
       });
+      pushAxis(anyF.direction);
       break;
     case "circularPattern":
       Object.assign(params, {
@@ -294,6 +349,11 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         axisSource: anyF.axis?.kind === "originAxis" ? "origin" : "edge",
         axis: anyF.axis?.kind === "originAxis" ? anyF.axis.axis : "Z",
       });
+      pushAxis(anyF.axis);
+      break;
+    case "splitBody":
+      if (anyF.tool)
+        selection.push({ kind: "plane", ref: anyF.tool, label: "Tool" });
       break;
     case "constructionPlane":
       Object.assign(params, {
@@ -302,6 +362,10 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       });
       if (anyF.method?.kind === "offset" && anyF.method.base) {
         selection.push({ kind: "plane", ref: anyF.method.base, label: "Base" });
+      }
+      if (anyF.method?.kind === "midplane") {
+        selection.push({ kind: "plane", ref: anyF.method.a, label: "A" });
+        selection.push({ kind: "plane", ref: anyF.method.b, label: "B" });
       }
       break;
     case "emboss":
@@ -317,7 +381,11 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
     default:
       break;
   }
-  s.setMode({ name: "dialog", dialog: f.type as DialogType, editFeatureId: f.id });
+  s.setMode({
+    name: "dialog",
+    dialog: (f.type === "importMesh" ? "importStep" : f.type) as DialogType,
+    editFeatureId: f.id,
+  });
   s.setDialogParams(params);
   s.setSelection(selection);
 }

@@ -1,24 +1,14 @@
 /* Rockett CAD — professional dense engineering UI, dark theme */
 
+:root {
+  scrollbar-color: var(--border) var(--bg1);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-}
-
-:root {
-  --bg0: #1e2124;
-  --bg1: #26292d;
-  --bg2: #2e3237;
-  --bg3: #383d43;
-  --border: #43494f;
-  --text: #d6dae0;
-  --text-dim: #9aa2ab;
-  --accent: #3ba1e8;
-  --accent-dim: #2b7fb8;
-  --ok: #47b04b;
-  --warn: #e8a33b;
-  --err: #e85a4f;
+  scrollbar-width: thin;
 }
 
 html,
@@ -170,12 +160,19 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .tb-group {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
   align-items: center;
   gap: 2px;
   padding: 0 8px;
   border-right: 1px solid var(--border);
-  position: relative;
+}
+
+.tb-row {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .tb-group:last-child {
@@ -188,9 +185,11 @@ button.doc-name:hover .doc-name-pen {
   flex-shrink: 0;
 }
 .toolbar.sketch .tb-group {
-  flex-wrap: wrap;
   min-height: 40px;
   max-width: 100%;
+}
+.toolbar.sketch .tb-row {
+  flex-wrap: wrap;
 }
 .toolbar.sketch label {
   display: flex;
@@ -199,33 +198,40 @@ button.doc-name:hover .doc-name-pen {
   margin-top: 10px;
   white-space: nowrap;
 }
-.toolbar.sketch label .tb-input { margin-top: 0; width: 60px; }
-.toolbar.sketch > .tb-group:last-child { margin-left: auto; }
+.toolbar.sketch label .tb-input {
+  margin-top: 0;
+  width: 60px;
+}
+.toolbar.sketch > .tb-group:last-child {
+  margin-left: auto;
+}
 
 .tb-title {
-  position: absolute;
-  top: 1px;
-  left: 8px;
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: start;
+  z-index: 1;
+  margin-top: 1px;
   font-size: 8.5px;
   letter-spacing: 0.08em;
   color: var(--text-dim);
 }
 
 .tb-btn {
-  padding: 14px 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 14px 6px 3px;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   color: var(--text);
 }
 
-.tb-btn:hover {
-  background: var(--bg3);
-}
-
-.tb-btn.active {
-  background: var(--accent-dim);
-  color: white;
+.tb-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .tb-btn.primary {
@@ -234,13 +240,25 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .tb-btn.icon {
-  font-size: 14px;
-  min-width: 26px;
+  padding-inline: 3px;
+}
+
+.tb-btn:hover {
+  background: var(--bg3);
+  color: var(--hover);
+}
+
+.tb-btn.active {
+  background: var(--bg3);
+  color: var(--accent);
+  box-shadow: inset 0 -2px var(--accent);
 }
 
 .tb-btn:disabled {
   opacity: 0.45;
   cursor: default;
+  background: none;
+  color: var(--text);
 }
 
 .tb-spacer {
@@ -324,7 +342,7 @@ button.doc-name:hover .doc-name-pen {
 
 .tree-item.selected {
   background: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
 }
 
 .tree-icon {
@@ -399,7 +417,7 @@ button.doc-name:hover .doc-name-pen {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(30, 33, 36, 0.85);
+  background: var(--hint-fill);
   border: 1px solid var(--border);
   padding: 4px 14px;
   border-radius: 4px;
@@ -446,8 +464,8 @@ button.doc-name:hover .doc-name-pen {
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
-  background: rgba(38, 41, 45, 0.9);
-  border: 1px solid var(--accent-dim);
+  background: var(--label-fill);
+  border: 1px solid var(--accent);
   color: var(--text);
   padding: 0 5px;
   border-radius: 3px;
@@ -457,7 +475,7 @@ button.doc-name:hover .doc-name-pen {
 
 .dim-label:hover {
   border-color: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .dim-edit {
@@ -482,8 +500,18 @@ button.doc-name:hover .doc-name-pen {
 }
 
 .dim-edit-delete:hover {
-  color: var(--danger, #ff5a5a);
-  border-color: var(--danger, #ff5a5a);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.quick-edit {
+  transform: none;
+  gap: 8px;
+  padding: 4px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px var(--shadow-menu);
 }
 
 /* typed sizes while drawing: follows the cursor, digits lock the active field */
@@ -494,7 +522,7 @@ button.doc-name:hover .doc-name-pen {
   align-items: center;
   gap: 4px;
   padding: 3px 5px;
-  background: rgba(38, 41, 45, 0.92);
+  background: var(--entry-fill);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
@@ -514,7 +542,7 @@ button.doc-name:hover .doc-name-pen {
 
 .dim-field.active {
   border-color: var(--accent);
-  background: rgba(59, 161, 232, 0.14);
+  background: var(--accent-wash);
 }
 
 .dim-field.locked .dim-val {
@@ -553,7 +581,7 @@ button.doc-name:hover .doc-name-pen {
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-bottom: 11px solid var(--accent);
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+  filter: drop-shadow(0 0 2px var(--shadow-strong));
   transform: translate(-50%, -55%);
 }
 
@@ -561,8 +589,8 @@ button.doc-name:hover .doc-name-pen {
   width: 9px;
   height: 9px;
   background: var(--accent);
-  outline: 1px solid #fff;
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  outline: 1px solid var(--on-accent);
+  box-shadow: 0 0 3px var(--shadow-strong);
 }
 
 .snap-marker.curve {
@@ -570,7 +598,7 @@ button.doc-name:hover .doc-name-pen {
   height: 11px;
   border: 2.5px solid var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 3px var(--shadow-strong);
 }
 
 .snap-marker.perpendicular {
@@ -579,7 +607,7 @@ button.doc-name:hover .doc-name-pen {
   border-left: 2.5px solid var(--accent);
   border-bottom: 2.5px solid var(--accent);
   transform: translate(-20%, -80%);
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+  filter: drop-shadow(0 0 2px var(--shadow-strong));
 }
 
 .snap-marker.perpendicular::after {
@@ -598,7 +626,7 @@ button.doc-name:hover .doc-name-pen {
   height: 10px;
   border: 2.5px solid var(--ok);
   transform: translate(-50%, -50%) rotate(45deg);
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 3px var(--shadow-strong);
 }
 
 .mode-banner {
@@ -607,7 +635,7 @@ button.doc-name:hover .doc-name-pen {
   left: 50%;
   transform: translateX(-50%);
   background: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
   padding: 4px 16px;
   border-radius: 4px;
   z-index: 20;
@@ -624,7 +652,7 @@ button.doc-name:hover .doc-name-pen {
   border: 1px solid var(--border);
   border-radius: 6px;
   z-index: 15;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 24px var(--shadow-panel);
   display: flex;
   flex-direction: column;
   max-height: calc(100% - 140px);
@@ -670,14 +698,68 @@ button.doc-name:hover .doc-name-pen {
   justify-content: flex-end;
 }
 
-.panel-reset { padding: 2px 5px; color: var(--text-dim); border-radius: 3px; }
-.panel-reset:hover { color: var(--text); background: var(--bg3); }
-button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.error-toast { display: flex; align-items: flex-start; gap: 12px; max-width: min(640px, calc(100vw - 32px)); }
-.error-toast span { overflow-wrap: anywhere; user-select: text; }
-.error-toast button { flex-shrink: 0; padding: 2px 4px; }
-.shortcut-help { line-height: 1.5; }
-kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; background: var(--bg0); }
+.panel-reset {
+  padding: 2px 5px;
+  color: var(--text-dim);
+  border-radius: 3px;
+}
+.panel-reset:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.error-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: min(640px, calc(100vw - 32px));
+}
+.error-toast span {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.error-toast button {
+  flex-shrink: 0;
+  padding: 2px 4px;
+}
+.dialog-panel.controls-help {
+  left: 12px;
+  right: auto;
+  width: min(90vw, calc(100% - 150px));
+  min-width: min(265px, 90vw);
+  max-width: 90vw;
+  min-height: 160px;
+  max-height: min(85vh, calc(100% - 20px));
+  overflow: hidden;
+  resize: both;
+}
+.controls-help .dialog-body {
+  flex: 1;
+}
+.shortcut-help {
+  line-height: 1.5;
+  columns: 17em;
+  column-gap: 24px;
+}
+.shortcut-help p {
+  margin: 0 0 8px;
+  break-inside: avoid;
+}
+.shortcut-help .help-heading {
+  break-after: avoid;
+}
+kbd {
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  background: var(--bg0);
+}
 
 .field {
   display: flex;
@@ -721,7 +803,7 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 }
 
 .sel-info.have {
-  border-color: var(--accent-dim);
+  border-color: var(--accent);
 }
 
 .sel-info.have b {
@@ -736,18 +818,19 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 }
 
 .btn:hover {
-  background: var(--border);
+  background: var(--bg2);
 }
 
 .btn.primary {
   background: var(--accent-dim);
   border-color: var(--accent-dim);
-  color: white;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 .btn.primary:hover {
   background: var(--accent);
+  color: var(--bg0);
 }
 
 .btn:disabled {
@@ -764,7 +847,7 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 }
 
 .measure-block.main {
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--accent);
 }
 
 .measure-head {
@@ -864,7 +947,7 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 }
 
 .tl-chip:hover {
-  border-color: var(--accent-dim);
+  border-color: var(--accent);
 }
 
 .tl-chip.error {
@@ -901,7 +984,7 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
   border-radius: 4px;
   z-index: 50;
   min-width: 130px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px var(--shadow-menu);
   display: flex;
   flex-direction: column;
   padding: 3px;
@@ -934,20 +1017,20 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
   bottom: 54px;
   left: 50%;
   transform: translateX(-50%);
-  background: #4a2622;
+  background: var(--err-fill);
   border: 1px solid var(--err);
-  color: #f4c7c3;
+  color: var(--err-fill-text);
   padding: 8px 18px;
   border-radius: 5px;
   z-index: 100;
-    cursor: default;
-    max-width: min(640px, calc(100vw - 32px));
+  cursor: default;
+  max-width: min(640px, calc(100vw - 32px));
 }
 
 .error-banner {
-  background: #4a2622;
+  background: var(--err-fill);
   border: 1px solid var(--err);
-  color: #f4c7c3;
+  color: var(--err-fill-text);
   padding: 6px 12px;
   border-radius: 4px;
   margin-bottom: 10px;
@@ -960,7 +1043,7 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at top, #2a2f36, var(--bg0));
+  background: radial-gradient(ellipse at top, var(--bg-glow), var(--bg0));
 }
 
 .project-list-card {
@@ -995,6 +1078,7 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 
 .new-project input {
   flex: 1;
+  min-width: 0;
   padding: 7px 10px;
 }
 
@@ -1023,8 +1107,12 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
   text-align: left;
 }
 
-.project-open:hover {
-  border-color: var(--accent-dim);
+.project-open:enabled:hover {
+  border-color: var(--accent);
+}
+
+.project-open:disabled {
+  cursor: default;
 }
 
 .project-open span {
@@ -1046,11 +1134,80 @@ kbd { font: inherit; font-size: 11px; border: 1px solid var(--border); border-ra
 .icon-btn.danger:hover {
   color: var(--err);
 }
+
+.storage-line {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.storage-line.warn {
+  color: var(--warn);
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-weight: 600;
+  margin: 8px 0 2px;
+}
+
+.breadcrumb > * + *::before {
+  content: ">";
+  color: var(--text-dim);
+  margin: 0 6px;
+}
+
+.breadcrumb button {
+  color: var(--accent);
+  border-radius: 4px;
+}
+
+.new-project .btn {
+  white-space: nowrap;
+}
+
+.folder-open {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-open .tree-icon {
+  font-size: 14px;
+}
+
+.folder-open .tree-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.drop-target {
+  outline: 2px solid var(--accent);
+  border-radius: 6px;
+}
+
+.move-tree .tree-item {
+  width: 100%;
+}
 .dim-label.offset-label {
-  border: 1px solid #d6a74d;
-  color: #ffcc66;
-  background: #282b30;
+  border: 1px solid var(--offset-border);
+  color: var(--offset);
+  background: var(--offset-fill);
   cursor: pointer;
   white-space: nowrap;
   padding: 3px 7px;
+}
+
+.version-label {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 1;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.6;
+  cursor: default;
 }

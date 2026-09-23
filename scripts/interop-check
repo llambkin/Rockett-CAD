@@ -1,0 +1,259 @@
+#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const MAX_BYTES = 64 * 1024 * 1024;
+const FORMATS = ["step", "3mf", "glb", "dxf"];
+
+const CONTAINERFILE = `FROM docker.io/library/python@sha256:37134a49d21d2120e4c4d73bb76f8a4ab9aef31f096f7ec2ead48c2feead4332
+RUN python3 - <<'PY'
+import hashlib, subprocess, urllib.request
+base = "https://snapshot.debian.org/archive/debian/20260922T000000Z/pool/main/"
+debs = {
+    "libg/libglvnd/libgl1_1.7.0-1+b2_amd64.deb": "87fa2f6e5abaed4ed385fac879c8dd735af719ee2300222d901793c66e041678",
+    "libg/libglvnd/libglvnd0_1.7.0-1+b2_amd64.deb": "887f74008166549ce9e100c906aa937e95d6e5ce1c8d86efe8c95fd953359b9c",
+    "libg/libglvnd/libglx0_1.7.0-1+b2_amd64.deb": "2721fdca0fe3bd963cb39482eabc253af52b88f4a7f6dbb69e475549daf5af3b",
+    "libx/libx11/libx11-6_1.8.12-1_amd64.deb": "b5a3fd3bf8c8fd0364bfb9bea00dcba7fc301229bd02dded084632d31f5b0fb3",
+    "libx/libxcb/libxcb1_1.17.0-2+b1_amd64.deb": "5c222a72d11b866447da31693254f738430726e3e065a384e82687b2fd2f978b",
+    "libx/libxau/libxau6_1.0.11-1_amd64.deb": "689a9f0e0ba3e2c65431f864871e303ee904de69dd28abfc462663fae030227f",
+    "libx/libxdmcp/libxdmcp6_1.1.5-1_amd64.deb": "0740dc760916b2008b45417a42a8fd7dd5de370fb57d31373f15034cda8acf0b",
+    "e/expat/libexpat1_2.8.3-1~deb13u1_amd64.deb": "38abe0e710a07688e9c149d74536e67cfee0364bdb64dd6d644c32a1cfad389f",
+}
+for path, sha in debs.items():
+    data = urllib.request.urlopen(base + path, timeout=120).read()
+    if hashlib.sha256(data).hexdigest() != sha:
+        raise SystemExit("hash mismatch: " + path)
+    with open("/tmp/p.deb", "wb") as f:
+        f.write(data)
+    subprocess.run(["dpkg-deb", "-x", "/tmp/p.deb", "/"], check=True)
+subprocess.run(["ldconfig"], check=True)
+PY
+RUN printf '%s\\n' \\
+  'cadquery-ocp-novtk==8.0.1.0.0 --hash=sha256:1702dfc8f5bdcb916ce65ea0c6314fe453cc78a6a3d49a044fb3062d47b0ef9f' \\
+  'cadquery-ocp-proxy==8.0.1.0.0 --hash=sha256:d6a6909a73d2300ca4581ff762ccf0137993ac75c57a2dc82e12bffa3a12b680' \\
+  'lib3mf==2.5.0 --hash=sha256:b4c00033c47cfeac93b7daa069fb46e8dea4391d5522b79cd6e9f6af75e33013' \\
+  'ezdxf==1.4.4 --hash=sha256:82c022cf094d21ad3db68557aa83628e4152355e8a8bef0fffd4f71a9ea325df' \\
+  'numpy==2.5.3 --hash=sha256:a5fa86b80fd24bcd1aff83ad23be44ea323de3f787be8f8b15d4a65621e25321' \\
+  'pyparsing==3.3.3 --hash=sha256:ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4' \\
+  'typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8' \\
+  'fonttools==4.65.0 --hash=sha256:6dd6243f60e2d6160c2966e1e14020dc261ffd741b69a2e4ca8bfd051592e4b7' \\
+  >/tmp/requirements.txt \\
+ && pip install --no-cache-dir --no-deps --only-binary=:all: --require-hashes --root-user-action=ignore -r /tmp/requirements.txt \\
+ && rm /tmp/requirements.txt
+`;
+
+const READER = `
+import json, sys, importlib.metadata as md
+
+def step(path):
+    from OCP.STEPControl import STEPControl_Reader
+    from OCP.IFSelect import IFSelect_RetDone
+    from OCP.BRepCheck import BRepCheck_Analyzer
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopAbs import TopAbs_SOLID
+    from OCP.GProp import GProp_GProps
+    from OCP.BRepGProp import BRepGProp
+    reader = STEPControl_Reader()
+    status = reader.ReadFile(path)
+    if status != IFSelect_RetDone:
+        return {"ok": False, "error": "ReadFile returned " + str(status)}
+    roots = reader.NbRootsForTransfer()
+    transferred = reader.TransferRoots()
+    shape = reader.OneShape()
+    solids = 0
+    explorer = TopExp_Explorer(shape, TopAbs_SOLID)
+    while explorer.More():
+        solids += 1
+        explorer.Next()
+    props = GProp_GProps()
+    BRepGProp.VolumeProperties_s(shape, props)
+    valid = BRepCheck_Analyzer(shape).IsValid()
+    return {
+        "ok": valid and solids > 0 and transferred == roots,
+        "entities": reader.WS().Model().NbEntities(),
+        "roots": roots,
+        "transferred": transferred,
+        "solids": solids,
+        "valid": valid,
+        "volume": round(props.Mass(), 6),
+    }
+
+def threemf(path):
+    import lib3mf
+    model = lib3mf.get_wrapper().CreateModel()
+    reader = model.QueryReader("3mf")
+    reader.SetStrictModeActive(True)
+    reader.ReadFromFile(path)
+    warnings = [str(reader.GetWarning(i)) for i in range(reader.GetWarningCount())]
+    objects = []
+    meshes = model.GetMeshObjects()
+    while meshes.MoveNext():
+        mesh = meshes.GetCurrentMeshObject()
+        objects.append({
+            "name": mesh.GetName(),
+            "vertices": mesh.GetVertexCount(),
+            "triangles": mesh.GetTriangleCount(),
+            "manifold": mesh.IsManifoldAndOriented(),
+        })
+    return {
+        "ok": not warnings and bool(objects) and all(o["manifold"] for o in objects),
+        "unit": lib3mf.ModelUnit(model.GetUnit()).name,
+        "buildItems": model.GetBuildItems().Count(),
+        "objects": objects,
+        "warnings": warnings,
+    }
+
+def dxf(path):
+    import collections, ezdxf
+    doc = ezdxf.readfile(path)
+    auditor = doc.audit()
+    return {
+        "ok": not auditor.has_errors,
+        "dxfversion": doc.dxfversion,
+        "insunits": doc.header.get("$INSUNITS"),
+        "entities": dict(collections.Counter(e.dxftype() for e in doc.modelspace())),
+        "layers": sorted(layer.dxf.name for layer in doc.layers),
+        "errors": [e.message for e in auditor.errors],
+        "fixes": len(auditor.fixes),
+    }
+
+fmt = sys.argv[1]
+reader, package, read = {
+    "step": ("OCP STEPControl_Reader", "cadquery-ocp-novtk", step),
+    "3mf": ("lib3mf", "lib3mf", threemf),
+    "dxf": ("ezdxf", "ezdxf", dxf),
+}[fmt]
+path = "/tmp/input." + fmt
+with open(path, "wb") as f:
+    f.write(sys.stdin.buffer.read())
+try:
+    result = read(path)
+except Exception as e:
+    result = {"ok": False, "error": type(e).__name__ + ": " + str(e)}
+print(json.dumps({"format": fmt, "reader": reader, "version": md.version(package), **result}))
+sys.exit(0 if result["ok"] else 1)
+`;
+
+function fail(message) {
+  console.error(`interop-check: ${message}`);
+  process.exit(2);
+}
+
+function engine() {
+  for (const name of ["podman", "docker"])
+    if (spawnSync(name, ["--version"], { stdio: "ignore" }).status === 0)
+      return name;
+  fail("podman or docker is required for step, 3mf and dxf");
+}
+
+function image(runtime) {
+  const tag = `rockett-interop:${createHash("sha256").update(CONTAINERFILE).digest("hex").slice(0, 12)}`;
+  if (
+    spawnSync(runtime, ["image", "inspect", tag], { stdio: "ignore" })
+      .status === 0
+  )
+    return tag;
+  const context = mkdtempSync(join(tmpdir(), "rockett-interop-"));
+  try {
+    writeFileSync(join(context, "Containerfile"), CONTAINERFILE);
+    const built = spawnSync(runtime, ["build", "-t", tag, context], {
+      stdio: ["ignore", 2, 2],
+    });
+    if (built.status !== 0) fail(`image build failed with ${built.status}`);
+  } finally {
+    rmSync(context, { recursive: true });
+  }
+  return tag;
+}
+
+async function readGlb(bytes) {
+  const validator = await import("gltf-validator");
+  const report = await validator.validateBytes(new Uint8Array(bytes), {
+    format: "glb",
+    maxIssues: 50,
+  });
+  const { numErrors, numWarnings, numInfos, numHints, messages } =
+    report.issues;
+  const info = report.info ?? {};
+  return {
+    format: "glb",
+    reader: "gltf-validator",
+    version: report.validatorVersion,
+    ok: numErrors === 0,
+    generator: info.generator ?? null,
+    materials: info.materialCount ?? 0,
+    vertices: info.totalVertexCount ?? 0,
+    triangles: info.totalTriangleCount ?? 0,
+    errors: numErrors,
+    warnings: numWarnings,
+    infos: numInfos,
+    hints: numHints,
+    messages: messages.map(({ code, severity, pointer, message }) => ({
+      code,
+      severity,
+      pointer: pointer ?? null,
+      message,
+    })),
+  };
+}
+
+const [format, file] = process.argv.slice(2);
+if (!FORMATS.includes(format) || !file)
+  fail(`usage: scripts/interop-check <${FORMATS.join("|")}> <file>`);
+const size = statSync(file, { throwIfNoEntry: false })?.size;
+if (size === undefined) fail(`${file} does not exist`);
+if (size > MAX_BYTES) fail(`${file} is over ${MAX_BYTES} bytes`);
+const bytes = readFileSync(file);
+
+if (format === "glb") {
+  const result = await readGlb(bytes);
+  console.log(JSON.stringify(result));
+  process.exit(result.ok ? 0 : 1);
+}
+
+const runtime = engine();
+const run = spawnSync(
+  runtime,
+  [
+    "run",
+    "--rm",
+    "-i",
+    "--network",
+    "none",
+    "--read-only",
+    "--tmpfs",
+    "/tmp",
+    "--cap-drop",
+    "all",
+    "--security-opt",
+    "no-new-privileges",
+    "--user",
+    "65534:65534",
+    "--env",
+    "HOME=/tmp",
+    image(runtime),
+    "python3",
+    "-I",
+    "-c",
+    READER,
+    format,
+  ],
+  {
+    input: bytes,
+    stdio: ["pipe", "inherit", "inherit"],
+    timeout: 300_000,
+    maxBuffer: 1 << 26,
+  },
+);
+if (run.status === null)
+  fail(`reader did not finish: ${run.error?.message ?? run.signal}`);
+process.exit(run.status);

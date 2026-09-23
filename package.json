@@ -1,6 +1,6 @@
 {
   "name": "rockett-cad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Self-hosted, browser-based parametric CAD for 3D printing (B-Rep kernel, feature timeline)",
   "workspaces": [
@@ -9,18 +9,42 @@
     "client"
   ],
   "scripts": {
-    "dev": "npm-run-all --parallel dev:server dev:client",
-    "dev:server": "npm run dev --workspace server",
-    "dev:client": "npm run dev --workspace client",
+    "bench:client": "vitest bench --run --reporter=default client/test",
     "build": "npm run build --workspace shared --if-present && npm run build --workspace server && npm run build --workspace client",
-    "test": "npm run test --workspace shared && npm run test --workspace server && npm run test:client",
-    "test:client": "vitest run client/test",
-    "start": "npm run start --workspace server"
+    "check": "run-s lint format:check lint:comments lint:cost lint:writing lint:readme lint:pins lint:notices build test test:browser && sh scripts/check-work-order.sh",
+    "cost": "node scripts/cost.mjs",
+    "dev": "npm-run-all --parallel dev:server dev:client",
+    "dev:client": "npm run dev --workspace client",
+    "dev:server": "npm run dev --workspace server",
+    "format:check": "prettier --check .",
+    "lint": "oxlint",
+    "lint:comments": "sh scripts/check-comments.sh",
+    "lint:cost": "node scripts/cost.mjs --check",
+    "lint:notices": "sh scripts/check-notices.sh",
+    "lint:pins": "grep -nE '\"[~^*]' package.json shared/package.json server/package.json client/package.json; [ $? -eq 1 ]",
+    "lint:readme": "sh scripts/check-readme.sh",
+    "lint:writing": "test -f ~/masterrulez/scripts/lint-writing || { echo 'masterrulez lint-writing is missing; clone masterrulez to ~/masterrulez' >&2; exit 1; } && node ~/masterrulez/scripts/lint-writing",
+    "prepare": "husky",
+    "start": "npm run start --workspace server",
+    "test": "npm run typecheck && vitest run --project node --project dom",
+    "test:browser": "vitest run --project browser",
+    "test:client": "vitest run --project node --project dom client/test",
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
   },
   "devDependencies": {
-    "npm-run-all": "^4.1.5"
+    "gltf-validator": "2.0.0-dev.3.10",
+    "happy-dom": "20.14.5",
+    "husky": "9.1.7",
+    "lint-staged": "17.3.0",
+    "npm-run-all2": "9.0.3",
+    "oxlint": "1.79.0",
+    "playwright-core": "1.61.1",
+    "prettier": "3.9.6",
+    "prettier-plugin-packagejson": "3.0.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

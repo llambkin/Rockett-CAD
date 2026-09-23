@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { asConstruction, createCircle, createPolygon, createRect, createSlot } from "../src/sketchTools";
+import {
+  asConstruction,
+  createCircle,
+  createPolygon,
+  createRect,
+  createSlot,
+} from "../src/sketchTools";
 
 const O = { x: 0, y: 0 };
 
@@ -20,7 +26,10 @@ describe("construction mode for every sketch tool", () => {
   });
 
   it("leaves the original untouched and does not invent entities for snapped points", () => {
-    const rect = createRect({ x: 0, y: 0, snapPointId: "existing" }, { x: 10, y: 5 });
+    const rect = createRect(
+      { x: 0, y: 0, snapPointId: "existing" },
+      { x: 10, y: 5 },
+    );
     const c = asConstruction(rect);
     expect(rect.entities.some((e) => e.construction)).toBe(false);
     // the first corner reused an existing point, so it is not in the created list

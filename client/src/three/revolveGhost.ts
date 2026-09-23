@@ -6,12 +6,11 @@
 
 import * as THREE from "three";
 import type { PlaneFrame } from "@rockett/shared";
-
-const GHOST_COLOR = 0x4da3ff;
+import { themeColor } from "../theme/tokens";
 
 function ghostMaterial(): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
-    color: GHOST_COLOR,
+    color: themeColor("gizmo"),
     transparent: true,
     opacity: 0.22,
     depthWrite: false,
@@ -25,9 +24,12 @@ function polyTo3d(frame: PlaneFrame, poly: number[]): THREE.Vector3[] {
   const xa = new THREE.Vector3(...frame.xAxis);
   const ya = new THREE.Vector3(...frame.yAxis);
   const out: THREE.Vector3[] = [];
-  for (let i = 0; i < poly.length; i += 2) {
+  for (let i = 0; i + 1 < poly.length; i += 2) {
     out.push(
-      o.clone().add(xa.clone().multiplyScalar(poly[i])).add(ya.clone().multiplyScalar(poly[i + 1]))
+      o
+        .clone()
+        .add(xa.clone().multiplyScalar(poly[i]!))
+        .add(ya.clone().multiplyScalar(poly[i + 1]!)),
     );
   }
   return out;
@@ -39,11 +41,11 @@ export function buildRevolveGhost(
   holePolygons: number[][],
   axisOrigin: THREE.Vector3,
   axisDir: THREE.Vector3,
-  angleDeg: number
+  angleDeg: number,
 ): THREE.Group {
   const group = new THREE.Group();
   const angle = THREE.MathUtils.degToRad(
-    Math.max(-360, Math.min(360, angleDeg || 360))
+    Math.max(-360, Math.min(360, angleDeg || 360)),
   );
   if (Math.abs(angle) < 1e-6) return group;
   const full = Math.abs(Math.abs(angleDeg) - 360) < 1e-9;
@@ -78,7 +80,10 @@ export function buildRevolveGhost(
       }
     }
     const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
     geom.setIndex(indices);
     const mesh = new THREE.Mesh(geom, ghostMaterial());
     mesh.renderOrder = 4;
@@ -88,22 +93,22 @@ export function buildRevolveGhost(
   // start/end caps for partial revolves
   if (!full) {
     const shape = new THREE.Shape();
-    for (let i = 0; i < polygon.length; i += 2) {
-      if (i === 0) shape.moveTo(polygon[0], polygon[1]);
-      else shape.lineTo(polygon[i], polygon[i + 1]);
+    for (let i = 0; i + 1 < polygon.length; i += 2) {
+      if (i === 0) shape.moveTo(polygon[0]!, polygon[1]!);
+      else shape.lineTo(polygon[i]!, polygon[i + 1]!);
     }
     for (const hp of holePolygons) {
       const hole = new THREE.Path();
-      for (let i = 0; i < hp.length; i += 2) {
-        if (i === 0) hole.moveTo(hp[0], hp[1]);
-        else hole.lineTo(hp[i], hp[i + 1]);
+      for (let i = 0; i + 1 < hp.length; i += 2) {
+        if (i === 0) hole.moveTo(hp[0]!, hp[1]!);
+        else hole.lineTo(hp[i]!, hp[i + 1]!);
       }
       shape.holes.push(hole);
     }
     const basis = new THREE.Matrix4().makeBasis(
       new THREE.Vector3(...frame.xAxis),
       new THREE.Vector3(...frame.yAxis),
-      new THREE.Vector3(...frame.normal)
+      new THREE.Vector3(...frame.normal),
     );
     basis.setPosition(new THREE.Vector3(...frame.origin));
     for (const a of [0, angle]) {
@@ -114,7 +119,11 @@ export function buildRevolveGhost(
         .makeTranslation(axisOrigin.x, axisOrigin.y, axisOrigin.z)
         .multiply(new THREE.Matrix4().makeRotationAxis(dir, a))
         .multiply(
-          new THREE.Matrix4().makeTranslation(-axisOrigin.x, -axisOrigin.y, -axisOrigin.z)
+          new THREE.Matrix4().makeTranslation(
+            -axisOrigin.x,
+            -axisOrigin.y,
+            -axisOrigin.z,
+          ),
         );
       geom.applyMatrix4(rot);
       const mesh = new THREE.Mesh(geom, ghostMaterial());

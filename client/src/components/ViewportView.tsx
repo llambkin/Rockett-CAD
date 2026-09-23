@@ -4,32 +4,61 @@
  * sketch tool interaction (with live constraint solving), and dimensions.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type {
   PlaneFrame,
-  ReferenceImageFeature,
   SketchConstraint,
   SketchEntity,
+  SketchSolveStatus,
 } from "@rockett/shared";
-import { newId, modifySketch } from "@rockett/shared";
+import {
+  findProfile,
+  formatAngle,
+  formatLength,
+  newId,
+  extendSketch,
+  trimPiece,
+} from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
+import { clearGroup, disposeGroup } from "../three/dispose";
+import { worldToClient } from "../three/screen";
+import { syncReferenceImages } from "../three/referenceImages";
 import { renderSketches, type SketchRenderInput } from "../three/sketchRender";
 import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
 import { buildRevolveGhost } from "../three/revolveGhost";
 import { RevolveGizmo } from "../three/RevolveGizmo";
+import { GizmoSlot } from "../three/gizmoSlot";
 import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
+import { listenWheel } from "../three/wheel";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
-import { useStore, type Selection } from "../store";
+import {
+  loadPreviewBase,
+  previewBodies,
+  previewScene,
+  previewedFeature,
+  useStore,
+  type Selection,
+} from "../store";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import * as tools from "../sketchTools";
+import { ANGLE_LOCK_KEY } from "../shortcuts";
 
 import { DIALOG_PICKS } from "../dialogPicks";
 import { dimensionLayout } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
+import { ViewportContextMenu } from "./ViewportContextMenu";
+import { createLivePreview } from "../livePreview";
+
+interface DimEditField {
+  constraintId: string;
+  value: string;
+  label?: string;
+  unit?: string;
+}
 
 interface DimLabel {
   id: string;
@@ -37,7 +66,17 @@ interface DimLabel {
   world: THREE.Vector3;
   /** Attachment on the measured geometry, independent of label placement. */
   anchorWorld: THREE.Vector3;
+  reference?: [THREE.Vector3, THREE.Vector3];
 }
+
+const NUDGE_EVENTS = ["pointerdown", "pointerup", "wheel"];
+
+const livePreview = createLivePreview({
+  intervalMs: 250,
+  send: (featureId, patch) =>
+    useStore.getState().updateFeaturePreview(featureId, patch),
+  now: () => performance.now(),
+});
 
 export function ViewportView() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,15 +87,20 @@ export function ViewportView() {
 
   const evaluation = useStore((s) => s.evaluation);
   const document_ = useStore((s) => s.document);
+  const hiddenBodies = useStore((s) => s.view.hidden.bodies);
+  const hiddenFeatures = useStore((s) => s.view.hidden.features);
   const mode = useStore((s) => s.mode);
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
   const draftSketch = useStore((s) => s.draftSketch);
   const dialogParams = useStore((s) => s.dialogParams);
+  const previewBaseline = useStore((s) => s.previewBaseline);
+  const dialogOpen = mode.name === "dialog";
+  const editFeatureId = dialogOpen ? mode.editFeatureId : undefined;
+  const [baseLoads, setBaseLoads] = useState(0);
 
   const [dimEdit, setDimEdit] = useState<{
-    constraintId: string;
-    value: string;
+    fields: DimEditField[];
     x: number;
     y: number;
   } | null>(null);
@@ -64,16 +108,12 @@ export function ViewportView() {
   const [ctxMenu, setCtxMenu] = useState<{
     x: number;
     y: number;
-    sel: Selection;
+    sel: Selection | null;
   } | null>(null);
 
-  const gizmoRef = useRef<ExtrudeGizmo | null>(null);
-  const gizmoDragRef = useRef(false);
-  const moveGizmoRef = useRef<MoveGizmo | null>(null);
-  const moveDragRef = useRef(false);
-  const revolveGizmoRef = useRef<RevolveGizmo | null>(null);
-  const revolveDragRef = useRef(false);
-  const previewThrottleRef = useRef({ last: 0, inFlight: false });
+  const [extrudeSlot] = useState(() => new GizmoSlot<ExtrudeGizmo>());
+  const [moveSlot] = useState(() => new GizmoSlot<MoveGizmo>());
+  const [revolveSlot] = useState(() => new GizmoSlot<RevolveGizmo>());
   /** in-progress dimension-label drag (repositioning the label) */
   const dimDragRef = useRef<{
     id: string;
@@ -101,8 +141,14 @@ export function ViewportView() {
    * snapshot.
    */
   type DimField = tools.DimField;
-  const { fmt2, dimFieldsFor, liveDimValues, lockedValue, resolveDimCursor, dimConstraintsFor } =
-    tools;
+  const {
+    fmt2,
+    dimFieldsFor,
+    liveDimValues,
+    lockedValue,
+    resolveDimCursor,
+    pinTypedDims,
+  } = tools;
   const dimRef = useRef<{
     tool: string;
     fields: DimField[];
@@ -128,7 +174,10 @@ export function ViewportView() {
     clicks: tools.UV[];
     dragPointId: string | null;
     chainPointId: string | null;
-    dimTargets: Array<{ kind: "point" | "line" | "circle" | "arc"; id: string }>;
+    dimTargets: Array<{
+      kind: "point" | "line" | "circle" | "arc";
+      id: string;
+    }>;
     pickDepth: number;
     lastPickPos: { x: number; y: number };
     /** press position for drag-to-draw */
@@ -146,7 +195,15 @@ export function ViewportView() {
     lastCursor: null,
   });
 
-  const DRAW_TOOLS = ["line", "rect", "centerRect", "circle", "arc3", "polygon", "slot"];
+  const DRAW_TOOLS = [
+    "line",
+    "rect",
+    "centerRect",
+    "circle",
+    "arc3",
+    "polygon",
+    "slot",
+  ];
   /** tools completed by exactly two inputs — eligible for drag-to-draw */
   const TWO_POINT_TOOLS = ["line", "rect", "centerRect", "circle", "polygon"];
 
@@ -165,19 +222,10 @@ export function ViewportView() {
       vp.scene.add(leaderGroupRef.current);
     }
     const g = leaderGroupRef.current;
-    for (const child of [...g.children]) {
-      g.remove(child);
-      (child as any).geometry?.dispose?.();
-      (child as any).material?.dispose?.();
-    }
+    clearGroup(g);
     const wpp = vp.worldPerPixel();
-    for (const l of dimLabelsRef.current) {
-      // only when the label sits away from its geometry (dragged, or far zoom)
-      if (l.world.distanceTo(l.anchorWorld) < wpp * 14) continue;
-      const geom = new THREE.BufferGeometry().setFromPoints([
-        l.anchorWorld,
-        l.world,
-      ]);
+    const dashed = (from: THREE.Vector3, to: THREE.Vector3) => {
+      const geom = new THREE.BufferGeometry().setFromPoints([from, to]);
       const line = new THREE.Line(
         geom,
         new THREE.LineDashedMaterial({
@@ -187,12 +235,19 @@ export function ViewportView() {
           transparent: true,
           opacity: 0.4,
           depthTest: false,
-        })
+        }),
       );
       line.computeLineDistances();
       line.renderOrder = 7;
       g.add(line);
+    };
+    for (const l of dimLabelsRef.current) {
+      if (l.reference) dashed(...l.reference);
+      // only when the label sits away from its geometry (dragged, or far zoom)
+      if (l.world.distanceTo(l.anchorWorld) < wpp * 14) continue;
+      dashed(l.anchorWorld, l.world);
     }
+    vp.requestRender();
   }
 
   // ---- engine lifecycle ----
@@ -211,31 +266,40 @@ export function ViewportView() {
     window.addEventListener("resize", onResize);
     const observer = new ResizeObserver(onResize);
     observer.observe(container);
+    const nudge = () => vp.requestRender();
+    const unsubscribe = useStore.subscribe(nudge);
+    for (const type of NUDGE_EVENTS) {
+      container.addEventListener(type, nudge, { passive: true });
+    }
 
-    // dimension label projection every frame
-    vp.onRender = () => {
+    vp.onRender(() => {
       const layer = labelLayerRef.current;
       if (!layer) return;
-      const rect = vp.renderer.domElement.getBoundingClientRect();
+      const rect = vp.canvasRect();
       const cam = vp.camera;
       const children = layer.children;
       for (let i = 0; i < children.length; i++) {
         const el = children[i] as HTMLElement;
         const label = dimLabelsRef.current[i];
         if (!label) continue;
-        const p = label.world.clone().project(cam);
-        const x = ((p.x + 1) / 2) * rect.width;
-        const y = ((1 - p.y) / 2) * rect.height;
-        el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
-        el.style.display = p.z < 1 ? "block" : "none";
+        const p = worldToClient(rect, cam, label.world);
+        el.style.transform = `translate(${p.x - rect.left}px, ${p.y - rect.top}px) translate(-50%, -50%)`;
+        el.style.display = p.inFront ? "block" : "none";
       }
-    };
+    });
 
     vp.zoomToFit(false);
     return () => {
       window.removeEventListener("resize", onResize);
       observer.disconnect();
+      unsubscribe();
+      for (const type of NUDGE_EVENTS) {
+        container.removeEventListener(type, nudge);
+      }
       cube.dispose();
+      extrudeSlot.release();
+      moveSlot.release();
+      revolveSlot.release();
       vp.dispose();
       viewportRef.current = null;
       viewportHandle.current = null;
@@ -244,9 +308,32 @@ export function ViewportView() {
 
   // ---- sync bodies ----
   useEffect(() => {
+    if (!editFeatureId) return;
+    void loadPreviewBase(editFeatureId).then(
+      (loaded) => loaded && setBaseLoads((n) => n + 1),
+    );
+  }, [editFeatureId]);
+
+  useEffect(() => {
     const vp = viewportRef.current;
     if (!vp || !evaluation) return;
-    vp.syncBodies(evaluation.bodies);
+    const scene = previewScene(useStore.getState());
+    vp.syncBodies(scene.bodies, new Set(hiddenBodies));
+    vp.setBodyTints(scene.tints);
+    vp.setPreviewGhosts(scene.ghosts);
+  }, [
+    evaluation,
+    document_,
+    hiddenBodies,
+    previewBaseline,
+    dialogOpen,
+    editFeatureId,
+    baseLoads,
+  ]);
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp || !evaluation) return;
     const names = new Map<string, string>();
     const visible = new Set<string>();
     for (const f of document_?.features ?? []) {
@@ -254,8 +341,8 @@ export function ViewportView() {
       if (f.type === "constructionPlane" && !f.suppressed) visible.add(f.id);
     }
     vp.syncConstructionPlanes(evaluation.planes, names, visible);
-    syncReferenceImages(vp, document_, evaluation);
-  }, [evaluation, document_]);
+    syncReferenceImages(vp, document_, evaluation, new Set(hiddenFeatures));
+  }, [evaluation, document_, hiddenFeatures]);
 
   // ---- sync sketches / profiles / highlights ----
   useEffect(() => {
@@ -266,11 +353,7 @@ export function ViewportView() {
     // still be extruded or cut. Used regions shade faintly but stay pickable
     // (the body over them may be hidden); free ones shade normally.
     const usage = sketchUsage(document_);
-    const hiddenSketches = new Set(
-      document_.features
-        .filter((f) => f.type === "sketch" && f.visible === false)
-        .map((f) => f.id)
-    );
+    const hiddenSketches = new Set(hiddenFeatures);
 
     const activeSketchId = mode.name === "sketch" ? mode.sketchId : null;
     const needProfiles =
@@ -294,7 +377,9 @@ export function ViewportView() {
       }
       if (hiddenSketches.has(sk.featureId)) continue;
       const usedHere = new Set(
-        sk.profiles.filter((p) => isProfileUsed(usage, sk.featureId, p.id)).map((p) => p.id)
+        sk.profiles
+          .filter((p) => isProfileUsed(usage, sk.featureId, p.id))
+          .map((p) => p.id),
       );
       const used = usedHere.size > 0;
       inputs.push({
@@ -315,7 +400,9 @@ export function ViewportView() {
     // dimension labels for the active sketch
     const labels: DimLabel[] = [];
     if (activeSketchId && draftSketch) {
-      const sk = evaluation.sketches.find((s) => s.featureId === activeSketchId);
+      const sk = evaluation.sketches.find(
+        (s) => s.featureId === activeSketchId,
+      );
       if (sk) {
         const pts = new Map<string, { x: number; y: number }>();
         for (const e of draftSketch.entities) {
@@ -338,9 +425,19 @@ export function ViewportView() {
               world: uv3(
                 sk.frame,
                 anchor.x + (off?.[0] ?? 0),
-                anchor.y + (off?.[1] ?? 0)
+                anchor.y + (off?.[1] ?? 0),
               ),
-              anchorWorld: uv3(sk.frame, layout.attachment.x, layout.attachment.y),
+              anchorWorld: uv3(
+                sk.frame,
+                layout.attachment.x,
+                layout.attachment.y,
+              ),
+              ...(layout.reference && {
+                reference: [
+                  uv3(sk.frame, layout.reference[0].x, layout.reference[0].y),
+                  uv3(sk.frame, layout.reference[1].x, layout.reference[1].y),
+                ],
+              }),
             });
           }
         }
@@ -355,9 +452,21 @@ export function ViewportView() {
     vp.clearHighlights();
     for (const s of selection) vp.addHighlight(s, "select");
     if (hover) vp.addHighlight(hover, "hover");
-  }, [evaluation, document_, mode, selection, hover, draftSketch]);
+  }, [
+    evaluation,
+    document_,
+    hiddenFeatures,
+    mode,
+    selection,
+    hover,
+    draftSketch,
+    baseLoads,
+  ]);
 
   const [, setLabelTick] = useState(0);
+  useEffect(() => {
+    viewportRef.current?.requestRender();
+  });
 
   // ---- extrude drag gizmo ----
 
@@ -367,41 +476,56 @@ export function ViewportView() {
     const profSel = s.selection.find((x) => x.kind === "profile") as any;
     if (profSel) {
       const sk = s.evaluation?.sketches.find(
-        (x) => x.featureId === profSel.sketchId
+        (x) => x.featureId === profSel.sketchId,
       );
-      const p = sk?.profiles.find((x) => x.id === profSel.profileId);
+      const p = sk && findProfile(sk, profSel.profileId);
       if (sk && p && p.polygon.length >= 6) {
         let cx = 0,
           cy = 0;
         const n = p.polygon.length / 2;
-        for (let i = 0; i < p.polygon.length; i += 2) {
-          cx += p.polygon[i];
-          cy += p.polygon[i + 1];
+        for (let i = 0; i + 1 < p.polygon.length; i += 2) {
+          cx += p.polygon[i]!;
+          cy += p.polygon[i + 1]!;
         }
         return { frame: sk.frame, anchorUV: [cx / n, cy / n], profile: p };
       }
     }
     const faceSel = s.selection.find((x) => x.kind === "face") as any;
     if (faceSel) {
-      const body = s.evaluation?.bodies.find((b) => b.bodyId === faceSel.bodyId);
+      const body = previewBodies(s).find((b) => b.bodyId === faceSel.bodyId);
       const face = body?.faces.find((f) => f.name === faceSel.faceName);
       if (body && face && face.surface.type === "plane") {
         let cx = 0,
           cy = 0,
           cz = 0,
           count = 0;
+        const vertexAt = (i: number) => {
+          const vi = body.indices[i];
+          if (vi === undefined) return null;
+          const x = body.positions[vi * 3];
+          const y = body.positions[vi * 3 + 1];
+          const z = body.positions[vi * 3 + 2];
+          if (x === undefined || y === undefined || z === undefined)
+            return null;
+          return { vi, x, y, z };
+        };
         const seen = new Set<number>();
         for (let i = face.start; i < face.start + face.count; i++) {
-          const vi = body.indices[i];
-          if (seen.has(vi)) continue;
-          seen.add(vi);
-          cx += body.positions[vi * 3];
-          cy += body.positions[vi * 3 + 1];
-          cz += body.positions[vi * 3 + 2];
+          const v = vertexAt(i);
+          if (!v) return null;
+          if (seen.has(v.vi)) continue;
+          seen.add(v.vi);
+          cx += v.x;
+          cy += v.y;
+          cz += v.z;
           count++;
         }
         if (count === 0) return null;
-        const centroid: [number, number, number] = [cx / count, cy / count, cz / count];
+        const centroid: [number, number, number] = [
+          cx / count,
+          cy / count,
+          cz / count,
+        ];
         const normal = face.surface.normal;
         const seed: [number, number, number] =
           Math.abs(normal[0]) > 0.9 ? [0, 1, 0] : [1, 0, 0];
@@ -415,16 +539,13 @@ export function ViewportView() {
         const ghostPositions: number[] = [];
         const ghostIndices: number[] = [];
         for (let i = face.start; i < face.start + face.count; i++) {
-          const vi = body.indices[i];
-          let ni = remap.get(vi);
+          const v = vertexAt(i);
+          if (!v) return null;
+          let ni = remap.get(v.vi);
           if (ni === undefined) {
             ni = ghostPositions.length / 3;
-            remap.set(vi, ni);
-            ghostPositions.push(
-              body.positions[vi * 3],
-              body.positions[vi * 3 + 1],
-              body.positions[vi * 3 + 2]
-            );
+            remap.set(v.vi, ni);
+            ghostPositions.push(v.x, v.y, v.z);
           }
           ghostIndices.push(ni);
         }
@@ -452,18 +573,18 @@ export function ViewportView() {
 
   // build / rebuild the gizmo when the extrude dialog selection changes
   useEffect(() => {
-    // never rebuild mid-drag (live previews change `evaluation` while dragging)
-    if (gizmoDragRef.current) return;
-    gizmoRef.current?.dispose();
-    gizmoRef.current = null;
+    extrudeSlot.rebuild(buildExtrudeGizmo);
+  }, [mode, selection, evaluation, baseLoads]);
+
+  function buildExtrudeGizmo(): ExtrudeGizmo | null {
     setGizmoLabel(null);
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp) return null;
     const src = computeGizmoSource();
-    if (!src) return;
+    if (!src) return null;
     const s = useStore.getState();
     // when editing, the real geometry live-updates — skip the ghost preview
-    if (s.mode.name === "dialog" && s.mode.editFeatureId) {
+    if (previewedFeature(s)) {
       src.profile = undefined;
       src.faceGhost = undefined;
     }
@@ -473,26 +594,21 @@ export function ViewportView() {
     const dist = Number.isFinite(distRaw) ? distRaw : 10;
     const sign = s.dialogParams.direction === "reverse" ? -1 : 1;
     const startRaw = Number(s.dialogParams.startOffset);
-    gizmoRef.current = new ExtrudeGizmo(
+    return new ExtrudeGizmo(
       vp,
       src,
       sign * dist,
       (s.dialogParams.operation ?? "join") === "cut",
-      Number.isFinite(startRaw) ? startRaw : 0
+      Number.isFinite(startRaw) ? startRaw : 0,
     );
-    return () => {
-      if (gizmoDragRef.current) return;
-      gizmoRef.current?.dispose();
-      gizmoRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selection, evaluation]);
+  }
 
   // typing in the dialog moves the arrow too; Cut tints the preview red
   useEffect(() => {
-    const g = gizmoRef.current;
-    if (!g || gizmoDragRef.current) return;
+    const g = extrudeSlot.current;
+    if (!g) return;
     g.setCut((dialogParams.operation ?? "join") === "cut");
+    if (extrudeSlot.isDragging) return;
     const startRaw = Number(dialogParams.startOffset);
     g.setStartOffset(Number.isFinite(startRaw) ? startRaw : 0);
     const dist = Number(dialogParams.distance);
@@ -503,21 +619,22 @@ export function ViewportView() {
 
   // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
   useEffect(() => {
-    if (moveDragRef.current) return;
-    moveGizmoRef.current?.dispose();
-    moveGizmoRef.current = null;
+    moveSlot.rebuild(buildMoveGizmo);
+  }, [mode, selection, evaluation]);
+
+  function buildMoveGizmo(): MoveGizmo | null {
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp) return null;
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "move") return;
+    if (s.mode.name !== "dialog" || s.mode.dialog !== "move") return null;
     const bodyIds = s.selection
       .filter((x) => x.kind === "body")
       .map((x: any) => x.bodyId);
-    if (bodyIds.length === 0) return;
+    if (bodyIds.length === 0) return null;
     const bodies = (s.evaluation?.bodies ?? []).filter((b) =>
-      bodyIds.includes(b.bodyId)
+      bodyIds.includes(b.bodyId),
     );
-    if (bodies.length === 0) return;
+    if (bodies.length === 0) return null;
     const t: [number, number, number] = [
       Number(s.dialogParams.tx) || 0,
       Number(s.dialogParams.ty) || 0,
@@ -525,36 +642,31 @@ export function ViewportView() {
     ];
     // bodies already sit at +t when editing (feature applied) — the gizmo
     // base is the pre-move position
-    const editing = !!s.mode.editFeatureId;
+    const shown = previewedFeature(s);
     const center = new THREE.Vector3();
     for (const b of bodies) {
       center.add(
         new THREE.Vector3(
           (b.bbox.min[0] + b.bbox.max[0]) / 2,
           (b.bbox.min[1] + b.bbox.max[1]) / 2,
-          (b.bbox.min[2] + b.bbox.max[2]) / 2
-        )
+          (b.bbox.min[2] + b.bbox.max[2]) / 2,
+        ),
       );
     }
     center.divideScalar(bodies.length);
-    if (editing) center.sub(new THREE.Vector3(...t));
+    if (shown?.type === "move")
+      center.sub(new THREE.Vector3(...shown.translation));
     // ghost meshes only for NEW moves; edits live-update the real geometry
-    const ghosts = editing
+    const ghosts = shown
       ? []
       : bodies.map((b) => ({ positions: b.positions, indices: b.indices }));
-    moveGizmoRef.current = new MoveGizmo(vp, center, t, ghosts);
-    return () => {
-      if (moveDragRef.current) return;
-      moveGizmoRef.current?.dispose();
-      moveGizmoRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selection, evaluation]);
+    return new MoveGizmo(vp, center, t, ghosts);
+  }
 
   // typing in the move dialog updates the arrows/ghost too
   useEffect(() => {
-    const g = moveGizmoRef.current;
-    if (!g || moveDragRef.current) return;
+    const g = moveSlot.current;
+    if (!g || moveSlot.isDragging) return;
     g.update([
       Number(dialogParams.tx) || 0,
       Number(dialogParams.ty) || 0,
@@ -564,7 +676,10 @@ export function ViewportView() {
 
   /** Resolve the revolve axis (origin + direction) exactly as the feature
    * will, from the current dialog params + selection. */
-  function resolveRevolveAxis(): { origin: THREE.Vector3; dir: THREE.Vector3 } | null {
+  function resolveRevolveAxis(): {
+    origin: THREE.Vector3;
+    dir: THREE.Vector3;
+  } | null {
     const s = useStore.getState();
     let axisOrigin: THREE.Vector3 | null = null;
     let axisDir: THREE.Vector3 | null = null;
@@ -573,10 +688,10 @@ export function ViewportView() {
       const edgeSel = s.selection.find((x) => x.kind === "edge") as any;
       if (lineSel) {
         const axSk = s.evaluation?.sketches.find(
-          (x) => x.featureId === lineSel.sketchId
+          (x) => x.featureId === lineSel.sketchId,
         );
         const line = axSk?.entities.find(
-          (e: any) => e.id === lineSel.entityId && e.kind === "line"
+          (e: any) => e.id === lineSel.entityId && e.kind === "line",
         ) as any;
         const p1 = axSk?.entities.find((e: any) => e.id === line?.p1) as any;
         const p2 = axSk?.entities.find((e: any) => e.id === line?.p2) as any;
@@ -586,21 +701,21 @@ export function ViewportView() {
             new THREE.Vector3(
               f.origin[0] + u * f.xAxis[0] + v * f.yAxis[0],
               f.origin[1] + u * f.xAxis[1] + v * f.yAxis[1],
-              f.origin[2] + u * f.xAxis[2] + v * f.yAxis[2]
+              f.origin[2] + u * f.xAxis[2] + v * f.yAxis[2],
             );
           axisOrigin = to3(p1.x, p1.y);
           axisDir = to3(p2.x, p2.y).sub(axisOrigin);
         }
       } else if (edgeSel) {
-        const body = s.evaluation?.bodies.find((b) => b.bodyId === edgeSel.bodyId);
+        const body = previewBodies(s).find((b) => b.bodyId === edgeSel.bodyId);
         const ed = body?.edges.find((x) => x.name === edgeSel.edgeName);
         if (ed && ed.polyline.length >= 6) {
           const pl = ed.polyline;
           axisOrigin = new THREE.Vector3(pl[0], pl[1], pl[2]);
           axisDir = new THREE.Vector3(
-            pl[pl.length - 3] - pl[0],
-            pl[pl.length - 2] - pl[1],
-            pl[pl.length - 1] - pl[2]
+            pl[pl.length - 3]! - pl[0]!,
+            pl[pl.length - 2]! - pl[1]!,
+            pl[pl.length - 1]! - pl[2]!,
           );
         }
       }
@@ -610,7 +725,7 @@ export function ViewportView() {
         Y: [0, 1, 0],
         Z: [0, 0, 1],
       };
-      const d = dirs[s.dialogParams.axis ?? "Z"] ?? dirs.Z;
+      const d = dirs[s.dialogParams.axis ?? "Z"] ?? dirs.Z!;
       axisOrigin = new THREE.Vector3(0, 0, 0);
       axisDir = new THREE.Vector3(...d);
     }
@@ -624,9 +739,9 @@ export function ViewportView() {
     const profSel = s.selection.find((x) => x.kind === "profile") as any;
     if (!profSel) return null;
     const sk = s.evaluation?.sketches.find(
-      (x) => x.featureId === profSel.sketchId
+      (x) => x.featureId === profSel.sketchId,
     );
-    const profile = sk?.profiles.find((p) => p.id === profSel.profileId);
+    const profile = sk && findProfile(sk, profSel.profileId);
     if (!sk || !profile) return null;
     return { sk, profile };
   }
@@ -637,18 +752,16 @@ export function ViewportView() {
     const vp = viewportRef.current;
     if (revolveGhostRef.current && vp) {
       vp.scene.remove(revolveGhostRef.current);
-      revolveGhostRef.current.traverse((o: any) => {
-        o.geometry?.dispose?.();
-        o.material?.dispose?.();
-      });
+      disposeGroup(revolveGhostRef.current);
       revolveGhostRef.current = null;
+      vp.requestRender();
     }
     if (!vp) return;
     const s = useStore.getState();
     if (
       s.mode.name !== "dialog" ||
       s.mode.dialog !== "revolve" ||
-      s.mode.editFeatureId // edits regenerate the real body on OK
+      previewedFeature(s) // the previewed body is already real
     ) {
       return;
     }
@@ -664,35 +777,44 @@ export function ViewportView() {
       profile.holePolygons,
       axis.origin,
       axis.dir,
-      Number.isFinite(angle) ? angle : 360
+      Number.isFinite(angle) ? angle : 360,
     );
     vp.scene.add(ghost);
+    vp.requestRender();
     revolveGhostRef.current = ghost;
     return () => {
       if (revolveGhostRef.current && viewportRef.current) {
         viewportRef.current.scene.remove(revolveGhostRef.current);
-        revolveGhostRef.current.traverse((o: any) => {
-          o.geometry?.dispose?.();
-          o.material?.dispose?.();
-        });
+        disposeGroup(revolveGhostRef.current);
         revolveGhostRef.current = null;
+        viewportRef.current.requestRender();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selection, evaluation, dialogParams]);
+  }, [mode, selection, evaluation, dialogParams, baseLoads]);
 
   // rotational drag handle for the revolve angle (ring around the axis)
   useEffect(() => {
-    if (revolveDragRef.current) return;
-    revolveGizmoRef.current?.dispose();
-    revolveGizmoRef.current = null;
+    revolveSlot.rebuild(buildRevolveGizmo);
+    // axisSource/axis in deps: the axis dropdown may switch AFTER mount
+    // (auto-switch on edge pick) — the ring must follow. Angle deliberately
+    // excluded so drags don't rebuild the ring under the pointer.
+  }, [
+    mode,
+    selection,
+    evaluation,
+    dialogParams.axisSource,
+    dialogParams.axis,
+    baseLoads,
+  ]);
+
+  function buildRevolveGizmo(): RevolveGizmo | null {
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp) return null;
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "revolve") return;
+    if (s.mode.name !== "dialog" || s.mode.dialog !== "revolve") return null;
     const sel = selectedRevolveProfile();
     const axis = resolveRevolveAxis();
-    if (!sel || !axis) return;
+    if (!sel || !axis) return null;
     const { sk, profile } = sel;
 
     // ring through the profile centroid, perpendicular to the axis
@@ -700,16 +822,16 @@ export function ViewportView() {
     let cu = 0,
       cv = 0;
     const n = profile.polygon.length / 2;
-    for (let i = 0; i < n; i++) {
-      cu += profile.polygon[i * 2];
-      cv += profile.polygon[i * 2 + 1];
+    for (let i = 0; i * 2 + 1 < profile.polygon.length; i++) {
+      cu += profile.polygon[i * 2]!;
+      cv += profile.polygon[i * 2 + 1]!;
     }
     cu /= n || 1;
     cv /= n || 1;
     const centroid = new THREE.Vector3(
       f.origin[0] + cu * f.xAxis[0] + cv * f.yAxis[0],
       f.origin[1] + cu * f.xAxis[1] + cv * f.yAxis[1],
-      f.origin[2] + cu * f.xAxis[2] + cv * f.yAxis[2]
+      f.origin[2] + cu * f.xAxis[2] + cv * f.yAxis[2],
     );
     const d = axis.dir.clone().normalize();
     const along = centroid.clone().sub(axis.origin).dot(d);
@@ -726,29 +848,20 @@ export function ViewportView() {
       radius = wpp * 50;
     }
     const angle = Number(s.dialogParams.angle);
-    revolveGizmoRef.current = new RevolveGizmo(
+    return new RevolveGizmo(
       vp,
       center,
       d,
       zeroDir,
       radius,
-      Number.isFinite(angle) ? angle : 360
+      Number.isFinite(angle) ? angle : 360,
     );
-    return () => {
-      if (revolveDragRef.current) return;
-      revolveGizmoRef.current?.dispose();
-      revolveGizmoRef.current = null;
-    };
-    // axisSource/axis in deps: the axis dropdown may switch AFTER mount
-    // (auto-switch on edge pick) — the ring must follow. Angle deliberately
-    // excluded so drags don't rebuild the ring under the pointer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selection, evaluation, dialogParams.axisSource, dialogParams.axis]);
+  }
 
   // typing an angle moves the handle too
   useEffect(() => {
-    const g = revolveGizmoRef.current;
-    if (!g || revolveDragRef.current) return;
+    const g = revolveSlot.current;
+    if (!g || revolveSlot.isDragging) return;
     const a = Number(dialogParams.angle);
     if (Number.isFinite(a)) g.update(a);
   }, [dialogParams]);
@@ -775,8 +888,14 @@ export function ViewportView() {
     let lastX = 0,
       lastY = 0;
     let orbiting = false;
+    let pivot: THREE.Vector3 | undefined;
     let panning = false;
     let dragMoved = false;
+
+    const startOrbit = (e: PointerEvent) => {
+      orbiting = true;
+      pivot = vp.pick(e.clientX, e.clientY, { bodies: true })?.point;
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       button = e.button;
@@ -785,32 +904,32 @@ export function ViewportView() {
       dragMoved = false;
       el.setPointerCapture(e.pointerId);
       if (e.button === 1) {
-        if (e.shiftKey) orbiting = true;
+        if (e.shiftKey) startOrbit(e);
         else panning = true;
         e.preventDefault();
         return;
       }
       if (e.button === 2) {
-        orbiting = true;
+        startOrbit(e);
         return;
       }
       if (e.button === 0) {
         // gizmo drags take priority over everything else
-        if (gizmoRef.current?.hitTest(e.clientX, e.clientY)) {
-          gizmoDragRef.current = true;
+        if (extrudeSlot.current?.hitTest(e.clientX, e.clientY)) {
+          extrudeSlot.beginDrag();
           e.preventDefault();
           return;
         }
-        const moveAxis = moveGizmoRef.current?.hitTest(e.clientX, e.clientY) ?? -1;
-        if (moveAxis >= 0 && moveGizmoRef.current) {
-          moveGizmoRef.current.beginDrag(moveAxis, e.clientX, e.clientY);
-          moveDragRef.current = true;
+        const moveAxis = moveSlot.current?.hitTest(e.clientX, e.clientY) ?? -1;
+        if (moveAxis >= 0 && moveSlot.current) {
+          moveSlot.current.beginDrag(moveAxis, e.clientX, e.clientY);
+          moveSlot.beginDrag();
           e.preventDefault();
           return;
         }
-        if (revolveGizmoRef.current?.hitTest(e.clientX, e.clientY)) {
-          revolveGizmoRef.current.beginDrag(e.clientX, e.clientY);
-          revolveDragRef.current = true;
+        if (revolveSlot.current?.hitTest(e.clientX, e.clientY)) {
+          revolveSlot.current.beginDrag(e.clientX, e.clientY);
+          revolveSlot.beginDrag();
           e.preventDefault();
           return;
         }
@@ -822,14 +941,14 @@ export function ViewportView() {
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
-      if (revolveDragRef.current && revolveGizmoRef.current) {
-        const g = revolveGizmoRef.current;
+      if (revolveSlot.isDragging && revolveSlot.current) {
+        const g = revolveSlot.current;
         const a = g.dragAngle(e.clientX, e.clientY);
         g.update(a);
         const s = useStore.getState();
         s.setDialogParams({ angle: a });
         const tip = g.handleScreenPosition();
-        setGizmoLabel({ x: tip.x, y: tip.y, text: `${a}°` });
+        setGizmoLabel({ x: tip.x, y: tip.y, text: formatAngle(a, 3) });
         // editing an existing revolve: live-update the real geometry
         const modeNow = s.mode;
         if (
@@ -838,24 +957,14 @@ export function ViewportView() {
           modeNow.editFeatureId &&
           a !== 0
         ) {
-          const th = previewThrottleRef.current;
-          const now = performance.now();
-          if (now - th.last > 250 && !th.inFlight) {
-            th.last = now;
-            th.inFlight = true;
-            void s
-              .updateFeaturePreview(modeNow.editFeatureId, { angle: a } as any)
-              .finally(() => {
-                th.inFlight = false;
-              });
-          }
+          livePreview.during(modeNow.editFeatureId, { angle: a } as any);
         }
         lastX = e.clientX;
         lastY = e.clientY;
         return;
       }
-      if (moveDragRef.current && moveGizmoRef.current) {
-        const g = moveGizmoRef.current;
+      if (moveSlot.isDragging && moveSlot.current) {
+        const g = moveSlot.current;
         const t = g.dragOffset(e.clientX, e.clientY);
         g.update(t);
         const s = useStore.getState();
@@ -867,7 +976,7 @@ export function ViewportView() {
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
-            text: `${axisName}: ${Math.round(v * 1000) / 1000} mm`,
+            text: `${axisName}: ${formatLength(v, "mm", 3)}`,
           });
         }
         // editing an existing move: live-update the real geometry
@@ -877,26 +986,16 @@ export function ViewportView() {
           modeNow.dialog === "move" &&
           modeNow.editFeatureId
         ) {
-          const th = previewThrottleRef.current;
-          const now = performance.now();
-          if (now - th.last > 250 && !th.inFlight) {
-            th.last = now;
-            th.inFlight = true;
-            void s
-              .updateFeaturePreview(modeNow.editFeatureId, {
-                translation: t,
-              } as any)
-              .finally(() => {
-                th.inFlight = false;
-              });
-          }
+          livePreview.during(modeNow.editFeatureId, {
+            translation: t,
+          } as any);
         }
         lastX = e.clientX;
         lastY = e.clientY;
         return;
       }
-      if (gizmoDragRef.current && gizmoRef.current) {
-        const g = gizmoRef.current;
+      if (extrudeSlot.isDragging && extrudeSlot.current) {
+        const g = extrudeSlot.current;
         // Ctrl while dragging: collapse the extrude to zero so the sketch
         // profiles reappear and can be re-picked.
         const zeroed = e.ctrlKey || e.metaKey;
@@ -914,7 +1013,7 @@ export function ViewportView() {
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
-            text: zeroed ? "0 mm" : `${Math.round(Math.abs(v) * 1000) / 1000} mm`,
+            text: formatLength(zeroed ? 0 : Math.abs(v), "mm", 3),
           });
           // editing an existing extrude: live-update the real geometry.
           // At zero the feature is previewed as suppressed (a real zero
@@ -925,29 +1024,22 @@ export function ViewportView() {
             modeNow.dialog === "extrude" &&
             modeNow.editFeatureId
           ) {
-            const th = previewThrottleRef.current;
-            const now = performance.now();
-            if (now - th.last > 250 && !th.inFlight) {
-              th.last = now;
-              th.inFlight = true;
-              const previewPatch = zeroed
+            livePreview.during(
+              modeNow.editFeatureId,
+              (zeroed
                 ? { suppressed: true }
                 : {
                     suppressed: false,
                     distance: Math.abs(v),
                     direction:
                       patch.direction ?? s.dialogParams.direction ?? "normal",
-                  };
-              void s
-                .updateFeaturePreview(modeNow.editFeatureId, previewPatch as any)
-                .finally(() => {
-                  th.inFlight = false;
-                });
-            }
+                    operation: s.dialogParams.operation,
+                  }) as any,
+            );
           }
         }
       } else if (orbiting) {
-        vp.orbit(dx, dy);
+        vp.orbitTrackball(dx, dy, pivot);
       } else if (panning) {
         vp.pan(dx, dy);
       } else if (button === 0) {
@@ -961,9 +1053,8 @@ export function ViewportView() {
 
     const onPointerUp = (e: PointerEvent) => {
       el.releasePointerCapture(e.pointerId);
-      if (revolveDragRef.current && revolveGizmoRef.current) {
-        revolveGizmoRef.current.endDrag();
-        revolveDragRef.current = false;
+      if (revolveSlot.isDragging && revolveSlot.current) {
+        revolveSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
         const s = useStore.getState();
@@ -975,13 +1066,12 @@ export function ViewportView() {
           Number.isFinite(a) &&
           a !== 0
         ) {
-          void s.updateFeaturePreview(s.mode.editFeatureId, { angle: a } as any);
+          livePreview.commit(s.mode.editFeatureId, { angle: a } as any);
         }
         return;
       }
-      if (moveDragRef.current && moveGizmoRef.current) {
-        moveGizmoRef.current.endDrag();
-        moveDragRef.current = false;
+      if (moveSlot.isDragging && moveSlot.current) {
+        moveSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
         const s = useStore.getState();
@@ -990,7 +1080,7 @@ export function ViewportView() {
           s.mode.dialog === "move" &&
           s.mode.editFeatureId
         ) {
-          void s.updateFeaturePreview(s.mode.editFeatureId, {
+          livePreview.commit(s.mode.editFeatureId, {
             translation: [
               Number(s.dialogParams.tx) || 0,
               Number(s.dialogParams.ty) || 0,
@@ -1000,8 +1090,8 @@ export function ViewportView() {
         }
         return;
       }
-      if (gizmoDragRef.current) {
-        gizmoDragRef.current = false;
+      if (extrudeSlot.isDragging) {
+        extrudeSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
         // editing: make sure the final dragged value is applied
@@ -1013,15 +1103,16 @@ export function ViewportView() {
         ) {
           const dist = Number(s.dialogParams.distance);
           if (Number.isFinite(dist) && dist !== 0) {
-            void s.updateFeaturePreview(s.mode.editFeatureId, {
+            livePreview.commit(s.mode.editFeatureId, {
               suppressed: false,
               distance: dist,
               direction: s.dialogParams.direction ?? "normal",
+              operation: s.dialogParams.operation,
             } as any);
           } else if (dist === 0) {
             // Ctrl-zeroed: leave the feature suppressed so profiles stay
             // pickable; dragging the arrow (or OK) brings it back.
-            void s.updateFeaturePreview(s.mode.editFeatureId, {
+            livePreview.commit(s.mode.editFeatureId, {
               suppressed: true,
             } as any);
           }
@@ -1041,11 +1132,6 @@ export function ViewportView() {
       if (b === 0) handlePrimaryUp(e, dragMoved);
     };
 
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      vp.zoomBy(e.deltaY > 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
-    };
-
     const onContext = (e: Event) => e.preventDefault();
 
     const onDblClick = (e: MouseEvent) => {
@@ -1055,19 +1141,18 @@ export function ViewportView() {
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
     el.addEventListener("pointerup", onPointerUp);
-    el.addEventListener("wheel", onWheel, { passive: false });
+    const unlistenWheel = listenWheel(el, vp);
     el.addEventListener("contextmenu", onContext);
     el.addEventListener("dblclick", onDblClick);
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
-      el.removeEventListener("wheel", onWheel);
+      unlistenWheel();
       el.removeEventListener("contextmenu", onContext);
       el.removeEventListener("dblclick", onDblClick);
     };
     // handlers read latest state via zustand getState
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ------ mode-aware handlers (read state fresh from the store) ------
@@ -1076,7 +1161,7 @@ export function ViewportView() {
     const s = useStore.getState();
     if (s.mode.name !== "sketch") return null;
     const sk = s.evaluation?.sketches.find(
-      (x) => x.featureId === (s.mode as any).sketchId
+      (x) => x.featureId === (s.mode as any).sketchId,
     );
     return sk?.frame ?? null;
   }
@@ -1110,11 +1195,13 @@ export function ViewportView() {
       const feat = s.document?.features.find((f) => f.id === sketchId) as any;
       if (feat?.plane?.kind !== "face") return null;
       const body = s.evaluation?.bodies.find(
-        (b) => b.bodyId === feat.plane.face.bodyId
+        (b) => b.bodyId === feat.plane.face.bodyId,
       );
       if (!body) return null;
       const faceName: string = feat.plane.face.faceName;
-      const o = frame.origin, xa = frame.xAxis, ya = frame.yAxis;
+      const o = frame.origin,
+        xa = frame.xAxis,
+        ya = frame.yAxis;
       const corners: { x: number; y: number }[] = [];
       const mids: { x: number; y: number }[] = [];
       const segs: number[][] = [];
@@ -1128,29 +1215,31 @@ export function ViewportView() {
         const pl = ed.polyline;
         if (pl.length < 6) continue;
         const uv: number[] = [];
-        for (let i = 0; i < pl.length; i += 3) {
-          const dx = pl[i] - o[0], dy = pl[i + 1] - o[1], dz = pl[i + 2] - o[2];
+        for (let i = 0; i + 2 < pl.length; i += 3) {
+          const dx = pl[i]! - o[0],
+            dy = pl[i + 1]! - o[1],
+            dz = pl[i + 2]! - o[2];
           uv.push(
             dx * xa[0] + dy * xa[1] + dz * xa[2],
-            dx * ya[0] + dy * ya[1] + dz * ya[2]
+            dx * ya[0] + dy * ya[1] + dz * ya[2],
           );
         }
         segs.push(uv);
-        addCorner(uv[0], uv[1]);
-        addCorner(uv[uv.length - 2], uv[uv.length - 1]);
+        addCorner(uv[0]!, uv[1]!);
+        addCorner(uv[uv.length - 2]!, uv[uv.length - 1]!);
         // midpoint by arc length
         let total = 0;
         for (let i = 0; i + 3 < uv.length; i += 2) {
-          total += Math.hypot(uv[i + 2] - uv[i], uv[i + 3] - uv[i + 1]);
+          total += Math.hypot(uv[i + 2]! - uv[i]!, uv[i + 3]! - uv[i + 1]!);
         }
         let acc = 0;
         for (let i = 0; i + 3 < uv.length; i += 2) {
-          const d = Math.hypot(uv[i + 2] - uv[i], uv[i + 3] - uv[i + 1]);
+          const d = Math.hypot(uv[i + 2]! - uv[i]!, uv[i + 3]! - uv[i + 1]!);
           if (acc + d >= total / 2 && d > 0) {
             const t = (total / 2 - acc) / d;
             mids.push({
-              x: uv[i] + t * (uv[i + 2] - uv[i]),
-              y: uv[i + 1] + t * (uv[i + 3] - uv[i + 1]),
+              x: uv[i]! + t * (uv[i + 2]! - uv[i]!),
+              y: uv[i + 1]! + t * (uv[i + 3]! - uv[i + 1]!),
             });
             break;
           }
@@ -1164,18 +1253,45 @@ export function ViewportView() {
     return data;
   }
 
-  function pointerToSketchUV(
-    e: { clientX: number; clientY: number },
-    alignFrom?: { x: number; y: number; pointId?: string }
-  ): tools.UV | null {
+  function planeUV(e: {
+    clientX: number;
+    clientY: number;
+  }): { x: number; y: number } | null {
     const vp = viewportRef.current;
     const frame = activeSketchFrame();
     if (!vp || !frame) return null;
     const hit = vp.screenToPlanePoint(e.clientX, e.clientY, frame);
     if (!hit) return null;
     const d = hit.clone().sub(new THREE.Vector3(...frame.origin));
-    let u = d.dot(new THREE.Vector3(...frame.xAxis));
-    let v = d.dot(new THREE.Vector3(...frame.yAxis));
+    return {
+      x: d.dot(new THREE.Vector3(...frame.xAxis)),
+      y: d.dot(new THREE.Vector3(...frame.yAxis)),
+    };
+  }
+
+  function trimTarget(e: PointerEvent) {
+    const draft = useStore.getState().draftSketch;
+    const picked = viewportRef.current?.pick(e.clientX, e.clientY, {
+      sketchEntities: true,
+      sketchPoints: false,
+    })?.selection;
+    const at = planeUV(e);
+    if (picked?.kind !== "sketchEntity" || picked.sketchId !== draft?.id)
+      return null;
+    const curve = draft.entities.find((x) => x.id === picked.entityId);
+    if (!at || !curve || curve.kind === "point") return null;
+    return { selection: picked, entities: draft.entities, at, curve };
+  }
+
+  function pointerToSketchUV(
+    e: { clientX: number; clientY: number },
+    alignFrom?: { x: number; y: number; pointId?: string | undefined },
+  ): tools.UV | null {
+    const vp = viewportRef.current;
+    const raw = planeUV(e);
+    if (!vp || !raw) return null;
+    let u = raw.x;
+    let v = raw.y;
     const s = useStore.getState();
     const tol = vp.worldPerPixel() * 10;
     const entities = s.draftSketch?.entities ?? [];
@@ -1243,7 +1359,12 @@ export function ViewportView() {
       }
     }
     if (mid) {
-      return { x: mid.x, y: mid.y, snapMidLineId: mid.lineId, snapKind: "midpoint" };
+      return {
+        x: mid.x,
+        y: mid.y,
+        snapMidLineId: mid.lineId,
+        snapKind: "midpoint",
+      };
     }
 
     // 3) direction locks from the previous point (line chaining): axis
@@ -1268,7 +1389,7 @@ export function ViewportView() {
           { x: alignFrom.x, y: alignFrom.y, snapPointId: alignFrom.pointId },
           { x: u, y: v },
           entities,
-          tol // a line shorter than the snap radius (10 px) has no reliable direction
+          tol, // a line shorter than the snap radius (10 px) has no reliable direction
         );
         if (perp) {
           u = perp.x;
@@ -1347,13 +1468,17 @@ export function ViewportView() {
     if (faceSnap) {
       for (const seg of faceSnap.segs) {
         for (let i = 0; i + 3 < seg.length; i += 2) {
-          const ax = seg[i], ay = seg[i + 1];
-          const bx = seg[i + 2], by = seg[i + 3];
-          const abx = bx - ax, aby = by - ay;
+          const ax = seg[i]!,
+            ay = seg[i + 1]!;
+          const bx = seg[i + 2]!,
+            by = seg[i + 3]!;
+          const abx = bx - ax,
+            aby = by - ay;
           const len2 = abx * abx + aby * aby || 1;
           let t = ((u - ax) * abx + (v - ay) * aby) / len2;
           t = Math.max(0, Math.min(1, t));
-          const px = ax + t * abx, py = ay + t * aby;
+          const px = ax + t * abx,
+            py = ay + t * aby;
           const dd = Math.hypot(u - px, v - py);
           if (dd < curveBest) {
             curveBest = dd;
@@ -1383,17 +1508,17 @@ export function ViewportView() {
   function handleHover(e: PointerEvent) {
     const vp = viewportRef.current;
     if (!vp) return;
-    if (gizmoRef.current) {
-      gizmoRef.current.setHover(gizmoRef.current.hitTest(e.clientX, e.clientY));
-    }
-    if (moveGizmoRef.current && !moveDragRef.current) {
-      moveGizmoRef.current.setHover(
-        moveGizmoRef.current.hitTest(e.clientX, e.clientY)
+    if (extrudeSlot.current) {
+      extrudeSlot.current.setHover(
+        extrudeSlot.current.hitTest(e.clientX, e.clientY),
       );
     }
-    if (revolveGizmoRef.current && !revolveDragRef.current) {
-      revolveGizmoRef.current.setHover(
-        revolveGizmoRef.current.hitTest(e.clientX, e.clientY)
+    if (moveSlot.current && !moveSlot.isDragging) {
+      moveSlot.current.setHover(moveSlot.current.hitTest(e.clientX, e.clientY));
+    }
+    if (revolveSlot.current && !revolveSlot.isDragging) {
+      revolveSlot.current.setHover(
+        revolveSlot.current.hitTest(e.clientX, e.clientY),
       );
     }
     const s = useStore.getState();
@@ -1410,8 +1535,20 @@ export function ViewportView() {
     } else if (s.mode.name === "sketch") {
       const tool = (s.mode as any).tool as string;
       if (tool === "project") {
-        picked = vp.pick(e.clientX, e.clientY, { edges: true })?.selection ?? null;
-      } else if (["select", "dimension", "trim", "extend", "offset"].includes(tool)) {
+        picked =
+          vp.pick(e.clientX, e.clientY, { edges: true })?.selection ?? null;
+      } else if (tool === "trim") {
+        const target = trimTarget(e);
+        if (target && !target.curve.external)
+          picked = {
+            ...target.selection,
+            piece: trimPiece(
+              target.entities,
+              target.selection.entityId,
+              target.at,
+            ).samples,
+          };
+      } else if (["select", "dimension", "extend", "offset"].includes(tool)) {
         const r = vp.pick(e.clientX, e.clientY, {
           sketchEntities: true,
           profiles: false,
@@ -1422,9 +1559,16 @@ export function ViewportView() {
         const ts = toolState.current;
         const last =
           ts.clicks.length > 0 ? ts.clicks[ts.clicks.length - 1] : undefined;
-        const uv = pointerToSketchUV(
+        const uv = angleSnapped(
           e,
-          tool === "line" && last ? { x: last.x, y: last.y, pointId: last.snapPointId } : undefined
+          tool,
+          last,
+          pointerToSketchUV(
+            e,
+            tool === "line" && last
+              ? { x: last.x, y: last.y, pointId: last.snapPointId }
+              : undefined,
+          ),
         );
         updateSnapMarker(uv);
         const frame = activeSketchFrame();
@@ -1433,7 +1577,7 @@ export function ViewportView() {
           // the ghost honours typed (locked) sizes, exactly as the placed shape will
           const ghostCursor =
             dimRef.current && ts.clicks.length === 1
-              ? resolveDimCursor(tool, ts.clicks[0], uv, dimRef.current.fields)
+              ? resolveDimCursor(tool, ts.clicks[0]!, uv, dimRef.current.fields)
               : uv;
           updateToolPreview(
             vp,
@@ -1441,7 +1585,7 @@ export function ViewportView() {
             tool as any,
             ts.clicks,
             ghostCursor,
-            Number(s.dialogParams.polygonSides ?? 6) || 6
+            Number(s.dialogParams.polygonSides ?? 6) || 6,
           );
           showToolLabel(e, tool, ts.clicks, uv);
         } else {
@@ -1453,11 +1597,19 @@ export function ViewportView() {
         const sketchId = (s.mode as any).sketchId as string;
         if (uv?.snapPointId) {
           picked = { kind: "sketchPoint", sketchId, entityId: uv.snapPointId };
-        } else if (uv?.snapLineId || uv?.snapCircleId || uv?.snapMidLineId || uv?.snapPerpLineId) {
+        } else if (
+          uv?.snapLineId ||
+          uv?.snapCircleId ||
+          uv?.snapMidLineId ||
+          uv?.snapPerpLineId
+        ) {
           picked = {
             kind: "sketchEntity",
             sketchId,
-            entityId: (uv.snapLineId ?? uv.snapCircleId ?? uv.snapMidLineId ?? uv.snapPerpLineId)!,
+            entityId: (uv.snapLineId ??
+              uv.snapCircleId ??
+              uv.snapMidLineId ??
+              uv.snapPerpLineId)!,
           };
         }
       } else {
@@ -1508,7 +1660,7 @@ export function ViewportView() {
 
   function filterDialogPick(
     sel: Selection | null,
-    dialog: keyof typeof DIALOG_PICKS
+    dialog: keyof typeof DIALOG_PICKS,
   ): Selection | null {
     if (!sel) return null;
     const picks = DIALOG_PICKS[dialog] ?? {};
@@ -1524,7 +1676,7 @@ export function ViewportView() {
       // only LINES can serve as an axis
       const doc = useStore.getState().document;
       const sk = doc?.features.find(
-        (f) => f.id === (sel as any).sketchId && f.type === "sketch"
+        (f) => f.id === (sel as any).sketchId && f.type === "sketch",
       ) as any;
       const ent = sk?.entities.find((x: any) => x.id === (sel as any).entityId);
       return ent?.kind === "line" ? sel : null;
@@ -1543,7 +1695,10 @@ export function ViewportView() {
         if (r?.selection.kind === "sketchPoint") {
           toolState.current.dragPointId = (r.selection as any).entityId;
         }
-      } else if (DRAW_TOOLS.includes(t) && toolState.current.clicks.length === 0) {
+      } else if (
+        DRAW_TOOLS.includes(t) &&
+        toolState.current.clicks.length === 0
+      ) {
         // press-drag-release drawing
         toolState.current.downUV = pointerToSketchUV(e);
       }
@@ -1556,7 +1711,11 @@ export function ViewportView() {
     if (toolState.current.dragPointId) {
       const uv = pointerToSketchUV(e);
       if (uv) {
-        s.solveDraft({ pointId: toolState.current.dragPointId, x: uv.x, y: uv.y });
+        s.solveDraft({
+          pointId: toolState.current.dragPointId,
+          x: uv.x,
+          y: uv.y,
+        });
       }
       return;
     }
@@ -1565,9 +1724,16 @@ export function ViewportView() {
     if (down && DRAW_TOOLS.includes(tool)) {
       const vp = viewportRef.current;
       const frame = activeSketchFrame();
-      const uv = pointerToSketchUV(
+      const uv = angleSnapped(
         e,
-        tool === "line" ? { x: down.x, y: down.y, pointId: down.snapPointId } : undefined
+        tool,
+        down,
+        pointerToSketchUV(
+          e,
+          tool === "line"
+            ? { x: down.x, y: down.y, pointId: down.snapPointId }
+            : undefined,
+        ),
       );
       if (vp && frame && uv) {
         updateToolPreview(
@@ -1576,7 +1742,7 @@ export function ViewportView() {
           tool as any,
           [down],
           uv,
-          Number(s.dialogParams.polygonSides ?? 6) || 6
+          Number(s.dialogParams.polygonSides ?? 6) || 6,
         );
         showToolLabel(e, tool, [down], uv);
         updateSnapMarker(uv);
@@ -1585,16 +1751,14 @@ export function ViewportView() {
   }
 
   /** Screen position (fixed coords) of a sketch (u,v) point. */
-  function sketchUVToScreen(u: number, v: number): { x: number; y: number } | null {
+  function sketchUVToScreen(
+    u: number,
+    v: number,
+  ): { x: number; y: number } | null {
     const vp = viewportRef.current;
     const frame = activeSketchFrame();
     if (!vp || !frame) return null;
-    const p = uv3(frame, u, v).project(vp.camera);
-    const rect = vp.renderer.domElement.getBoundingClientRect();
-    return {
-      x: rect.left + ((p.x + 1) / 2) * rect.width,
-      y: rect.top + ((1 - p.y) / 2) * rect.height,
-    };
+    return worldToClient(vp.canvasRect(), vp.camera, uv3(frame, u, v));
   }
 
   /** Show/hide the snap glyph for the current pointer result. */
@@ -1613,12 +1777,12 @@ export function ViewportView() {
   function toolSizeText(
     tool: string,
     clicks: tools.UV[],
-    cursor: tools.UV
+    cursor: tools.UV,
   ): string | null {
     const r1 = (v: number) => Math.round(v * 100) / 100;
     const first = clicks[0];
     if (!first) return null;
-    const last = clicks[clicks.length - 1];
+    const last = clicks[clicks.length - 1]!;
     const dx = cursor.x - last.x;
     const dy = cursor.y - last.y;
     switch (tool) {
@@ -1647,7 +1811,7 @@ export function ViewportView() {
     e: { clientX: number; clientY: number },
     tool: string,
     clicks: tools.UV[],
-    cursor: tools.UV
+    cursor: tools.UV,
   ) {
     // tools with typed sizes get the editable entry instead of the readout
     const fields = dimFieldsFor(tool);
@@ -1659,7 +1823,7 @@ export function ViewportView() {
       }
       d.x = e.clientX;
       d.y = e.clientY;
-      const live = liveDimValues(tool, clicks[0], cursor);
+      const live = liveDimValues(tool, clicks[0]!, cursor);
       for (const f of d.fields) if (!f.locked) f.text = fmt2(live[f.key] ?? 0);
       refreshDim();
       setToolLabel(null);
@@ -1679,7 +1843,14 @@ export function ViewportView() {
   function refreshDim() {
     const d = dimRef.current;
     setDimEntry(
-      d ? { x: d.x, y: d.y, active: d.active, fields: d.fields.map((f) => ({ ...f })) } : null
+      d
+        ? {
+            x: d.x,
+            y: d.y,
+            active: d.active,
+            fields: d.fields.map((f) => ({ ...f })),
+          }
+        : null,
     );
   }
 
@@ -1701,8 +1872,8 @@ export function ViewportView() {
       frame,
       d.tool as any,
       ts.clicks,
-      resolveDimCursor(d.tool, ts.clicks[0], ts.lastCursor, d.fields),
-      Number(useStore.getState().dialogParams.polygonSides ?? 6) || 6
+      resolveDimCursor(d.tool, ts.clicks[0]!, ts.lastCursor, d.fields),
+      Number(useStore.getState().dialogParams.polygonSides ?? 6) || 6,
     );
   }
 
@@ -1714,13 +1885,19 @@ export function ViewportView() {
     const ts = toolState.current;
     const d = dimRef.current;
     if (ts.clicks.length !== 1 || !d) return;
-    const first = ts.clicks[0];
+    const first = ts.clicks[0]!;
     const second = resolveDimCursor(tool, first, cursor, d.fields);
-    const result = buildFromClicks(tool, [first, second], s.mode.constructionMode);
+    const result = buildFromClicks(
+      tool,
+      [first, second],
+      s.mode.constructionMode,
+    );
     if (!result?.created) return;
-    result.created.constraints.push(...dimConstraintsFor(tool, result.created, d.fields));
     clearDimEntry();
-    await applyCreated(result.created, result.chain);
+    await applyCreated(
+      pinTypedDims(tool, result.created, d.fields),
+      result.chain,
+    );
   }
 
   /** Build geometry once a tool has enough clicks; null = needs more clicks.
@@ -1728,7 +1905,7 @@ export function ViewportView() {
   function buildFromClicks(
     tool: string,
     clicks: tools.UV[],
-    construction: boolean
+    construction: boolean,
   ): { created: tools.Created | null; chain: boolean } | null {
     const r = buildFromClicksRaw(tool, clicks, construction);
     if (r?.created && construction) r.created = tools.asConstruction(r.created);
@@ -1738,43 +1915,58 @@ export function ViewportView() {
   function buildFromClicksRaw(
     tool: string,
     clicks: tools.UV[],
-    construction: boolean
+    construction: boolean,
   ): { created: tools.Created | null; chain: boolean } | null {
     const s = useStore.getState();
     switch (tool) {
       case "line":
         return clicks.length >= 2
-          ? { created: tools.createLine(clicks[0], clicks[1], construction), chain: true }
+          ? {
+              created: tools.createLine(clicks[0]!, clicks[1]!, construction),
+              chain: true,
+            }
           : null;
       case "rect":
         return clicks.length >= 2
-          ? { created: tools.createRect(clicks[0], clicks[1]), chain: false }
+          ? { created: tools.createRect(clicks[0]!, clicks[1]!), chain: false }
           : null;
       case "centerRect":
         return clicks.length >= 2
-          ? { created: tools.createCenterRect(clicks[0], clicks[1]), chain: false }
+          ? {
+              created: tools.createCenterRect(clicks[0]!, clicks[1]!),
+              chain: false,
+            }
           : null;
       case "circle":
         return clicks.length >= 2
-          ? { created: tools.createCircle(clicks[0], clicks[1]), chain: false }
+          ? {
+              created: tools.createCircle(clicks[0]!, clicks[1]!),
+              chain: false,
+            }
           : null;
       case "arc3":
         return clicks.length >= 3
-          ? { created: tools.createArc3(clicks[0], clicks[1], clicks[2]), chain: false }
+          ? {
+              created: tools.createArc3(clicks[0]!, clicks[1]!, clicks[2]!),
+              chain: false,
+            }
           : null;
       case "polygon": {
         if (clicks.length < 2) return null;
         const sides = Number(s.dialogParams.polygonSides ?? 6) || 6;
-        return { created: tools.createPolygon(clicks[0], clicks[1], sides), chain: false };
+        return {
+          created: tools.createPolygon(clicks[0]!, clicks[1]!, sides),
+          chain: false,
+        };
       }
       case "slot": {
         if (clicks.length < 3) return null;
         const r = Math.hypot(
-          clicks[2].x - clicks[1].x,
-          clicks[2].y - clicks[1].y
+          clicks[2]!.x - clicks[1]!.x,
+          clicks[2]!.y - clicks[1]!.y,
         );
         return {
-          created: tools.createSlot(clicks[0], clicks[1], Math.max(r, 0.5)),
+          created: tools.createSlot(clicks[0]!, clicks[1]!, Math.max(r, 0.5)),
           chain: false,
         };
       }
@@ -1788,17 +1980,16 @@ export function ViewportView() {
     const draft = s.draftSketch;
     if (!draft) return;
 
-
     s.updateDraftSketch(
       [...draft.entities, ...created.entities],
-      [...draft.constraints, ...created.constraints]
+      [...draft.constraints, ...created.constraints],
     );
     await s.commitDraftSketch();
     const ts = toolState.current;
     if (keepChaining && created.chainPointId) {
       const st = useStore.getState();
       const p = st.draftSketch?.entities.find(
-        (x) => x.id === created.chainPointId
+        (x) => x.id === created.chainPointId,
       ) as any;
       ts.clicks = [
         { x: p?.x ?? 0, y: p?.y ?? 0, snapPointId: created.chainPointId },
@@ -1843,16 +2034,27 @@ export function ViewportView() {
       ts.downUV = null;
       const tool = (s.mode as any).tool as string;
       if (down && DRAW_TOOLS.includes(tool) && ts.clicks.length === 0) {
-        const upUV = pointerToSketchUV(
+        const upUV = angleSnapped(
           e,
-          tool === "line" ? { x: down.x, y: down.y, pointId: down.snapPointId } : undefined
+          tool,
+          down,
+          pointerToSketchUV(
+            e,
+            tool === "line"
+              ? { x: down.x, y: down.y, pointId: down.snapPointId }
+              : undefined,
+          ),
         );
         if (
           upUV &&
           Math.hypot(upUV.x - down.x, upUV.y - down.y) > vp.worldPerPixel() * 4
         ) {
           if (TWO_POINT_TOOLS.includes(tool)) {
-            const result = buildFromClicks(tool, [down, upUV], (s.mode as any).constructionMode);
+            const result = buildFromClicks(
+              tool,
+              [down, upUV],
+              (s.mode as any).constructionMode,
+            );
             if (result?.created) {
               await applyCreated(result.created, false);
             }
@@ -1873,7 +2075,8 @@ export function ViewportView() {
     const samePos =
       Math.abs(e.clientX - toolState.current.lastPickPos.x) < 4 &&
       Math.abs(e.clientY - toolState.current.lastPickPos.y) < 4;
-    toolState.current.pickDepth = e.altKey && samePos ? toolState.current.pickDepth + 1 : 0;
+    toolState.current.pickDepth =
+      e.altKey && samePos ? toolState.current.pickDepth + 1 : 0;
     toolState.current.lastPickPos = { x: e.clientX, y: e.clientY };
 
     if (s.mode.name === "pickPlane") {
@@ -1922,16 +2125,46 @@ export function ViewportView() {
         depth: toolState.current.pickDepth,
       });
       const sel = filterDialogPick(r?.selection ?? null, s.mode.dialog);
-      if (sel?.kind === "edge" && ["fillet", "chamfer"].includes(s.mode.dialog) && s.dialogParams.tangentChain !== false && s.projectId) {
+      if (
+        sel?.kind === "edge" &&
+        ["fillet", "chamfer"].includes(s.mode.dialog) &&
+        s.dialogParams.tangentChain !== false &&
+        s.projectId
+      ) {
         try {
-          const response = await api.tangentEdges(s.projectId, sel, s.mode.editFeatureId);
+          const response = await api.tangentEdges(
+            s.projectId,
+            sel,
+            s.mode.editFeatureId,
+          );
           const current = useStore.getState();
-          if (current.mode !== s.mode || current.selection !== s.selection || current.dialogParams.tangentChain === false) return;
-          const names = new Set(response.edges.map(e => e.edgeName));
-          const remove = response.edges.every(edge => s.selection.some(selected => selected.kind === "edge" && selected.bodyId === edge.bodyId && selected.edgeName === edge.edgeName));
-          const remaining = s.selection.filter(selected => selected.kind !== "edge" || selected.bodyId !== sel.bodyId || !names.has(selected.edgeName));
-          s.setSelection(remove ? remaining : [...remaining, ...response.edges]);
-        } catch (error) { s.setError((error as Error).message); }
+          if (
+            current.mode !== s.mode ||
+            current.selection !== s.selection ||
+            current.dialogParams.tangentChain === false
+          )
+            return;
+          const names = new Set(response.edges.map((e) => e.edgeName));
+          const remove = response.edges.every((edge) =>
+            s.selection.some(
+              (selected) =>
+                selected.kind === "edge" &&
+                selected.bodyId === edge.bodyId &&
+                selected.edgeName === edge.edgeName,
+            ),
+          );
+          const remaining = s.selection.filter(
+            (selected) =>
+              selected.kind !== "edge" ||
+              selected.bodyId !== sel.bodyId ||
+              !names.has(selected.edgeName),
+          );
+          s.setSelection(
+            remove ? remaining : [...remaining, ...response.edges],
+          );
+        } catch (error) {
+          s.setError((error as Error).message);
+        }
         return;
       }
       // profiles: plain click replaces, Ctrl/⌘/Shift adds or removes (as in
@@ -1980,9 +2213,16 @@ export function ViewportView() {
     const construction = s.mode.constructionMode;
     const ts = toolState.current;
     const last = ts.clicks[ts.clicks.length - 1];
-    const uv = pointerToSketchUV(
+    const uv = angleSnapped(
       e,
-      tool === "line" && last ? { x: last.x, y: last.y, pointId: last.snapPointId } : undefined
+      tool,
+      last,
+      pointerToSketchUV(
+        e,
+        tool === "line" && last
+          ? { x: last.x, y: last.y, pointId: last.snapPointId }
+          : undefined,
+      ),
     );
     if (!uv) return;
     const draft = s.draftSketch;
@@ -1990,52 +2230,110 @@ export function ViewportView() {
 
     if (s.busy) return;
     if (tool === "project") {
-      const picked = viewportRef.current!.pick(e.clientX, e.clientY, { edges: true })?.selection;
+      const picked = viewportRef.current!.pick(e.clientX, e.clientY, {
+        edges: true,
+      })?.selection;
       if (picked?.kind !== "edge") return;
-      const edge = s.evaluation?.bodies.find(b => b.bodyId === picked.bodyId)?.edges.find(ed => ed.name === picked.edgeName);
+      const edge = s.evaluation?.bodies
+        .find((b) => b.bodyId === picked.bodyId)
+        ?.edges.find((ed) => ed.name === picked.edgeName);
       const frame = activeSketchFrame();
       if (!edge || !frame) return;
       try {
-        if (draft.entities.some(en => en.kind !== "point" && en.projection?.bodyId === picked.bodyId && en.projection.edgeName === picked.edgeName))
+        if (
+          draft.entities.some(
+            (en) =>
+              en.kind !== "point" &&
+              en.projection?.bodyId === picked.bodyId &&
+              en.projection.edgeName === picked.edgeName,
+          )
+        )
           throw new Error("This edge is already projected into the sketch.");
         if (!s.projectId) return;
-        const { entities: added } = await api.projectEdge(s.projectId, draft.id,
-          { kind: "edge", bodyId: picked.bodyId, edgeName: picked.edgeName }, newId("proj"));
+        const { entities: added } = await api.projectEdge(
+          s.projectId,
+          draft.id,
+          { kind: "edge", bodyId: picked.bodyId, edgeName: picked.edgeName },
+          newId("proj"),
+        );
         const current = useStore.getState();
-        if (current.draftSketch !== draft || current.mode.name !== "sketch" || current.mode.tool !== "project") return;
+        if (
+          current.draftSketch !== draft ||
+          current.mode.name !== "sketch" ||
+          current.mode.tool !== "project"
+        )
+          return;
         s.updateDraftSketch([...draft.entities, ...added], draft.constraints);
         await s.commitDraftSketch();
         useStore.getState().setSketchTool("select");
       } catch (error) {
-        if (useStore.getState().draftSketch?.id === draft.id) useStore.setState({ draftSketch: draft });
+        if (useStore.getState().draftSketch?.id === draft.id)
+          useStore.setState({ draftSketch: draft });
         s.setError((error as Error).message);
       }
       return;
     }
-    if (tool === "trim" || tool === "extend" || tool === "offset") {
-      const picked = viewportRef.current!.pick(e.clientX, e.clientY, { sketchEntities: true })?.selection;
-      if (!picked || (picked.kind !== "sketchEntity" && picked.kind !== "sketchPoint") || picked.sketchId !== draft.id) return;
+    if (tool === "trim") {
+      const target = trimTarget(e);
+      if (!target) return;
+      try {
+        await s.trimSketchCurve(target.selection.entityId, target.at);
+      } catch (error) {
+        s.setError((error as Error).message);
+      }
+      return;
+    }
+    if (tool === "extend" || tool === "offset") {
+      const picked = viewportRef.current!.pick(e.clientX, e.clientY, {
+        sketchEntities: true,
+      })?.selection;
+      if (
+        !picked ||
+        (picked.kind !== "sketchEntity" && picked.kind !== "sketchPoint") ||
+        picked.sketchId !== draft.id
+      )
+        return;
       let entityId = picked.entityId;
       if (picked.kind === "sketchPoint") {
-        const connected = draft.entities.filter(en => en.kind === "line" ? [en.p1, en.p2].includes(entityId)
-          : en.kind === "arc" ? [en.start, en.end].includes(entityId) : false);
-        if (connected.length !== 1) { s.setError("Click along the curve to choose which one to modify."); return; }
-        entityId = connected[0].id;
+        const connected = draft.entities.filter((en) =>
+          en.kind === "line"
+            ? [en.p1, en.p2].includes(entityId)
+            : en.kind === "arc"
+              ? [en.start, en.end].includes(entityId)
+              : false,
+        );
+        if (connected.length !== 1) {
+          s.setError("Click along the curve to choose which one to modify.");
+          return;
+        }
+        entityId = connected[0]!.id;
       }
       if (tool === "offset") {
         const additive = e.ctrlKey || e.metaKey;
         s.setDialogParams({ offsetManualSelection: additive });
-        s.toggleSelection({ kind: "sketchEntity", sketchId: draft.id, entityId }, additive);
+        s.toggleSelection(
+          { kind: "sketchEntity", sketchId: draft.id, entityId },
+          additive,
+        );
         return;
       }
       try {
-        const result = modifySketch(draft.entities, draft.constraints, entityId, uv, tool);
+        const result = extendSketch(
+          draft.entities,
+          draft.constraints,
+          entityId,
+          uv,
+        );
         s.updateDraftSketch(result.entities, result.constraints);
         await s.commitDraftSketch();
         useStore.getState().setSketchTool("select");
-        if (result.removedConstraints) s.setError(`${result.removedConstraints} constraint(s) on the modified curve were removed. Undo restores them.`);
+        if (result.removedConstraints)
+          s.setError(
+            `${result.removedConstraints} constraint(s) on the modified curve were removed. Undo restores them.`,
+          );
       } catch (error) {
-        if (useStore.getState().draftSketch?.id === draft.id) useStore.setState({ draftSketch: draft });
+        if (useStore.getState().draftSketch?.id === draft.id)
+          useStore.setState({ draftSketch: draft });
         s.setError((error as Error).message);
       }
       return;
@@ -2044,7 +2342,11 @@ export function ViewportView() {
     if (DRAW_TOOLS.includes(tool)) {
       // a typed (locked) size wins over where the second click landed
       const d = dimRef.current;
-      if (ts.clicks.length === 1 && d && d.fields.some((f) => lockedValue(d.fields, f.key) !== null)) {
+      if (
+        ts.clicks.length === 1 &&
+        d &&
+        d.fields.some((f) => lockedValue(d.fields, f.key) !== null)
+      ) {
         await placeWithDims(uv);
         return;
       }
@@ -2066,7 +2368,8 @@ export function ViewportView() {
       case "select": {
         const vp = viewportRef.current!;
         const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
-        if (r) s.toggleSelection(r.selection, e.ctrlKey || e.metaKey || e.shiftKey);
+        if (r)
+          s.toggleSelection(r.selection, e.ctrlKey || e.metaKey || e.shiftKey);
         else if (!e.ctrlKey && !e.metaKey) s.setSelection([]);
         return;
       }
@@ -2093,13 +2396,14 @@ export function ViewportView() {
                 : "arc";
         ts.dimTargets.push({ kind, id: ent.id } as any);
 
-        const tryDim = (targets: typeof ts.dimTargets): SketchConstraint | null =>
-          tools.dimensionFor(targets as any, 0);
+        const tryDim = (
+          targets: typeof ts.dimTargets,
+        ): SketchConstraint | null => tools.dimensionFor(targets as any, 0);
 
         // single-target dimensions apply immediately; two points/lines need 2 clicks
         let constraint: SketchConstraint | null = null;
         if (kind === "line" || kind === "circle" || kind === "arc") {
-          constraint = tryDim([ts.dimTargets[ts.dimTargets.length - 1]]);
+          constraint = tryDim([ts.dimTargets[ts.dimTargets.length - 1]!]);
           ts.dimTargets = [];
         } else if (ts.dimTargets.length >= 2) {
           constraint = tryDim(ts.dimTargets.slice(-2));
@@ -2107,11 +2411,18 @@ export function ViewportView() {
         }
         if (constraint) {
           // already dimensioned? edit that one instead of stacking another
-          const existing = tools.findExistingDimension(draft.constraints, constraint);
+          const existing = tools.findExistingDimension(
+            draft.constraints,
+            constraint,
+          );
           if (existing) {
             setDimEdit({
-              constraintId: existing.id,
-              value: String((existing as any).value),
+              fields: [
+                {
+                  constraintId: existing.id,
+                  value: String((existing as any).value),
+                },
+              ],
               x: e.clientX,
               y: e.clientY,
             });
@@ -2119,12 +2430,19 @@ export function ViewportView() {
           }
           const currentValue = measureCurrent(constraint, draft.entities);
           (constraint as any).value = currentValue;
-          s.updateDraftSketch(draft.entities, [...draft.constraints, constraint]);
+          s.updateDraftSketch(draft.entities, [
+            ...draft.constraints,
+            constraint,
+          ]);
           await s.commitDraftSketch();
           // open the label editor immediately
           setDimEdit({
-            constraintId: constraint.id,
-            value: String(round3(currentValue)),
+            fields: [
+              {
+                constraintId: constraint.id,
+                value: String(round3(currentValue)),
+              },
+            ],
             x: e.clientX,
             y: e.clientY,
           });
@@ -2143,7 +2461,8 @@ export function ViewportView() {
       const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
       if (
         r &&
-        (r.selection.kind === "sketchEntity" || r.selection.kind === "sketchPoint")
+        (r.selection.kind === "sketchEntity" ||
+          r.selection.kind === "sketchPoint")
       ) {
         const key = JSON.stringify(r.selection);
         const already = s.selection.some((x) => JSON.stringify(x) === key);
@@ -2151,7 +2470,7 @@ export function ViewportView() {
         if (!already) s.setSelection([r.selection]);
         setCtxMenu({ x: e.clientX, y: e.clientY, sel: r.selection });
       } else {
-        setCtxMenu(null);
+        setCtxMenu({ x: e.clientX, y: e.clientY, sel: null });
       }
       return;
     }
@@ -2166,10 +2485,11 @@ export function ViewportView() {
     if (r) {
       // keep an existing multi-selection when right-clicking inside it
       const key = JSON.stringify(r.selection);
-      if (!s.selection.some((x) => JSON.stringify(x) === key)) s.setSelection([r.selection]);
+      if (!s.selection.some((x) => JSON.stringify(x) === key))
+        s.setSelection([r.selection]);
       setCtxMenu({ x: e.clientX, y: e.clientY, sel: r.selection });
     } else {
-      setCtxMenu(null);
+      setCtxMenu({ x: e.clientX, y: e.clientY, sel: null });
     }
   }
 
@@ -2180,37 +2500,68 @@ export function ViewportView() {
    */
   async function openDimensionEditor(
     entityId: string,
-    e: { clientX: number; clientY: number }
+    e: { clientX: number; clientY: number },
   ) {
     const s = useStore.getState();
     const draft = s.draftSketch;
     if (!draft) return;
     const ent = draft.entities.find((x) => x.id === entityId);
     if (!ent || ent.kind === "point") return;
+    if (ent.kind === "line") {
+      const dims = tools.lineDimensions(
+        entityId,
+        draft.entities,
+        draft.constraints,
+      );
+      s.updateDraftSketch(draft.entities, dims.constraints);
+      await s.commitDraftSketch();
+      const labels = dimFieldsFor("line") ?? [];
+      const fields: DimEditField[] = [];
+      for (const [i, id] of [dims.lengthId, dims.angleId].entries()) {
+        const c = dims.constraints.find((x) => x.id === id) as any;
+        const stored = draft.constraints.some((x) => x.id === id);
+        fields.push({
+          constraintId: id,
+          value: String(stored ? c.value : round3(c.value)),
+          label: labels[i]?.label ?? "",
+          unit: labels[i]?.unit ?? "",
+        });
+      }
+      setDimEdit({ fields, x: e.clientX, y: e.clientY });
+      return;
+    }
     const existing = draft.constraints.find(
       (c) =>
-        (c.type === "length" && (c as any).line === entityId) ||
-        ((c.type === "radius" || c.type === "diameter") &&
-          (c as any).entity === entityId)
+        (c.type === "radius" || c.type === "diameter") && c.entity === entityId,
     );
     if (existing) {
       setDimEdit({
-        constraintId: existing.id,
-        value: String((existing as any).value),
+        fields: [
+          {
+            constraintId: existing.id,
+            value: String((existing as any).value),
+          },
+        ],
         x: e.clientX,
         y: e.clientY,
       });
       return;
     }
-    const kind = ent.kind === "line" ? "line" : ent.kind === "circle" ? "circle" : "arc";
-    const constraint = tools.dimensionFor([{ kind, id: entityId } as any], 0);
+    const constraint = tools.dimensionFor(
+      [{ kind: ent.kind, id: entityId }],
+      0,
+    );
     if (!constraint) return;
     (constraint as any).value = measureCurrent(constraint, draft.entities);
     s.updateDraftSketch(draft.entities, [...draft.constraints, constraint]);
     await s.commitDraftSketch();
     setDimEdit({
-      constraintId: constraint.id,
-      value: String(round3((constraint as any).value)),
+      fields: [
+        {
+          constraintId: constraint.id,
+          value: String(round3((constraint as any).value)),
+        },
+      ],
       x: e.clientX,
       y: e.clientY,
     });
@@ -2222,8 +2573,14 @@ export function ViewportView() {
       // double-click a sketch curve → edit that sketch
       const vp = viewportRef.current!;
       const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
-      if (r && (r.selection.kind === "sketchEntity" || r.selection.kind === "sketchPoint")) {
-        void s.editSketch((r.selection as any).sketchId).then(alignCameraToActiveSketch);
+      if (
+        r &&
+        (r.selection.kind === "sketchEntity" ||
+          r.selection.kind === "sketchPoint")
+      ) {
+        void s
+          .editSketch((r.selection as any).sketchId)
+          .then(alignCameraToActiveSketch);
       }
     } else if (s.mode.name === "sketch") {
       // double-click a curve → edit its size
@@ -2243,7 +2600,6 @@ export function ViewportView() {
     }
   }
 
-
   // typed sizes while drawing: digits lock the active field, Tab cycles,
   // Enter places. Capture phase, so App's shortcut/delete handlers never
   // see these keys.
@@ -2258,6 +2614,7 @@ export function ViewportView() {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const f = d.fields[d.active];
+      if (!f) return;
       const swallow = () => {
         e.preventDefault();
         e.stopPropagation();
@@ -2269,19 +2626,37 @@ export function ViewportView() {
         refreshDim();
       } else if (e.key === "Enter") {
         swallow();
-        void placeWithDims(ts.lastCursor ?? ts.clicks[0]);
+        void placeWithDims(ts.lastCursor ?? ts.clicks[0]!);
+      } else if (
+        d.tool === "line" &&
+        !e.repeat &&
+        e.key.toUpperCase() === ANGLE_LOCK_KEY
+      ) {
+        swallow();
+        const live = liveDimValues(
+          d.tool,
+          ts.clicks[0]!,
+          ts.lastCursor ?? ts.clicks[0]!,
+        );
+        tools.toggleAngleLock(d.fields, live.angle ?? 0);
+        refreshDim();
+        refreshGhost();
       } else if (e.key === "Backspace" && f.locked) {
         swallow();
         f.text = f.text.slice(0, -1);
         if (!f.text) {
           // emptied: back to following the cursor
           f.locked = false;
-          const live = liveDimValues(d.tool, ts.clicks[0], ts.lastCursor ?? ts.clicks[0]);
+          const live = liveDimValues(
+            d.tool,
+            ts.clicks[0]!,
+            ts.lastCursor ?? ts.clicks[0]!,
+          );
           f.text = fmt2(live[f.key] ?? 0);
         }
         refreshDim();
         refreshGhost();
-      } else if (/^[0-9.\-]$/.test(e.key)) {
+      } else if (/^[0-9.-]$/.test(e.key)) {
         swallow();
         if (!f.locked) {
           f.text = "";
@@ -2306,7 +2681,11 @@ export function ViewportView() {
     if (dialog !== "extrude") return { profiles };
     const faces = sel
       .filter((x) => x.kind === "face")
-      .map((x: any) => ({ kind: "face", bodyId: x.bodyId, faceName: x.faceName }));
+      .map((x: any) => ({
+        kind: "face",
+        bodyId: x.bodyId,
+        faceName: x.faceName,
+      }));
     return { profiles, faces };
   }
   const peekRef = useRef(false);
@@ -2315,34 +2694,18 @@ export function ViewportView() {
     !!mode.editFeatureId &&
     (mode.dialog === "extrude" || mode.dialog === "revolve");
 
-  // Adding or removing a region while editing re-previews the feature, so the
-  // effect of each pick shows at once.
   useEffect(() => {
-    if (!editingProfiles || mode.name !== "dialog") return;
+    if (!editingProfiles || mode.name !== "dialog" || peekRef.current) return;
     const editId = mode.editFeatureId!;
     const refs = selectionRefs(mode.dialog, selection);
     if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
-    const current = document_?.features.find((f) => f.id === editId) as any;
-    const key = (arr: any[] | undefined, f: (x: any) => string) =>
-      JSON.stringify((arr ?? []).map(f).sort());
-    const same =
-      current &&
-      !current.suppressed &&
-      key(refs.profiles, (p) => `${p.sketchId}:${p.profileId}`) ===
-        key(current.profiles, (p) => `${p.sketchId}:${p.profileId}`) &&
-      key(refs.faces, (x) => `${x.bodyId}:${x.faceName}`) ===
-        key(current.faces, (x) => `${x.bodyId}:${x.faceName}`);
-    if (same) return;
-    const t = window.setTimeout(() => {
-      void useStore.getState().updateFeaturePreview(editId, {
-        ...refs,
-        // while Ctrl/⌘ is held the feature stays hidden until release
-        ...(peekRef.current ? {} : { suppressed: false }),
-      } as any);
-    }, 150);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selection, mode, editingProfiles, document_]);
+    const current = document_?.features.find((f) => f.id === editId);
+    if (!current?.suppressed) return;
+    void useStore.getState().updateFeaturePreview(editId, {
+      ...refs,
+      suppressed: false,
+    } as any);
+  }, [selection, editingProfiles]);
 
   // Hold Ctrl/⌘ while editing to see the model WITHOUT this feature — its
   // regions come back into view for picking — and release to see it with the
@@ -2356,7 +2719,9 @@ export function ViewportView() {
       const s = useStore.getState();
       if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
       peekRef.current = true;
-      void s.updateFeaturePreview(s.mode.editFeatureId, { suppressed: true } as any);
+      void s.updateFeaturePreview(s.mode.editFeatureId, {
+        suppressed: true,
+      } as any);
     };
     const release = (e?: KeyboardEvent) => {
       if (e && e.key !== "Control" && e.key !== "Meta") return;
@@ -2419,16 +2784,21 @@ export function ViewportView() {
       setDimEdit(null);
       return;
     }
-    const v = Number(dimEdit.value);
-    if (Number.isFinite(v) && v > 0) {
+    let constraints = draft.constraints;
+    for (const f of dimEdit.fields) {
+      const edited = constraints.find((c) => c.id === f.constraintId);
+      const v = edited ? tools.dimensionValue(edited, f.value) : null;
+      if (v === null) continue;
       // the edited value wins; any other dimension on the same target is a
       // stale duplicate (older sketches could stack them) and goes away
-      const constraints = tools.dedupeDimensions(
-        draft.constraints.map((c) =>
-          c.id === dimEdit.constraintId ? { ...c, value: v } : c
+      constraints = tools.dedupeDimensions(
+        constraints.map((c) =>
+          c.id === f.constraintId ? { ...c, value: v } : c,
         ) as SketchConstraint[],
-        dimEdit.constraintId
+        f.constraintId,
       );
+    }
+    if (constraints !== draft.constraints) {
       s.updateDraftSketch(draft.entities, constraints);
       await s.commitDraftSketch();
     }
@@ -2436,14 +2806,13 @@ export function ViewportView() {
   }
 
   /** Remove the dimension whose label is being edited. */
-  async function deleteDimEdit() {
-    if (!dimEdit) return;
+  async function deleteDimEdit(ids: string[]) {
     const s = useStore.getState();
     const draft = s.draftSketch;
     if (draft) {
       s.updateDraftSketch(
         draft.entities,
-        draft.constraints.filter((c) => c.id !== dimEdit.constraintId)
+        draft.constraints.filter((c) => !ids.includes(c.id)),
       );
       await s.commitDraftSketch();
     }
@@ -2479,7 +2848,9 @@ export function ViewportView() {
               const d = dimDragRef.current;
               if (!d || d.id !== l.id || e.buttons === 0) return;
               if (
-                Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) > 4
+                Math.abs(e.clientX - d.startX) +
+                  Math.abs(e.clientY - d.startY) >
+                4
               ) {
                 d.moved = true;
               }
@@ -2516,14 +2887,18 @@ export function ViewportView() {
                 const draft = s.draftSketch;
                 if (!draft) return;
                 const constraints = draft.constraints.map((c) =>
-                  c.id === l.id ? { ...c, labelOffset: d.pendingOffset! } : c
+                  c.id === l.id ? { ...c, labelOffset: d.pendingOffset! } : c,
                 );
                 s.updateDraftSketch(draft.entities, constraints as any);
                 void s.commitDraftSketch();
               } else {
                 setDimEdit({
-                  constraintId: l.id,
-                  value: l.text.replace(/[^\d.\-]/g, ""),
+                  fields: [
+                    {
+                      constraintId: l.id,
+                      value: l.text.replace(/[^\d.-]/g, ""),
+                    },
+                  ],
                   x: e.clientX,
                   y: e.clientY,
                 });
@@ -2536,29 +2911,56 @@ export function ViewportView() {
       </div>
       <SketchOffsetIndicators />
       {dimEdit && (
-        <div className="dim-edit" style={{ left: dimEdit.x, top: dimEdit.y }}>
-          <input
-            autoFocus
-            aria-label="Dimension value"
-            value={dimEdit.value}
-            onChange={(e) => setDimEdit({ ...dimEdit, value: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === "Return") void commitDimEdit();
-              if (e.key === "Escape") setDimEdit(null);
-              // Delete on an emptied box removes the dimension altogether
-              if ((e.key === "Delete" || e.key === "Backspace") && dimEdit.value === "") {
-                e.preventDefault();
-                void deleteDimEdit();
-              }
-            }}
-            onBlur={() => void commitDimEdit()}
-          />
+        <div
+          className="dim-edit"
+          style={{ left: dimEdit.x, top: dimEdit.y }}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+              void commitDimEdit();
+          }}
+        >
+          {dimEdit.fields.map((f, i) => (
+            <Fragment key={f.constraintId}>
+              {f.label && <span className="dim-key">{f.label}</span>}
+              <input
+                autoFocus={i === 0}
+                aria-label={
+                  f.label ? `Dimension ${f.label}` : "Dimension value"
+                }
+                value={f.value}
+                onChange={(e) =>
+                  setDimEdit({
+                    ...dimEdit,
+                    fields: dimEdit.fields.map((x) =>
+                      x === f ? { ...x, value: e.target.value } : x,
+                    ),
+                  })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Return")
+                    void commitDimEdit();
+                  if (e.key === "Escape") setDimEdit(null);
+                  // Delete on an emptied box removes the dimension altogether
+                  if (
+                    (e.key === "Delete" || e.key === "Backspace") &&
+                    f.value === ""
+                  ) {
+                    e.preventDefault();
+                    void deleteDimEdit([f.constraintId]);
+                  }
+                }}
+              />
+              {f.unit && <span className="dim-unit">{f.unit}</span>}
+            </Fragment>
+          ))}
           <button
             className="dim-edit-delete"
             title="Delete this dimension"
             aria-label="Delete dimension"
             onPointerDown={(e) => e.preventDefault()} // keep the input's blur from committing first
-            onClick={() => void deleteDimEdit()}
+            onClick={() =>
+              void deleteDimEdit(dimEdit.fields.map((f) => f.constraintId))
+            }
           >
             ✕
           </button>
@@ -2624,199 +3026,17 @@ export function ViewportView() {
         ⌂
       </button>
       {ctxMenu && (
-        <>
-          <div className="ctx-backdrop" onPointerDown={() => setCtxMenu(null)} />
-          <ViewportContextMenu
-            menu={ctxMenu}
-            onClose={() => setCtxMenu(null)}
-            isPlanarFace={isPlanarFace}
-            alignToSketch={alignCameraToActiveSketch}
-            onDimension={(entityId, pos) => void openDimensionEditor(entityId, pos)}
-          />
-        </>
+        <ViewportContextMenu
+          menu={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          isPlanarFace={isPlanarFace}
+          alignToSketch={alignCameraToActiveSketch}
+          onDimension={(entityId, pos) =>
+            void openDimensionEditor(entityId, pos)
+          }
+        />
       )}
       <ViewportHud />
-    </div>
-  );
-}
-
-/** Flip the construction flag on curves of a committed sketch (undoable). */
-async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
-  const s = useStore.getState();
-  const sk = s.document?.features.find((f) => f.id === sketchId && f.type === "sketch") as any;
-  if (!sk) return;
-  const ids = new Set(entityIds);
-  const entities = sk.entities.map((e: any) =>
-    ids.has(e.id) && e.kind !== "point" ? { ...e, construction: !e.construction } : e
-  );
-  await s.updateFeature(sketchId, { entities } as any);
-}
-
-function ViewportContextMenu({
-  menu,
-  onClose,
-  isPlanarFace,
-  alignToSketch,
-  onDimension,
-}: {
-  menu: { x: number; y: number; sel: Selection };
-  onClose: () => void;
-  isPlanarFace: (sel: Selection) => boolean;
-  alignToSketch: () => void;
-  onDimension: (entityId: string, pos: { clientX: number; clientY: number }) => void;
-}) {
-  const { sel } = menu;
-  const s = useStore.getState();
-
-  const openDialog = (dialog: any, selection: Selection[] = [sel]) => {
-    s.setMode({ name: "dialog", dialog });
-    s.setSelection(selection);
-    onClose();
-  };
-
-  const items: { label: string; action: () => void }[] = [];
-
-  if (sel.kind === "sketchEntity" || sel.kind === "sketchPoint") {
-    const selectedIds = s.selection
-      .filter((x) => x.kind === "sketchEntity" || x.kind === "sketchPoint")
-      .map((x: any) => x.entityId);
-    const many = selectedIds.length > 1;
-    if (s.mode.name !== "sketch") {
-      // curves of a committed sketch, right-clicked from idle
-      if (sel.kind === "sketchEntity") {
-        items.push({
-          label: many ? `Toggle construction (${selectedIds.length})` : "Toggle construction",
-          action: () => {
-            void toggleSketchConstruction(sel.sketchId, selectedIds);
-            onClose();
-          },
-        });
-      }
-      items.push({
-        label: "Edit sketch",
-        action: () => {
-          void s.editSketch(sel.sketchId).then(alignToSketch);
-          onClose();
-        },
-      });
-      return (
-        <div
-          className="context-menu"
-          style={{ position: "fixed", left: menu.x, top: menu.y, bottom: "auto" }}
-        >
-          {items.map((it) => (
-            <button key={it.label} onClick={it.action}>
-              {it.label}
-            </button>
-          ))}
-        </div>
-      );
-    }
-    items.push({
-      label: many ? `Delete (${selectedIds.length})` : "Delete",
-      action: () => {
-        void s.deleteSketchEntities(selectedIds);
-        onClose();
-      },
-    });
-    if (sel.kind === "sketchEntity") {
-      items.push({
-        label: many ? "Toggle construction (selection)" : "Toggle construction",
-        action: () => {
-          void s.toggleSketchConstruction(selectedIds);
-          onClose();
-        },
-      });
-      items.push({
-        label: "Dimension…",
-        action: () => {
-          onDimension((sel as any).entityId, { clientX: menu.x, clientY: menu.y });
-          onClose();
-        },
-      });
-    }
-    return (
-      <div
-        className="context-menu"
-        style={{ position: "fixed", left: menu.x, top: menu.y, bottom: "auto" }}
-      >
-        {items.map((it) => (
-          <button key={it.label} onClick={it.action}>
-            {it.label}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  if (sel.kind === "face") {
-    if (isPlanarFace(sel)) {
-      items.push({
-        label: "Create Sketch on face",
-        action: () => {
-          void s
-            .startSketchOnPlane({
-              kind: "face",
-              face: { kind: "face", bodyId: sel.bodyId, faceName: sel.faceName },
-            })
-            .then(alignToSketch);
-          onClose();
-        },
-      });
-      items.push({ label: "Extrude face", action: () => openDialog("extrude") });
-      items.push({ label: "Press / Pull", action: () => openDialog("offsetFace") });
-      items.push({
-        label: "Shell (open this face)",
-        action: () => openDialog("shell"),
-      });
-    }
-    items.push({
-      label: "Hide body",
-      action: () => {
-        void s.setBodyMeta(sel.bodyId, { visible: false });
-        onClose();
-      },
-    });
-  } else if (sel.kind === "edge") {
-    items.push({ label: "Fillet edge", action: () => openDialog("fillet") });
-    items.push({ label: "Chamfer edge", action: () => openDialog("chamfer") });
-  } else if (sel.kind === "profile") {
-    // the whole current selection goes along, so several regions can be
-    // right-clicked into one feature
-    const regions = s.selection.filter((x) => x.kind === "profile");
-    const many = regions.length > 1;
-    items.push({
-      label: many ? `Extrude (${regions.length} regions)` : "Extrude region",
-      action: () => openDialog("extrude", regions),
-    });
-    items.push({
-      label: many ? `Revolve (${regions.length} regions)` : "Revolve region",
-      action: () => openDialog("revolve", regions),
-    });
-  }
-
-  if (sel.kind !== "profile") {
-    items.push({
-      label: "Measure",
-      action: () => {
-        s.setMode({ name: "measure" });
-        s.setSelection([sel]);
-        void s.runMeasure();
-        onClose();
-      },
-    });
-  }
-
-  return (
-    <div
-      className="context-menu"
-      style={{ position: "fixed", left: menu.x, top: menu.y, bottom: "auto" }}
-    >
-      {items.map((it) => (
-        <button key={it.label} onClick={it.action}>
-          {it.label}
-        </button>
-      ))}
     </div>
   );
 }
@@ -2827,7 +3047,8 @@ function ViewportHud() {
   const draftSketch = useStore((s) => s.draftSketch);
 
   let hint = "";
-  if (mode.name === "pickPlane") hint = "Select a plane or planar face to sketch on";
+  if (mode.name === "pickPlane")
+    hint = "Select a plane or planar face to sketch on";
   else if (mode.name === "sketch") {
     const toolHints: Record<string, string> = {
       select: "Drag points to adjust · click to select",
@@ -2839,23 +3060,33 @@ function ViewportHud() {
       polygon: "Click centre, then a vertex",
       slot: "Click two centres, then the radius",
       point: "Click to place points",
-      dimension: "Click an entity (or two points / two lines), then type the value",
-      project: "Click a model edge to create a linked purple reference · source must precede this sketch",
+      dimension:
+        "Click an entity (or two points / two lines), then type the value",
+      project:
+        "Click a model edge to create a linked purple reference · source must precede this sketch",
       trim: "Click the section between intersections to remove · Esc cancels",
-      extend: "Click near the endpoint to extend to the next boundary · Esc cancels",
-      offset: "Ctrl-click to add/remove curves · select a connected chain · preview then Create offset",
+      extend:
+        "Click near the endpoint to extend to the next boundary · Esc cancels",
+      offset:
+        "Ctrl-click to add/remove curves · select a connected chain · preview then Create offset",
     };
     hint = toolHints[(mode as any).tool] ?? "";
-  } else if (mode.name === "measure") hint = "Select up to two faces / edges / vertices";
+  } else if (mode.name === "measure")
+    hint = "Select up to two faces / edges / vertices";
 
   let sketchBadge: { label: string; cls: string } | null = null;
   if (mode.name === "sketch" && draftSketch && evaluation) {
-    const solved = evaluation.sketches.find((s) => s.featureId === draftSketch.id);
+    const solved = evaluation.sketches.find(
+      (s) => s.featureId === draftSketch.id,
+    );
     const status = solved?.solveStatus ?? "unconstrained";
     const dof = solved?.dof ?? 0;
-    const map: Record<string, { label: string; cls: string }> = {
+    const map: Record<SketchSolveStatus, { label: string; cls: string }> = {
       unconstrained: { label: `Unconstrained (${dof} DOF)`, cls: "warn" },
-      partially_constrained: { label: `Partially constrained (${dof} DOF)`, cls: "warn" },
+      partially_constrained: {
+        label: `Partially constrained (${dof} DOF)`,
+        cls: "warn",
+      },
       fully_constrained: { label: "Fully constrained", cls: "ok" },
       over_constrained: { label: "Over-constrained!", cls: "err" },
     };
@@ -2866,7 +3097,9 @@ function ViewportHud() {
     <>
       {hint && <div className="viewport-hint">{hint}</div>}
       {sketchBadge && (
-        <div className={`sketch-status ${sketchBadge.cls}`}>{sketchBadge.label}</div>
+        <div className={`sketch-status ${sketchBadge.cls}`}>
+          {sketchBadge.label}
+        </div>
       )}
     </>
   );
@@ -2877,7 +3110,7 @@ function ViewportHud() {
 /** Default label anchor for a dimension, building the lookup maps itself. */
 function dimAnchorFor(
   c: SketchConstraint,
-  entities: SketchEntity[]
+  entities: SketchEntity[],
 ): { x: number; y: number } | null {
   const pts = new Map<string, { x: number; y: number }>();
   const lines = new Map<string, { p1: string; p2: string }>();
@@ -2900,10 +3133,22 @@ function dimensionText(c: SketchConstraint): string {
     case "diameter":
       return `⌀${round3((c as any).value)}`;
     case "angle":
+    case "lineAngle":
       return `${round3((c as any).value)}°`;
     default:
       return "";
   }
+}
+
+function angleSnapped(
+  e: { shiftKey: boolean },
+  tool: string,
+  from: tools.UV | undefined,
+  uv: tools.UV | null,
+): tools.UV | null {
+  return uv && from && tool === "line" && e.shiftKey
+    ? tools.snapLineEnd(from, uv)
+    : uv;
 }
 
 function round3(v: number): number {
@@ -2952,59 +3197,4 @@ function measureCurrent(c: SketchConstraint, entities: SketchEntity[]): number {
     return (Math.atan2(Math.abs(cross), dot) * 180) / Math.PI;
   }
   return 0;
-}
-
-// ---------------------------------------------------------------------------
-// Reference images
-// ---------------------------------------------------------------------------
-
-const textureCache = new Map<string, THREE.Texture>();
-// per-viewport image group — a module-global group stayed attached to the
-// FIRST viewport's scene, so canvases never showed after switching projects
-const imageRoots = new WeakMap<CadViewport, THREE.Group>();
-
-function syncReferenceImages(vp: CadViewport, doc: any, evaluation: any) {
-  let imageRoot = imageRoots.get(vp);
-  if (!imageRoot) {
-    imageRoot = new THREE.Group();
-    vp.scene.add(imageRoot);
-    imageRoots.set(vp, imageRoot);
-  }
-  imageRoot.clear();
-  if (!doc) return;
-  const activeFeatures = doc.features.slice(0, doc.timelinePosition);
-  for (const f of activeFeatures) {
-    if (f.type !== "referenceImage" || f.suppressed || !f.visible) continue;
-    const planeInfo = evaluation.planes.find((p: any) => p.featureId === f.id);
-    if (!planeInfo) continue;
-    const url = `/api/projects/${doc.id}/assets/${f.assetId}`;
-    let tex = textureCache.get(url);
-    if (!tex) {
-      tex = new THREE.TextureLoader().load(url);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      textureCache.set(url, tex);
-    }
-    const w = f.width * f.transform.scale;
-    const h = f.height * f.transform.scale;
-    const geom = new THREE.PlaneGeometry(w, h);
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      opacity: f.opacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geom, mat);
-    const frame = planeInfo.frame;
-    const m = new THREE.Matrix4().makeBasis(
-      new THREE.Vector3(...frame.xAxis),
-      new THREE.Vector3(...frame.yAxis),
-      new THREE.Vector3(...frame.normal)
-    );
-    m.setPosition(uv3(frame, f.transform.u, f.transform.v));
-    const rot = new THREE.Matrix4().makeRotationZ((f.transform.rotation * Math.PI) / 180);
-    mesh.applyMatrix4(new THREE.Matrix4().multiplyMatrices(m, rot));
-    mesh.renderOrder = -2;
-    imageRoot.add(mesh);
-  }
 }

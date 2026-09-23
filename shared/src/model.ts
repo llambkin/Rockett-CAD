@@ -9,17 +9,9 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-export const SCHEMA_VERSION = 4;
+import type { Units } from "./units.js";
 
-export type Units = "mm" | "cm" | "m" | "in";
-
-/** Conversion factors to internal geometry units (always millimetres). */
-export const UNIT_TO_MM: Record<Units, number> = {
-  mm: 1,
-  cm: 10,
-  m: 1000,
-  in: 25.4,
-};
+export const SCHEMA_VERSION = 11;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -154,6 +146,7 @@ export type DimensionConstraint =
       value: number; // mm
     })
   | (ConstraintBase & { type: "length"; line: string; value: number })
+  | (ConstraintBase & { type: "lineAngle"; line: string; value: number })
   | (ConstraintBase & { type: "radius"; entity: string; value: number })
   | (ConstraintBase & { type: "diameter"; entity: string; value: number })
   | (ConstraintBase & { type: "angle"; a: string; b: string; value: number }); // degrees
@@ -305,7 +298,8 @@ export interface MirrorFeature extends FeatureBase {
 export interface LinearPatternFeature extends FeatureBase {
   type: "linearPattern";
   bodies: string[];
-  direction: { kind: "axis"; axis: "X" | "Y" | "Z" } | { kind: "edge"; edge: EdgeRef };
+  direction:
+    { kind: "axis"; axis: "X" | "Y" | "Z" } | { kind: "edge"; edge: EdgeRef };
   count: number;
   spacing: number; // mm
   combine: boolean;
@@ -343,7 +337,7 @@ export interface ReferenceImageFeature extends FeatureBase {
     scale: number;
   };
   opacity: number; // 0..1
-  visible: boolean;
+  visible?: boolean;
   /** Natural image size in pixels (for aspect + calibration). */
   width: number;
   height: number;
@@ -366,12 +360,20 @@ export interface EmbossFeature extends FeatureBase {
 export interface ImportStepFeature extends FeatureBase {
   type: "importStep";
   filename: string;
-  /** Original STEP source retained so projects remain self-contained. */
+  format?: "iges" | "brep";
+  blob: string;
+}
+
+export interface ImportMeshFeature extends FeatureBase {
+  type: "importMesh";
+  filename: string;
+  format: "stl" | "obj" | "3mf";
   data: string;
 }
 
 export type Feature =
   | ImportStepFeature
+  | ImportMeshFeature
   | SketchFeature
   | ExtrudeFeature
   | RevolveFeature
@@ -399,18 +401,24 @@ export type FeatureType = Feature["type"];
 
 export interface BodyMeta {
   name: string;
-  visible: boolean;
 }
 
-export interface CameraState {
-  position: [number, number, number];
-  target: [number, number, number];
-  up: [number, number, number];
-  projection: "orthographic" | "perspective";
+export interface TreeGroup {
+  id: string;
+  name: string;
+  kind: "body" | "sketch";
+  members: string[];
+}
+
+export interface ExtensionData {
+  version: number;
+  data: unknown;
 }
 
 export interface CadDocument {
   schemaVersion: number;
+  revision: number;
+  savedWith: { version: string; commit: string | null } | null;
   id: string;
   name: string;
   units: Units;
@@ -422,11 +430,12 @@ export interface CadDocument {
    * < features.length). New features insert at this position.
    */
   timelinePosition: number;
-  /** Display metadata per body id (names, visibility). */
+  /** Display names per body id. */
   bodyMeta: Record<string, BodyMeta>;
   /** Per-type counters used for default names (Sketch1, Extrude2, ...). */
   counters: Record<string, number>;
-  camera?: CameraState;
+  groups: TreeGroup[];
+  extensions: Record<string, ExtensionData>;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +445,11 @@ export interface CadDocument {
 let idCounter = 0;
 
 /** Unique-enough id generator (time + counter + randomness). */
+export function normalizeDegrees(value: number): number {
+  const wrapped = value - 360 * Math.floor(value / 360);
+  return wrapped > 180 ? wrapped - 360 : wrapped;
+}
+
 export function newId(prefix: string): string {
   idCounter = (idCounter + 1) % 46656;
   const rand = Math.floor(Math.random() * 46656)
@@ -448,6 +462,7 @@ export function newId(prefix: string): string {
 
 export const FEATURE_LABELS: Record<FeatureType, string> = {
   importStep: "Import STEP",
+  importMesh: "Import mesh",
   sketch: "Sketch",
   extrude: "Extrude",
   revolve: "Revolve",
@@ -480,6 +495,8 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
   const now = new Date().toISOString();
   return {
     schemaVersion: SCHEMA_VERSION,
+    revision: 0,
+    savedWith: null,
     id,
     name,
     units: "mm",
@@ -489,10 +506,16 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
     timelinePosition: 0,
     bodyMeta: {},
     counters: {},
+    groups: [],
+    extensions: {},
   };
 }
 
 /** Features that can produce/modify solid bodies (used for dependency logic). */
 export function featureProducesGeometry(f: Feature): boolean {
-  return f.type !== "sketch" && f.type !== "constructionPlane" && f.type !== "referenceImage";
+  return (
+    f.type !== "sketch" &&
+    f.type !== "constructionPlane" &&
+    f.type !== "referenceImage"
+  );
 }

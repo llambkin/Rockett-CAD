@@ -1,0 +1,102 @@
+# Last run
+
+Paused on request after the batch deployed and 0.2.0 was proposed upstream. Dev runs `777efbb`, schema 11,
+with everything below. No agents are running.
+
+- Deployed to dev this batch: BUG-041, DOC-018, DOC-019, CUST-034, CUST-035,
+  CUST-036 and CUST-037. `npm run check` passed on `777efbb`: 986 tests and
+  26 browser tests. The 1,000-body stress project that hung dev evaluates
+  there in 1.9 s cold and 0.15 s warm.
+- An audit of rows done by earlier runs is filed as BUG-042 to BUG-055 and
+  PERF-042 to PERF-048, plus Proposed lines. Mark ruled that BUG-042,
+  BUG-043 and BUG-044 gate REL-001. Next is BUG-042.
+- CUST-036: Move to on the project list opens at the click, inside the
+  window, with focus in it.
+- CUST-037: the Controls help opens up to 90% of the window in reflowing
+  columns and resizes from its corner, remembered until reload.
+- Released 0.2.0 and opened it as a pull request to the upstream
+  repository, marked unfinished. It waits on the upstream owner's review.
+- CUST-034: curves that touch tangentially now split sketch regions, so a
+  circle inscribed in a square gives the disc and four corners, each picked
+  and extruded on its own. Regions bounded by the same curves get distinct
+  ids. Saved ids missing from the new split resolve through the previous
+  detection, so no schema change. 200 curves take 67.5 ms median. `npm run check` passed: 976 tests and 20 browser tests.
+- CUST-035: Trim (T) highlights the piece under the cursor and deletes it
+  on click, cutting at `curveHits`. A curve that meets nothing goes whole,
+  construction curves never cut, new ends get point-on-cutter or coincident
+  constraints, and kept-piece constraints stay. Trim stays active; each click
+  is one undo step. Hover lookup on 200 curves: 8 us median after a 34 ms
+  first call per sketch change. No control added: the existing Trim button,
+  hover colour and a T shortcut, under DEC-004. A browser test trims and
+  undoes in the built app. `npm run check` passed: 986 tests
+  and 26 browser tests.
+
+- Done this run: CUST-030, CUST-031, CUST-032, BUG-038, BUG-039, BUG-040,
+  PERF-041, REF-004, PERF-035, and DOC-010, DOC-011, DOC-012, DOC-015,
+  DOC-017, DOC-018 and DOC-019. `npm run check` passed on each: 966
+  tests, 20 browser tests and the work order check on DOC-019.
+- DOC-018 moves visibility out of the document into `view.json` and bumps
+  the schema to 11. A project migrates on its next write, and `view.json` is
+  in its backup. Legacy `visible` patches still work until DOC-020.
+- Each dev project moves to schema 11 on its next write, after a backup.
+- DOC-019: the client hides and shows through `PUT /view`. A toggle is no
+  undo step, sends no document edit and requests no evaluation. Undo and
+  feature edits no longer send `visible`, so they cannot overwrite the view.
+- Prod still runs schema 6. Deploying it migrates every project from schema
+  6 to 11, which needs Mark's approval first.
+- A fillet drag on the 1,000-body model takes about 70 ms, down from about
+  500 ms, because edits now send only the meshes the client lacks.
+- BUG-041: pushing up the top face of a filleted body hung the server in
+  OCCT's face unify, an infinite loop on one 18-face solid, which is what
+  hung the dev instance on the 1,000-body project. The fixture now opens in
+  1.4 s and edits in about 200 ms. The Docker health probe gives up after 5 s.
+  Deployed to dev. The 1,000-body project there evaluates in 1.9 s cold and
+  0.15 s warm.
+
+## Next
+
+DOC-020. CUST-033 (drag handles on every feature) is queued and not started.
+
+## Left open
+
+- The toolbar error message contains an em dash.
+- A crash mid-import leaves a file in `uploads/`, and nothing removes it.
+- `app.ts` cannot configure the import limits.
+- A view PUT overwrites `view.json` with no backup. Only a document
+  migration backs it up.
+- Pick labels follow payload order.
+- Trim deletes one piece per click; trimming by drag waits on a gesture
+  approval. See Proposed.
+- A feature saved on a region id from before CUST-034 still builds, but its
+  pick row shows no region number and the sketch does not tint that region
+  as used. See Proposed.
+- REF-004 proposes hashing identity outside names.
+- PERF-035 covers linear patterns only, not circular patterns, mirrors or
+  moves.
+- PERF-041 set its timing budgets after the before run. The engine missed
+  100 ms at load average 22.
+- `api.ts` keeps one evaluation's meshes after a project closes.
+- When editing, BUG-040 counts bodies from later features as bodies to cut.
+- Project files, duplicates and browser projects no longer carry hidden
+  bodies or sketches. See Proposed.
+- A construction plane's eye still suppresses the plane. See Proposed.
+- BUG-041 leaves a seam ring where a pushed-up fillet's cylinder meets one
+  whose frame differs. A kernel call that never returns still blocks the
+  server until the PERF-011 worker lands.
+
+## Waiting on Mark
+
+- The schema 6 to 11 prod migration.
+- OCP novtk.
+- Backup retention.
+- Mesh upload limit.
+- Payload budget.
+- Insert DXF and SVG icons.
+- The DEC-403 accent split.
+- Integer-only pattern counts.
+- EXCH-026 database ownership.
+- Browser folder controls.
+
+## Stuck
+
+0

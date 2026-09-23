@@ -25,9 +25,13 @@ import {
   emptyState,
   evaluateFeature,
   type EvalState,
+  type StateBody,
 } from "./features.js";
-import { tessellateBody } from "./tessellate.js";
-import { shapeHash } from "./kernel.js";
+import type { Sources } from "./importers.js";
+import { movePayload, tessellateBody } from "./tessellate.js";
+import type { NamedBody } from "./naming.js";
+import { shapeHash, type Shape } from "./kernel.js";
+import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
 
 interface Snapshot {
   /** JSON of the feature this snapshot is the result of (cache key). */
@@ -36,50 +40,116 @@ interface Snapshot {
   statuses: FeatureStatus[];
 }
 
+function releaseSnapshots(
+  discarded: Pick<Snapshot, "state">[],
+  retained: Pick<Snapshot, "state">[],
+): void {
+  const bodies = (snapshots: Pick<Snapshot, "state">[]) =>
+    snapshots.flatMap((s) => [...s.state.bodies.values()]);
+  const kept = bodies(retained);
+  const keptShapes = new Set(kept.map((b) => b.shape));
+  const keptNames = new Set(kept.map((b) => b.names));
+  const dropped = bodies(discarded);
+  for (const shape of new Set(dropped.map((b) => b.shape)))
+    if (!keptShapes.has(shape)) shape.delete();
+  for (const names of new Set(dropped.map((b) => b.names)))
+    if (!keptNames.has(names)) names.release();
+}
+
+function evaluateTracked(
+  next: EvalState,
+  feature: CadDocument["features"][number],
+  earlier: CadDocument["features"],
+  sources: Sources,
+): string | void {
+  const made: ShapeMap<unknown>[] = [];
+  try {
+    return trackShapeMaps(made, () =>
+      evaluateFeature(next, feature, earlier, sources),
+    );
+  } finally {
+    const held = new Set<ShapeMap<unknown>>(
+      [...next.bodies.values()].map((b) => b.names),
+    );
+    for (const map of made) if (!held.has(map)) map.release();
+  }
+}
+
 /** Cache key for a feature: its JSON minus display-only fields, so hiding a
  * sketch in the viewport doesn't re-evaluate the timeline after it. */
-function featureKey(feature: CadDocument["features"][number]): string {
+export function featureKey(feature: CadDocument["features"][number]): string {
   const { visible: _visible, ...geometric } = feature as any;
   return JSON.stringify(geometric);
 }
 
+const TESS_CACHE_BYTES = 256 * 1024 * 1024;
+
+function payloadBytes(p: BodyPayload): number {
+  let numbers = p.positions.length + p.normals.length + p.indices.length;
+  for (const edge of p.edges) numbers += edge.polyline.length;
+  return numbers * 8;
+}
+
+function cacheKey(body: NamedBody): string {
+  return `${body.bodyId}:${shapeHash(body.shape)}`;
+}
+
+interface Tessellation {
+  shape: Shape;
+  payload: BodyPayload;
+}
+
 class DocumentEngine {
   private snapshots: Snapshot[] = [];
-  private tessCache = new Map<string, BodyPayload>();
+  private tessCache = new Map<string, Tessellation>();
+  private tessBytes = 0;
 
-  evaluate(doc: CadDocument, position?: number): EvaluateResult {
+  evaluate(
+    doc: CadDocument,
+    position?: number,
+    sources: Sources = new Map(),
+  ): EvaluateResult {
     const t0 = performance.now();
     const upTo = Math.min(
       position ?? doc.timelinePosition,
-      doc.features.length
+      doc.features.length,
     );
 
-    // Find longest valid cached prefix.
-    let start = 0;
+    // Drop snapshots from the first stale feature on. Valid snapshots past
+    // upTo stay, so a rewind or stateAt query doesn't discard later work.
+    let valid = 0;
     while (
-      start < upTo &&
-      start < this.snapshots.length &&
-      this.snapshots[start].featureKey === featureKey(doc.features[start])
+      valid < this.snapshots.length &&
+      valid < doc.features.length &&
+      this.snapshots[valid]!.featureKey === featureKey(doc.features[valid]!)
     ) {
-      start++;
+      valid++;
     }
-    this.snapshots.length = start;
+    releaseSnapshots(this.snapshots.splice(valid), this.snapshots);
+    const start = Math.min(valid, upTo);
 
     let state: EvalState =
-      start === 0 ? emptyState() : cloneState(this.snapshots[start - 1].state);
+      start === 0 ? emptyState() : cloneState(this.snapshots[start - 1]!.state);
     let statuses: FeatureStatus[] =
-      start === 0 ? [] : [...this.snapshots[start - 1].statuses];
+      start === 0 ? [] : [...this.snapshots[start - 1]!.statuses];
 
     for (let i = start; i < upTo; i++) {
-      const feature = doc.features[i];
+      const feature = doc.features[i]!;
       const next = cloneState(state);
       let status: FeatureStatus;
       if (feature.suppressed) {
         status = { featureId: feature.id, status: "suppressed" };
       } else {
         try {
-          evaluateFeature(next, feature, doc);
-          status = { featureId: feature.id, status: "ok" };
+          const warning = evaluateTracked(
+            next,
+            feature,
+            doc.features.slice(0, i),
+            sources,
+          );
+          status = warning
+            ? { featureId: feature.id, status: "warning", warning }
+            : { featureId: feature.id, status: "ok" };
         } catch (err: any) {
           status = {
             featureId: feature.id,
@@ -87,6 +157,7 @@ class DocumentEngine {
             error: err?.message ?? String(err),
           };
           // keep pre-failure state
+          releaseSnapshots([{ state: next }], this.snapshots);
           next.bodies = new Map(state.bodies);
           next.sketches = new Map(state.sketches);
           next.planes = new Map(state.planes);
@@ -105,29 +176,15 @@ class DocumentEngine {
     for (let i = upTo; i < doc.features.length; i++) {
       statuses = [
         ...statuses,
-        { featureId: doc.features[i].id, status: "rolledBack" },
+        { featureId: doc.features[i]!.id, status: "rolledBack" },
       ];
     }
 
     // --- payloads ---
     const bodies: BodyPayload[] = [];
     for (const body of state.bodies.values()) {
-      const meta = doc.bodyMeta[body.bodyId] ?? {
-        name: body.bodyId,
-        visible: true,
-      };
-      const cacheKey = `${body.bodyId}:${shapeHash(body.shape)}:${meta.name}:${meta.visible}`;
-      let payload = this.tessCache.get(cacheKey);
-      if (!payload) {
-        payload = tessellateBody(body, meta);
-        this.tessCache.set(cacheKey, payload);
-        // basic cache size control
-        if (this.tessCache.size > 64) {
-          const firstKey = this.tessCache.keys().next().value;
-          if (firstKey) this.tessCache.delete(firstKey);
-        }
-      }
-      bodies.push(payload);
+      const name = doc.bodyMeta[body.bodyId]?.name ?? body.bodyId;
+      bodies.push({ ...this.tessellated(body, name), name });
     }
 
     const sketches: SketchPayload[] = [];
@@ -156,32 +213,84 @@ class DocumentEngine {
     };
   }
 
+  private tessellated(body: StateBody, name: string): BodyPayload {
+    const hit = this.cached(body);
+    if (hit) return hit;
+    const payload =
+      this.moved(body) ?? tessellateBody(body, { name, visible: true });
+    const key = cacheKey(body);
+    const stale = this.tessCache.get(key);
+    this.tessCache.delete(key);
+    if (stale) this.tessBytes -= payloadBytes(stale.payload);
+    this.tessCache.set(key, { shape: body.shape, payload });
+    this.tessBytes += payloadBytes(payload);
+    for (const [old, entry] of this.tessCache) {
+      if (this.tessBytes <= TESS_CACHE_BYTES) break;
+      this.tessCache.delete(old);
+      this.tessBytes -= payloadBytes(entry.payload);
+    }
+    return payload;
+  }
+
+  private cached(body: NamedBody): BodyPayload | undefined {
+    const key = cacheKey(body);
+    const entry = this.tessCache.get(key);
+    if (
+      !entry ||
+      entry.shape.isDeleted() ||
+      body.shape.isDeleted() ||
+      !entry.shape.IsSame(body.shape)
+    )
+      return undefined;
+    this.tessCache.delete(key);
+    this.tessCache.set(key, entry);
+    return entry.payload;
+  }
+
+  private moved({ bodyId, copyOf }: StateBody): BodyPayload | undefined {
+    const source = copyOf && this.cached(copyOf.source);
+    return source && movePayload(source, bodyId, copyOf.offset, copyOf.prefix);
+  }
+
   /** Access the evaluated state at the current cache tip (for measure/export). */
-  stateAt(doc: CadDocument, position?: number): EvalState {
-    this.evaluate(doc, position);
-    const upTo = Math.min(position ?? doc.timelinePosition, doc.features.length);
+  stateAt(
+    doc: CadDocument,
+    position?: number,
+    sources: Sources = new Map(),
+  ): EvalState {
+    this.evaluate(doc, position, sources);
+    const upTo = Math.min(
+      position ?? doc.timelinePosition,
+      doc.features.length,
+    );
     if (upTo === 0) return emptyState();
-    return this.snapshots[upTo - 1].state;
+    return this.snapshots[upTo - 1]!.state;
   }
 
   invalidate(): void {
+    releaseSnapshots(this.snapshots, []);
     this.snapshots = [];
     this.tessCache.clear();
+    this.tessBytes = 0;
   }
 }
 
+const MAX_ENGINES = 8;
 const engines = new Map<string, DocumentEngine>();
 
 export function engineFor(docId: string): DocumentEngine {
-  let e = engines.get(docId);
-  if (!e) {
-    e = new DocumentEngine();
-    engines.set(docId, e);
+  const e = engines.get(docId) ?? new DocumentEngine();
+  engines.delete(docId);
+  engines.set(docId, e);
+  for (const [id] of engines) {
+    if (engines.size <= MAX_ENGINES) break;
+    dropEngine(id);
   }
   return e;
 }
 
 export function dropEngine(docId: string): void {
+  engines.get(docId)?.invalidate();
   engines.delete(docId);
 }
 

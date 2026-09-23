@@ -1,5 +1,22 @@
 # Rockett CAD
 
+Team Rockett!
+
+Prepare for trouble!
+And make it double!
+
+To protect the world from devastation!
+To unite all peoples within our nation!
+
+To denounce the evils of truth and love!
+To extend our reach to the stars above!
+
+Liam
+Mark
+
+Team Rocket blasts off at the speed of light!
+Surrender now, or prepare to fight!
+
 Self-hosted, browser-based **parametric CAD** for designing 3D-printable parts.
 A deliberately simplified, self-hostable take on the parametric solid-modelling
 portion of Fusion 360:
@@ -7,7 +24,7 @@ portion of Fusion 360:
 > **Sketch → constrain → feature → body → timeline → modify → regenerate → export**
 
 Built on a real B-Rep solid-modelling kernel (OpenCascade / OCCT compiled to
-WebAssembly) — not a mesh editor. Every operation is an editable parametric
+WebAssembly), not a mesh editor. Every operation is an editable parametric
 feature in a chronological timeline; editing an earlier feature rebuilds
 everything downstream against persistent topology references.
 
@@ -15,127 +32,125 @@ everything downstream against persistent topology references.
 
 ## Features
 
-- **Parametric sketcher** — line, rectangle, centre rectangle, circle, 3-point
-  arc, polygon, slot, points, construction geometry; full constraint solver
-  (horizontal, vertical, parallel, perpendicular, tangent, coincident,
-  concentric, equal, midpoint, collinear, fix) and editable dimensions
-  (length, distance, radius, diameter, angle) with live DOF / constrained-state
-  feedback.
-- **Sketch offsets** — select a curve, preview the distance, and reverse the
-  direction before applying. Chain connected lines and rounded arc corners,
-  or offset a single line, circle, or arc. Ctrl-click adds/removes curves to
-  choose an explicit chain; curves can be selected in any order.
-- **Solid features** — extrude (new body / join / cut / intersect, symmetric,
-  two-sided, from sketch profiles *or* planar faces), revolve, sweep, loft,
-  emboss/deboss.
-- **Modify** — fillet, chamfer, shell, boolean combine, split body,
-  press/pull (offset face).
-- **Replicate** — mirror, rectangular pattern, circular pattern.
-- **Construction** — offset planes, midplanes; sketch on any planar face.
-- **Reference images** — attach PNG/JPEG/WebP canvases to planes, with
-  two-point calibration to real dimensions.
-- **Feature timeline** — rename, edit, suppress, delete, roll back, insert
-  features mid-history; broken references are flagged, never silently dropped.
-- **Inspect** — point/edge/face measurement (distance, ΔXYZ, angle, radius,
-  area, length).
-- **Export** — binary STL and multi-body 3MF (bodies preserved as named
-  objects), with tessellation quality control.
-- **STEP import** — start a project with **New project from STEP**, or use
-  **Insert → Import STEP** in an existing project. Accepts `.step`/`.stp`
-  files up to 10 MB containing solid bodies. Imported solids support further
-  modelling; the source application's sketches and feature history are not imported.
-- **Persistence** — human-inspectable JSON project format that stores the full
-  parametric history (never just the final mesh); versioned schema with
-  migrations; automatic save on every change; survives container recreation.
-- **Undo/redo** — application-level, separate from the CAD timeline.
+### Sketch
+
+- **Sketcher**: draw lines, rectangles, circles, arcs, polygons, slots, points and construction geometry.
+- **Constraints and dimensions**: constrain shapes, drive them with editable dimensions and watch the remaining degrees of freedom.
+- **Line angles**: a typed angle is kept; double-click a line to edit its length and angle.
+- **Regions**: crossing and touching curves split a sketch into regions, such as the four corners around an inscribed circle.
+- **Angle snap**: hold Shift to snap a line to 15 degree steps; press A to lock its angle.
+- **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
+- **Project, trim and extend**: link earlier model edges into a sketch, trim the highlighted piece of a curve (T), extend curves to boundaries.
+- **Insert DXF and SVG**: bring DXF lines, arcs, circles and points, or SVG paths and shapes, into the open sketch as editable geometry.
+- **Edit in place**: editing a sketch rolls the model back to it; Finish Sketch returns to the saved position.
+
+### Model
+
+- **Solid features**: extrude, revolve, sweep, loft, emboss and deboss from sketch profiles or planar faces.
+- **Modify**: fillet, chamfer, shell, combine, split, press/pull and move bodies; shell with no open face hollows the body.
+- **Tangent chains**: fillet and chamfer pick smooth connected edges in one click.
+- **Replicate**: mirror, rectangular pattern and circular pattern.
+- **Construction**: offset planes and midplanes; sketch on any planar face.
+- **Reference images**: place PNG, JPEG or WebP images on planes and calibrate them to real size.
+- **Feature timeline**: rename, edit, quick edit, hover preview, suppress, delete, roll back and insert features; broken references are flagged, never dropped.
+
+### Inspect
+
+- **Measure**: distance, ΔXYZ, angle, radius, area and length between points, edges and faces.
+
+### Files
+
+- **Import**: start or extend a project from a STEP, IGES, BREP, STL, OBJ or 3MF file. Meshes are not parametric.
+- **Export**: download binary STL or multi-body 3MF with named bodies and a quality setting.
+- **Autosave**: every change saves to a readable JSON file that keeps the full feature history.
+- **Edit conflicts**: a change that conflicts with another tab or fails to reach the server waits until you reapply or discard it.
+
+### Workspace
+
+- **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, orthographic or perspective.
+- **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
+- **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.
+- **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
+- **Tool panels**: open with the main number selected and list each pick to remove; Enter confirms, Escape reverts.
+- **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.
+- **Tree selection**: Ctrl or Cmd+click adds bodies or sketches, Shift+click selects a range; right-click acts on all.
+- **Live preview**: feature dialogs keep the model before the feature pickable and ghost the result, green added, red removed, until OK.
+- **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions, sketch selections their relations; right-drag still orbits.
+- **Projects**: sort into folders; create, rename, move or delete by button, right-click or drag; unreadable ones show why.
+- **Project files**: download a project as one `.rockett` file, or open one as a new project.
+- **This browser**: keep a project in this browser instead of on the server; move it either way by Move to or drag.
+- **Reload**: refreshing the page reopens the project you had open; Back returns to the list.
+- **Errors**: stay visible until dismissed, and their text can be copied.
+- **Version label**: the bottom-right corner shows the running build; hover for commit, version and schema.
+
+[docs/user/guide.md](docs/user/guide.md) explains how to use each one.
 
 ## Quick start (Docker)
 
 ```bash
-docker compose up -d
+ROCKETT_ALLOWED_ORIGINS=http://localhost:8788 docker compose up -d
 ```
 
-Then open http://localhost:8788. All state lives in the `./data` volume.
+Then open http://localhost:8788. The server refuses to start without
+`ROCKETT_ALLOWED_ORIGINS`, the comma-separated browser origins allowed to
+change projects; list the origin you browse to. All state lives in the
+`rockett-cad_data` volume; DOCKER.md covers LAN access, running dev and prod
+side by side, and promoting the image dev verified to prod.
+The container runs as the unprivileged `rockett` user: `/app` is root-owned
+and `/data` is the only path it writes.
 
 For Unraid, see [DOCKER.md](DOCKER.md) and the template in
 `docker/unraid-rockett-cad.xml`.
 
+## Running build
+
+The bottom-right corner of the project list and the workspace shows the
+running build: the image's `git describe` output, else `v<version> <commit>`,
+else `v<version> dev`. Hover it for the full commit, version and schema.
+`GET /api/health` returns the same fields.
+
+A plain `docker compose up` records neither, so the label reads
+`v<version> dev`. For a granular label, build with
+`--build-arg ROCKETT_COMMIT=$(git rev-parse HEAD) --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty)`.
+[DOCKER.md](DOCKER.md) has the full Compose and `docker build` commands.
+
 ## Development
 
 ```bash
-npm install
-npm run dev        # server on :8788 + Vite client on :5173
-npm test           # geometry, solver, timeline, persistence, API tests
+npm ci                 # .npmrc: install scripts off, exact pins on save
+npm run prepare        # once per clone: husky sets core.hooksPath to .husky/_
+export ROCKETT_ALLOWED_ORIGINS=http://localhost:5173
+npm run dev            # server on :8788 + Vite client on :5173
+npm test               # typecheck, then shared, server and client tests
+npm run lint           # oxlint
+npm run format:check   # Prettier
+npm run lint:readme    # README feature items stay within 20 words
+npm run lint:comments  # comment ratchet: no file may gain a comment
+npm run lint:writing   # writing lint over tracked markdown
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md).
+The last two need masterrulez cloned to `~/masterrulez`. See
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Documentation
 
-| Doc | Contents |
-| --- | --- |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, layers, technology choices |
-| [CAD_MODEL.md](CAD_MODEL.md) | B-Rep representation, topology naming, regeneration, tessellation |
-| [FEATURE_TIMELINE.md](FEATURE_TIMELINE.md) | Timeline semantics, rollback, dependency handling |
-| [API.md](API.md) | REST API reference |
-| [DOCKER.md](DOCKER.md) | Deployment (Docker / Compose / Unraid) |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Repo layout, workflows, testing |
-| [ROADMAP.md](ROADMAP.md) | Current status and planned work |
-
-## Viewport controls
-
-While editing a sketch, click its **↔ Offset … mm** badge to change a saved
-offset distance. New offsets retain their source curves and generated entity
-IDs, so distance edits preserve downstream profile references. Offsets created
-before this feature were stored as plain geometry and need to be recreated once
-to get an editable badge. Offset geometry is driven by its distance; edit the
-badge instead of dragging its points.
-
-Editing an existing sketch temporarily rolls the viewport and timeline marker
-back to that sketch. **Finish Sketch** regenerates the model at the previously
-saved timeline position. Entering edit mode does not change the saved marker or
-create an undo step.
-
-| Action | Input |
-| --- | --- |
-| Select | Left click (Ctrl adds; Alt+click cycles overlapping picks) |
-| Context menu | Right click on geometry |
-| Orbit | Right-drag, Shift+middle-drag, or drag the ViewCube |
-| Pan | Middle-drag |
-| Zoom | Scroll wheel (to cursor) |
-| Named views / fit / ortho–persp | Toolbar (right side) and ViewCube |
-| Shortcuts | S sketch · E extrude · F fillet · M measure · Ctrl+Z/Y undo/redo · in sketch: L/R/C/D/P tools, X construction |
+| Doc                                        | Contents                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| [docs/user/guide.md](docs/user/guide.md)   | How to use each feature, controls and shortcuts                   |
+| [ARCHITECTURE.md](ARCHITECTURE.md)         | System overview, layers, technology choices                       |
+| [CAD_MODEL.md](CAD_MODEL.md)               | B-Rep representation, topology naming, regeneration, tessellation |
+| [FEATURE_TIMELINE.md](FEATURE_TIMELINE.md) | Timeline semantics, rollback, dependency handling                 |
+| [API.md](API.md)                           | REST API reference                                                |
+| [DOCKER.md](DOCKER.md)                     | Deployment (Docker / Compose / Unraid)                            |
+| [DEVELOPMENT.md](DEVELOPMENT.md)           | Repo layout, workflows, testing                                   |
+| [WORK-ORDER.md](WORK-ORDER.md)             | Scope, rulings and planned work                                   |
+| [CHANGELOG.md](CHANGELOG.md)               | Changes per release, release and schema conventions               |
+| [Brief.md](Brief.md)                       | Original 3D-printing brief, kept as history                       |
 
 ## License note
 
 Rockett CAD bundles [opencascade.js](https://github.com/donalffons/opencascade.js)
-(LGPL-2.1) — the WASM build of Open CASCADE Technology.
-
-### Sketch modification tools
-
-- Project: click an earlier model edge to add a purple linked reference. Snap or
-  constrain new shapes to it to follow source edits. References are construction
-  geometry by default; toggle Construction on a selected reference to use it in a profile.
-- Trim: click the portion of a curve between intersections to remove it.
-- Extend: click near an endpoint to extend to the first intersecting boundary.
-- Offset: enter a signed mm distance, then click a curve. Positive means left of
-  a line or outside a circle/arc; negative reverses the side. Closed loop follows
-  simple connected line loops. The copy remains independently editable.
-
-Each operation returns to Select and can be undone. Unsupported projections and
-collapsing offsets show an error. Trim/extend reports removed curve constraints.
-
-### Workspace usability
-
-Undo/redo stays inside an existing sketch and returns to Select. Opening a sketch
-from the model tree or timeline faces its plane automatically. Shift+F fits the
-model in view. The Controls button (or ?) lists keyboard and mouse controls.
-Tool panels keep their action buttons within the window; the arrow in the title
-bar restores their docked position. Errors remain visible until dismissed or
-the next operation starts, and their text can be selected and copied.
-
-Fillet and Chamfer now default to **Select tangent chain**. Clicking an edge
-selects smooth connected edges (including line/arc joins); sharp corners and
-ambiguous branches stop the chain. Clicking a fully selected chain deselects it.
-Uncheck the option to pick edges individually. OCCT may still propagate a fillet
-or chamfer along a smooth contour as required by its native operation.
+(LGPL-2.1-only), the WASM build of Open CASCADE Technology.
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every third-party
+package in the image and the client bundle, with its version, licence and the
+obligations to meet before distribution.

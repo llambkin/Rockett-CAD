@@ -7,17 +7,37 @@ function rect(
   x: number,
   y: number,
   w: number,
-  h: number
+  h: number,
 ): SketchEntity[] {
   return [
     { id: `${idPrefix}pa`, kind: "point", x, y },
     { id: `${idPrefix}pb`, kind: "point", x: x + w, y },
     { id: `${idPrefix}pc`, kind: "point", x: x + w, y: y + h },
     { id: `${idPrefix}pd`, kind: "point", x, y: y + h },
-    { id: `${idPrefix}l1`, kind: "line", p1: `${idPrefix}pa`, p2: `${idPrefix}pb` },
-    { id: `${idPrefix}l2`, kind: "line", p1: `${idPrefix}pb`, p2: `${idPrefix}pc` },
-    { id: `${idPrefix}l3`, kind: "line", p1: `${idPrefix}pc`, p2: `${idPrefix}pd` },
-    { id: `${idPrefix}l4`, kind: "line", p1: `${idPrefix}pd`, p2: `${idPrefix}pa` },
+    {
+      id: `${idPrefix}l1`,
+      kind: "line",
+      p1: `${idPrefix}pa`,
+      p2: `${idPrefix}pb`,
+    },
+    {
+      id: `${idPrefix}l2`,
+      kind: "line",
+      p1: `${idPrefix}pb`,
+      p2: `${idPrefix}pc`,
+    },
+    {
+      id: `${idPrefix}l3`,
+      kind: "line",
+      p1: `${idPrefix}pc`,
+      p2: `${idPrefix}pd`,
+    },
+    {
+      id: `${idPrefix}l4`,
+      kind: "line",
+      p1: `${idPrefix}pd`,
+      p2: `${idPrefix}pa`,
+    },
   ];
 }
 
@@ -25,8 +45,8 @@ describe("profile detection", () => {
   it("finds a rectangle region", () => {
     const profiles = detectProfiles(rect("r", 0, 0, 100, 50));
     expect(profiles).toHaveLength(1);
-    expect(profiles[0].outer).toHaveLength(4);
-    expect(profiles[0].area).toBeCloseTo(5000, 3);
+    expect(profiles[0]!.outer).toHaveLength(4);
+    expect(profiles[0]!.area).toBeCloseTo(5000, 3);
   });
 
   it("finds circle region and treats inner circle as hole", () => {
@@ -80,7 +100,7 @@ describe("profile detection", () => {
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(2);
-    expect(profiles[0].area + profiles[1].area).toBeCloseTo(4000, 3);
+    expect(profiles[0]!.area + profiles[1]!.area).toBeCloseTo(4000, 3);
   });
 
   it("ignores construction geometry", () => {
@@ -99,24 +119,53 @@ describe("profile detection", () => {
     const p1 = detectProfiles(e1);
     const e2 = rect("r", 0, 0, 120, 50); // same entities, different size
     const p2 = detectProfiles(e2);
-    expect(p1[0].id).toBe(p2[0].id);
+    expect(p1[0]!.id).toBe(p2[0]!.id);
   });
 });
 
-const P = (id: string, x: number, y: number): SketchEntity => ({ id, kind: "point", x, y });
-const L = (id: string, p1: string, p2: string): SketchEntity => ({ id, kind: "line", p1, p2 });
+const P = (id: string, x: number, y: number): SketchEntity => ({
+  id,
+  kind: "point",
+  x,
+  y,
+});
+const L = (id: string, p1: string, p2: string): SketchEntity => ({
+  id,
+  kind: "line",
+  p1,
+  p2,
+});
 
 /** Four-point star: square ±25 with radial guide lines from the centre to the
  * tips at ±75 and the outline joining corners to tips. The radials cross the
  * square's edges at their interiors with no sketch point there. */
 function ninjaStar(): SketchEntity[] {
   return [
-    P("A", -25, -25), P("B", 25, -25), P("C", 25, 25), P("D", -25, 25),
-    L("sq1", "A", "B"), L("sq2", "B", "C"), L("sq3", "C", "D"), L("sq4", "D", "A"),
-    P("O", 0, 0), P("Dn", 0, -75), P("Rt", 75, 0), P("Up", 0, 75), P("Lf", -75, 0),
-    L("rad1", "O", "Dn"), L("rad2", "O", "Rt"), L("rad3", "O", "Up"), L("rad4", "O", "Lf"),
-    L("o1", "A", "Lf"), L("o2", "Lf", "D"), L("o3", "D", "Up"), L("o4", "Up", "C"),
-    L("o5", "C", "Rt"), L("o6", "Rt", "B"), L("o7", "B", "Dn"), L("o8", "Dn", "A"),
+    P("A", -25, -25),
+    P("B", 25, -25),
+    P("C", 25, 25),
+    P("D", -25, 25),
+    L("sq1", "A", "B"),
+    L("sq2", "B", "C"),
+    L("sq3", "C", "D"),
+    L("sq4", "D", "A"),
+    P("O", 0, 0),
+    P("Dn", 0, -75),
+    P("Rt", 75, 0),
+    P("Up", 0, 75),
+    P("Lf", -75, 0),
+    L("rad1", "O", "Dn"),
+    L("rad2", "O", "Rt"),
+    L("rad3", "O", "Up"),
+    L("rad4", "O", "Lf"),
+    L("o1", "A", "Lf"),
+    L("o2", "Lf", "D"),
+    L("o3", "D", "Up"),
+    L("o4", "Up", "C"),
+    L("o5", "C", "Rt"),
+    L("o6", "Rt", "B"),
+    L("o7", "B", "Dn"),
+    L("o8", "Dn", "A"),
   ];
 }
 
@@ -144,7 +193,9 @@ describe("crossing curves (X-junctions)", () => {
     for (const p of profiles) expect(p.area).toBeCloseTo(50, 6);
     // the split pieces of the cutting line carry trim so the server can
     // build the wire from the inside portion only
-    const cutPieces = profiles.flatMap((p) => p.outer.filter((c) => c.entityId === "cut"));
+    const cutPieces = profiles.flatMap((p) =>
+      p.outer.filter((c) => c.entityId === "cut"),
+    );
     expect(cutPieces.length).toBeGreaterThan(0);
     for (const c of cutPieces) {
       expect(c.trim).toBeDefined();
@@ -160,7 +211,10 @@ describe("crossing curves (X-junctions)", () => {
       ...rect("r", 0, 0, 10, 10),
       L("d1", "rpa", "rpc"),
       L("d2", "rpb", "rpd"),
-      P("mb", 5, 0), P("mt", 5, 10), P("ml", 0, 5), P("mr", 10, 5),
+      P("mb", 5, 0),
+      P("mt", 5, 10),
+      P("ml", 0, 5),
+      P("mr", 10, 5),
       L("v", "mb", "mt"),
       L("h", "ml", "mr"),
     ];
@@ -171,30 +225,38 @@ describe("crossing curves (X-junctions)", () => {
 
   it("a line crossing an arc splits a D-shape in half", () => {
     const entities: SketchEntity[] = [
-      P("c", 0, 0), P("s", 10, 0), P("e", -10, 0),
+      P("c", 0, 0),
+      P("s", 10, 0),
+      P("e", -10, 0),
       { id: "arc", kind: "arc", center: "c", start: "s", end: "e" },
       L("base", "e", "s"),
-      P("v1", 0, -2), P("v2", 0, 12),
+      P("v1", 0, -2),
+      P("v2", 0, 12),
       L("v", "v1", "v2"),
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(2);
-    for (const p of profiles) expect(Math.abs(p.area - 25 * Math.PI)).toBeLessThan(0.5);
+    for (const p of profiles)
+      expect(Math.abs(p.area - 25 * Math.PI)).toBeLessThan(0.5);
   });
 
   it("two arcs crossing each other enclose a lens", () => {
     // upper half of a circle at the origin and lower half of a circle 10 above:
     // they cross at (±√75, 5) and enclose a lens; the arc tails dangle.
     const entities: SketchEntity[] = [
-      P("c1", 0, 0), P("s1", 10, 0), P("e1", -10, 0),
+      P("c1", 0, 0),
+      P("s1", 10, 0),
+      P("e1", -10, 0),
       { id: "a1", kind: "arc", center: "c1", start: "s1", end: "e1" },
-      P("c2", 0, 10), P("s2", -10, 10), P("e2", 10, 10),
+      P("c2", 0, 10),
+      P("s2", -10, 10),
+      P("e2", 10, 10),
       { id: "a2", kind: "arc", center: "c2", start: "s2", end: "e2" },
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(1);
     const lens = 200 * Math.acos(0.5) - 5 * Math.sqrt(300);
-    expect(Math.abs(profiles[0].area - lens)).toBeLessThan(1);
+    expect(Math.abs(profiles[0]!.area - lens)).toBeLessThan(1);
   });
 
   it("ninja star: radial guide lines carve the square into quadrants and each point in half", () => {
@@ -218,12 +280,14 @@ describe("crossing curves (X-junctions)", () => {
     expect(profiles).toHaveLength(4);
     const areas = profiles.map((p) => p.area).sort((a, b) => a - b);
     const half = (Math.PI * 25) / 2;
-    expect(Math.abs(areas[0] - half)).toBeLessThan(0.3);
-    expect(Math.abs(areas[1] - half)).toBeLessThan(0.3);
-    expect(Math.abs(areas[2] - (400 - half))).toBeLessThan(0.3);
-    expect(Math.abs(areas[3] - (400 - half))).toBeLessThan(0.3);
+    expect(Math.abs(areas[0]! - half)).toBeLessThan(0.3);
+    expect(Math.abs(areas[1]! - half)).toBeLessThan(0.3);
+    expect(Math.abs(areas[2]! - (400 - half))).toBeLessThan(0.3);
+    expect(Math.abs(areas[3]! - (400 - half))).toBeLessThan(0.3);
     // the circle pieces carry trim so the server can build them as arcs
-    const arcs = profiles.flatMap((p) => p.outer.filter((c) => c.entityId === "ci"));
+    const arcs = profiles.flatMap((p) =>
+      p.outer.filter((c) => c.entityId === "ci"),
+    );
     expect(arcs.length).toBeGreaterThan(0);
     for (const a of arcs) expect(a.trim).toBeDefined();
   });
@@ -238,7 +302,7 @@ describe("crossing curves (X-junctions)", () => {
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(1);
-    expect(Math.abs(profiles[0].area - Math.PI * 25)).toBeLessThan(0.3);
+    expect(Math.abs(profiles[0]!.area - Math.PI * 25)).toBeLessThan(0.3);
   });
 
   it("ninja star with a centre circle: four quarter discs and four notched quadrants", () => {
@@ -249,10 +313,16 @@ describe("crossing curves (X-junctions)", () => {
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(16);
-    expect(Math.abs(profiles.reduce((s, p) => s + p.area, 0) - 7500)).toBeLessThan(1);
+    expect(
+      Math.abs(profiles.reduce((s, p) => s + p.area, 0) - 7500),
+    ).toBeLessThan(1);
     const quarter = (Math.PI * 12.5 * 12.5) / 4;
-    expect(profiles.filter((p) => Math.abs(p.area - quarter) < 0.5)).toHaveLength(4);
-    expect(profiles.filter((p) => Math.abs(p.area - (625 - quarter)) < 0.5)).toHaveLength(4);
+    expect(
+      profiles.filter((p) => Math.abs(p.area - quarter) < 0.5),
+    ).toHaveLength(4);
+    expect(
+      profiles.filter((p) => Math.abs(p.area - (625 - quarter)) < 0.5),
+    ).toHaveLength(4);
   });
 
   it("ninja star without the radials is a square plus four triangles", () => {

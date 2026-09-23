@@ -56,13 +56,17 @@ describe("face extrude (extrude from a body surface)", () => {
 
     const engine = engineFor("fx1");
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     result = engine.evaluate(doc);
-    expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok", "ok"]);
+    expect(result.featureStatuses.map((s) => s.status)).toEqual([
+      "ok",
+      "ok",
+      "ok",
+    ]);
     expect(result.bodies).toHaveLength(1);
     // box 30x20x10 plus boss 30x20x5 on top = single body 30x20x15
-    expect(Math.round(result.bodies[0].bbox.max[2])).toBe(15);
+    expect(Math.round(result.bodies[0]!.bbox.max[2])).toBe(15);
     const vol = volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape);
     expect(vol).toBeCloseTo(30 * 20 * 15, 2);
   });
@@ -114,10 +118,14 @@ describe("face extrude (extrude from a body surface)", () => {
     doc.timelinePosition = 3;
     const engine = engineFor("fx2");
     let result = engine.evaluate(doc, 1);
-    (doc.features[1] as ExtrudeFeature).profiles[0].profileId =
-      result.sketches[0].profiles[0].id;
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
     result = engine.evaluate(doc);
-    expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok", "ok"]);
+    expect(result.featureStatuses.map((s) => s.status)).toEqual([
+      "ok",
+      "ok",
+      "ok",
+    ]);
     // full-face pocket 8 deep → height reduced to 12
     const vol = volumeOf(engine.stateAt(doc).bodies.get("b:ext1")!.shape);
     expect(vol).toBeCloseTo(40 * 40 * 12, 2);

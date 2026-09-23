@@ -5,13 +5,16 @@
 
 import * as THREE from "three";
 import type { PlaneFrame } from "@rockett/shared";
-import { COLORS, CadViewport, uv3 } from "./CadViewport";
+import { CadViewport, uv3 } from "./CadViewport";
+import { themeColor } from "../theme/tokens";
+import { clearGroup } from "./dispose";
 import type { SketchTool } from "../store";
 import type { UV } from "../sketchTools";
 
 let group: THREE.Group | null = null;
 
 function ensureGroup(viewport: CadViewport): THREE.Group {
+  viewport.requestRender();
   if (!group || group.parent !== viewport.scene) {
     group = new THREE.Group();
     group.renderOrder = 9;
@@ -22,22 +25,19 @@ function ensureGroup(viewport: CadViewport): THREE.Group {
 
 export function clearToolPreview(viewport: CadViewport | null): void {
   if (!viewport || !group) return;
-  for (const child of [...group.children]) {
-    group.remove(child);
-    (child as any).geometry?.dispose?.();
-    (child as any).material?.dispose?.();
-  }
+  clearGroup(group);
+  viewport.requestRender();
 }
 
 function ghostLine(pts: THREE.Vector3[]): THREE.Line {
   return new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.LineBasicMaterial({
-      color: COLORS.hover,
+      color: themeColor("hover"),
       transparent: true,
       opacity: 0.9,
       depthTest: false,
-    })
+    }),
   );
 }
 
@@ -51,7 +51,7 @@ export function updateToolPreview(
   tool: SketchTool,
   clicks: UV[],
   cursor: UV,
-  polygonSides = 6
+  polygonSides = 6,
 ): boolean {
   clearToolPreview(viewport);
   const g = ensureGroup(viewport);
@@ -69,12 +69,12 @@ export function updateToolPreview(
   switch (tool) {
     case "line": {
       if (clicks.length < 1) return false;
-      g.add(ghostLine([P(clicks[0].x, clicks[0].y), P(cursor.x, cursor.y)]));
+      g.add(ghostLine([P(clicks[0]!.x, clicks[0]!.y), P(cursor.x, cursor.y)]));
       return true;
     }
     case "rect": {
       if (clicks.length < 1) return false;
-      const a = clicks[0];
+      const a = clicks[0]!;
       g.add(
         ghostLine([
           P(a.x, a.y),
@@ -82,13 +82,13 @@ export function updateToolPreview(
           P(cursor.x, cursor.y),
           P(a.x, cursor.y),
           P(a.x, a.y),
-        ])
+        ]),
       );
       return true;
     }
     case "centerRect": {
       if (clicks.length < 1) return false;
-      const c = clicks[0];
+      const c = clicks[0]!;
       const w = Math.abs(cursor.x - c.x);
       const h = Math.abs(cursor.y - c.y);
       g.add(
@@ -98,25 +98,28 @@ export function updateToolPreview(
           P(c.x + w, c.y + h),
           P(c.x - w, c.y + h),
           P(c.x - w, c.y - h),
-        ])
+        ]),
       );
       return true;
     }
     case "circle": {
       if (clicks.length < 1) return false;
-      const c = clicks[0];
+      const c = clicks[0]!;
       const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
       if (r > 1e-6) g.add(ghostLine(circlePts(c.x, c.y, r)));
       return true;
     }
     case "arc3": {
       if (clicks.length === 1) {
-        g.add(ghostLine([P(clicks[0].x, clicks[0].y), P(cursor.x, cursor.y)]));
+        g.add(
+          ghostLine([P(clicks[0]!.x, clicks[0]!.y), P(cursor.x, cursor.y)]),
+        );
         return true;
       }
       if (clicks.length === 2) {
         // arc through start, cursor, end (circumcircle sample)
-        const [s, e] = clicks;
+        const s = clicks[0]!;
+        const e = clicks[1]!;
         const b = cursor;
         const d =
           2 * (s.x * (b.y - e.y) + b.x * (e.y - s.y) + e.x * (s.y - b.y));
@@ -151,7 +154,7 @@ export function updateToolPreview(
     }
     case "polygon": {
       if (clicks.length < 1) return false;
-      const c = clicks[0];
+      const c = clicks[0]!;
       const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
       const a0 = Math.atan2(cursor.y - c.y, cursor.x - c.x);
       const pts: THREE.Vector3[] = [];
@@ -164,11 +167,14 @@ export function updateToolPreview(
     }
     case "slot": {
       if (clicks.length === 1) {
-        g.add(ghostLine([P(clicks[0].x, clicks[0].y), P(cursor.x, cursor.y)]));
+        g.add(
+          ghostLine([P(clicks[0]!.x, clicks[0]!.y), P(cursor.x, cursor.y)]),
+        );
         return true;
       }
       if (clicks.length === 2) {
-        const [c1, c2] = clicks;
+        const c1 = clicks[0]!;
+        const c2 = clicks[1]!;
         const r = Math.max(Math.hypot(cursor.x - c2.x, cursor.y - c2.y), 0.01);
         const dx = c2.x - c1.x,
           dy = c2.y - c1.y;
@@ -179,13 +185,13 @@ export function updateToolPreview(
           ghostLine([
             P(c1.x + nx * r, c1.y + ny * r),
             P(c2.x + nx * r, c2.y + ny * r),
-          ])
+          ]),
         );
         g.add(
           ghostLine([
             P(c1.x - nx * r, c1.y - ny * r),
             P(c2.x - nx * r, c2.y - ny * r),
-          ])
+          ]),
         );
         g.add(ghostLine(circlePts(c1.x, c1.y, r)));
         g.add(ghostLine(circlePts(c2.x, c2.y, r)));

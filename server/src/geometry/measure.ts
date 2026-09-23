@@ -3,19 +3,8 @@
  */
 
 import type { MeasureRequest, MeasureResult, Vec3 } from "@rockett/shared";
-import {
-  areaOf,
-  getKernel,
-  lengthOf,
-  progress,
-  type Shape,
-} from "./kernel.js";
-import {
-  computeEdgeNames,
-  computeVertexNames,
-  findFace,
-  type NamedBody,
-} from "./naming.js";
+import { areaOf, getKernel, lengthOf, progress, type Shape } from "./kernel.js";
+import { computeEdgeNames, computeVertexNames, findFace } from "./naming.js";
 import type { EvalState } from "./features.js";
 
 interface Resolved {
@@ -26,7 +15,7 @@ interface Resolved {
 
 function resolveRef(
   state: EvalState,
-  ref: MeasureRequest["refs"][number]
+  ref: MeasureRequest["refs"][number],
 ): Resolved {
   const k = getKernel();
   const body = state.bodies.get(ref.bodyId);
@@ -109,11 +98,11 @@ export function measure(state: EvalState, req: MeasureRequest): MeasureResult {
 
   if (resolved.length === 2) {
     const dist = new k.BRepExtrema_DistShapeShape_2(
-      resolved[0].shape,
-      resolved[1].shape,
+      resolved[0]!.shape,
+      resolved[1]!.shape,
       k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
       k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
-      progress()
+      progress(),
     );
     dist.Perform(progress());
     if (dist.IsDone() && dist.NbSolution() > 0) {
@@ -135,11 +124,11 @@ export function measure(state: EvalState, req: MeasureRequest): MeasureResult {
         : r.kind === "edge"
           ? edgeDirection(r.shape)
           : null;
-    const dirA = dirOf(resolved[0]);
-    const dirB = dirOf(resolved[1]);
+    const dirA = dirOf(resolved[0]!);
+    const dirB = dirOf(resolved[1]!);
     if (dirA && dirB) {
       const dot = Math.abs(
-        dirA[0] * dirB[0] + dirA[1] * dirB[1] + dirA[2] * dirB[2]
+        dirA[0] * dirB[0] + dirA[1] * dirB[1] + dirA[2] * dirB[2],
       );
       result.angleDeg = (Math.acos(Math.min(1, dot)) * 180) / Math.PI;
     }

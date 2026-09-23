@@ -1,4 +1,6 @@
-Project Brief — Self-Hosted Parametric CAD Application
+This is the original 3D-printing brief, kept as history. `WORK-ORDER.md` owns scope.
+
+Project Brief: Self-Hosted Parametric CAD Application
 
 
 
@@ -2408,7 +2410,7 @@ Example:
 
 
 
-⚠ Fillet4 — referenced edge no longer exists
+⚠ Fillet4: referenced edge no longer exists
 
 
 
@@ -2928,7 +2930,7 @@ Maintain a working application throughout development.
 
 
 
-Phase 1 — CAD Foundation
+Phase 1: CAD Foundation
 
 
 
@@ -2976,7 +2978,7 @@ This validates the core architecture.
 
 
 
-Phase 2 — Sketching
+Phase 2: Sketching
 
 
 
@@ -3020,7 +3022,7 @@ sketch editing
 
 
 
-Phase 3 — Parametric Solid Creation
+Phase 3: Parametric Solid Creation
 
 
 
@@ -3056,7 +3058,7 @@ This milestone should establish the real CAD workflow.
 
 
 
-Phase 4 — Modification
+Phase 4: Modification
 
 
 
@@ -3084,7 +3086,7 @@ shell
 
 
 
-Phase 5 — Construction \& References
+Phase 5: Construction \& References
 
 
 
@@ -3116,7 +3118,7 @@ projected geometry
 
 
 
-Phase 6 — Advanced Creation
+Phase 6: Advanced Creation
 
 
 
@@ -3148,7 +3150,7 @@ emboss
 
 
 
-Phase 7 — Inspection \& Export
+Phase 7: Inspection \& Export
 
 
 
@@ -3172,7 +3174,7 @@ tessellation controls
 
 
 
-Phase 8 — UX Refinement
+Phase 8: UX Refinement
 
 
 

@@ -8,22 +8,56 @@ export function dimensionLayout(
   points: Map<string, Point>,
   lines: Map<string, { p1: string; p2: string }>,
   circles: Map<string, { center: string; radius: number }>,
-): { label: Point; attachment: Point } | null {
+): { label: Point; attachment: Point; reference?: [Point, Point] } | null {
   const span = (a?: Point, b?: Point, offset = 2.5) => {
     if (!a || !b) return null;
     const attachment = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    const dx = b.x - a.x, dy = b.y - a.y;
+    const dx = b.x - a.x,
+      dy = b.y - a.y;
     const length = Math.hypot(dx, dy) || 1;
     return {
       attachment,
-      label: { x: attachment.x - dy / length * offset, y: attachment.y + dx / length * offset },
+      label: {
+        x: attachment.x - (dy / length) * offset,
+        y: attachment.y + (dx / length) * offset,
+      },
     };
   };
   switch (constraint.type) {
     case "length":
     case "angle": {
-      const line = lines.get(constraint.type === "length" ? constraint.line : constraint.a);
-      return line ? span(points.get(line.p1), points.get(line.p2), constraint.type === "angle" ? 4 : 2.5) : null;
+      const line = lines.get(
+        constraint.type === "length" ? constraint.line : constraint.a,
+      );
+      return line
+        ? span(
+            points.get(line.p1),
+            points.get(line.p2),
+            constraint.type === "angle" ? 4 : 2.5,
+          )
+        : null;
+    }
+    case "lineAngle": {
+      const line = lines.get(constraint.line);
+      const start = line && points.get(line.p1);
+      const end = line && points.get(line.p2);
+      if (!start || !end) return null;
+      const dx = end.x - start.x,
+        dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      const half = Math.atan2(dy, dx) / 2;
+      const bisector = {
+        x: start.x + (length / 3) * Math.cos(half),
+        y: start.y + (length / 3) * Math.sin(half),
+      };
+      return {
+        attachment: bisector,
+        label: { ...bisector },
+        reference: [
+          { x: start.x, y: start.y },
+          { x: start.x + length / 2, y: start.y },
+        ],
+      };
     }
     case "distance":
       return span(points.get(constraint.a), points.get(constraint.b));
@@ -34,8 +68,14 @@ export function dimensionLayout(
       if (!circle || !center) return null;
       return {
         // Preserve the existing default label location and saved offsets.
-        label: { x: center.x + circle.radius * 0.75, y: center.y + circle.radius * 0.75 },
-        attachment: { x: center.x + circle.radius * Math.SQRT1_2, y: center.y + circle.radius * Math.SQRT1_2 },
+        label: {
+          x: center.x + circle.radius * 0.75,
+          y: center.y + circle.radius * 0.75,
+        },
+        attachment: {
+          x: center.x + circle.radius * Math.SQRT1_2,
+          y: center.y + circle.radius * Math.SQRT1_2,
+        },
       };
     }
     default:

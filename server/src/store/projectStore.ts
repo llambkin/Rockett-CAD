@@ -1,73 +1,163 @@
-/**
- * Project persistence.
- *
- * Layout under DATA_DIR (a mounted Docker volume in production):
- *   projects/{id}/document.json   — the parametric document (source of truth)
- *   projects/{id}/assets/{id}.ext — uploaded reference images
- *   projects/{id}/exports/        — optionally retained export files
- *
- * Writes are atomic (tmp file + rename) so a crash never corrupts a project.
- */
-
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
-  SCHEMA_VERSION,
   createEmptyDocument,
+  emptyView,
+  parse,
+  projectView,
+  VIEW_VERSION,
+  withShown,
   type CadDocument,
   type ProjectSummary,
+  type ProjectView,
+  type Visibility,
 } from "@rockett/shared";
-import { migrateDocument } from "./migrations.js";
-import { ProjectQueue } from "./projectQueue.js";
+import { build } from "../build.js";
+import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
+import { JsonStore, sha256, StoreError, type Inventory } from "./jsonStore.js";
+import { documentMigrations, TooNewError } from "./migrations.js";
+import type { Storage } from "./storage.js";
+
+export { StoreError };
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
-export class StoreError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message);
-  }
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
+
+export const IMAGE_LIMIT_MB = 25;
+
+const IMAGE_TYPES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
+  {
+    mime: "image/png",
+    test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
+  },
+  {
+    mime: "image/jpeg",
+    test: (b) =>
+      b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  },
+  {
+    mime: "image/webp",
+    test: (b) =>
+      b.length > 12 &&
+      b.toString("ascii", 0, 4) === "RIFF" &&
+      b.toString("ascii", 8, 12) === "WEBP",
+  },
+];
+
+const newId = () => crypto.randomBytes(6).toString("hex");
+
+const text = (v: unknown, fallback: string) =>
+  typeof v === "string" ? v : fallback;
+
+function imageMime(data: Buffer, label: string): string {
+  if (data.length > IMAGE_LIMIT_MB * 1024 * 1024)
+    throw new StoreError(`${label}image is over ${IMAGE_LIMIT_MB} MB`);
+  const type = IMAGE_TYPES.find((t) => t.test(data));
+  if (!type)
+    throw new StoreError(
+      `${label}unsupported image type (PNG, JPEG, WebP only)`,
+    );
+  return type.mime;
+}
+
+function stepBlobs(doc: CadDocument): string[] {
+  return doc.features.flatMap((f) => (f.type === "importStep" ? [f.blob] : []));
+}
+
+function imageBlobs(doc: CadDocument): string[] {
+  return doc.features.flatMap((f) =>
+    f.type === "referenceImage" && HASH_RE.test(f.assetId) ? [f.assetId] : [],
+  );
 }
 
 export class ProjectStore {
-  private saves = new ProjectQueue();
+  private documents: JsonStore<CadDocument, PendingBlobs>;
+  private views: JsonStore<ProjectView>;
+  readonly uploads: Uploads;
 
-  constructor(private dataDir: string) {}
-
-  private projectsDir(): string {
-    return path.join(this.dataDir, "projects");
+  constructor(
+    private readonly storage: Storage,
+    private readonly validate: (doc: CadDocument) => void,
+    private readonly now: () => number = Date.now,
+  ) {
+    this.uploads = new Uploads(storage);
+    this.views = new JsonStore({
+      storage,
+      root: "projects",
+      name: "project",
+      key: ID_RE,
+      file: "view.json",
+      migrations: {
+        namespace: "view",
+        current: VIEW_VERSION,
+        field: "version",
+        steps: {},
+      },
+      unbacked: async () => true,
+      validate: (view) => parse(projectView, view),
+    });
+    this.documents = new JsonStore({
+      storage,
+      root: "projects",
+      name: "project",
+      key: ID_RE,
+      file: "document.json",
+      migrations: documentMigrations,
+      unbacked: (id) => this.isTemporary(id),
+      validate,
+      effects: {
+        context: async (id, stored) =>
+          new PendingBlobs(await this.legacyAssets(id, stored)),
+        commit: async (id, pending) => {
+          for (const bytes of pending.blobs.values())
+            await this.blobs(id).put(bytes);
+          await this.views.write(
+            id,
+            withShown(await this.storedView(id), pending.shown),
+          );
+        },
+        retire: (id) => storage.remove(this.assetDir(id)),
+      },
+    });
   }
 
-  /** Validated project directory — rejects path traversal. */
-  private projectDir(id: string): string {
-    if (!ID_RE.test(id)) throw new StoreError(`invalid project id`, 400);
-    return path.join(this.projectsDir(), id);
-  }
-
-  async init(): Promise<void> {
-    await fs.mkdir(this.projectsDir(), { recursive: true });
+  inventory(): Promise<Inventory> {
+    return this.documents.inventory();
   }
 
   async list(): Promise<ProjectSummary[]> {
-    await this.init();
-    const entries = await fs.readdir(this.projectsDir(), { withFileTypes: true });
     const out: ProjectSummary[] = [];
-    for (const e of entries) {
-      if (!e.isDirectory() || !ID_RE.test(e.name)) continue;
+    for (const id of await this.documents.keys()) {
+      if (await this.isTemporary(id)) continue;
       try {
-        const doc = await this.load(e.name);
+        const doc = await this.load(id);
         out.push({
           id: doc.id,
           name: doc.name,
           createdAt: doc.createdAt,
           modifiedAt: doc.modifiedAt,
           featureCount: doc.features.length,
+          revision: doc.revision,
+          status: "ok",
         });
-      } catch {
-        // skip unreadable projects rather than failing the listing
+      } catch (err) {
+        if (err instanceof StoreError && err.code === "not_found") continue;
+        const raw = (await this.documents
+          .stored(id)
+          .catch(() => ({}))) as Partial<Record<keyof CadDocument, unknown>>;
+        out.push({
+          id,
+          name: text(raw.name, id),
+          createdAt: text(raw.createdAt, ""),
+          modifiedAt: text(raw.modifiedAt, ""),
+          featureCount: Array.isArray(raw.features) ? raw.features.length : 0,
+          status: err instanceof TooNewError ? "tooNew" : "invalid",
+          error: (err as Error).message,
+          ...(err instanceof TooNewError && { schemaVersion: err.version }),
+        });
       }
     }
     out.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
@@ -75,130 +165,272 @@ export class ProjectStore {
   }
 
   async create(name: string): Promise<CadDocument> {
-    const id = crypto.randomBytes(6).toString("hex");
+    const id = newId();
     const doc = createEmptyDocument(id, name || "Untitled");
-    await fs.mkdir(path.join(this.projectDir(id), "assets"), { recursive: true });
-    await fs.mkdir(path.join(this.projectDir(id), "exports"), { recursive: true });
     await this.save(doc);
     return doc;
   }
 
   async load(id: string): Promise<CadDocument> {
-    const file = path.join(this.projectDir(id), "document.json");
-    let raw: string;
+    return this.valid(id, await this.documents.read(id));
+  }
+
+  async open(id: string): Promise<{ doc: CadDocument; view: ProjectView }> {
+    const { value, context } = await this.documents.migrated(id);
+    return {
+      doc: this.valid(id, value),
+      view: withShown(await this.storedView(id), context.shown),
+    };
+  }
+
+  private valid(id: string, doc: CadDocument): CadDocument {
     try {
-      raw = await fs.readFile(file, "utf8");
-    } catch {
-      throw new StoreError(`project ${id} not found`, 404);
+      this.validate(doc);
+    } catch (err) {
+      throw new StoreError(
+        `project ${id} is invalid: ${(err as Error).message}`,
+        "unprocessable",
+      );
     }
-    let doc: CadDocument;
-    try {
-      doc = JSON.parse(raw);
-    } catch {
-      throw new StoreError(`project ${id} is corrupted`, 500);
-    }
-    return migrateDocument(doc);
+    return doc;
   }
 
   async save(doc: CadDocument): Promise<void> {
-    // Windows cannot reliably replace the same destination concurrently.
-    // Capture the submitted version before waiting for earlier saves.
     const snapshot = structuredClone(doc);
-    await this.saves.run(doc.id, () => this.writeDocument(snapshot));
+    snapshot.modifiedAt = new Date().toISOString();
+    snapshot.savedWith = build();
+    await this.documents.update(doc.id, (previous) => {
+      snapshot.revision = (previous?.revision ?? 0) + 1;
+      return snapshot;
+    });
     doc.modifiedAt = snapshot.modifiedAt;
+    doc.revision = snapshot.revision;
+    doc.savedWith = snapshot.savedWith;
   }
 
-  private async writeDocument(doc: CadDocument): Promise<void> {
-    if (doc.schemaVersion !== SCHEMA_VERSION) {
-      throw new StoreError(
-        `document schema ${doc.schemaVersion} does not match ${SCHEMA_VERSION}`,
-        400
-      );
-    }
-    doc.modifiedAt = new Date().toISOString();
-    const dir = this.projectDir(doc.id);
-    await fs.mkdir(dir, { recursive: true });
-    const file = path.join(dir, "document.json");
-    const tmp = `${file}.${crypto.randomUUID()}.tmp`;
-    try {
-      await fs.writeFile(tmp, JSON.stringify(doc, null, 1), "utf8");
-      await fs.rename(tmp, file);
-    } finally {
-      // Each save owns its temporary file, including when a write fails.
-      await fs.rm(tmp, { force: true });
-    }
+  async view(id: string): Promise<ProjectView> {
+    return (await this.open(id)).view;
+  }
+
+  async setView(id: string, view: ProjectView): Promise<void> {
+    await this.exists(id);
+    await this.documents.settle(id);
+    await this.views.write(id, view);
+  }
+
+  async setVisible(
+    id: string,
+    view: ProjectView,
+    shown: Visibility,
+  ): Promise<ProjectView> {
+    if (
+      !Object.keys(shown.bodies).length &&
+      !Object.keys(shown.features).length
+    )
+      return view;
+    const next = withShown(view, shown);
+    await this.setView(id, next);
+    return next;
+  }
+
+  private storedView(id: string): Promise<ProjectView> {
+    return this.views.read(id).catch((err) => {
+      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
+      return emptyView();
+    });
+  }
+
+  private async exists(id: string): Promise<void> {
+    if (
+      !(await this.storage.list(this.documents.dir(id))).includes(
+        "document.json",
+      )
+    )
+      throw new StoreError(`project ${id} not found`, "not_found");
   }
 
   async duplicate(id: string, newName?: string): Promise<CadDocument> {
     const src = await this.load(id);
     const copy: CadDocument = JSON.parse(JSON.stringify(src));
-    copy.id = crypto.randomBytes(6).toString("hex");
+    copy.id = newId();
     copy.name = newName || `${src.name} (copy)`;
     copy.createdAt = new Date().toISOString();
-    await fs.mkdir(path.join(this.projectDir(copy.id), "assets"), {
-      recursive: true,
-    });
-    await fs.mkdir(path.join(this.projectDir(copy.id), "exports"), {
-      recursive: true,
-    });
-    // copy assets
-    const srcAssets = path.join(this.projectDir(id), "assets");
-    try {
-      for (const f of await fs.readdir(srcAssets)) {
-        await fs.copyFile(
-          path.join(srcAssets, f),
-          path.join(this.projectDir(copy.id), "assets", f)
-        );
-      }
-    } catch {
-      // no assets
+    const from = path.posix.join(this.documents.dir(id), "blobs");
+    for (const f of await this.storage.list(from))
+      await this.storage.writeAtomic(
+        path.posix.join(this.documents.dir(copy.id), "blobs", f),
+        await this.storage.read(path.posix.join(from, f)),
+      );
+    for (const hash of [...stepBlobs(src), ...imageBlobs(src)]) {
+      const bytes = await this.blob(id, hash).catch(() => undefined);
+      if (bytes) await this.blobs(copy.id).put(bytes);
     }
     await this.save(copy);
     return copy;
   }
 
-  async remove(id: string): Promise<void> {
-    const dir = this.projectDir(id);
-    await fs.rm(dir, { recursive: true, force: true });
+  async isTemporary(id: string): Promise<boolean> {
+    return (await this.touchedAt(id)) !== undefined;
   }
 
-  // ----- assets (reference images) -----
+  async touch(id: string): Promise<void> {
+    const at = await this.touchedAt(id);
+    if (at !== undefined && this.now() - at >= MINUTE)
+      await this.writeMarker(id);
+  }
+
+  async temporaryIds(): Promise<string[]> {
+    const out: string[] = [];
+    for (const id of await this.documents.keys())
+      if (await this.isTemporary(id)) out.push(id);
+    return out;
+  }
+
+  async expire(id: string): Promise<boolean> {
+    const at = await this.touchedAt(id);
+    if (at === undefined || this.now() - at < DAY) return false;
+    await this.remove(id);
+    return true;
+  }
+
+  private markerFile(id: string): string {
+    return path.posix.join(this.documents.dir(id), "temporary.json");
+  }
+
+  private writeMarker(id: string): Promise<void> {
+    return this.storage.writeAtomic(
+      this.markerFile(id),
+      JSON.stringify({
+        owner: null,
+        touchedAt: new Date(this.now()).toISOString(),
+      }),
+    );
+  }
+
+  private async touchedAt(id: string): Promise<number | undefined> {
+    let raw: Buffer;
+    try {
+      raw = await this.storage.read(this.markerFile(id));
+    } catch {
+      return undefined;
+    }
+    try {
+      return Date.parse(JSON.parse(raw.toString("utf8")).touchedAt) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  remove(id: string): Promise<void> {
+    return this.documents.remove(id);
+  }
 
   async saveAsset(
     projectId: string,
     data: Buffer,
-    mime: string
   ): Promise<{ assetId: string }> {
-    const ext =
-      mime === "image/png" ? "png" : mime === "image/jpeg" ? "jpg" : "webp";
-    const assetId = `${crypto.randomBytes(8).toString("hex")}.${ext}`;
-    const dir = path.join(this.projectDir(projectId), "assets");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, assetId), data);
-    return { assetId };
+    imageMime(data, "");
+    return { assetId: await this.blobs(projectId).put(data) };
   }
 
-  async assetPath(projectId: string, assetId: string): Promise<string> {
-    if (!/^[a-f0-9]{16}\.(png|jpg|webp)$/.test(assetId)) {
-      throw new StoreError("invalid asset id", 400);
-    }
-    const p = path.join(this.projectDir(projectId), "assets", assetId);
+  async importProject(
+    doc: CadDocument,
+    assets: ReadonlyMap<string, Buffer>,
+    temporary = false,
+  ): Promise<CadDocument> {
+    const id = newId();
+    const images = new Set(imageBlobs(doc));
     try {
-      await fs.access(p);
-    } catch {
-      throw new StoreError("asset not found", 404);
+      if (temporary) await this.writeMarker(id);
+      for (const [assetId, data] of assets) {
+        const label = `asset ${assetId}: `;
+        if (!HASH_RE.test(assetId))
+          throw new StoreError(`${label}invalid asset id`);
+        if (sha256(data) !== assetId)
+          throw new StoreError(`${label}content does not match its id`);
+        if (images.has(assetId)) imageMime(data, label);
+        await this.blobs(id).put(data);
+      }
+      const imported = { ...doc, id };
+      await this.save(imported);
+      return imported;
+    } catch (error) {
+      await this.remove(id);
+      throw error;
     }
-    return p;
+  }
+
+  blobs(projectId: string): BlobStore {
+    return new BlobStore(
+      this.storage,
+      path.posix.join(this.documents.dir(projectId), "blobs"),
+    );
+  }
+
+  async blob(projectId: string, hash: string): Promise<Buffer> {
+    try {
+      return await this.blobs(projectId).get(hash);
+    } catch (err) {
+      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
+      const { context } = await this.documents.migrated(projectId);
+      const pending = context.blobs.get(hash);
+      if (!pending) throw err;
+      return pending;
+    }
+  }
+
+  async sources(doc: CadDocument): Promise<Map<string, Buffer>> {
+    const out = new Map<string, Buffer>();
+    for (const hash of stepBlobs(doc)) {
+      if (out.has(hash)) continue;
+      const bytes = await this.blob(doc.id, hash).catch(() => undefined);
+      if (bytes) out.set(hash, bytes);
+    }
+    return out;
+  }
+
+  private assetDir(projectId: string): string {
+    return path.posix.join(this.documents.dir(projectId), "assets");
+  }
+
+  private async legacyAssets(
+    projectId: string,
+    stored: unknown,
+  ): Promise<Map<string, Buffer>> {
+    const out = new Map<string, Buffer>();
+    const version = (stored as Partial<CadDocument> | null)?.schemaVersion;
+    if (typeof version !== "number" || version > 8) return out;
+    const dir = this.assetDir(projectId);
+    for (const name of await this.storage.list(dir))
+      out.set(name, await this.storage.read(path.posix.join(dir, name)));
+    return out;
+  }
+
+  async readAsset(
+    projectId: string,
+    assetId: string,
+  ): Promise<{ data: Buffer; mime: string }> {
+    const missing = new StoreError("asset not found", "not_found");
+    if (!HASH_RE.test(assetId)) throw missing;
+    const data = await this.blob(projectId, assetId);
+    const type = IMAGE_TYPES.find((t) => t.test(data));
+    if (!type) throw missing;
+    return { data, mime: type.mime };
   }
 
   async saveExport(
     projectId: string,
     fileName: string,
-    data: Buffer
+    data: Buffer,
   ): Promise<void> {
     if (!/^[\w.-]{1,120}$/.test(fileName)) return;
-    const dir = path.join(this.projectDir(projectId), "exports");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, fileName), data);
+    const file = path.posix.join(
+      this.documents.dir(projectId),
+      "exports",
+      fileName,
+    );
+    await this.documents.exclusive(projectId, () =>
+      this.storage.writeAtomic(file, data),
+    );
   }
 }

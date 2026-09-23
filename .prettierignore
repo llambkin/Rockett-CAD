@@ -1,0 +1,8 @@
+package-lock.json
+Brief.md
+dist
+data
+server/test/fixtures
+WORK-ORDER.md
+docs/internals/work-order-done.md
+docs/internals/work-order-later.md

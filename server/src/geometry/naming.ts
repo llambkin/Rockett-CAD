@@ -19,18 +19,19 @@
  * suffix ordered by centroid.
  */
 
+import type { Vec3 } from "@rockett/shared";
 import {
   edgeCentroid,
   faceCentroid,
   faces,
   getKernel,
   listToArray,
-  shapeHash,
+  release,
   type Shape,
 } from "./kernel.js";
+import { ShapeMap } from "./shapeMap.js";
 
-/** face hash → persistent name for one body state. */
-export type NameMap = Map<number, string>;
+export type NameMap = ShapeMap<string>;
 
 export interface NamedBody {
   bodyId: string;
@@ -38,56 +39,73 @@ export interface NamedBody {
   names: NameMap;
 }
 
+export function byPosition(a: Vec3, b: Vec3): number {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+export function suffixDuplicates<T>(
+  groups: Map<string, T[]>,
+  positionOf: (item: T) => Vec3,
+): Array<[T, string]> {
+  const named: Array<[T, string]> = [];
+  for (const [base, group] of groups) {
+    if (group.length === 1) {
+      named.push([group[0]!, base]);
+      continue;
+    }
+    group
+      .map((item) => ({ item, pos: positionOf(item) }))
+      .sort((a, b) => byPosition(a.pos, b.pos))
+      .forEach(({ item }, i) => named.push([item, `${base}~${i + 1}`]));
+  }
+  return named;
+}
+
 /** Assign fallback names + disambiguate duplicates. Returns final NameMap. */
 export function finalizeNames(
   shape: Shape,
   provisional: NameMap,
-  featureId: string
+  featureId: string,
 ): NameMap {
   const allFaces = faces(shape);
-  // Group by provisional name
-  const byName = new Map<string, Shape[]>();
-  const unnamed: Shape[] = [];
-  for (const f of allFaces) {
-    const n = provisional.get(shapeHash(f));
-    if (n) {
-      const arr = byName.get(n) ?? [];
-      arr.push(f);
-      byName.set(n, arr);
-    } else {
-      unnamed.push(f);
+  try {
+    // Group by provisional name
+    const byName = new Map<string, Shape[]>();
+    const unnamed: Shape[] = [];
+    for (const f of allFaces) {
+      const n = provisional.get(f);
+      if (n) {
+        const arr = byName.get(n) ?? [];
+        arr.push(f);
+        byName.set(n, arr);
+      } else {
+        unnamed.push(f);
+      }
     }
-  }
-  const result: NameMap = new Map();
-  for (const [name, group] of byName) {
-    if (group.length === 1) {
-      result.set(shapeHash(group[0]), name);
-    } else {
-      const sorted = group
+    const result: NameMap = new ShapeMap();
+    for (const [f, name] of suffixDuplicates(byName, faceCentroid)) {
+      result.set(f, name);
+    }
+    if (unnamed.length > 0) {
+      const sorted = unnamed
         .map((f) => ({ f, c: faceCentroid(f) }))
-        .sort((a, b) => a.c[0] - b.c[0] || a.c[1] - b.c[1] || a.c[2] - b.c[2]);
-      sorted.forEach((item, i) => {
-        result.set(shapeHash(item.f), `${name}~${i + 1}`);
-      });
+        .sort((a, b) => byPosition(a.c, b.c));
+      // fallback numbers skip names already present, so a feature that names
+      // its faces in several passes never hands out the same name twice
+      const taken = new Set(result.values());
+      let n = 0;
+      for (const item of sorted) {
+        let name: string;
+        do name = `f:${featureId}:x${++n}`;
+        while (taken.has(name));
+        taken.add(name);
+        result.set(item.f, name);
+      }
     }
+    return result;
+  } finally {
+    release(allFaces);
   }
-  if (unnamed.length > 0) {
-    const sorted = unnamed
-      .map((f) => ({ f, c: faceCentroid(f) }))
-      .sort((a, b) => a.c[0] - b.c[0] || a.c[1] - b.c[1] || a.c[2] - b.c[2]);
-    // fallback numbers skip names already present, so a feature that names
-    // its faces in several passes never hands out the same name twice
-    const taken = new Set(result.values());
-    let n = 0;
-    for (const item of sorted) {
-      let name: string;
-      do name = `f:${featureId}:x${++n}`;
-      while (taken.has(name));
-      taken.add(name);
-      result.set(shapeHash(item.f), name);
-    }
-  }
-  return result;
 }
 
 /**
@@ -98,34 +116,38 @@ export function propagateNames(
   op: any,
   inputs: Array<{ shape: Shape; names: NameMap }>,
   resultShape: Shape,
-  featureId: string
+  featureId: string,
 ): NameMap {
-  const provisional: NameMap = new Map();
+  const provisional: NameMap = new ShapeMap();
   for (const input of inputs) {
-    for (const f of faces(input.shape)) {
-      const name = input.names.get(shapeHash(f));
-      if (!name) continue;
-      let mapped = false;
-      try {
-        if (op.IsDeleted(f)) continue;
-      } catch {
-        // some ops throw on unknown shapes — treat as not deleted
-      }
-      try {
-        const modified = op.Modified(f);
-        const arr = listToArray(modified);
-        modified.delete?.();
-        for (const mf of arr) {
-          provisional.set(shapeHash(mf), name);
-          mapped = true;
+    const inputFaces = faces(input.shape);
+    try {
+      for (const f of inputFaces) {
+        const name = input.names.get(f);
+        if (!name) continue;
+        let mapped = false;
+        try {
+          if (op.IsDeleted(f)) continue;
+        } catch {
+          // some ops throw on unknown shapes — treat as not deleted
         }
-      } catch {
-        // no modification info
+        try {
+          const arr = listToArray(op.Modified(f));
+          for (const mf of arr) {
+            provisional.set(mf, name);
+            mapped = true;
+          }
+          release(arr);
+        } catch {
+          // no modification info
+        }
+        if (!mapped) {
+          // face may survive unchanged (same TShape) in the result
+          provisional.set(f, name);
+        }
       }
-      if (!mapped) {
-        // face may survive unchanged (same TShape) in the result
-        provisional.set(shapeHash(f), name);
-      }
+    } finally {
+      release(inputFaces);
     }
   }
   return finalizeNames(resultShape, provisional, featureId);
@@ -141,26 +163,30 @@ export function historyNames(
   history: any,
   input: { shape: Shape; names: NameMap },
   resultShape: Shape,
-  featureId: string
+  featureId: string,
 ): NameMap {
-  const candidates = new Map<number, string[]>();
-  for (const f of faces(input.shape)) {
-    const name = input.names.get(shapeHash(f));
-    if (!name) continue;
-    if (history.IsRemoved(f)) continue;
-    const modified = history.Modified(f);
-    const targets = listToArray(modified);
-    modified.delete?.();
-    for (const t of targets.length > 0 ? targets : [f]) {
-      const arr = candidates.get(shapeHash(t)) ?? [];
-      arr.push(name);
-      candidates.set(shapeHash(t), arr);
+  const candidates = new ShapeMap<string[]>();
+  const inputFaces = faces(input.shape);
+  try {
+    for (const f of inputFaces) {
+      const name = input.names.get(f);
+      if (!name) continue;
+      if (history.IsRemoved(f)) continue;
+      const targets = listToArray(history.Modified(f));
+      for (const t of targets.length > 0 ? targets : [f]) {
+        const arr = candidates.get(t) ?? [];
+        arr.push(name);
+        candidates.set(t, arr);
+      }
+      release(targets);
     }
+  } finally {
+    release(inputFaces);
   }
-  const provisional: NameMap = new Map();
-  for (const [hash, names] of candidates) {
+  const provisional: NameMap = new ShapeMap();
+  for (const [face, names] of candidates.entries()) {
     const bases = [...new Set(names.map((n) => n.replace(/~\d+$/, "")))].sort();
-    provisional.set(hash, bases[0]);
+    provisional.set(face, bases[0]!);
   }
   return finalizeNames(resultShape, provisional, featureId);
 }
@@ -169,18 +195,21 @@ export function historyNames(
 export function transformNames(
   transformOp: any,
   input: { shape: Shape; names: NameMap },
-  prefix: string
+  prefix: string,
 ): NameMap {
-  const out: NameMap = new Map();
+  const out: NameMap = new ShapeMap();
   for (const f of faces(input.shape)) {
-    const name = input.names.get(shapeHash(f));
-    if (!name) continue;
+    const name = input.names.get(f);
     try {
-      const mf = transformOp.ModifiedShape(f);
-      out.set(shapeHash(mf), prefix ? `${prefix}:${name}` : name);
+      if (name) {
+        const mf = transformOp.ModifiedShape(f);
+        out.set(mf, prefix ? `${prefix}:${name}` : name);
+        mf.delete();
+      }
     } catch {
       // ignore
     }
+    f.delete();
   }
   return out;
 }
@@ -190,14 +219,11 @@ export function transformNames(
 // ---------------------------------------------------------------------------
 
 export interface EdgeNames {
-  /** edge hash → persistent edge name */
-  byHash: Map<number, string>;
   /** persistent edge name → edge shape */
   byName: Map<string, Shape>;
 }
 
 export interface VertexNames {
-  byHash: Map<number, string>;
   byName: Map<string, Shape>;
 }
 
@@ -208,7 +234,7 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
     body.shape,
     k.TopAbs_ShapeEnum.TopAbs_EDGE,
     k.TopAbs_ShapeEnum.TopAbs_FACE,
-    map
+    map,
   );
   interface Entry {
     edge: Shape;
@@ -218,15 +244,14 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
   const entries: Entry[] = [];
   const n = map.Extent();
   for (let i = 1; i <= n; i++) {
-    const edge = k.TopoDS.Edge_1(map.FindKey(i));
+    const key = map.FindKey(i);
+    const edge = k.TopoDS.Edge_1(key);
+    key.delete();
     const faceList = listToArray(map.FindFromIndex(i));
     const faceNames = [
-      ...new Set(
-        faceList.map(
-          (f: Shape) => body.names.get(shapeHash(f)) ?? "?"
-        )
-      ),
+      ...new Set(faceList.map((f: Shape) => body.names.get(f) ?? "?")),
     ].sort();
+    release(faceList);
     const base =
       faceNames.length >= 2
         ? `e[${faceNames.join("|")}]`
@@ -248,27 +273,11 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
     arr.push(e);
     groups.set(e.base, arr);
   }
-  const byHash = new Map<number, string>();
   const byName = new Map<string, Shape>();
-  for (const [base, group] of groups) {
-    if (group.length === 1) {
-      byHash.set(shapeHash(group[0].edge), base);
-      byName.set(base, group[0].edge);
-    } else {
-      group.sort(
-        (a, b) =>
-          a.centroid[0] - b.centroid[0] ||
-          a.centroid[1] - b.centroid[1] ||
-          a.centroid[2] - b.centroid[2]
-      );
-      group.forEach((e, i) => {
-        const name = `${base}~${i + 1}`;
-        byHash.set(shapeHash(e.edge), name);
-        byName.set(name, e.edge);
-      });
-    }
+  for (const [e, name] of suffixDuplicates(groups, (entry) => entry.centroid)) {
+    byName.set(name, e.edge);
   }
-  return { byHash, byName };
+  return { byName };
 }
 
 export function computeVertexNames(body: NamedBody): VertexNames {
@@ -278,7 +287,7 @@ export function computeVertexNames(body: NamedBody): VertexNames {
     body.shape,
     k.TopAbs_ShapeEnum.TopAbs_VERTEX,
     k.TopAbs_ShapeEnum.TopAbs_FACE,
-    map
+    map,
   );
   interface Entry {
     vertex: Shape;
@@ -288,13 +297,14 @@ export function computeVertexNames(body: NamedBody): VertexNames {
   const entries: Entry[] = [];
   const n = map.Extent();
   for (let i = 1; i <= n; i++) {
-    const vertex = k.TopoDS.Vertex_1(map.FindKey(i));
+    const key = map.FindKey(i);
+    const vertex = k.TopoDS.Vertex_1(key);
+    key.delete();
     const faceList = listToArray(map.FindFromIndex(i));
     const faceNames = [
-      ...new Set(
-        faceList.map((f: Shape) => body.names.get(shapeHash(f)) ?? "?")
-      ),
+      ...new Set(faceList.map((f: Shape) => body.names.get(f) ?? "?")),
     ].sort();
+    release(faceList);
     const p = k.BRep_Tool.Pnt(vertex);
     const pos: [number, number, number] = [p.X(), p.Y(), p.Z()];
     p.delete();
@@ -308,30 +318,19 @@ export function computeVertexNames(body: NamedBody): VertexNames {
     arr.push(e);
     groups.set(e.base, arr);
   }
-  const byHash = new Map<number, string>();
   const byName = new Map<string, Shape>();
-  for (const [base, group] of groups) {
-    if (group.length === 1) {
-      byHash.set(shapeHash(group[0].vertex), base);
-      byName.set(base, group[0].vertex);
-    } else {
-      group.sort(
-        (a, b) => a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2]
-      );
-      group.forEach((e, i) => {
-        const name = `${base}~${i + 1}`;
-        byHash.set(shapeHash(e.vertex), name);
-        byName.set(name, e.vertex);
-      });
-    }
+  for (const [e, name] of suffixDuplicates(groups, (entry) => entry.pos)) {
+    byName.set(name, e.vertex);
   }
-  return { byHash, byName };
+  return { byName };
 }
 
 /** Find a face in a body by persistent name. */
 export function findFace(body: NamedBody, faceName: string): Shape | null {
+  let found: Shape | null = null;
   for (const f of faces(body.shape)) {
-    if (body.names.get(shapeHash(f)) === faceName) return f;
+    if (!found && body.names.get(f) === faceName) found = f;
+    else f.delete();
   }
-  return null;
+  return found;
 }

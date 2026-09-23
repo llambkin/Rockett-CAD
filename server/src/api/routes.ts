@@ -6,16 +6,30 @@
  * updated document plus a fresh incremental evaluation.
  */
 
-import { Router, json } from "express";
-import multer from "multer";
+import { Router, json, type RequestHandler } from "express";
 import {
+  DOCUMENT_EDITS,
+  emptyView,
   nextFeatureName,
-  newId,
+  parse,
   projectEdge,
+  ROUTES,
+  SCHEMA_VERSION,
+  ValidationError,
+  type ApiErrorBody,
+  type ApiErrorCode,
   type CadDocument,
+  type EvaluateResult,
+  type ExportRequest,
   type Feature,
+  type Method,
+  type ProjectView,
+  type Route,
 } from "@rockett/shared";
+import { build } from "../build.js";
 import type { ProjectStore } from "../store/projectStore.js";
+import { splitView } from "../store/migrations.js";
+import type { FolderStore } from "../store/folderStore.js";
 import { StoreError } from "../store/projectStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { engineFor, dropEngine } from "../geometry/engine.js";
@@ -24,222 +38,411 @@ import { resolvePlaneFrame } from "../geometry/features.js";
 import { computeEdgeNames } from "../geometry/naming.js";
 import { curveInfo } from "../geometry/tessellate.js";
 import { tangentEdges } from "../geometry/tangentEdges.js";
-import { readStep } from "../geometry/stepImport.js";
+import { importerFor, IMPORTERS } from "../geometry/importers.js";
 import { write3mf, writeStl } from "../geometry/exporters.js";
-import { validateDocument, validateFeature, ValidationError } from "./validate.js";
+import type { NamedBody } from "../geometry/naming.js";
+import {
+  knownKeys,
+  record,
+  validateDocument,
+  validateFeature,
+} from "./validate.js";
+import {
+  downloadProjectFile,
+  safeFileName,
+  uploadProjectFile,
+} from "./projectFile.js";
+import { folderRoutes } from "./folderRoutes.js";
+import {
+  discarding,
+  IMPORT_LIMITS,
+  readUpload,
+  receiveImage,
+  receiveImport,
+  receiveProjectFile,
+  type ImportLimits,
+  type Upload,
+} from "./uploads.js";
+import {
+  checkRevision,
+  ifMatchRevision,
+  reply,
+  RevisionConflict,
+} from "./revision.js";
+import { omitHeldMeshes } from "./heldMeshes.js";
+import {
+  takeVisible,
+  withVisible,
+  withVisibleBodies,
+} from "./legacyVisible.js";
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
+const STATUS: Record<ApiErrorCode, number> = {
+  validation: 400,
+  not_found: 404,
+  too_large: 413,
+  conflict: 409,
+  precondition_required: 428,
+  unprocessable: 422,
+  kernel: 503,
+  internal: 500,
+};
+
+function sendError(res: any, body: ApiErrorBody) {
+  res.status(STATUS[body.code]).json(body);
+}
+
+function fail(res: any, err: any) {
+  const code: ApiErrorCode =
+    err instanceof StoreError || err instanceof ValidationError
+      ? err.code
+      : "internal";
+  if (code !== "internal")
+    return sendError(res, {
+      error: err.message,
+      code,
+      ...(err.detail !== undefined && { detail: err.detail }),
+      ...(err instanceof RevisionConflict && { revision: err.revision }),
+    });
+  console.error(err);
+  sendError(res, { error: "Internal server error", code });
+}
+
+function check(test: (req: any, res: any) => void): RequestHandler {
+  return (req, res, next) => {
+    try {
+      test(req, res);
+    } catch (err) {
+      return fail(res, err);
+    }
+    next();
+  };
+}
+
+const parseBody = (schema: NonNullable<Route["body"]>) =>
+  check((req) => (req.body = parse(schema, req.body ?? {})));
+
+const requireRevision = check((req, res) => {
+  res.locals.revision = ifMatchRevision(req.get("If-Match"));
 });
 
-const IMAGE_MAGIC: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
+const EXPORTERS: Record<
+  ExportRequest["format"],
   {
-    mime: "image/png",
-    test: (b) => b.length > 8 && b.readUInt32BE(0) === 0x89504e47,
+    mime: string;
+    write: (bodies: NamedBody[], doc: CadDocument, quality: number) => Buffer;
+  }
+> = {
+  stl: {
+    mime: "model/stl",
+    write: (bodies, _doc, quality) => writeStl(bodies, quality),
   },
-  {
-    mime: "image/jpeg",
-    test: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  "3mf": {
+    mime: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+    write: (bodies, doc, quality) =>
+      write3mf(
+        bodies.map((b) => ({
+          body: b,
+          name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId,
+        })),
+        quality,
+      ),
   },
-  {
-    mime: "image/webp",
-    test: (b) =>
-      b.length > 12 &&
-      b.toString("ascii", 0, 4) === "RIFF" &&
-      b.toString("ascii", 8, 12) === "WEBP",
-  },
-];
+};
 
-export function createApiRouter(store: ProjectStore): Router {
+function evaluationPosition(req: any, doc: CadDocument): number | undefined {
+  if (req.query.position === undefined) return undefined;
+  const position = Number(req.query.position);
+  if (
+    !Number.isInteger(position) ||
+    position < 0 ||
+    position > doc.features.length
+  )
+    throw new ValidationError("invalid evaluation position");
+  return position;
+}
+
+function pruneGroups(
+  doc: CadDocument,
+  evaluation: EvaluateResult,
+  position: number | undefined,
+): boolean {
+  const sketches = new Set(
+    doc.features.filter((f) => f.type === "sketch").map((f) => f.id),
+  );
+  const bodies =
+    position === undefined && doc.timelinePosition === doc.features.length
+      ? new Set(evaluation.bodies.map((b) => b.bodyId))
+      : null;
+  let changed = false;
+  for (const group of doc.groups) {
+    const kept = group.members.filter((id) =>
+      group.kind === "sketch" ? sketches.has(id) : (bodies?.has(id) ?? true),
+    );
+    changed ||= kept.length !== group.members.length;
+    group.members = kept;
+  }
+  return changed;
+}
+
+export function createApiRouter(
+  store: ProjectStore,
+  folders: FolderStore,
+  projects = new ProjectQueue(),
+  limits: Partial<ImportLimits> = {},
+): Router {
+  const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
-  router.use(json({ limit: "50mb" }));
+  router.use(json({ limit: "50mb" }), check(omitHeldMeshes));
+  const on = (route: Route, ...handlers: RequestHandler[]) =>
+    router[route.method.toLowerCase() as Lowercase<Method>](
+      route.path,
+      ...(route.body ? [parseBody(route.body)] : []),
+      ...(DOCUMENT_EDITS.has(route) ? [requireRevision] : []),
+      ...handlers,
+    );
 
   // Serialize the whole load/edit/save/evaluate operation for each project.
   // Locking only save() would still allow two requests to edit stale copies.
-  // Reads also participate because evaluation can persist body metadata.
-  const projects = new ProjectQueue();
-
   const wrap =
     (fn: (req: any, res: any) => Promise<void>) => (req: any, res: any) => {
-      const result = req.params.id
-        ? projects.run(req.params.id, () => fn(req, res))
+      const { id } = req.params;
+      const result = id
+        ? projects.run(id, () => store.touch(id).then(() => fn(req, res)))
         : fn(req, res);
-      result.catch((err) => {
-        const status =
-          err instanceof StoreError || err instanceof ValidationError
-            ? (err as any).status ?? 400
-            : 500;
-        if (status === 500) console.error(err);
-        res.status(status).json({ error: err.message ?? String(err) });
-      });
+      result.catch((err) => fail(res, err));
     };
 
-  /** Temporary evaluation range; does not move the persisted timeline marker. */
-  function evaluationPosition(req: any, doc: CadDocument): number | undefined {
-    if (req.query.position === undefined) return undefined;
-    const position = Number(req.query.position);
-    if (!Number.isInteger(position) || position < 0 || position > doc.features.length)
-      throw new ValidationError("invalid evaluation position");
-    return position;
+  const editable = async (req: any, res: any) => {
+    const opened = await store.open(req.params.id);
+    checkRevision(opened.doc, res.locals.revision);
+    return opened;
+  };
+
+  const send = (
+    res: any,
+    view: ProjectView,
+    doc: CadDocument,
+    evaluation?: EvaluateResult,
+  ) =>
+    reply(res, {
+      document: withVisible(doc, view),
+      ...(evaluation && { evaluation: withVisibleBodies(evaluation, view) }),
+    });
+
+  async function evaluate(doc: CadDocument, position?: number) {
+    return engineFor(doc.id).evaluate(doc, position, await store.sources(doc));
+  }
+
+  async function stateAt(doc: CadDocument, position?: number) {
+    return engineFor(doc.id).stateAt(doc, position, await store.sources(doc));
   }
 
   /** Evaluate + make sure every body has display metadata. */
   async function evaluateAndSync(doc: CadDocument, position?: number) {
-    const engine = engineFor(doc.id);
-    const evaluation = engine.evaluate(doc, position);
-    let metaChanged = false;
+    const evaluation = await evaluate(doc, position);
+    let metaChanged = pruneGroups(doc, evaluation, position);
     for (const body of evaluation.bodies) {
       if (!doc.bodyMeta[body.bodyId]) {
         const n = (doc.counters["body"] ?? 0) + 1;
         doc.counters["body"] = n;
-        doc.bodyMeta[body.bodyId] = { name: `Body${n}`, visible: true };
+        doc.bodyMeta[body.bodyId] = { name: `Body${n}` };
         metaChanged = true;
       }
     }
     if (metaChanged) {
-      for (const body of evaluation.bodies) {
-        const meta = doc.bodyMeta[body.bodyId];
-        body.name = meta.name;
-        body.visible = meta.visible;
-      }
+      evaluation.bodies = evaluation.bodies.map((body) => ({
+        ...body,
+        name: doc.bodyMeta[body.bodyId]!.name,
+      }));
       await store.save(doc);
     }
     return evaluation;
   }
 
-  router.get("/health", (_req, res) => {
-    res.json({ ok: true });
+  on(ROUTES.health, (_req, res) => {
+    res.json({
+      ok: true,
+      ...build(),
+      schemaVersion: SCHEMA_VERSION,
+      describe: process.env.ROCKETT_DESCRIBE || null,
+    });
   });
 
   // ----- projects -----
 
-  router.get(
-    "/projects",
+  on(
+    ROUTES.listProjects,
     wrap(async (_req, res) => {
       res.json(await store.list());
-    })
+    }),
   );
 
-  router.post(
-    "/projects",
+  on(
+    ROUTES.createProject,
     wrap(async (req, res) => {
-      const name = String(req.body?.name ?? "Untitled").slice(0, 200);
-      const doc = await store.create(name);
+      const name = (req.body.name ?? "Untitled").slice(0, 200);
+      const { folderId } = req.body;
+      const doc =
+        folderId === undefined
+          ? await store.create(name)
+          : await folders.createIn(folderId, () => store.create(name));
       res.json({ document: doc });
-    })
+    }),
   );
 
-  router.get(
-    "/projects/:id",
+  on(ROUTES.downloadProjectFile, wrap(downloadProjectFile(store)));
+  on(
+    ROUTES.uploadProjectFile,
+    receiveProjectFile,
+    wrap(uploadProjectFile(store, folders)),
+  );
+
+  on(
+    ROUTES.getProject,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      res.json({ document: doc });
-    })
+      const { doc, view } = await store.open(req.params.id);
+      send(res, view, doc);
+    }),
   );
 
-  router.delete(
-    "/projects/:id",
+  on(
+    ROUTES.deleteProject,
     wrap(async (req, res) => {
       await store.remove(req.params.id);
       dropEngine(req.params.id);
+      await folders.place(req.params.id, null);
       res.json({ ok: true });
-    })
+    }),
   );
 
-  router.post(
-    "/projects/:id/duplicate",
+  on(
+    ROUTES.duplicateProject,
     wrap(async (req, res) => {
       const copy = await store.duplicate(
         req.params.id,
-        req.body?.name ? String(req.body.name).slice(0, 200) : undefined
+        req.body.name ? req.body.name.slice(0, 200) : undefined,
       );
       res.json({ document: copy });
-    })
+    }),
   );
 
-  router.post(
-    "/projects/:id/rename",
+  on(
+    ROUTES.renameProject,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      doc.name = String(req.body?.name ?? doc.name).slice(0, 200);
+      const { doc, view } = await editable(req, res);
+      doc.name = (req.body.name ?? doc.name).slice(0, 200);
       await store.save(doc);
-      res.json({ document: doc });
-    })
+      send(res, view, doc);
+    }),
   );
+
+  for (const [route, handler] of folderRoutes(folders, store))
+    on(route, wrap(handler));
 
   // ----- evaluation -----
 
-  router.get(
-    "/projects/:id/evaluate",
+  on(
+    ROUTES.evaluate,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      const evaluation = await evaluateAndSync(doc, evaluationPosition(req, doc));
-      res.json(evaluation);
-    })
+      const { doc, view } = await store.open(req.params.id);
+      res.json(
+        withVisibleBodies(
+          await evaluate(doc, evaluationPosition(req, doc)),
+          view,
+        ),
+      );
+    }),
   );
 
   // ----- document-level replace (undo/redo restore) -----
 
-  router.put(
-    "/projects/:id/document",
+  on(
+    ROUTES.replaceDocument,
     wrap(async (req, res) => {
-      const incoming = req.body?.document as CadDocument;
-      if (!incoming || incoming.id !== req.params.id) {
+      const sent = req.body?.document;
+      if (!sent || sent.id !== req.params.id) {
         throw new ValidationError("document id mismatch");
       }
-      validateDocument(incoming);
+      validateDocument(sent);
+      const { doc, shown } = splitView(sent);
+      const incoming = doc as unknown as CadDocument;
       const position = evaluationPosition(req, incoming);
       // Replacement is an edit, not creation (e.g. a delayed undo after delete).
-      await store.load(req.params.id);
+      const { view } = await editable(req, res);
       await store.save(incoming);
+      const next = await store.setVisible(incoming.id, view, shown);
       const evaluation = await evaluateAndSync(incoming, position);
-      res.json({ document: incoming, evaluation });
-    })
+      send(res, next, incoming, evaluation);
+    }),
   );
 
   // ----- features -----
-  const stepUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }).single("file");
-  const receiveStep = (req: any, res: any, next: any) => stepUpload(req, res, (error: any) => {
-    if (error) res.status(400).json({ error: "Upload one STEP file (.step or .stp), up to 10 MB." });
-    else next();
-  });
-  const importStep = wrap(async (req, res) => {
-    if (!req.file || !/\.(step|stp)$/i.test(req.file.originalname)) throw new ValidationError("Choose a .step or .stp file");
-    const filename = req.file.originalname.replace(/^.*[\\/]/, "").slice(0, 255);
-    const feature: Feature = { id: newId("import"), type: "importStep", name: filename.slice(0, 120),
-      suppressed: false, filename, data: req.file.buffer.toString("utf8").replace(/^\uFEFF/, "") };
-    validateFeature(feature);
-    // Reject bad geometry before creating a project or changing its history.
-    try { readStep(feature.data).delete(); }
-    catch (error) { throw new ValidationError((error as Error).message); }
+  const receiveStep = receiveImport(store.uploads, uploadBytes);
+  const importUpload = async (req: any, res: any) => {
+    const file: Upload | undefined = req.file,
+      importer = file && importerFor(file.originalname);
+    if (!file || !importer)
+      throw new ValidationError(
+        `Choose a ${IMPORTERS.flatMap((i) => i.extensions).join(", ")} file`,
+      );
+    const filename = file.originalname.replace(/^.*[\\/]/, "").slice(0, 255);
+    const { features, sources } = importer.read(
+      await readUpload(store.uploads, file, importBytes),
+      filename,
+    );
+    features.forEach(validateFeature);
     const created = !req.params.id;
-    const doc = created ? await store.create(filename.replace(/\.(step|stp)$/i, "")) : await store.load(req.params.id);
+    const { doc, view } = created
+      ? {
+          doc: await store.create(filename.replace(/\.[^.]*$/, "")),
+          view: emptyView(),
+        }
+      : await editable(req, res);
     try {
       const at = Math.min(doc.timelinePosition, doc.features.length);
-      doc.features.splice(at, 0, feature); doc.timelinePosition = at + 1;
+      doc.features.splice(at, 0, ...features);
+      doc.timelinePosition = at + features.length;
       if (Buffer.byteLength(JSON.stringify(doc), "utf8") > 40 * 1024 * 1024)
-        throw new ValidationError("This import would exceed the 40 MB project limit. Start a separate project for this STEP file.");
-      const evaluation = engineFor(doc.id).evaluate(doc);
-      const status = evaluation.featureStatuses.find(s => s.featureId === feature.id);
-      if (status?.status !== "ok") throw new ValidationError(status?.error ?? "STEP import failed");
+        throw new ValidationError(
+          `This import would exceed the 40 MB project limit. Start a separate project for this ${importer.label} file.`,
+        );
+      const evaluation = engineFor(doc.id).evaluate(
+        doc,
+        undefined,
+        new Map([...(await store.sources(doc)), ...sources]),
+      );
+      for (const feature of features) {
+        const status = evaluation.featureStatuses.find(
+          (s) => s.featureId === feature.id,
+        );
+        if (status?.status !== "ok" && status?.status !== "warning")
+          throw new ValidationError(
+            status?.error ?? `${importer.label} import failed`,
+          );
+      }
+      for (const [hash, bytes] of sources)
+        await (hash === file.hash
+          ? store.blobs(doc.id).adopt(file)
+          : store.blobs(doc.id).put(bytes));
       await store.save(doc);
-      res.json({ document: doc, evaluation: await evaluateAndSync(doc) });
+      send(res, view, doc, await evaluateAndSync(doc));
     } catch (error) {
       dropEngine(doc.id);
       if (created) await store.remove(doc.id);
       throw error;
     }
-  });
-  router.post("/projects/import-step", receiveStep, importStep);
-  router.post("/projects/:id/import-step", receiveStep, importStep);
+  };
+  const importStep = wrap(discarding(store.uploads, importUpload));
+  on(ROUTES.importStep, receiveStep, importStep);
+  on(ROUTES.importStepInto, receiveStep, importStep);
 
-  router.post(
-    "/projects/:id/features",
+  on(
+    ROUTES.addFeature,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const { doc, view } = await editable(req, res);
       const feature = req.body?.feature as Feature;
-      if (!feature) throw new ValidationError("feature required");
+      record(feature, "feature");
+      knownKeys(feature, feature.type);
       if (!feature.name) {
         feature.name = nextFeatureName(doc, feature.type);
       }
@@ -247,216 +450,256 @@ export function createApiRouter(store: ProjectStore): Router {
       if (doc.features.some((f) => f.id === feature.id)) {
         throw new ValidationError("duplicate feature id");
       }
+      const shown = takeVisible(feature, feature.id);
       // Insert at the timeline marker (supports inserting mid-history).
       const at = Math.min(doc.timelinePosition, doc.features.length);
       doc.features.splice(at, 0, feature);
       doc.timelinePosition = at + 1;
       await store.save(doc);
+      const next = await store.setVisible(doc.id, view, shown);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
-    })
+      send(res, next, doc, evaluation);
+    }),
   );
 
-  router.put(
-    "/projects/:id/features/:fid",
+  on(
+    ROUTES.updateFeature,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
+      const { doc, view } = await editable(req, res);
       const position = evaluationPosition(req, doc);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
-      if (idx < 0) throw new StoreError("feature not found", 404);
+      if (idx < 0) throw new StoreError("feature not found", "not_found");
       const patch = req.body?.feature as Partial<Feature>;
-      if (!patch) throw new ValidationError("feature required");
-      const updated = { ...doc.features[idx], ...patch, id: doc.features[idx].id };
+      record(patch, "feature");
+      if (patch.type !== undefined && patch.type !== doc.features[idx]!.type) {
+        throw new ValidationError("feature type cannot change");
+      }
+      knownKeys(patch, doc.features[idx]!.type);
+      const updated = {
+        ...doc.features[idx],
+        ...patch,
+        id: doc.features[idx]!.id,
+      };
       validateFeature(updated as Feature);
+      const next = await store.setVisible(
+        doc.id,
+        view,
+        takeVisible(updated as Feature, updated.id),
+      );
       doc.features[idx] = updated as Feature;
-      await store.save(doc);
+      if (Object.keys(patch).some((key) => key !== "visible"))
+        await store.save(doc);
       const evaluation = await evaluateAndSync(doc, position);
-      res.json({ document: doc, evaluation });
-    })
+      send(res, next, doc, evaluation);
+    }),
   );
 
   // Resolve against geometry BEFORE the sketch, so projections cannot depend
   // on their own extrude or another downstream feature. This is read-only.
-  router.post("/projects/:id/features/:fid/project", wrap(async (req, res) => {
-    const doc = await store.load(req.params.id);
-    const index = doc.features.findIndex(f => f.id === req.params.fid);
-    const sketch = doc.features[index];
-    if (!sketch || sketch.type !== "sketch") throw new ValidationError("Sketch not found");
-    const { edge: ref, entityId } = req.body ?? {};
-    if (ref?.kind !== "edge" || typeof ref.bodyId !== "string" || typeof ref.edgeName !== "string"
-      || typeof entityId !== "string" || !entityId || entityId.length > 100)
-      throw new ValidationError("An edge reference and entity ID are required");
-    const state = engineFor(doc.id).stateAt(doc, index);
-    const body = state.bodies.get(ref.bodyId);
-    const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
-    if (!edge) throw new ValidationError("This edge is not available before the sketch. Choose geometry from an earlier feature.");
-    try {
-      res.json({ entities: projectEdge(curveInfo(edge), resolvePlaneFrame(state, sketch.plane), entityId, ref) });
-    } catch (error) { throw new ValidationError((error as Error).message); }
-  }));
-
-  router.delete(
-    "/projects/:id/features/:fid",
+  on(
+    ROUTES.projectEdge,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
+      const index = doc.features.findIndex((f) => f.id === req.params.fid);
+      const sketch = doc.features[index];
+      if (!sketch || sketch.type !== "sketch")
+        throw new ValidationError("Sketch not found");
+      const { edge: ref, entityId } = req.body;
+      const state = await stateAt(doc, index);
+      const body = state.bodies.get(ref.bodyId);
+      const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
+      if (!edge)
+        throw new ValidationError(
+          "This edge is not available before the sketch. Choose geometry from an earlier feature.",
+        );
+      try {
+        res.json({
+          entities: projectEdge(
+            curveInfo(edge),
+            resolvePlaneFrame(state, sketch.plane),
+            entityId,
+            ref,
+          ),
+        });
+      } catch (error) {
+        throw new ValidationError((error as Error).message);
+      }
+    }),
+  );
+
+  on(
+    ROUTES.deleteFeature,
+    wrap(async (req, res) => {
+      const { doc, view } = await editable(req, res);
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
-      if (idx < 0) throw new StoreError("feature not found", 404);
+      if (idx < 0) throw new StoreError("feature not found", "not_found");
       doc.features.splice(idx, 1);
       if (doc.timelinePosition > idx) doc.timelinePosition--;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
-    })
+      send(res, view, doc, evaluation);
+    }),
   );
 
-  router.post(
-    "/projects/:id/timeline",
+  on(
+    ROUTES.setTimeline,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      const position = Number(req.body?.position);
-      if (
-        !Number.isInteger(position) ||
-        position < 0 ||
-        position > doc.features.length
-      ) {
-        throw new ValidationError("invalid timeline position");
-      }
+      const { doc, view } = await editable(req, res);
+      const { position } = req.body;
+      if (position > doc.features.length)
+        throw new ValidationError("invalid timeline position", "/position");
       doc.timelinePosition = position;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
-    })
+      send(res, view, doc, evaluation);
+    }),
   );
 
   // ----- bodies -----
-  router.post("/projects/:id/tangent-edges", wrap(async (req, res) => {
-    const doc = await store.load(req.params.id);
-    const { edge, beforeFeatureId } = req.body ?? {};
-    if (edge?.kind !== "edge" || typeof edge.bodyId !== "string" || typeof edge.edgeName !== "string")
-      throw new ValidationError("An edge reference is required");
-    const index = beforeFeatureId === undefined ? undefined : doc.features.findIndex(f => f.id === beforeFeatureId);
-    if (index === -1) throw new ValidationError("Feature not found");
-    const state = engineFor(doc.id).stateAt(doc, index);
-    const body = state.bodies.get(edge.bodyId);
-    if (!body) throw new ValidationError("Body not found before this feature");
-    try { res.json({ edges: tangentEdges(body, [edge]) }); }
-    catch (error) { throw new ValidationError((error as Error).message); }
-  }));
-
-  router.put(
-    "/projects/:id/bodies/:bodyId",
+  on(
+    ROUTES.tangentEdges,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const meta = doc.bodyMeta[req.params.bodyId];
-      if (!meta) throw new StoreError("body not found", 404);
-      if (typeof req.body?.name === "string") {
-        meta.name = req.body.name.slice(0, 120);
+      const { edge, beforeFeatureId } = req.body;
+      const index =
+        beforeFeatureId === undefined
+          ? undefined
+          : doc.features.findIndex((f) => f.id === beforeFeatureId);
+      if (index === -1) throw new ValidationError("Feature not found");
+      const state = await stateAt(doc, index);
+      const body = state.bodies.get(edge.bodyId);
+      if (!body)
+        throw new ValidationError("Body not found before this feature");
+      try {
+        res.json({ edges: tangentEdges(body, [edge]) });
+      } catch (error) {
+        throw new ValidationError((error as Error).message);
       }
-      if (typeof req.body?.visible === "boolean") {
-        meta.visible = req.body.visible;
-      }
+    }),
+  );
+
+  on(
+    ROUTES.updateGroups,
+    wrap(async (req, res) => {
+      const { doc, view } = await editable(req, res);
+      doc.groups = req.body.groups;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
-      res.json({ document: doc, evaluation });
-    })
+      send(res, view, doc, evaluation);
+    }),
+  );
+
+  on(
+    ROUTES.updateBody,
+    wrap(async (req, res) => {
+      const { doc, view } = await editable(req, res);
+      const { bodyId } = req.params;
+      const meta = doc.bodyMeta[bodyId];
+      if (!meta) throw new StoreError("body not found", "not_found");
+      const { name, visible } = req.body;
+      const next = await store.setVisible(doc.id, view, {
+        bodies: visible === undefined ? {} : { [bodyId]: visible },
+        features: {},
+      });
+      if (name !== undefined) {
+        meta.name = name.slice(0, 120);
+        await store.save(doc);
+      }
+      const evaluation = await evaluateAndSync(doc);
+      send(res, next, doc, evaluation);
+    }),
+  );
+
+  on(
+    ROUTES.getView,
+    wrap(async (req, res) => {
+      res.json(await store.view(req.params.id));
+    }),
+  );
+
+  on(
+    ROUTES.putView,
+    wrap(async (req, res) => {
+      await store.setView(req.params.id, req.body);
+      res.json(req.body);
+    }),
   );
 
   // ----- measure -----
 
-  router.post(
-    "/projects/:id/measure",
+  on(
+    ROUTES.measure,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const refs = req.body?.refs;
-      if (!Array.isArray(refs) || refs.length === 0 || refs.length > 2) {
-        throw new ValidationError("measure requires 1-2 refs");
-      }
-      const engine = engineFor(doc.id);
-      const state = engine.stateAt(doc);
-      res.json(measure(state, { refs }));
-    })
+      const state = await stateAt(doc);
+      res.json(measure(state, req.body));
+    }),
   );
 
   // ----- export -----
 
-  router.post(
-    "/projects/:id/export",
+  on(
+    ROUTES.exportModel,
     wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      const format = req.body?.format === "3mf" ? "3mf" : "stl";
-      const quality = Math.min(
-        Math.max(Number(req.body?.quality) || 0.05, 0.001),
-        1
-      );
-      const requestedIds: string[] = Array.isArray(req.body?.bodyIds)
-        ? req.body.bodyIds.map(String)
-        : [];
-      const engine = engineFor(doc.id);
-      const state = engine.stateAt(doc);
+      const { doc, view } = await store.open(req.params.id);
+      const {
+        format,
+        bodyIds: requestedIds,
+        quality = 0.05,
+        retain,
+      }: ExportRequest = req.body;
+      const exporter = EXPORTERS[format];
+      const state = await stateAt(doc);
+      const missing = requestedIds.filter((id) => !state.bodies.has(id));
+      if (missing.length)
+        throw new ValidationError(
+          `export bodies not in the model: ${missing.join(", ")}`,
+        );
       const chosen = [...state.bodies.values()].filter((b) => {
         if (requestedIds.length > 0) return requestedIds.includes(b.bodyId);
-        return doc.bodyMeta[b.bodyId]?.visible !== false;
+        return !view.hidden.bodies.includes(b.bodyId);
       });
       if (chosen.length === 0) {
         throw new ValidationError("no bodies to export");
       }
-      const safeName = doc.name.replace(/[^\w-]+/g, "_").slice(0, 60) || "model";
-      let data: Buffer;
-      let fileName: string;
-      if (format === "stl") {
-        data = writeStl(chosen, quality);
-        fileName = `${safeName}.stl`;
-        res.setHeader("Content-Type", "model/stl");
-      } else {
-        data = write3mf(
-          chosen.map((b) => ({
-            body: b,
-            name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId,
-          })),
-          quality
-        );
-        fileName = `${safeName}.3mf`;
-        res.setHeader(
-          "Content-Type",
-          "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"
-        );
-      }
-      if (req.body?.retain) {
+      const safeName = safeFileName(doc.name) || "model";
+      const data = exporter.write(
+        chosen,
+        doc,
+        Math.min(Math.max(quality, 0.001), 1),
+      );
+      const fileName = `${safeName}.${format}`;
+      res.setHeader("Content-Type", exporter.mime);
+      if (retain) {
         await store.saveExport(doc.id, fileName, data);
       }
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`,
+      );
       res.send(data);
-    })
+    }),
   );
 
   // ----- assets (reference images) -----
 
-  router.post(
-    "/projects/:id/assets",
-    upload.single("image"),
+  on(
+    ROUTES.uploadImage,
+    receiveImage,
     wrap(async (req, res) => {
       await store.load(req.params.id); // ensure project exists
-      const file = req.file;
-      if (!file) throw new ValidationError("image file required");
-      const magic = IMAGE_MAGIC.find((m) => m.test(file.buffer));
-      if (!magic) {
-        throw new ValidationError("unsupported image type (PNG, JPEG, WebP only)");
-      }
-      const { assetId } = await store.saveAsset(
-        req.params.id,
-        file.buffer,
-        magic.mime
-      );
+      if (!req.file) throw new ValidationError("image file required");
+      const { assetId } = await store.saveAsset(req.params.id, req.file.buffer);
       res.json({ assetId });
-    })
+    }),
   );
 
-  router.get(
-    "/projects/:id/assets/:assetId",
+  on(
+    ROUTES.asset,
     wrap(async (req, res) => {
-      const p = await store.assetPath(req.params.id, req.params.assetId);
-      res.sendFile(p);
-    })
+      const asset = await store.readAsset(req.params.id, req.params.assetId);
+      res.type(asset.mime).send(asset.data);
+    }),
   );
 
   return router;
