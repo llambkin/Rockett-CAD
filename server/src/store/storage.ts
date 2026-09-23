@@ -2,9 +2,12 @@ import type { promises } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
+export type Data = string | Uint8Array | AsyncIterable<Uint8Array>;
+
 export interface Storage {
   read(file: string): Promise<Buffer>;
-  writeAtomic(file: string, data: string | Uint8Array): Promise<void>;
+  writeAtomic(file: string, data: Data): Promise<void>;
+  move(from: string, to: string): Promise<void>;
   list(dir: string): Promise<string[]>;
   files(dir: string): Promise<string[]>;
   remove(target: string): Promise<void>;
@@ -41,7 +44,7 @@ export class LocalStorage implements Storage {
     return this.fs.readFile(this.resolve(file));
   }
 
-  async writeAtomic(file: string, data: string | Uint8Array): Promise<void> {
+  async writeAtomic(file: string, data: Data): Promise<void> {
     const full = this.resolve(file);
     const dir = path.dirname(full);
     await this.fs.mkdir(dir, { recursive: true });
@@ -55,10 +58,17 @@ export class LocalStorage implements Storage {
     await this.sync(dir, "r");
   }
 
+  async move(from: string, to: string): Promise<void> {
+    const target = this.resolve(to);
+    await this.fs.mkdir(path.dirname(target), { recursive: true });
+    await this.fs.rename(this.resolve(from), target);
+    await this.sync(path.dirname(target), "r");
+  }
+
   private async sync(
     target: string,
     flags: string,
-    data?: string | Uint8Array,
+    data?: Data,
   ): Promise<void> {
     const handle = await this.fs.open(target, flags);
     try {

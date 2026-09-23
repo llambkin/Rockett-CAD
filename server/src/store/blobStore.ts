@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import path from "node:path";
 import { sha256, StoreError } from "./jsonStore.js";
 import type { Storage } from "./storage.js";
@@ -25,6 +26,44 @@ export class PendingBlobs {
   }
 }
 
+export interface Staged {
+  path: string;
+  hash: string;
+  size: number;
+}
+
+export class Uploads {
+  constructor(
+    private readonly storage: Storage,
+    private readonly dir = "uploads",
+  ) {}
+
+  async stage(chunks: AsyncIterable<Uint8Array>): Promise<Staged> {
+    const file = path.posix.join(this.dir, crypto.randomUUID()),
+      hash = crypto.createHash("sha256");
+    let size = 0;
+    await this.storage.writeAtomic(
+      file,
+      (async function* () {
+        for await (const chunk of chunks) {
+          hash.update(chunk);
+          size += chunk.byteLength;
+          yield chunk;
+        }
+      })(),
+    );
+    return { path: file, hash: hash.digest("hex"), size };
+  }
+
+  read(staged: Staged): Promise<Buffer> {
+    return this.storage.read(staged.path);
+  }
+
+  discard(staged: Pick<Staged, "path">): Promise<void> {
+    return this.storage.remove(staged.path);
+  }
+}
+
 export class BlobStore {
   constructor(
     private readonly storage: Storage,
@@ -41,6 +80,12 @@ export class BlobStore {
     if (!(await this.has(hash)))
       await this.storage.writeAtomic(this.file(hash), bytes);
     return hash;
+  }
+
+  async adopt(staged: Staged): Promise<string> {
+    if (await this.has(staged.hash)) await this.storage.remove(staged.path);
+    else await this.storage.move(staged.path, this.file(staged.hash));
+    return staged.hash;
   }
 
   async get(hash: string): Promise<Buffer> {

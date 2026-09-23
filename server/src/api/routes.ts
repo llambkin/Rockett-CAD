@@ -7,12 +7,10 @@
  */
 
 import { Router, json, type RequestHandler } from "express";
-import multer from "multer";
 import {
   DOCUMENT_EDITS,
   nextFeatureName,
   parse,
-  PROJECT_FILE_LIMIT_MB,
   projectEdge,
   ROUTES,
   SCHEMA_VERSION,
@@ -29,7 +27,7 @@ import {
 import { build } from "../build.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
-import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
+import { StoreError } from "../store/projectStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { engineFor, dropEngine } from "../geometry/engine.js";
 import { measure } from "../geometry/measure.js";
@@ -52,6 +50,16 @@ import {
   uploadProjectFile,
 } from "./projectFile.js";
 import { folderRoutes } from "./folderRoutes.js";
+import {
+  discarding,
+  IMPORT_LIMITS,
+  readUpload,
+  receiveImage,
+  receiveImport,
+  receiveProjectFile,
+  type ImportLimits,
+  type Upload,
+} from "./uploads.js";
 import {
   checkRevision,
   ifMatchRevision,
@@ -107,37 +115,6 @@ const parseBody = (schema: NonNullable<Route["body"]>) =>
 const requireRevision = check((req, res) => {
   res.locals.revision = ifMatchRevision(req.get("If-Match"));
 });
-
-function multipart(field: string, megabytes: number, error: string) {
-  const receive = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: megabytes * 1024 * 1024, files: 1 },
-  }).single(field);
-  return (req: any, res: any, next: any) =>
-    receive(req, res, (err: any) => {
-      if (!err) return next();
-      sendError(res, {
-        error,
-        code: err.code === "LIMIT_FILE_SIZE" ? "too_large" : "validation",
-      });
-    });
-}
-
-const receiveImage = multipart(
-  "image",
-  IMAGE_LIMIT_MB,
-  `Upload one PNG, JPEG or WebP image, up to ${IMAGE_LIMIT_MB} MB.`,
-);
-const receiveStep = multipart(
-  "file",
-  10,
-  "Upload one STEP, IGES, BREP, STL, OBJ or 3MF file, up to 10 MB.",
-);
-const receiveProjectFile = multipart(
-  "file",
-  PROJECT_FILE_LIMIT_MB,
-  `Upload one .rockett project file, up to ${PROJECT_FILE_LIMIT_MB} MB.`,
-);
 
 const EXPORTERS: Record<
   ExportRequest["format"],
@@ -202,7 +179,9 @@ export function createApiRouter(
   store: ProjectStore,
   folders: FolderStore,
   projects = new ProjectQueue(),
+  limits: Partial<ImportLimits> = {},
 ): Router {
+  const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
   router.use(json({ limit: "50mb" }));
   const on = (route: Route, ...handlers: RequestHandler[]) =>
@@ -367,15 +346,19 @@ export function createApiRouter(
   );
 
   // ----- features -----
-  const importStep = wrap(async (req, res) => {
-    const file = req.file,
+  const receiveStep = receiveImport(store.uploads, uploadBytes);
+  const importUpload = async (req: any, res: any) => {
+    const file: Upload | undefined = req.file,
       importer = file && importerFor(file.originalname);
     if (!file || !importer)
       throw new ValidationError(
         `Choose a ${IMPORTERS.flatMap((i) => i.extensions).join(", ")} file`,
       );
     const filename = file.originalname.replace(/^.*[\\/]/, "").slice(0, 255);
-    const { features, sources } = importer.read(file.buffer, filename);
+    const { features, sources } = importer.read(
+      await readUpload(store.uploads, file, importBytes),
+      filename,
+    );
     features.forEach(validateFeature);
     const created = !req.params.id;
     const doc = created
@@ -403,8 +386,10 @@ export function createApiRouter(
             status?.error ?? `${importer.label} import failed`,
           );
       }
-      for (const bytes of sources.values())
-        await store.blobs(doc.id).put(bytes);
+      for (const [hash, bytes] of sources)
+        await (hash === file.hash
+          ? store.blobs(doc.id).adopt(file)
+          : store.blobs(doc.id).put(bytes));
       await store.save(doc);
       reply(res, { document: doc, evaluation: await evaluateAndSync(doc) });
     } catch (error) {
@@ -412,7 +397,8 @@ export function createApiRouter(
       if (created) await store.remove(doc.id);
       throw error;
     }
-  });
+  };
+  const importStep = wrap(discarding(store.uploads, importUpload));
   on(ROUTES.importStep, receiveStep, importStep);
   on(ROUTES.importStepInto, receiveStep, importStep);
 

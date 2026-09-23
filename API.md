@@ -163,8 +163,14 @@ its placement.
 `POST /projects/import-step` creates a project named from the filename.
 `POST /projects/:id/import-step` inserts into an existing project's timeline
 at the current marker. Both accept multipart field `file` (`.step`/`.stp`,
-`.igs`/`.iges`, `.brep`, `.stl`, `.obj` or `.3mf`, maximum 10 MB) and return
-`{ document, evaluation }`. Exact files must contain solid bodies. A file with
+`.igs`/`.iges`, `.brep`, `.stl`, `.obj` or `.3mf`) and return
+`{ document, evaluation }`. The upload streams to `uploads/` while it is
+hashed. Two limits apply, each 10 MB by default: the upload limit stops the
+transfer with 413 as soon as it is passed, and the import limit returns 413
+before the kernel reads a file over it. A STEP, IGES or BREP source moves
+from `uploads/` into the blob store once the import succeeds. A
+cancelled, oversized or unreadable upload removes its own file in `uploads/`
+and keeps no new project. Exact files must contain solid bodies. A file with
 none is 400 naming its format, for example `No solid found in the IGES file.`
 A mesh over 200,000 triangles is 400 with its count, for example
 `The STL mesh has 200,001 triangles; the limit is 200,000.` An open mesh

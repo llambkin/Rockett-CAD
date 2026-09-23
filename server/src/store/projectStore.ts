@@ -6,7 +6,7 @@ import {
   type ProjectSummary,
 } from "@rockett/shared";
 import { build } from "../build.js";
-import { BlobStore, HASH_RE, PendingBlobs } from "./blobStore.js";
+import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
 import { JsonStore, sha256, StoreError, type Inventory } from "./jsonStore.js";
 import { documentMigrations, TooNewError } from "./migrations.js";
 import type { Storage } from "./storage.js";
@@ -68,12 +68,14 @@ function imageBlobs(doc: CadDocument): string[] {
 
 export class ProjectStore {
   private documents: JsonStore<CadDocument, PendingBlobs>;
+  readonly uploads: Uploads;
 
   constructor(
     private readonly storage: Storage,
     private readonly validate: (doc: CadDocument) => void,
     private readonly now: () => number = Date.now,
   ) {
+    this.uploads = new Uploads(storage);
     this.documents = new JsonStore({
       storage,
       root: "projects",

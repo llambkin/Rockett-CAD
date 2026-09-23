@@ -7,7 +7,7 @@ import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { validateDocument } from "../src/api/validate.js";
 import { documentMigrations, migrate } from "../src/store/migrations.js";
-import { LocalStorage, type Storage } from "../src/store/storage.js";
+import { LocalStorage, type Data, type Storage } from "../src/store/storage.js";
 import { MemoryStorage } from "./helpers/memoryStorage.js";
 import { PendingBlobs } from "../src/store/blobStore.js";
 
@@ -64,8 +64,12 @@ class FailingStorage implements Storage {
     return this.inner.files(dir);
   }
 
-  writeAtomic(file: string, data: string | Uint8Array) {
+  writeAtomic(file: string, data: Data) {
     return this.mutate(() => this.inner.writeAtomic(file, data));
+  }
+
+  move(from: string, to: string) {
+    return this.mutate(() => this.inner.move(from, to));
   }
 
   remove(target: string) {
@@ -323,6 +327,7 @@ describe.each(backends)("project migration on %s", (_, make) => {
       list: (dir) => clean.list(dir),
       files: (dir) => clean.files(dir),
       remove: (target) => clean.remove(target),
+      move: (from, to) => clean.move(from, to),
       writeAtomic: async (file, data) => {
         if (file.startsWith("backups/") && !exported) {
           exported = store.saveExport(id, "part.stl", stl);

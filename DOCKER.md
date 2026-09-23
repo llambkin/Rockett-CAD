@@ -97,6 +97,7 @@ docker run -d --name rockett-cad \
 │           └── files/          # byte-for-byte copy of the project directory
 ├── folders/
 │   └── folders.json        # the shared folder tree and project placement
+├── uploads/                # model imports while they stream in; each is removed when its request ends
 └── projects/
     └── {projectId}/
         ├── document.json   # the parametric document (full history)

@@ -194,6 +194,7 @@ describe("reference images in the blob store", () => {
       list: (dir) => local.list(dir),
       files: (dir) => local.files(dir),
       remove: (target) => local.remove(target),
+      move: (from, to) => local.move(from, to),
     };
     const store = new ProjectStore(storage, validateDocument);
     await expect(store.save(await store.load(id))).rejects.toThrow(/damaged/);

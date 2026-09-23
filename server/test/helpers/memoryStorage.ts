@@ -1,4 +1,8 @@
-import { storagePath, type Storage } from "../../src/store/storage.js";
+import {
+  storagePath,
+  type Data,
+  type Storage,
+} from "../../src/store/storage.js";
 
 export class MemoryStorage implements Storage {
   readonly data = new Map<string, Buffer>();
@@ -9,11 +13,17 @@ export class MemoryStorage implements Storage {
     return data;
   }
 
-  async writeAtomic(file: string, data: string | Uint8Array): Promise<void> {
-    this.data.set(
-      storagePath(file),
-      typeof data === "string" ? Buffer.from(data) : Buffer.from(data),
-    );
+  async writeAtomic(file: string, data: Data): Promise<void> {
+    const chunks: Uint8Array[] = [];
+    if (typeof data === "string" || data instanceof Uint8Array)
+      chunks.push(Buffer.from(data));
+    else for await (const chunk of data) chunks.push(chunk);
+    this.data.set(storagePath(file), Buffer.concat(chunks));
+  }
+
+  async move(from: string, to: string): Promise<void> {
+    this.data.set(storagePath(to), await this.read(from));
+    this.data.delete(storagePath(from));
   }
 
   async list(dir: string): Promise<string[]> {
