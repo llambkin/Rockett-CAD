@@ -1,4 +1,6 @@
-# Rockett CAD - Team Rockett!
+# Rockett CAD
+
+Team Rockett!
 
 Prepare for trouble!
 And make it double!
