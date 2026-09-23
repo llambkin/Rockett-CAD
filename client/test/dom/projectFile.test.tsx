@@ -21,6 +21,8 @@ const fetchStub = vi.fn(async (url: string, init: RequestInit) => {
   if (url === "/api/health") return new Promise<Response>(() => {});
   if (url === "/api/projects" && init.method === "GET")
     return Response.json([plate]);
+  if (url === "/api/folders")
+    return Response.json({ folders: [], placement: {} });
   if (url === "/api/projects/p1/file" && init.method === "GET")
     return new Response("{}", {
       headers: {

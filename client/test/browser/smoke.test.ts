@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
-import type { EvaluateResult, ProjectSummary } from "@rockett/shared";
+import type {
+  EvaluateResult,
+  FolderTree,
+  ProjectSummary,
+} from "@rockett/shared";
 import { startBuiltApp, type BuiltApp } from "./builtApp";
 
 let app: BuiltApp;
@@ -234,4 +238,34 @@ it("keeps every toolbar label inside its group", async () => {
   await page.getByRole("button", { name: "Create Sketch" }).click();
   await page.locator(".tb-title", { hasText: "CONSTRAIN" }).waitFor();
   expect(await overflowing()).toEqual([]);
+});
+
+it("drags a project into a folder and Back to projects returns there", async () => {
+  const path = () => new URL(page.url()).pathname;
+  await page.goto(app.origin);
+  await page.getByRole("button", { name: "New folder" }).click();
+  await page.getByLabel("Folder name").fill("Brackets");
+  await page.getByLabel("Folder name").press("Enter");
+  const folder = page.locator(".project-row", { hasText: "Brackets" });
+  await folder.getByText("0 items").waitFor();
+  await page.locator(".project-row", { hasText: "Smoke plate" }).dragTo(folder);
+  await folder.getByText("1 item").waitFor();
+  const { folders } = await api<FolderTree>("/folders");
+
+  await folder.locator(".project-open").click();
+  expect(path()).toBe(`/folders/${folders[0]!.id}`);
+  await page.locator(".project-open", { hasText: "Smoke plate" }).click();
+  await bodiesHeader().getByText("Bodies (1)").waitFor();
+  await page.getByTitle("Back to projects").click();
+  await page.locator(".breadcrumb", { hasText: "Brackets" }).waitFor();
+  expect(path()).toBe(`/folders/${folders[0]!.id}`);
+
+  await page
+    .locator(".breadcrumb")
+    .getByRole("button", { name: "Projects" })
+    .click();
+  await folder.waitFor();
+  expect(path()).toBe("/");
+  expect(failures).toEqual([]);
+  expect(app.serverErrors).toEqual([]);
 });

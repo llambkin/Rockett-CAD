@@ -1045,6 +1045,7 @@ kbd {
 
 .new-project input {
   flex: 1;
+  min-width: 0;
   padding: 7px 10px;
 }
 
@@ -1095,6 +1096,48 @@ kbd {
 
 .icon-btn.danger:hover {
   color: var(--err);
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-weight: 600;
+  margin: 8px 0 2px;
+}
+
+.breadcrumb > * + *::before {
+  content: ">";
+  color: var(--text-dim);
+  margin: 0 6px;
+}
+
+.breadcrumb button {
+  color: var(--accent);
+  border-radius: 4px;
+}
+
+.new-project .btn {
+  white-space: nowrap;
+}
+
+.folder-open {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-open .tree-icon {
+  font-size: 14px;
+}
+
+.drop-target {
+  outline: 2px solid var(--accent);
+  border-radius: 6px;
+}
+
+.move-tree .tree-item {
+  width: 100%;
 }
 .dim-label.offset-label {
   border: 1px solid var(--offset-border);

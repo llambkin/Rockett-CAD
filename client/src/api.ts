@@ -132,8 +132,12 @@ export const api = {
       : send(ROUTES.importStep, {}, options);
   },
   listProjects: () => send(ROUTES.listProjects, {}),
-  createProject: (name: string) =>
-    send(ROUTES.createProject, {}, { body: { name } }),
+  createProject: (name: string, folderId: string | null = null) =>
+    send(
+      ROUTES.createProject,
+      {},
+      { body: folderId === null ? { name } : { name, folderId } },
+    ),
   getProject: (id: string) => send(ROUTES.getProject, { id }),
   deleteProject: (id: string) => send(ROUTES.deleteProject, { id }),
   duplicateProject: (id: string, name?: string) =>
@@ -146,6 +150,17 @@ export const api = {
   },
   uploadProjectFile: (file: File) =>
     send(ROUTES.uploadProjectFile, {}, { body: fileForm("file", file) }),
+  placeProject: (id: string, folderId: string | null) =>
+    send(ROUTES.placeProject, { id }, { body: { folderId } }),
+
+  listFolders: () => send(ROUTES.listFolders, {}),
+  createFolder: (name: string, parentId: string | null) =>
+    send(ROUTES.createFolder, {}, { body: { name, parentId } }),
+  renameFolder: (id: string, name: string) =>
+    send(ROUTES.updateFolder, { id }, { body: { name } }),
+  moveFolder: (id: string, parentId: string | null) =>
+    send(ROUTES.updateFolder, { id }, { body: { parentId } }),
+  deleteFolder: (id: string) => send(ROUTES.deleteFolder, { id }),
 
   evaluate: (id: string, position?: number) =>
     send(ROUTES.evaluate, { id }, { position }),

@@ -14,6 +14,7 @@ vi.mock("../../src/api", () => ({
   api: {
     health: vi.fn(() => new Promise(() => {})),
     listProjects: vi.fn(),
+    listFolders: vi.fn(async () => ({ folders: [], placement: {} })),
     duplicateProject: vi.fn(),
     deleteProject: vi.fn(),
   },
@@ -182,6 +183,7 @@ it("duplicates a project from its row menu and confirms a delete", async () => {
     "Rename",
     "Duplicate",
     "Download",
+    "Move to…",
     "Delete",
   ]);
   await choose("Duplicate");

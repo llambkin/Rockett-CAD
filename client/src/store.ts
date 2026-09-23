@@ -26,6 +26,7 @@ import {
   editSketchOffset,
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
+import { projectIdFromPath, projectPath, showPath } from "./paths";
 
 // ---------------------------------------------------------------------------
 
@@ -267,25 +268,6 @@ function endPreviews(): Promise<void> | null {
   return preview.inFlight;
 }
 
-function projectPath(id: string): string {
-  return `/projects/${encodeURIComponent(id)}`;
-}
-
-function projectIdFromPath(path: string): string | null {
-  const segment = /^\/projects\/([^/]+)\/?$/.exec(path)?.[1];
-  if (segment === undefined) return null;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
-function showPath(path: string): void {
-  if (window.location.pathname !== path)
-    window.history.pushState(null, "", path);
-}
-
 export function followPath(): Promise<void> | void {
   const id = projectIdFromPath(window.location.pathname);
   const s = useStore.getState();
@@ -338,7 +320,6 @@ export const useStore = create<State>((set, get) => ({
   },
 
   closeProject() {
-    showPath("/");
     set({
       error: null,
       projectId: null,

@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import type { ProjectSummary } from "@rockett/shared";
-import { api, saveDownload } from "./api";
+import { useEffect, useState } from "react";
 import { followPath, useStore } from "./store";
 import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
@@ -9,11 +7,11 @@ import { ViewportView } from "./components/ViewportView";
 import { FeatureDialog } from "./components/FeatureDialog";
 import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
-import { StepImportButton } from "./components/StepImportButton";
 import { DraggablePanel } from "./components/DraggablePanel";
-import { ContextMenu, type MenuItem } from "./components/ContextMenu";
+import { ProjectList, backToProjects } from "./components/ProjectList";
+import { RenameInput } from "./components/RenameInput";
+import { VersionLabel } from "./components/VersionLabel";
 import { viewportHandle } from "./viewportRef";
-import { versionLabel } from "./versionLabel";
 import {
   IDLE_SHORTCUTS,
   LINE_SHORTCUTS,
@@ -30,254 +28,6 @@ export function App() {
     return () => window.removeEventListener("popstate", followPath);
   }, []);
   return projectId ? <Workspace /> : <ProjectList />;
-}
-
-function ProjectList() {
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [name, setName] = useState("");
-  const [listError, setError] = useState<string | null>(null);
-  const loadError = useStore((s) => s.error);
-  const error = listError ?? loadError;
-  /** id of the project whose name is being edited in place */
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const openProject = useStore((s) => s.openProject);
-  const [menu, setMenu] = useState<{
-    x: number;
-    y: number;
-    items: MenuItem[];
-  } | null>(null);
-
-  const refresh = () => {
-    api
-      .listProjects()
-      .then(setProjects)
-      .catch((e) => setError(e.message));
-  };
-  useEffect(refresh, []);
-
-  const duplicate = (p: ProjectSummary) =>
-    void api.duplicateProject(p.id).then(refresh);
-  const download = (p: ProjectSummary) =>
-    void api
-      .downloadProjectFile(p.id)
-      .then(saveDownload)
-      .catch((e) => setError(e.message));
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const openFile = async (file?: File) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { document } = await api.uploadProjectFile(file);
-      await openProject(document.id);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setUploading(false);
-      if (fileInput.current) fileInput.current.value = "";
-    }
-  };
-  const remove = (p: ProjectSummary) => {
-    if (window.confirm(`Delete project "${p.name}"?`))
-      void api.deleteProject(p.id).then(refresh);
-  };
-
-  const create = async () => {
-    try {
-      const { document } = await api.createProject(name || "Untitled");
-      await openProject(document.id);
-    } catch (e: any) {
-      setError(e.message);
-    }
-  };
-
-  return (
-    <div className="project-list-page">
-      <div className="project-list-card">
-        <h1>
-          <span className="logo">⬢</span> Rockett CAD
-        </h1>
-        <p className="tagline">Your CAD. Your server. Your plugins.</p>
-        {error && <div className="error-banner">{error}</div>}
-        <div className="new-project">
-          <input
-            placeholder="New project name…"
-            aria-label="New project name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void create()}
-          />
-          <button className="btn primary" onClick={() => void create()}>
-            Create
-          </button>
-        </div>
-        <div className="projects">
-          <StepImportButton newProject onError={setError} />
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".rockett"
-            hidden
-            aria-label="Project file"
-            onChange={(e) => void openFile(e.target.files?.[0])}
-          />
-          <button
-            className="btn"
-            disabled={uploading}
-            title="Open a .rockett project file as a new project"
-            onClick={() => fileInput.current?.click()}
-          >
-            {uploading ? "Opening project file…" : "Open project file"}
-          </button>
-          {projects.map((p) => (
-            <div
-              key={p.id}
-              className="project-row"
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setMenu({
-                  x: e.clientX,
-                  y: e.clientY,
-                  items: [
-                    { label: "Open", action: () => void openProject(p.id) },
-                    { label: "Rename", action: () => setRenamingId(p.id) },
-                    { label: "Duplicate", action: () => duplicate(p) },
-                    { label: "Download", action: () => download(p) },
-                    { label: "Delete", danger: true, action: () => remove(p) },
-                  ],
-                });
-              }}
-            >
-              {renamingId === p.id ? (
-                <div className="project-open project-renaming">
-                  <RenameInput
-                    value={p.name}
-                    className="project-rename"
-                    onCommit={(n) => {
-                      setRenamingId(null);
-                      api
-                        .renameProject(p.id, n)
-                        .then(refresh)
-                        .catch((e) => setError(e.message));
-                    }}
-                    onCancel={() => setRenamingId(null)}
-                  />
-                  <span>
-                    {p.featureCount} features ·{" "}
-                    {new Date(p.modifiedAt).toLocaleString()}
-                  </span>
-                </div>
-              ) : (
-                <button
-                  className="project-open"
-                  onClick={() => void openProject(p.id)}
-                  onDoubleClick={(e) => e.preventDefault()}
-                >
-                  <b>{p.name}</b>
-                  <span>
-                    {p.featureCount} features ·{" "}
-                    {new Date(p.modifiedAt).toLocaleString()}
-                  </span>
-                </button>
-              )}
-              <button
-                className="icon-btn"
-                title="Rename"
-                aria-label={`Rename ${p.name}`}
-                onClick={() => setRenamingId(p.id)}
-              >
-                ✎
-              </button>
-              <button
-                className="icon-btn"
-                title="Duplicate"
-                onClick={() => duplicate(p)}
-              >
-                ⎘
-              </button>
-              <button
-                className="icon-btn"
-                title="Download project file"
-                aria-label={`Download ${p.name}`}
-                onClick={() => download(p)}
-              >
-                ⤓
-              </button>
-              <button
-                className="icon-btn danger"
-                title="Delete"
-                onClick={() => remove(p)}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-          {projects.length === 0 && (
-            <div className="tree-empty">No projects yet</div>
-          )}
-        </div>
-        {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
-      </div>
-      <VersionLabel />
-    </div>
-  );
-}
-
-function VersionLabel() {
-  const [label, setLabel] = useState<ReturnType<typeof versionLabel>>();
-  useEffect(() => {
-    api
-      .health()
-      .then((h) => setLabel(versionLabel(h)))
-      .catch(() => setLabel(undefined));
-  }, []);
-  if (!label) return null;
-  return (
-    <div className="version-label" title={label.title}>
-      {label.text}
-    </div>
-  );
-}
-
-/**
- * Inline text editor used for renaming (project header + project list).
- * Enter / blur commit, Escape cancels; an empty name is ignored.
- */
-function RenameInput({
-  value,
-  className,
-  onCommit,
-  onCancel,
-}: {
-  value: string;
-  className: string;
-  onCommit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [text, setText] = useState(value);
-  const commit = () => {
-    const t = text.trim();
-    if (t && t !== value) onCommit(t);
-    else onCancel();
-  };
-  return (
-    <input
-      autoFocus
-      className={className}
-      aria-label="Project name"
-      value={text}
-      maxLength={200}
-      onFocus={(e) => e.target.select()}
-      onChange={(e) => setText(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commit();
-        if (e.key === "Escape") onCancel();
-        e.stopPropagation();
-      }}
-      onBlur={commit}
-      onClick={(e) => e.stopPropagation()}
-    />
-  );
 }
 
 /** The open project's name in the top bar — click to rename. */
@@ -344,7 +94,6 @@ function Workspace() {
   const setError = useStore((s) => s.setError);
   const busy = useStore((s) => s.busy);
   const document_ = useStore((s) => s.document);
-  const closeProject = useStore((s) => s.closeProject);
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
   const mode = useStore((s) => s.mode);
@@ -425,7 +174,7 @@ function Workspace() {
       <div className="top-bar">
         <button
           className="app-title"
-          onClick={closeProject}
+          onClick={() => void backToProjects()}
           title="Back to projects"
         >
           ⬢ Rockett CAD

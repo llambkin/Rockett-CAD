@@ -1,4 +1,4 @@
-client/src/App.tsx 7
+client/src/App.tsx 2
 client/src/api.ts 1
 client/src/components/DraggablePanel.tsx 8
 client/src/components/FeatureDialog.tsx 24

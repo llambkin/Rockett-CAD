@@ -71,6 +71,7 @@ everything downstream against persistent topology references.
 - **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline.
 - **Tool panels**: panels stay inside the window; Escape cancels a feature dialog and reverts its preview.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions; right-drag still orbits.
+- **Projects**: sort projects into folders; create, rename, move or delete them by button, right-click or drag.
 - **Project files**: download a project as one `.rockett` file, or open one as a new project.
 - **Reload**: refreshing the page reopens the project you had open; Back returns to the list.
 - **Errors**: stay visible until dismissed, and their text can be copied.

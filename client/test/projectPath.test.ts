@@ -2,8 +2,9 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { createEmptyDocument } from "@rockett/shared";
 import { followPath, useStore } from "../src/store";
 import { api } from "../src/api";
+import { backToProjects } from "../src/components/ProjectList";
 vi.mock("../src/api", () => ({
-  api: { getProject: vi.fn(), evaluate: vi.fn() },
+  api: { getProject: vi.fn(), evaluate: vi.fn(), listFolders: vi.fn() },
 }));
 
 const location = { pathname: "/" };
@@ -29,14 +30,39 @@ beforeEach(() => {
     document: createEmptyDocument(id, "Doc"),
   }));
   vi.mocked(api.evaluate).mockResolvedValue({} as any);
+  vi.mocked(api.listFolders).mockResolvedValue({
+    folders: [{ id: "f 1", name: "Brackets", parentId: null }],
+    placement: { p1: "f 1", p2: "gone" },
+  });
 });
 
-it("opening pushes the encoded project path and closing pushes /", async () => {
+it("opening pushes the encoded project path and Back to projects pushes /", async () => {
   await useStore.getState().openProject("a b");
   expect(location.pathname).toBe("/projects/a%20b");
-  useStore.getState().closeProject();
-  expect(location.pathname).toBe("/");
+  await backToProjects();
+  expect(useStore.getState().projectId).toBeNull();
   expect(entries).toEqual(["/", "/projects/a%20b", "/"]);
+});
+
+it("Back to projects returns to the project's folder, or the root when it is missing", async () => {
+  await useStore.getState().openProject("p1");
+  await backToProjects();
+  expect(location.pathname).toBe("/folders/f%201");
+  await useStore.getState().openProject("p2");
+  await backToProjects();
+  expect(location.pathname).toBe("/");
+  vi.mocked(api.listFolders).mockRejectedValue(new Error("offline"));
+  await useStore.getState().openProject("p1");
+  await backToProjects();
+  expect(location.pathname).toBe("/");
+});
+
+it("a folder path closes an open project without a new entry", async () => {
+  await useStore.getState().openProject("p1");
+  location.pathname = "/folders/f1";
+  await followPath();
+  expect(useStore.getState().projectId).toBeNull();
+  expect(history.pushState).toHaveBeenCalledTimes(1);
 });
 
 it("a store started at a project path opens that project without a new entry", async () => {
