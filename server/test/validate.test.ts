@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Feature } from "@rockett/shared";
-import { validateFeature, ValidationError } from "../src/api/validate.js";
+import {
+  validateDocument,
+  validateFeature,
+  ValidationError,
+} from "../src/api/validate.js";
 
 const base = { id: "f1", name: "F1", suppressed: false };
 const profile = { sketchId: "sk", profileId: "p" };
@@ -88,6 +92,22 @@ describe("validateFeature", () => {
     ];
     for (const f of missing)
       expect(() => validateFeature(f as any)).toThrow(ValidationError);
+  });
+
+  it("malformed shapes give ValidationError", () => {
+    const sketch = { ...base, type: "sketch", plane, constraints: [] };
+    const features = [
+      { ...base, type: "constructionPlane" },
+      { ...base, type: "referenceImage", opacity: 1, width: 1, height: 1 },
+      { ...sketch, entities: [null] },
+      null,
+      [],
+      "abc",
+    ];
+    for (const f of features)
+      expect(() => validateFeature(f as any)).toThrow(ValidationError);
+    const doc = { id: "d", name: "D", features: [null], timelinePosition: 0 };
+    expect(() => validateDocument(doc as any)).toThrow(ValidationError);
   });
 
   it("rejects an unknown feature type", () => {

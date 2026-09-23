@@ -478,6 +478,11 @@ describe("REST API MVP workflow", () => {
         feature: { id: "cam1", type: "cam", name: "x", suppressed: false },
       }),
     ).rejects.toThrow(/400.*unknown feature type cam/);
+    await expect(
+      api("POST", `${url}/features`, {
+        feature: { id: "cp1", type: "constructionPlane" },
+      }),
+    ).rejects.toThrow(/400/);
     await api("POST", `${url}/features`, {
       feature: {
         id: "sk",

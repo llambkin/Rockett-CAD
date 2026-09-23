@@ -35,6 +35,12 @@ function list(v: unknown, label: string, min: number, max: number): void {
   }
 }
 
+function record(v: unknown, label: string): void {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    throw new ValidationError(`${label} must be an object`);
+  }
+}
+
 function planeRef(v: unknown, label: string): void {
   const kind = (v as { kind?: unknown } | null)?.kind;
   if (kind !== "origin" && kind !== "construction" && kind !== "face") {
@@ -45,6 +51,7 @@ function planeRef(v: unknown, label: string): void {
 const MAX_DIM = 100_000; // 100 m in mm — sanity bound
 
 export function validateFeature(f: Feature): void {
+  record(f, "feature");
   str(f.id, "feature id", 100);
   if (f.name !== undefined) str(f.name, "feature name", 120);
   switch (f.type) {
@@ -70,7 +77,7 @@ export function validateFeature(f: Feature): void {
         const ids = new Set<string>();
         const outputs = new Set<string>();
         for (const offset of f.offsets) {
-          if (!offset) throw new ValidationError("sketch offset invalid");
+          record(offset, "sketch offset");
           str(offset.id, "offset id", 100);
           if (ids.has(offset.id))
             throw new ValidationError("duplicate offset id");
@@ -101,6 +108,7 @@ export function validateFeature(f: Feature): void {
       if (f.visible !== undefined && typeof f.visible !== "boolean") {
         throw new ValidationError("sketch visible must be a boolean");
       }
+      for (const e of f.entities) record(e, "sketch entity");
       const entityIds = new Set(f.entities.map((e) => e.id));
       if (entityIds.size !== f.entities.length)
         throw new ValidationError("duplicate sketch entity ID");
@@ -207,12 +215,14 @@ export function validateFeature(f: Feature): void {
       num(f.totalAngle, "pattern angle", -360, 360);
       break;
     case "constructionPlane":
+      record(f.method, "plane method");
       if (f.method.kind === "offset") {
         num(f.method.distance, "plane offset", -MAX_DIM, MAX_DIM);
       }
       break;
     case "referenceImage":
       num(f.opacity, "opacity", 0, 1);
+      record(f.transform, "image transform");
       num(f.transform.scale, "image scale", 1e-9, MAX_DIM);
       num(f.width, "image width", 1, 65536);
       num(f.height, "image height", 1, 65536);
@@ -248,9 +258,9 @@ export function validateDocument(doc: CadDocument): void {
   num(doc.timelinePosition, "timeline position", 0, doc.features.length);
   const ids = new Set<string>();
   for (const f of doc.features) {
+    validateFeature(f);
     if (ids.has(f.id))
       throw new ValidationError(`duplicate feature id ${f.id}`);
     ids.add(f.id);
-    validateFeature(f);
   }
 }
