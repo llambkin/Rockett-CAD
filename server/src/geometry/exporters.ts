@@ -9,7 +9,7 @@
  */
 
 import { zipSync, strToU8 } from "fflate";
-import { getKernel, faces as facesOf } from "./kernel.js";
+import { meshShape } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
 
 interface Mesh {
@@ -19,51 +19,12 @@ interface Mesh {
 
 /** Tessellate a body at export quality. */
 export function exportMesh(body: NamedBody, quality = 0.05): Mesh {
-  const k = getKernel();
-  const mesh = new k.BRepMesh_IncrementalMesh_2(
-    body.shape,
-    quality,
-    false,
-    0.3,
-    false,
-  );
-  mesh.delete();
-
   const positions: number[] = [];
   const indices: number[] = [];
-  const reversedEnum = k.TopAbs_Orientation.TopAbs_REVERSED;
-
-  for (const face of facesOf(body.shape)) {
-    const loc = new k.TopLoc_Location_1();
-    const triHandle = k.BRep_Tool.Triangulation(face, loc, 0);
-    if (triHandle.IsNull()) {
-      loc.delete();
-      triHandle.delete();
-      continue;
-    }
-    const tri = triHandle.get();
-    const trsf = loc.Transformation();
-    const reversed = face.Orientation_1() === reversedEnum;
+  for (const m of meshShape(body.shape, { linear: quality, angular: 0.3 })) {
     const offset = positions.length / 3;
-    const nbNodes = tri.NbNodes();
-    for (let i = 1; i <= nbNodes; i++) {
-      const p = tri.Node(i).Transformed(trsf);
-      positions.push(p.X(), p.Y(), p.Z());
-      p.delete();
-    }
-    const nbTris = tri.NbTriangles();
-    for (let i = 1; i <= nbTris; i++) {
-      const t = tri.Triangle(i);
-      let a = t.Value(1),
-        b = t.Value(2),
-        c = t.Value(3);
-      t.delete();
-      if (reversed) [b, c] = [c, b];
-      indices.push(offset + a - 1, offset + b - 1, offset + c - 1);
-    }
-    trsf.delete();
-    loc.delete();
-    triHandle.delete();
+    for (const p of m.positions) positions.push(p);
+    for (const i of m.indices) indices.push(offset + i);
   }
   return { positions, indices };
 }

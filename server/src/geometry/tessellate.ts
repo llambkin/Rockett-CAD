@@ -19,9 +19,9 @@ import {
   getKernel,
   lengthOf,
   shapeHash,
-  faces as facesOf,
   type Shape,
 } from "./kernel.js";
+import { meshShape } from "./mesh.js";
 import {
   computeEdgeNames,
   computeVertexNames,
@@ -41,102 +41,50 @@ export function tessellateBody(
   opts: TessellationOptions = {},
 ): BodyPayload {
   const k = getKernel();
-  const linear = opts.linear ?? 0.08;
-  const angular = opts.angular ?? 0.35;
-
-  // (Re)mesh. IncrementalMesh caches on the shape; calling again with the
-  // same parameters is cheap.
-  const mesh = new k.BRepMesh_IncrementalMesh_2(
-    body.shape,
-    linear,
-    false,
-    angular,
-    false,
-  );
-  mesh.delete();
-
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
   const faceInfos: FaceInfo[] = [];
 
-  const reversedEnum = k.TopAbs_Orientation.TopAbs_REVERSED;
-
-  for (const face of facesOf(body.shape)) {
-    const name = body.names.get(shapeHash(face)) ?? "?";
-    const loc = new k.TopLoc_Location_1();
-    const triHandle = k.BRep_Tool.Triangulation(face, loc, 0);
-    if (triHandle.IsNull()) {
-      loc.delete();
-      triHandle.delete();
-      continue;
-    }
-    const tri = triHandle.get();
-    const trsf = loc.Transformation();
-    const reversed = face.Orientation_1() === reversedEnum;
-
+  for (const m of meshShape(body.shape, {
+    linear: opts.linear ?? 0.08,
+    angular: opts.angular ?? 0.35,
+  })) {
     const start = indices.length;
     const vertexOffset = positions.length / 3;
-
-    tri.ComputeNormals();
-
-    const nbNodes = tri.NbNodes();
-    for (let i = 1; i <= nbNodes; i++) {
-      const p = tri.Node(i).Transformed(trsf);
-      positions.push(p.X(), p.Y(), p.Z());
-      p.delete();
-      const d = tri.Normal_1(i).Transformed(trsf);
-      const sgn = reversed ? -1 : 1;
-      normals.push(sgn * d.X(), sgn * d.Y(), sgn * d.Z());
-      d.delete();
+    for (let i = 0; i < m.positions.length; i++) {
+      positions.push(m.positions[i]);
+      normals.push(m.normals[i]);
     }
 
-    const nbTris = tri.NbTriangles();
+    const P = m.positions;
     let area = 0;
-    for (let i = 1; i <= nbTris; i++) {
-      const t = tri.Triangle(i);
-      let a = t.Value(1),
-        b = t.Value(2),
-        c = t.Value(3);
-      t.delete();
-      if (reversed) [b, c] = [c, b];
-      const ia = vertexOffset + a - 1;
-      const ib = vertexOffset + b - 1;
-      const ic = vertexOffset + c - 1;
-      indices.push(ia, ib, ic);
-      // approximate area from triangles
-      const ax = positions[ia * 3],
-        ay = positions[ia * 3 + 1],
-        az = positions[ia * 3 + 2];
-      const bx = positions[ib * 3],
-        by = positions[ib * 3 + 1],
-        bz = positions[ib * 3 + 2];
-      const cx = positions[ic * 3],
-        cy = positions[ic * 3 + 1],
-        cz = positions[ic * 3 + 2];
-      const ux = bx - ax,
-        uy = by - ay,
-        uz = bz - az;
-      const vx = cx - ax,
-        vy = cy - ay,
-        vz = cz - az;
-      const nx = uy * vz - uz * vy,
-        ny = uz * vx - ux * vz,
-        nz = ux * vy - uy * vx;
-      area += Math.hypot(nx, ny, nz) / 2;
+    for (let i = 0; i < m.indices.length; i += 3) {
+      const a = m.indices[i] * 3,
+        b = m.indices[i + 1] * 3,
+        c = m.indices[i + 2] * 3;
+      indices.push(
+        vertexOffset + m.indices[i],
+        vertexOffset + m.indices[i + 1],
+        vertexOffset + m.indices[i + 2],
+      );
+      const ux = P[b] - P[a],
+        uy = P[b + 1] - P[a + 1],
+        uz = P[b + 2] - P[a + 2];
+      const vx = P[c] - P[a],
+        vy = P[c + 1] - P[a + 1],
+        vz = P[c + 2] - P[a + 2];
+      area +=
+        Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
     }
 
     faceInfos.push({
-      name,
+      name: body.names.get(shapeHash(m.face)) ?? "?",
       start,
       count: indices.length - start,
-      surface: surfaceInfo(face),
+      surface: surfaceInfo(m.face),
       area,
     });
-
-    trsf.delete();
-    loc.delete();
-    triHandle.delete();
   }
 
   // --- edges ---
