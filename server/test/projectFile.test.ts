@@ -137,10 +137,12 @@ describe("project file", () => {
     expect(imported.status).toBe(200);
     const { document } = await imported.json();
     expect(document.id).not.toBe(project.id);
+    expect(document.revision).toBe(1);
     expect({
       ...document,
       id: project.id,
       modifiedAt: project.modifiedAt,
+      revision: project.revision,
     }).toEqual(project);
     expect(await projectDirs()).toEqual(new Set([...before, document.id]));
     expect((await json(`/projects/${document.id}`)).document).toEqual(document);

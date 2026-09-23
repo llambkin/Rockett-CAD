@@ -373,6 +373,15 @@ Double-clicking a line edits its L and ∠ together, first adding either one
 at its current value when missing. A `lineAngle` replaces any `horizontal`
 or `vertical` constraint on the same line, which it implies.
 
+## Revision (schema 7)
+
+Schema version 7 adds `revision` and `savedWith` to the document. The store
+sets `revision` to the stored value plus one on every write, whatever the
+caller sent, so a new project saves as 1 and a read never changes it.
+`savedWith` is the `version` and `commit` that `GET /health` reports for the
+build that wrote the file. The 6 to 7 migration adds `revision: 0` and
+`savedWith: null`.
+
 ## Tangent edge chains
 
 Fillet/Chamfer store optional tangentChain metadata (absent preserves prior

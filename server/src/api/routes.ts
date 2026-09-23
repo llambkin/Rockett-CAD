@@ -25,7 +25,7 @@ import {
   type Method,
   type Route,
 } from "@rockett/shared";
-import { version } from "../../../package.json";
+import { build } from "../build.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
 import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
@@ -234,9 +234,8 @@ export function createApiRouter(
   on(ROUTES.health, (_req, res) => {
     res.json({
       ok: true,
-      version,
+      ...build(),
       schemaVersion: SCHEMA_VERSION,
-      commit: process.env.ROCKETT_COMMIT || null,
       describe: process.env.ROCKETT_DESCRIBE || null,
     });
   });

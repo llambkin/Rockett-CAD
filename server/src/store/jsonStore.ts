@@ -88,7 +88,12 @@ export class JsonStore<T> {
   }
 
   write(key: string, value: T): Promise<void> {
+    return this.update(key, () => value);
+  }
+
+  update(key: string, change: (previous: T | undefined) => T): Promise<void> {
     return this.writes.run(key, async () => {
+      const value = change(await this.previous(key));
       this.options.validate?.(value);
       if (!(await this.options.unbacked?.(key))) await this.upgrade(key);
       await this.options.storage.writeAtomic(
@@ -96,6 +101,16 @@ export class JsonStore<T> {
         JSON.stringify(value, null, 1),
       );
     });
+  }
+
+  private async previous(key: string): Promise<T | undefined> {
+    try {
+      return await this.read(key);
+    } catch (err) {
+      if (err instanceof StoreError && err.code === "not_found")
+        return undefined;
+      throw err;
+    }
   }
 
   private async upgrade(key: string): Promise<void> {

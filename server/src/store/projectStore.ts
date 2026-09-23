@@ -5,6 +5,7 @@ import {
   type CadDocument,
   type ProjectSummary,
 } from "@rockett/shared";
+import { build } from "../build.js";
 import { BlobStore } from "./blobStore.js";
 import { JsonStore, StoreError, type Inventory } from "./jsonStore.js";
 import { documentMigrations, TooNewError } from "./migrations.js";
@@ -138,8 +139,14 @@ export class ProjectStore {
   async save(doc: CadDocument): Promise<void> {
     const snapshot = structuredClone(doc);
     snapshot.modifiedAt = new Date().toISOString();
-    await this.documents.write(doc.id, snapshot);
+    snapshot.savedWith = build();
+    await this.documents.update(doc.id, (previous) => {
+      snapshot.revision = (previous?.revision ?? 0) + 1;
+      return snapshot;
+    });
     doc.modifiedAt = snapshot.modifiedAt;
+    doc.revision = snapshot.revision;
+    doc.savedWith = snapshot.savedWith;
   }
 
   async duplicate(id: string, newName?: string): Promise<CadDocument> {

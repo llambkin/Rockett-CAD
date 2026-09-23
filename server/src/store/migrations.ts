@@ -59,5 +59,6 @@ export const documentMigrations: Migrations<CadDocument> = {
     3: (doc) => doc,
     4: (doc) => doc,
     5: (doc) => ({ ...doc, groups: [] }),
+    6: (doc) => ({ ...doc, revision: 0, savedWith: null }),
   },
 };

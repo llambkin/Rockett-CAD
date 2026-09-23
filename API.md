@@ -204,6 +204,8 @@ feature in `detail`, such as `/transform/scale`.
 
 `PUT /projects/:id/document` also parses the document against
 `documentSchema` in the same file: `schemaVersion` equals the current version,
+`revision` is a non-negative integer, `savedWith` is `null` or
+`{ version, commit }` with `commit` a string or `null`,
 `units` is `mm`, `cm`, `m` or `in`, `bodyMeta` values are
 `{ name: string, visible: boolean }`, `counters` are non-negative integers,
 `groups` have unique ids, a name of 1 to 200 characters, `kind` `body` or

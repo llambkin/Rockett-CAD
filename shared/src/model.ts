@@ -11,7 +11,7 @@
 
 import type { Units } from "./units.js";
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -420,6 +420,8 @@ export interface CameraState {
 
 export interface CadDocument {
   schemaVersion: number;
+  revision: number;
+  savedWith: { version: string; commit: string | null } | null;
   id: string;
   name: string;
   units: Units;
@@ -496,6 +498,8 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
   const now = new Date().toISOString();
   return {
     schemaVersion: SCHEMA_VERSION,
+    revision: 0,
+    savedWith: null,
     id,
     name,
     units: "mm",

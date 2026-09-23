@@ -361,6 +361,14 @@ export const groupsSchema = Type.Refine(
 export const documentSchema = Type.Refine(
   Type.Object({
     schemaVersion: Type.Literal(SCHEMA_VERSION),
+    revision: Type.Integer({ minimum: 0 }),
+    savedWith: Type.Union([
+      Type.Null(),
+      Type.Object({
+        version: text,
+        commit: Type.Union([text, Type.Null()]),
+      }),
+    ]),
     id,
     name: text,
     units: Type.Enum(Object.keys(UNIT_TO_MM) as Units[]),
