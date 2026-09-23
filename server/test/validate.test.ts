@@ -1,13 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createEmptyDocument, type Feature } from "@rockett/shared";
-import { migrateDocument } from "../src/store/migrations.js";
 import {
-  parseEdgeRef,
-  validateDocument,
-  validateFeature,
+  createEmptyDocument,
   ValidationError,
-} from "../src/api/validate.js";
+  type Feature,
+} from "@rockett/shared";
+import { migrateDocument } from "../src/store/migrations.js";
+import { validateDocument, validateFeature } from "../src/api/validate.js";
 
 const base = { id: "f1", name: "F1", suppressed: false };
 const profile = { sketchId: "sk", profileId: "p" };
@@ -461,28 +460,5 @@ describe("validateDocument", () => {
           JSON.stringify(change),
         )
         .toThrow(ValidationError);
-  });
-});
-
-describe("parseEdgeRef", () => {
-  const ref = { kind: "edge", bodyId: "b1", edgeName: "e1" };
-
-  it("returns the edge reference unchanged", () => {
-    expect(parseEdgeRef(ref, "edge required")).toBe(ref);
-  });
-
-  it("rejects a malformed edge reference with the given message", () => {
-    const invalid = [
-      undefined,
-      null,
-      "edge",
-      { kind: "edge", bodyId: "b1" },
-      { ...ref, bodyId: 1 },
-      { ...ref, kind: "face" },
-    ];
-    for (const value of invalid)
-      expect
-        .soft(() => parseEdgeRef(value, "edge required"), JSON.stringify(value))
-        .toThrow(new ValidationError("edge required"));
   });
 });

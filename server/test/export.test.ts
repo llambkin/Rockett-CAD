@@ -157,16 +157,19 @@ describe("exporters", () => {
       expect((await res.json()).error).toMatch(error);
     };
 
-    await rejects({ format: "stl" }, /bodyIds must be an array/);
+    await rejects({ format: "stl" }, /required properties bodyIds/);
     await rejects({ format: "stl", bodyIds: "b:ext1" }, /bodyIds must be/);
-    await rejects({ format: "stl", bodyIds: [5, null] }, /strings: 5, null/);
+    await rejects(
+      { format: "stl", bodyIds: [5, null] },
+      /bodyIds.0 must be string/,
+    );
     await rejects(
       { format: "stl", bodyIds: ["b:ext1", "b:gone", "b:lost"] },
       /not in the model: b:gone, b:lost/,
     );
     await rejects(
       { format: "stl", bodyIds: [], quality: "fine" },
-      /quality must be a finite number/,
+      /quality must be number/,
     );
 
     const res = await post({

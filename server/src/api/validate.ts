@@ -7,14 +7,10 @@ import {
   LINEAR_TOL,
   SCHEMA_VERSION,
   UNIT_TO_MM,
+  ValidationError,
   type CadDocument,
-  type EdgeRef,
   type Feature,
 } from "@rockett/shared";
-
-export class ValidationError extends Error {
-  readonly code = "validation";
-}
 
 function num(v: unknown, label: string, min?: number, max?: number): void {
   if (typeof v !== "number" || !Number.isFinite(v)) {
@@ -98,17 +94,6 @@ function edgeRef(v: unknown, label: string): void {
     throw new ValidationError(`${label} must reference an edge`);
   str(ref.bodyId, `${label} body`);
   str(ref.edgeName, `${label} edge`, 2000);
-}
-
-export function parseEdgeRef(value: unknown, message: string): EdgeRef {
-  const ref = value as Partial<EdgeRef> | null | undefined;
-  if (
-    ref?.kind !== "edge" ||
-    typeof ref.bodyId !== "string" ||
-    typeof ref.edgeName !== "string"
-  )
-    throw new ValidationError(message);
-  return ref as EdgeRef;
 }
 
 const AXES = ["X", "Y", "Z"] as const;

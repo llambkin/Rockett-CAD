@@ -78,11 +78,10 @@ source is embedded in the document; uploads that take the document beyond
 | `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                              |
 | `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = all visible bodies. `retain: true` also stores a copy under the project's `exports/` dir |
 
-Export returns 400 when `bodyIds` is missing or not an array, when an id is
-not a string, or when an id is not a body of the evaluated model; the error
-names the offending ids. `format` defaults to `stl`, which is always binary.
-`quality` is the tessellation tolerance in mm: a finite number, default 0.05,
-clamped to 0.001 to 1; anything else returns 400.
+Export returns 400 when an id in `bodyIds` is not a body of the evaluated
+model; the error names the offending ids. `format` is required, and `stl` is
+always binary. `quality` is the tessellation tolerance in mm: a number,
+default 0.05, clamped to 0.001 to 1.
 
 ## Assets (reference images)
 
@@ -92,6 +91,11 @@ clamped to 0.001 to 1; anything else returns 400.
 | `GET /projects/:id/assets/:assetId` | none              | Serves the image                                      |
 
 ## Validation
+
+Routes with a JSON body outside the feature and document routes parse it
+against the JSON Schema on their `ROUTES` entry in `shared/src/routes.ts`
+before the handler runs. A mismatch returns 400 with the failing JSON Pointer
+in `detail`, such as `/edge/bodyId`.
 
 `server/src/api/validate.ts` bounds every modelling parameter (finite numbers,
 sane ranges, entity/constraint counts) and rejects duplicate feature ids;

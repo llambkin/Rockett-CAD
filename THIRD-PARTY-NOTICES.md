@@ -126,6 +126,7 @@ neither artefact.
 | toidentifier            | 1.0.1              | MIT           | image                        | https://github.com/component/toidentifier            |
 | type-is                 | 1.6.18             | MIT           | image                        | https://github.com/jshttp/type-is                    |
 | type-is                 | 2.1.0              | MIT           | image                        | https://github.com/jshttp/type-is                    |
+| typebox                 | 1.3.34             | MIT           | image and client bundle      | https://github.com/sinclairzx81/typebox              |
 | unpipe                  | 1.0.0              | MIT           | image                        | https://github.com/stream-utils/unpipe               |
 | vary                    | 1.1.2              | MIT           | image                        | https://github.com/jshttp/vary                       |
 | vite                    | 8.3.0              | MIT           | client bundle (build helper) | https://github.com/vitejs/vite                       |

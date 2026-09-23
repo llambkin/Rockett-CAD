@@ -11,9 +11,11 @@ import multer from "multer";
 import {
   nextFeatureName,
   newId,
+  parse,
   projectEdge,
   ROUTES,
   SCHEMA_VERSION,
+  ValidationError,
   type ApiErrorBody,
   type ApiErrorCode,
   type CadDocument,
@@ -37,11 +39,9 @@ import { write3mf, writeStl } from "../geometry/exporters.js";
 import type { NamedBody } from "../geometry/naming.js";
 import {
   knownKeys,
-  parseEdgeRef,
   record,
   validateDocument,
   validateFeature,
-  ValidationError,
 } from "./validate.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
@@ -55,6 +55,32 @@ const STATUS: Record<ApiErrorCode, number> = {
 
 function sendError(res: any, body: ApiErrorBody) {
   res.status(STATUS[body.code]).json(body);
+}
+
+function fail(res: any, err: any) {
+  const code: ApiErrorCode =
+    err instanceof StoreError || err instanceof ValidationError
+      ? err.code
+      : "internal";
+  if (code !== "internal")
+    return sendError(res, {
+      error: err.message,
+      code,
+      ...(err.detail !== undefined && { detail: err.detail }),
+    });
+  console.error(err);
+  sendError(res, { error: "Internal server error", code });
+}
+
+function parseBody(schema: NonNullable<Route["body"]>): RequestHandler {
+  return (req, res, next) => {
+    try {
+      req.body = parse(schema, req.body ?? {});
+    } catch (err) {
+      return fail(res, err);
+    }
+    next();
+  };
 }
 
 function multipart(field: string, megabytes: number, error: string) {
@@ -134,6 +160,7 @@ export function createApiRouter(store: ProjectStore): Router {
   const on = (route: Route, ...handlers: RequestHandler[]) =>
     router[route.method.toLowerCase() as Lowercase<Method>](
       route.path,
+      ...(route.body ? [parseBody(route.body)] : []),
       ...handlers,
     );
 
@@ -146,16 +173,7 @@ export function createApiRouter(store: ProjectStore): Router {
       const result = req.params.id
         ? projects.run(req.params.id, () => fn(req, res))
         : fn(req, res);
-      result.catch((err) => {
-        const code: ApiErrorCode =
-          err instanceof StoreError || err instanceof ValidationError
-            ? err.code
-            : "internal";
-        if (code !== "internal")
-          return sendError(res, { error: err.message, code });
-        console.error(err);
-        sendError(res, { error: "Internal server error", code });
-      });
+      result.catch((err) => fail(res, err));
     };
 
   /** Temporary evaluation range; does not move the persisted timeline marker. */
@@ -217,7 +235,7 @@ export function createApiRouter(store: ProjectStore): Router {
   on(
     ROUTES.createProject,
     wrap(async (req, res) => {
-      const name = String(req.body?.name ?? "Untitled").slice(0, 200);
+      const name = (req.body.name ?? "Untitled").slice(0, 200);
       const doc = await store.create(name);
       res.json({ document: doc });
     }),
@@ -245,7 +263,7 @@ export function createApiRouter(store: ProjectStore): Router {
     wrap(async (req, res) => {
       const copy = await store.duplicate(
         req.params.id,
-        req.body?.name ? String(req.body.name).slice(0, 200) : undefined,
+        req.body.name ? req.body.name.slice(0, 200) : undefined,
       );
       res.json({ document: copy });
     }),
@@ -255,7 +273,7 @@ export function createApiRouter(store: ProjectStore): Router {
     ROUTES.renameProject,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      doc.name = String(req.body?.name ?? doc.name).slice(0, 200);
+      doc.name = (req.body.name ?? doc.name).slice(0, 200);
       await store.save(doc);
       res.json({ document: doc });
     }),
@@ -401,11 +419,7 @@ export function createApiRouter(store: ProjectStore): Router {
       const sketch = doc.features[index];
       if (!sketch || sketch.type !== "sketch")
         throw new ValidationError("Sketch not found");
-      const { edge: value, entityId } = req.body ?? {};
-      const message = "An edge reference and entity ID are required";
-      const ref = parseEdgeRef(value, message);
-      if (typeof entityId !== "string" || !entityId || entityId.length > 100)
-        throw new ValidationError(message);
+      const { edge: ref, entityId } = req.body;
       const state = engineFor(doc.id).stateAt(doc, index);
       const body = state.bodies.get(ref.bodyId);
       const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
@@ -446,14 +460,9 @@ export function createApiRouter(store: ProjectStore): Router {
     ROUTES.setTimeline,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const position = Number(req.body?.position);
-      if (
-        !Number.isInteger(position) ||
-        position < 0 ||
-        position > doc.features.length
-      ) {
-        throw new ValidationError("invalid timeline position");
-      }
+      const { position } = req.body;
+      if (position > doc.features.length)
+        throw new ValidationError("invalid timeline position", "/position");
       doc.timelinePosition = position;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
@@ -466,8 +475,7 @@ export function createApiRouter(store: ProjectStore): Router {
     ROUTES.tangentEdges,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const { edge: value, beforeFeatureId } = req.body ?? {};
-      const edge = parseEdgeRef(value, "An edge reference is required");
+      const { edge, beforeFeatureId } = req.body;
       const index =
         beforeFeatureId === undefined
           ? undefined
@@ -491,12 +499,9 @@ export function createApiRouter(store: ProjectStore): Router {
       const doc = await store.load(req.params.id);
       const meta = doc.bodyMeta[req.params.bodyId];
       if (!meta) throw new StoreError("body not found", "not_found");
-      if (typeof req.body?.name === "string") {
-        meta.name = req.body.name.slice(0, 120);
-      }
-      if (typeof req.body?.visible === "boolean") {
-        meta.visible = req.body.visible;
-      }
+      const { name, visible } = req.body;
+      if (name !== undefined) meta.name = name.slice(0, 120);
+      if (visible !== undefined) meta.visible = visible;
       await store.save(doc);
       const evaluation = await evaluateAndSync(doc);
       res.json({ document: doc, evaluation });
@@ -509,13 +514,9 @@ export function createApiRouter(store: ProjectStore): Router {
     ROUTES.measure,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const refs = req.body?.refs;
-      if (!Array.isArray(refs) || refs.length === 0 || refs.length > 2) {
-        throw new ValidationError("measure requires 1-2 refs");
-      }
       const engine = engineFor(doc.id);
       const state = engine.stateAt(doc);
-      res.json(measure(state, { refs }));
+      res.json(measure(state, req.body));
     }),
   );
 
@@ -525,25 +526,13 @@ export function createApiRouter(store: ProjectStore): Router {
     ROUTES.exportModel,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const body = req.body ?? {};
-      record(body, "export request");
-      const { format = "stl", bodyIds, quality = 0.05 } = body;
-      if (typeof format !== "string" || !Object.hasOwn(EXPORTERS, format)) {
-        throw new ValidationError(
-          `unsupported export format; supported: ${Object.keys(EXPORTERS).join(", ")}`,
-        );
-      }
-      const exporter = EXPORTERS[format as ExportRequest["format"]];
-      if (typeof quality !== "number" || !Number.isFinite(quality))
-        throw new ValidationError("export quality must be a finite number");
-      if (!Array.isArray(bodyIds))
-        throw new ValidationError("export bodyIds must be an array");
-      const nonStrings = bodyIds.filter((id) => typeof id !== "string");
-      if (nonStrings.length)
-        throw new ValidationError(
-          `export bodyIds must be strings: ${nonStrings.map(String).join(", ")}`,
-        );
-      const requestedIds: string[] = bodyIds;
+      const {
+        format,
+        bodyIds: requestedIds,
+        quality = 0.05,
+        retain,
+      }: ExportRequest = req.body;
+      const exporter = EXPORTERS[format];
       const engine = engineFor(doc.id);
       const state = engine.stateAt(doc);
       const missing = requestedIds.filter((id) => !state.bodies.has(id));
@@ -567,7 +556,7 @@ export function createApiRouter(store: ProjectStore): Router {
       );
       const fileName = `${safeName}.${format}`;
       res.setHeader("Content-Type", exporter.mime);
-      if (body.retain) {
+      if (retain) {
         await store.saveExport(doc.id, fileName, data);
       }
       res.setHeader(

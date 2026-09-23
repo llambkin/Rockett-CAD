@@ -534,7 +534,7 @@ describe("REST API MVP workflow", () => {
     expect(saved.features.map((f: any) => f.type)).toEqual(["sketch"]);
     await expect(
       api("POST", `${url}/export`, { format: "step", bodyIds: [] }),
-    ).rejects.toThrow(/400.*supported: stl, 3mf/);
+    ).rejects.toThrow(/400.*format must be equal to one of the allowed values/);
   });
 
   it("accepts a PNG and rejects malformed or oversized uploads", async () => {

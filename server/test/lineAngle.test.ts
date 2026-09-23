@@ -7,8 +7,9 @@ import {
   SCHEMA_VERSION,
   type Feature,
   type SketchFeature,
+  ValidationError,
 } from "@rockett/shared";
-import { validateFeature, ValidationError } from "../src/api/validate.js";
+import { validateFeature } from "../src/api/validate.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 
 function sketch(value: number): SketchFeature {
