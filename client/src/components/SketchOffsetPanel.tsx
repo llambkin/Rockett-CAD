@@ -9,6 +9,7 @@ import {
 import { useStore } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
+import { disposeGroup } from "../three/dispose";
 import { DraggablePanel } from "./DraggablePanel";
 
 export function SketchOffsetPanel() {
@@ -141,14 +142,7 @@ function OffsetBody() {
     vp.scene.add(group);
     return () => {
       vp.scene.remove(group);
-      for (const child of group.children) {
-        const line = child as THREE.Line<
-          THREE.BufferGeometry,
-          THREE.LineBasicMaterial
-        >;
-        line.geometry.dispose();
-        line.material.dispose();
-      }
+      disposeGroup(group);
     };
   }, [preview, draft, evaluation, editing]);
 

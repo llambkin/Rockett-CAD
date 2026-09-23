@@ -14,6 +14,7 @@ import type {
 import { newId, modifySketch } from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
+import { clearGroup, disposeGroup } from "../three/dispose";
 import { worldToClient } from "../three/screen";
 import { syncReferenceImages } from "../three/referenceImages";
 import { renderSketches, type SketchRenderInput } from "../three/sketchRender";
@@ -190,11 +191,7 @@ export function ViewportView() {
       vp.scene.add(leaderGroupRef.current);
     }
     const g = leaderGroupRef.current;
-    for (const child of Array.from(g.children)) {
-      g.remove(child);
-      (child as any).geometry?.dispose?.();
-      (child as any).material?.dispose?.();
-    }
+    clearGroup(g);
     const wpp = vp.worldPerPixel();
     for (const l of dimLabelsRef.current) {
       // only when the label sits away from its geometry (dragged, or far zoom)
@@ -677,10 +674,7 @@ export function ViewportView() {
     const vp = viewportRef.current;
     if (revolveGhostRef.current && vp) {
       vp.scene.remove(revolveGhostRef.current);
-      revolveGhostRef.current.traverse((o: any) => {
-        o.geometry?.dispose?.();
-        o.material?.dispose?.();
-      });
+      disposeGroup(revolveGhostRef.current);
       revolveGhostRef.current = null;
     }
     if (!vp) return;
@@ -711,10 +705,7 @@ export function ViewportView() {
     return () => {
       if (revolveGhostRef.current && viewportRef.current) {
         viewportRef.current.scene.remove(revolveGhostRef.current);
-        revolveGhostRef.current.traverse((o: any) => {
-          o.geometry?.dispose?.();
-          o.material?.dispose?.();
-        });
+        disposeGroup(revolveGhostRef.current);
         revolveGhostRef.current = null;
       }
     };

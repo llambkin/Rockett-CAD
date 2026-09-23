@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import type { PlaneFrame } from "@rockett/shared";
 import { COLORS, CadViewport, uv3 } from "./CadViewport";
+import { clearGroup } from "./dispose";
 import type { SketchTool } from "../store";
 import type { UV } from "../sketchTools";
 
@@ -22,11 +23,7 @@ function ensureGroup(viewport: CadViewport): THREE.Group {
 
 export function clearToolPreview(viewport: CadViewport | null): void {
   if (!viewport || !group) return;
-  for (const child of Array.from(group.children)) {
-    group.remove(child);
-    (child as any).geometry?.dispose?.();
-    (child as any).material?.dispose?.();
-  }
+  clearGroup(group);
 }
 
 function ghostLine(pts: THREE.Vector3[]): THREE.Line {
