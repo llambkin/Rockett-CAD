@@ -65,6 +65,28 @@ const circularPattern = {
   combine: false,
 };
 
+const face = { kind: "face", bodyId: "b1", faceName: "f" };
+const edge = { kind: "edge", bodyId: "b1", edgeName: "e" };
+const mirror = {
+  ...base,
+  type: "mirror",
+  bodies: ["b1"],
+  plane,
+  combine: false,
+};
+const referenceImage = {
+  ...base,
+  type: "referenceImage",
+  plane,
+  assetId: "a",
+  fileName: "a.png",
+  transform: { u: 0, v: 0, rotation: 0, scale: 1 },
+  opacity: 1,
+  visible: true,
+  width: 1,
+  height: 1,
+};
+
 const cases: Array<{ valid: Feature; invalid: Feature }> = [
   {
     valid: {
@@ -166,8 +188,6 @@ describe("validateFeature", () => {
   });
 
   it("references and lists", () => {
-    const face = { kind: "face", bodyId: "b1", faceName: "f" };
-    const edge = { kind: "edge", bodyId: "b1", edgeName: "e" };
     const shell = { ...base, type: "shell", openFaces: [], thickness: 1 };
     const offsetFace = {
       ...base,
@@ -239,25 +259,6 @@ describe("validateFeature", () => {
       toolBodies: ["b2"],
       keepTools: false,
     };
-    const mirror = {
-      ...base,
-      type: "mirror",
-      bodies: ["b1"],
-      plane,
-      combine: false,
-    };
-    const referenceImage = {
-      ...base,
-      type: "referenceImage",
-      plane,
-      assetId: "a",
-      fileName: "a.png",
-      transform: { u: 0, v: 0, rotation: 0, scale: 1 },
-      opacity: 1,
-      visible: true,
-      width: 1,
-      height: 1,
-    };
     const valid: object[] = [
       { ...emboss, mode: "deboss" },
       { ...combine, keepTools: true },
@@ -291,6 +292,104 @@ describe("validateFeature", () => {
       { ...circularPattern, combine: undefined },
       { ...referenceImage, visible: "yes" },
       { ...referenceImage, visible: undefined },
+    ];
+    for (const f of invalid)
+      expect
+        .soft(() => validateFeature(f as any), JSON.stringify(f))
+        .toThrow(ValidationError);
+  });
+
+  it("plane and axis refs", () => {
+    const goodPlanes = [
+      ...["XY", "XZ", "YZ"].map((name) => ({ kind: "origin", plane: name })),
+      { kind: "construction", featureId: "cp1" },
+      { kind: "face", face },
+    ];
+    const badPlanes = [
+      null,
+      { kind: "bogus" },
+      { kind: "origin", plane: "QQ" },
+      { kind: "origin" },
+      { kind: "construction" },
+      { kind: "construction", featureId: 3 },
+      { kind: "face" },
+      { kind: "face", face: edge },
+      { kind: "face", face: { kind: "face", bodyId: "b1" } },
+    ];
+    const goodAxes = [
+      ...["X", "Y", "Z"].map((name) => ({ kind: "originAxis", axis: name })),
+      { kind: "edge", edge },
+      { kind: "sketchLine", sketchId: "sk", entityId: "l1" },
+    ];
+    const badAxes = [
+      null,
+      { kind: "bogus" },
+      { kind: "originAxis", axis: "W" },
+      { kind: "axis", axis: "X" },
+      { kind: "edge" },
+      { kind: "edge", edge: face },
+      { kind: "sketchLine", sketchId: "sk" },
+      { kind: "sketchLine", entityId: "l1" },
+    ];
+    const goodDirections = [
+      ...["X", "Y", "Z"].map((name) => ({ kind: "axis", axis: name })),
+      { kind: "edge", edge },
+    ];
+    const badDirections = [
+      null,
+      { kind: "originAxis", axis: "X" },
+      { kind: "axis", axis: "W" },
+      { kind: "edge" },
+      { kind: "edge", edge: face },
+    ];
+    const sketch = {
+      ...base,
+      type: "sketch",
+      plane,
+      entities: [],
+      constraints: [],
+    };
+    const splitBody = { ...base, type: "splitBody", body: "b1", tool: plane };
+    const offsetPlane = (p: unknown) => ({
+      ...base,
+      type: "constructionPlane",
+      method: { kind: "offset", base: p, distance: 1 },
+    });
+    const midplane = (a: unknown, b: unknown) => ({
+      ...base,
+      type: "constructionPlane",
+      method: { kind: "midplane", a, b },
+    });
+    const withPlane = (p: unknown) => [
+      { ...sketch, plane: p },
+      { ...splitBody, tool: p },
+      { ...mirror, plane: p },
+      { ...referenceImage, plane: p },
+      offsetPlane(p),
+      midplane(p, plane),
+      midplane(plane, p),
+    ];
+    const withAxis = (a: unknown) => [
+      { ...revolve, axis: a },
+      { ...circularPattern, axis: a },
+    ];
+    const withDirection = (direction: unknown) => [
+      { ...linearPattern, direction },
+    ];
+    const valid = [
+      ...goodPlanes.flatMap(withPlane),
+      ...goodAxes.flatMap(withAxis),
+      ...goodDirections.flatMap(withDirection),
+    ];
+    for (const f of valid)
+      expect
+        .soft(() => validateFeature(f as any), JSON.stringify(f))
+        .not.toThrow();
+    const invalid = [
+      ...badPlanes.flatMap(withPlane),
+      ...badAxes.flatMap(withAxis),
+      ...badDirections.flatMap(withDirection),
+      { ...offsetPlane(plane), method: { kind: "tangent", base: plane } },
     ];
     for (const f of invalid)
       expect

@@ -87,11 +87,47 @@ function edgeRef(v: unknown, label: string): void {
   str(ref.edgeName, `${label} edge`, 2000);
 }
 
+const AXES = ["X", "Y", "Z"] as const;
+
 function planeRef(v: unknown, label: string): void {
-  const kind = (v as { kind?: unknown } | null)?.kind;
-  if (kind !== "origin" && kind !== "construction" && kind !== "face") {
-    throw new ValidationError(`${label} must be a plane reference`);
-  }
+  record(v, label);
+  const ref = v as {
+    kind?: unknown;
+    plane?: unknown;
+    featureId?: unknown;
+    face?: unknown;
+  };
+  if (ref.kind === "origin")
+    oneOf(ref.plane, `${label} origin plane`, ["XY", "XZ", "YZ"]);
+  else if (ref.kind === "construction")
+    str(ref.featureId, `${label} feature`, 100);
+  else if (ref.kind === "face") faceRef(ref.face, `${label} face`);
+  else throw new ValidationError(`${label} must be a plane reference`);
+}
+
+function axisRef(v: unknown, label: string): void {
+  record(v, label);
+  const ref = v as {
+    kind?: unknown;
+    axis?: unknown;
+    edge?: unknown;
+    sketchId?: unknown;
+    entityId?: unknown;
+  };
+  if (ref.kind === "originAxis") oneOf(ref.axis, `${label} axis`, AXES);
+  else if (ref.kind === "edge") edgeRef(ref.edge, `${label} edge`);
+  else if (ref.kind === "sketchLine") {
+    str(ref.sketchId, `${label} sketch`, 100);
+    str(ref.entityId, `${label} line`, 100);
+  } else throw new ValidationError(`${label} must be an axis reference`);
+}
+
+function directionRef(v: unknown, label: string): void {
+  record(v, label);
+  const ref = v as { kind?: unknown; axis?: unknown; edge?: unknown };
+  if (ref.kind === "axis") oneOf(ref.axis, `${label} axis`, AXES);
+  else if (ref.kind === "edge") edgeRef(ref.edge, `${label} edge`);
+  else throw new ValidationError(`${label} must be an axis or edge`);
 }
 
 const MAX_DIM = 100_000; // 100 m in mm — sanity bound
@@ -111,6 +147,7 @@ export function validateFeature(f: Feature): void {
         throw new ValidationError("A valid STEP file up to 10 MB is required");
       break;
     case "sketch": {
+      planeRef(f.plane, "sketch plane");
       if (!Array.isArray(f.entities) || f.entities.length > 5000) {
         throw new ValidationError("sketch entities invalid");
       }
@@ -212,6 +249,7 @@ export function validateFeature(f: Feature): void {
     }
     case "revolve":
       list(f.profiles, "revolve profiles", 1, 64, profileRef);
+      axisRef(f.axis, "revolve axis");
       num(f.angle, "revolve angle", -360, 360);
       oneOf(f.operation, "revolve operation", OPERATIONS);
       break;
@@ -256,22 +294,30 @@ export function validateFeature(f: Feature): void {
     case "linearPattern":
       list(f.bodies, "pattern bodies", 1, 64, str);
       num(f.count, "pattern count", 2, 500);
+      directionRef(f.direction, "pattern direction");
       num(f.spacing, "pattern spacing", -MAX_DIM, MAX_DIM);
       bool(f.combine, "pattern combine");
       break;
     case "circularPattern":
       list(f.bodies, "pattern bodies", 1, 64, str);
       num(f.count, "pattern count", 2, 500);
+      axisRef(f.axis, "pattern axis");
       num(f.totalAngle, "pattern angle", -360, 360);
       bool(f.combine, "pattern combine");
       break;
     case "constructionPlane":
       record(f.method, "plane method");
       if (f.method.kind === "offset") {
+        planeRef(f.method.base, "plane base");
         num(f.method.distance, "plane offset", -MAX_DIM, MAX_DIM);
-      }
+      } else if (f.method.kind === "midplane") {
+        planeRef(f.method.a, "midplane first plane");
+        planeRef(f.method.b, "midplane second plane");
+      } else
+        throw new ValidationError("plane method must be offset or midplane");
       break;
     case "referenceImage":
+      planeRef(f.plane, "image plane");
       num(f.opacity, "opacity", 0, 1);
       record(f.transform, "image transform");
       num(f.transform.scale, "image scale", 1e-9, MAX_DIM);
