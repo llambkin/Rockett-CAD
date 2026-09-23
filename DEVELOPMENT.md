@@ -2,16 +2,22 @@
 
 ## Prerequisites
 
-- Node.js 24, the line the Docker image pins (`node:24-trixie-slim`)
+- Node.js 24 or newer (`engines.node` is `>=24`). Develop on 24, the line the
+  Docker image pins (`node:24-trixie-slim`).
 - npm ≥ 10 (workspaces)
 - Docker (only for container builds)
+- `~/masterrulez/scripts/lint-writing` (only for `npm run check`)
 
 ## Setup & run
 
 ```bash
-npm install
+npm ci
+npm run prepare
 npm run dev
 ```
+
+`.npmrc` sets `ignore-scripts=true`, so `npm ci` skips lifecycle scripts.
+`npm run prepare` installs the husky git hooks.
 
 - API server: http://localhost:8788 (tsx watch; the OCCT WASM kernel takes a
   few seconds to load on each restart)
@@ -25,7 +31,7 @@ Data in dev goes to `./data/` (gitignored).
 | --------- | ------------------------------------------------------------------------------------------------------------------- |
 | `shared`  | `npm test -w shared`: solver + profile-detection tests                                                              |
 | `server`  | `npm run dev -w server`, `npm test -w server`, `npm run build -w server` (esbuild bundle → `server/dist/server.js`) |
-| `client`  | `npm run dev -w client`, `npm run build -w client` (Vite → `client/dist`)                                           |
+| `client`  | `npm run dev -w client`, `npm run build -w client` (Vite → `client/dist`), `npm run test:client` (from the root)    |
 
 `@rockett/shared` is consumed as TypeScript source (tsx and Vite both
 transpile it); the server production build bundles it via esbuild.
@@ -33,8 +39,11 @@ transpile it); the server production build bundles it via esbuild.
 ## Testing
 
 ```bash
-npm test          # shared + server suites
+npm test          # typecheck, then shared, server and client suites
+npm run check     # ship command: lint, format, comments, writing, pins, build, test, work order
 ```
+
+Run `npm run check` before every commit. It stops at the first failure.
 
 The suites map to the layers the brief requires:
 
@@ -55,6 +64,9 @@ The suites map to the layers the brief requires:
   3MF unzips with named objects and millimetre units.
 - **API integration** (`server/test/api.test.ts`): the complete MVP workflow
   over real HTTP, ending in reload-and-verify.
+- **Client** (`client/test/`, DOM tests in `client/test/dom/`): sketch-mode
+  preservation, authoritative solved positions, undoing the sketch creation,
+  and repeated undo input while a request is pending.
 
 Write geometry tests as _reproducible numeric models_ (exact volumes, bounding
 boxes, face counts). Never rely on visual confirmation alone.
@@ -80,9 +92,5 @@ boxes, face counts). Never rely on visual confirmation alone.
 - Never reference topology by index. Use persistent names only (CAD_MODEL.md).
 - The engine must keep working through feature failures: catch, record an
   actionable error, continue with the pre-failure state.
-- Keep the working app runnable at every commit: `npm test` + open the UI and
+- Keep the working app runnable at every commit: `npm run check` + open the UI and
   run a sketch→extrude→fillet loop before merging geometry changes.
-
-Client history regressions run with `npm run test:client` (also included in `npm test`).
-They cover sketch-mode preservation, authoritative solved positions, undoing the
-sketch creation, and repeated undo input while a request is pending.
