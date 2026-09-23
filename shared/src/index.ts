@@ -8,3 +8,4 @@ export * from "./sketchModify.js";
 export * from "./sketchOffsets.js";
 export * from "./meshFormat.js";
 export * from "./tolerance.js";
+export * from "./units.js";

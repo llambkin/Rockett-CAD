@@ -9,17 +9,9 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
+import type { Units } from "./units.js";
+
 export const SCHEMA_VERSION = 5;
-
-export type Units = "mm" | "cm" | "m" | "in";
-
-/** Conversion factors to internal geometry units (always millimetres). */
-export const UNIT_TO_MM: Record<Units, number> = {
-  mm: 1,
-  cm: 10,
-  m: 1000,
-  in: 25.4,
-};
 
 // ---------------------------------------------------------------------------
 // Persistent topology references

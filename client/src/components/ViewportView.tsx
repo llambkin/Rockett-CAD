@@ -12,7 +12,12 @@ import type {
   SketchEntity,
   SketchSolveStatus,
 } from "@rockett/shared";
-import { newId, modifySketch } from "@rockett/shared";
+import {
+  formatAngle,
+  formatLength,
+  newId,
+  modifySketch,
+} from "@rockett/shared";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
 import { clearGroup, disposeGroup } from "../three/dispose";
@@ -870,7 +875,7 @@ export function ViewportView() {
         const s = useStore.getState();
         s.setDialogParams({ angle: a });
         const tip = g.handleScreenPosition();
-        setGizmoLabel({ x: tip.x, y: tip.y, text: `${a}°` });
+        setGizmoLabel({ x: tip.x, y: tip.y, text: formatAngle(a, 3) });
         // editing an existing revolve: live-update the real geometry
         const modeNow = s.mode;
         if (
@@ -898,7 +903,7 @@ export function ViewportView() {
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
-            text: `${axisName}: ${Math.round(v * 1000) / 1000} mm`,
+            text: `${axisName}: ${formatLength(v, "mm", 3)}`,
           });
         }
         // editing an existing move: live-update the real geometry
@@ -935,9 +940,7 @@ export function ViewportView() {
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
-            text: zeroed
-              ? "0 mm"
-              : `${Math.round(Math.abs(v) * 1000) / 1000} mm`,
+            text: formatLength(zeroed ? 0 : Math.abs(v), "mm", 3),
           });
           // editing an existing extrude: live-update the real geometry.
           // At zero the feature is previewed as suppressed (a real zero

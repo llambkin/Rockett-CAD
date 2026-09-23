@@ -1,11 +1,11 @@
 /** Measure results panel (shown in measure mode). */
 
+import { formatAngle, formatLength } from "@rockett/shared";
 import { useStore } from "../store";
 import { DraggablePanel } from "./DraggablePanel";
 
-function fmt(v: number | undefined, unit = " mm"): string {
-  if (v === undefined) return "—";
-  return `${Math.round(v * 10000) / 10000}${unit}`;
+function fmt(v: number | undefined): string {
+  return v === undefined ? "—" : formatLength(v, "mm", 4);
 }
 
 export function MeasurePanel() {
@@ -33,7 +33,7 @@ export function MeasurePanel() {
               <Row k="Length" v={fmt(item.length)} />
             )}
             {item.area !== undefined && (
-              <Row k="Area" v={fmt(item.area, " mm²")} />
+              <Row k="Area" v={`${formatLength(item.area, "mm", 4)}²`} />
             )}
             {item.radius !== undefined && (
               <Row k="Radius" v={fmt(item.radius)} />
@@ -58,7 +58,7 @@ export function MeasurePanel() {
             <Row k="ΔY" v={fmt(result.deltaY)} />
             <Row k="ΔZ" v={fmt(result.deltaZ)} />
             {result.angleDeg !== undefined && (
-              <Row k="Angle" v={fmt(result.angleDeg, "°")} />
+              <Row k="Angle" v={formatAngle(result.angleDeg, 4)} />
             )}
           </div>
         )}
