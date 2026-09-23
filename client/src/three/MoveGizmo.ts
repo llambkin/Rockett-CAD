@@ -8,9 +8,9 @@
 
 import * as THREE from "three";
 import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
+import { themeColor } from "../theme/tokens";
 
-const AXIS_COLORS = [0xe05c5c, 0x62c162, 0x4da3ff]; // X red, Y green, Z blue
-const AXIS_HOVER = 0xffd166;
+const AXIS_COLORS = ["move-axis-x", "move-axis-y", "move-axis-z"] as const;
 const AXES: THREE.Vector3[] = [
   new THREE.Vector3(1, 0, 0),
   new THREE.Vector3(0, 1, 0),
@@ -27,7 +27,7 @@ export class MoveGizmo extends Manipulator {
     shaft: THREE.Mesh;
     cone: THREE.Mesh;
     dir: THREE.Vector3;
-    color: number;
+    color: string;
   }[] = [];
   private ghosts: THREE.Mesh[] = [];
 
@@ -49,7 +49,7 @@ export class MoveGizmo extends Manipulator {
     this.offset.set(...initial);
 
     for (let i = 0; i < 3; i++) {
-      const color = AXIS_COLORS[i]!;
+      const color = themeColor(AXIS_COLORS[i]!);
       const mat = new THREE.MeshBasicMaterial({
         color,
         depthTest: false,
@@ -80,7 +80,7 @@ export class MoveGizmo extends Manipulator {
       const mesh = new THREE.Mesh(
         geom,
         new THREE.MeshBasicMaterial({
-          color: 0x4da3ff,
+          color: themeColor("gizmo"),
           transparent: true,
           opacity: 0.22,
           depthWrite: false,
@@ -147,7 +147,11 @@ export class MoveGizmo extends Manipulator {
 
   setHover(axis: number) {
     this.arrows.forEach(({ shaft, cone, color }, i) =>
-      this.paint(i === axis ? AXIS_HOVER : color, shaft, cone),
+      this.paint(
+        i === axis ? themeColor("move-axis-hover") : color,
+        shaft,
+        cone,
+      ),
     );
   }
 

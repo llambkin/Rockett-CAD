@@ -6,7 +6,8 @@
 import * as THREE from "three";
 import type { PlaneFrame, Profile, SketchEntity } from "@rockett/shared";
 import { detectProfiles, sampleArc } from "@rockett/shared";
-import { COLORS, CadViewport, uv3 } from "./CadViewport";
+import { CadViewport, uv3 } from "./CadViewport";
+import { themeColor } from "../theme/tokens";
 import { clearGroup } from "./dispose";
 import type { Selection } from "../store";
 import { selectionKey } from "../store";
@@ -75,11 +76,9 @@ export function renderSketches(
         const mesh = new THREE.Mesh(
           geom,
           new THREE.MeshBasicMaterial({
-            color: isSel
-              ? COLORS.selected
-              : isHover
-                ? COLORS.hover
-                : COLORS.profileFill,
+            color: themeColor(
+              isSel ? "selection" : isHover ? "hover" : "profile-fill",
+            ),
             transparent: true,
             opacity: isSel ? 0.55 : isHover ? 0.4 : used ? 0.06 : 0.18,
             side: THREE.DoubleSide,
@@ -129,19 +128,21 @@ export function renderSketches(
       const key = `se:${sk.sketchId}:${e.id}`;
       const isSel = selKeys.has(key);
       const isHover = hoverKey === key;
-      const color = isSel
-        ? COLORS.selected
-        : isHover
-          ? COLORS.hover
-          : e.external
-            ? 0xbb88ff
-            : e.construction
-              ? COLORS.sketchConstruction
-              : sk.active
-                ? COLORS.sketchLine
-                : sk.dim
-                  ? 0x566478
-                  : 0x7a92a8;
+      const color = themeColor(
+        isSel
+          ? "selection"
+          : isHover
+            ? "hover"
+            : e.external
+              ? "sketch-external"
+              : e.construction
+                ? "sketch-construction"
+                : sk.active
+                  ? "sketch-line"
+                  : sk.dim
+                    ? "sketch-dimmed"
+                    : "sketch-inactive",
+      );
       const pickable = sk.curvesPickable !== false;
       const geom = new THREE.BufferGeometry().setFromPoints(positions);
       const line = new THREE.Line(
@@ -180,11 +181,9 @@ export function renderSketches(
         const pt = new THREE.Points(
           geom,
           new THREE.PointsMaterial({
-            color: isSel
-              ? COLORS.selected
-              : isHover
-                ? COLORS.hover
-                : COLORS.sketchPoint,
+            color: themeColor(
+              isSel ? "selection" : isHover ? "hover" : "sketch-point",
+            ),
             size: isSel || isHover ? 9 : 6,
             sizeAttenuation: false,
             depthTest: false,

@@ -63,9 +63,9 @@ export abstract class Manipulator {
     return ray.distanceSqToSegment(a, b) < tol * tol;
   }
 
-  protected paint(color: number, ...meshes: THREE.Mesh[]) {
+  protected paint(color: THREE.ColorRepresentation, ...meshes: THREE.Mesh[]) {
     for (const m of meshes) {
-      (m.material as THREE.MeshBasicMaterial).color.setHex(color);
+      (m.material as THREE.MeshBasicMaterial).color.set(color);
     }
   }
 

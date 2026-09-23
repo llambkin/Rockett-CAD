@@ -8,12 +8,7 @@ import * as THREE from "three";
 import type { PlaneFrame, Profile } from "@rockett/shared";
 import { disposeObject } from "./dispose";
 import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
-
-const ARROW_COLOR = 0x4da3ff;
-const ARROW_HOVER = 0x8fd0ff;
-/** Preview tint: blue for material being added, red for a cut. */
-const PREVIEW_ADD = 0x4da3ff;
-const PREVIEW_CUT = 0xff5a5a;
+import { themeColor } from "../theme/tokens";
 
 export interface GizmoSource {
   /** Base plane frame; the arrow points along frame.normal. */
@@ -79,7 +74,7 @@ export class ExtrudeGizmo extends Manipulator {
     this.value = initialValue;
 
     const mat = new THREE.MeshBasicMaterial({
-      color: ARROW_COLOR,
+      color: themeColor("gizmo"),
       depthTest: false,
       transparent: true,
       opacity: 0.95,
@@ -108,15 +103,15 @@ export class ExtrudeGizmo extends Manipulator {
     if (this.cut === cut) return;
     this.cut = cut;
     if (this.previewMesh) {
-      (this.previewMesh.material as THREE.MeshBasicMaterial).color.setHex(
-        cut ? PREVIEW_CUT : PREVIEW_ADD,
+      (this.previewMesh.material as THREE.MeshBasicMaterial).color.set(
+        themeColor(cut ? "gizmo-cut" : "gizmo"),
       );
     }
   }
 
   private previewMaterial(): THREE.MeshBasicMaterial {
     return new THREE.MeshBasicMaterial({
-      color: this.cut ? PREVIEW_CUT : PREVIEW_ADD,
+      color: themeColor(this.cut ? "gizmo-cut" : "gizmo"),
       transparent: true,
       opacity: this.cut ? 0.3 : 0.22,
       depthWrite: false,
@@ -280,7 +275,11 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   setHover(hover: boolean) {
-    this.paint(hover ? ARROW_HOVER : ARROW_COLOR, this.shaft, this.cone);
+    this.paint(
+      themeColor(hover ? "gizmo-hover" : "gizmo"),
+      this.shaft,
+      this.cone,
+    );
   }
 
   dragValue(clientX: number, clientY: number): number {

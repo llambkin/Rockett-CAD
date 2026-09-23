@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import type { CadViewport } from "./CadViewport";
+import { themeColor } from "../theme/tokens";
 
 /**
  * Face label texture. `rotation` counters BoxGeometry's per-face UV
@@ -15,12 +16,12 @@ function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const ctx = c.getContext("2d")!;
-  ctx.fillStyle = "#3d4249";
+  ctx.fillStyle = themeColor("viewcube-face");
   ctx.fillRect(0, 0, 128, 128);
-  ctx.strokeStyle = "#565e68";
+  ctx.strokeStyle = themeColor("viewcube-border");
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, 124, 124);
-  ctx.fillStyle = "#c8cfd8";
+  ctx.fillStyle = themeColor("viewcube-label");
   ctx.font = "bold 24px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -78,7 +79,7 @@ export class ViewCube {
     this.scene.add(this.cube);
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(this.cube.geometry as THREE.BoxGeometry),
-      new THREE.LineBasicMaterial({ color: 0x767f8a }),
+      new THREE.LineBasicMaterial({ color: themeColor("viewcube-edge") }),
     );
     this.cube.add(edges);
 

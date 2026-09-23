@@ -6,12 +6,11 @@
 
 import * as THREE from "three";
 import type { PlaneFrame } from "@rockett/shared";
-
-const GHOST_COLOR = 0x4da3ff;
+import { themeColor } from "../theme/tokens";
 
 function ghostMaterial(): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
-    color: GHOST_COLOR,
+    color: themeColor("gizmo"),
     transparent: true,
     opacity: 0.22,
     depthWrite: false,

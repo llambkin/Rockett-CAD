@@ -17,23 +17,7 @@ import type {
 import type { Selection } from "../store";
 import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
-
-export const COLORS = {
-  bg: 0x2a2d30,
-  body: 0xb7bcc1,
-  bodyHover: 0xd3dbe3,
-  edge: 0x30343a,
-  edgeHover: 0x38b6ff,
-  selected: 0x4da3ff,
-  hover: 0x77c4ff,
-  sketchLine: 0x3ba1e8,
-  sketchConstruction: 0x8f7fe8,
-  sketchPoint: 0x1c72b8,
-  sketchFixed: 0x2c9c3e,
-  profileFill: 0x3ba1e8,
-  planeFill: 0xf2b34c,
-  dimension: 0xd8dee6,
-};
+import { themeColor } from "../theme/tokens";
 
 export interface PickResult {
   selection: Selection;
@@ -141,7 +125,7 @@ export class CadViewport {
     this.container = container;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setClearColor(COLORS.bg);
+    this.renderer.setClearColor(themeColor("viewport-bg"));
     container.appendChild(this.renderer.domElement);
 
     const aspect = 1;
@@ -154,10 +138,14 @@ export class CadViewport {
     }
 
     // lighting: hemisphere + key light attached to camera for stable shading
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x555566, 0.9);
+    const hemi = new THREE.HemisphereLight(
+      themeColor("light-sky"),
+      themeColor("light-ground"),
+      0.9,
+    );
     hemi.position.set(0, 0, 1);
     this.scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    const key = new THREE.DirectionalLight(themeColor("light-key"), 1.1);
     key.position.set(0.6, -0.9, 1.4);
     this.scene.add(key);
 
@@ -461,7 +449,7 @@ export class CadViewport {
     for (const def of ORIGIN_PLANE_DEFS) {
       const geom = new THREE.PlaneGeometry(size, size);
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x999faf,
+        color: themeColor("origin-plane"),
         transparent: true,
         opacity: 0.07,
         side: THREE.DoubleSide,
@@ -474,7 +462,7 @@ export class CadViewport {
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
         new THREE.LineBasicMaterial({
-          color: 0x8b93a5,
+          color: themeColor("origin-plane-border"),
           transparent: true,
           opacity: 0.35,
         }),
@@ -485,9 +473,9 @@ export class CadViewport {
     }
     // axes
     const axes = [
-      { dir: new THREE.Vector3(1, 0, 0), color: 0xcc5555 },
-      { dir: new THREE.Vector3(0, 1, 0), color: 0x55aa55 },
-      { dir: new THREE.Vector3(0, 0, 1), color: 0x5577cc },
+      { dir: new THREE.Vector3(1, 0, 0), color: themeColor("axis-x") },
+      { dir: new THREE.Vector3(0, 1, 0), color: themeColor("axis-y") },
+      { dir: new THREE.Vector3(0, 0, 1), color: themeColor("axis-z") },
     ];
     for (const a of axes) {
       const geom = new THREE.BufferGeometry().setFromPoints([
@@ -555,7 +543,7 @@ export class CadViewport {
     geom.setAttribute("normal", new THREE.Float32BufferAttribute(p.normals, 3));
     geom.setIndex(p.indices);
     const mat = new THREE.MeshStandardMaterial({
-      color: COLORS.body,
+      color: themeColor("body"),
       metalness: 0.15,
       roughness: 0.55,
       polygonOffset: true,
@@ -589,7 +577,7 @@ export class CadViewport {
     );
     const edges = new THREE.LineSegments(
       edgeGeom,
-      new THREE.LineBasicMaterial({ color: COLORS.edge }),
+      new THREE.LineBasicMaterial({ color: themeColor("edge") }),
     );
     edges.userData.bodyId = p.bodyId;
     group.add(edges);
@@ -609,7 +597,7 @@ export class CadViewport {
     const vertices = new THREE.Points(
       vertGeom,
       new THREE.PointsMaterial({
-        color: COLORS.edge,
+        color: themeColor("edge"),
         size: 4,
         sizeAttenuation: false,
       }),
@@ -845,7 +833,7 @@ export class CadViewport {
   }
 
   addHighlight(sel: Selection, kind: "select" | "hover") {
-    const color = kind === "select" ? COLORS.selected : COLORS.hover;
+    const color = themeColor(kind === "select" ? "selection" : "hover");
     if (sel.kind === "face" || sel.kind === "body") {
       const b = this.bodies.get(sel.bodyId);
       if (!b) return;
@@ -971,7 +959,7 @@ export class CadViewport {
       if (!visibleIds.has(p.featureId)) continue;
       const geom = new THREE.PlaneGeometry(p.size * 2, p.size * 2);
       const mat = new THREE.MeshBasicMaterial({
-        color: COLORS.planeFill,
+        color: themeColor("plane"),
         transparent: true,
         opacity: 0.09,
         side: THREE.DoubleSide,
@@ -984,7 +972,7 @@ export class CadViewport {
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
         new THREE.LineBasicMaterial({
-          color: COLORS.planeFill,
+          color: themeColor("plane"),
           transparent: true,
           opacity: 0.55,
         }),

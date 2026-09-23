@@ -8,10 +8,7 @@
 
 import * as THREE from "three";
 import { Manipulator, type ManipulatorHost } from "./Manipulator";
-
-const RING_COLOR = 0x4da3ff;
-const RING_HOVER = 0x8fd0ff;
-const HANDLE_COLOR = 0xffd166;
+import { themeColor } from "../theme/tokens";
 
 export class RevolveGizmo extends Manipulator {
   private ring: THREE.Mesh;
@@ -43,7 +40,7 @@ export class RevolveGizmo extends Manipulator {
     this.ring = new THREE.Mesh(
       new THREE.TorusGeometry(radius, wpp * 1.4, 8, 96),
       new THREE.MeshBasicMaterial({
-        color: RING_COLOR,
+        color: themeColor("gizmo"),
         depthTest: false,
         transparent: true,
         opacity: 0.9,
@@ -59,7 +56,10 @@ export class RevolveGizmo extends Manipulator {
 
     this.handle = new THREE.Mesh(
       new THREE.SphereGeometry(wpp * 5, 16, 12),
-      new THREE.MeshBasicMaterial({ color: HANDLE_COLOR, depthTest: false }),
+      new THREE.MeshBasicMaterial({
+        color: themeColor("gizmo-handle"),
+        depthTest: false,
+      }),
     );
     this.handle.renderOrder = 21;
 
@@ -81,7 +81,7 @@ export class RevolveGizmo extends Manipulator {
   }
 
   setHover(hover: boolean) {
-    this.paint(hover ? RING_HOVER : RING_COLOR, this.ring);
+    this.paint(themeColor(hover ? "gizmo-hover" : "gizmo"), this.ring);
   }
 
   private ringPlaneHit(ray: THREE.Ray): THREE.Vector3 | null {
