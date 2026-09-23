@@ -10,10 +10,10 @@ export function projectEdge(
   construction = true,
 ): SketchEntity[] {
   const uv = (p: Vec3) => {
-    const d = p.map((v, i) => v - frame.origin[i]);
+    const d = p.map((v, i) => v - frame.origin[i]!);
     return {
-      x: d.reduce((v, a, i) => v + a * frame.xAxis[i], 0),
-      y: d.reduce((v, a, i) => v + a * frame.yAxis[i], 0),
+      x: d.reduce((v, a, i) => v + a * frame.xAxis[i]!, 0),
+      y: d.reduce((v, a, i) => v + a * frame.yAxis[i]!, 0),
     };
   };
   const point = (suffix: string, p: Vec3): SketchEntity => ({
@@ -38,7 +38,7 @@ export function projectEdge(
     ];
   }
   if (curve.type === "circle") {
-    const dot = curve.axis.reduce((v, a, i) => v + a * frame.normal[i], 0);
+    const dot = curve.axis.reduce((v, a, i) => v + a * frame.normal[i]!, 0);
     if (Math.abs(dot) < 1 - 1e-6)
       throw new Error(
         "Tilted circular edges project to ellipses, which the sketcher does not yet support.",

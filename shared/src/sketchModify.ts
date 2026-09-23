@@ -153,12 +153,12 @@ export function modifySketch(
       .filter((q) => g.contains(q))
       .map((q) => g.parameter(q))
       .sort((a, b) => a - b)
-      .filter((t, i, arr) => i === 0 || Math.abs(t - arr[i - 1]) > EPS);
+      .filter((t, i, arr) => i === 0 || Math.abs(t - arr[i - 1]!) > EPS);
     const t = g.parameter(click);
     if (entity.kind === "circle") {
       if (params.length < 2)
         throw new Error("Trim a circle between at least two intersections.");
-      const upper = params.find((x) => x > t + EPS) ?? params[0] + 1;
+      const upper = params.find((x) => x > t + EPS) ?? params[0]! + 1;
       const lower =
         [...params].reverse().find((x) => x <= t + EPS) ?? params.at(-1)! - 1;
       pieces.push([upper, lower + 1]);
@@ -257,7 +257,7 @@ export function offsetSketchSelection(
   if (!ids.length)
     throw new Error("Select one or more sketch curves to offset.");
   if (ids.length === 1)
-    return offsetSketch(entities, constraints, ids[0], amount, autoChain);
+    return offsetSketch(entities, constraints, ids[0]!, amount, autoChain);
   if (!Number.isFinite(amount) || Math.abs(amount) < EPS)
     throw new Error("Enter a non-zero offset distance in mm.");
   const selected = ids.map((id) => entities.find((e) => e.id === id));
@@ -286,13 +286,13 @@ export function offsetSketchSelection(
     throw new Error(
       "The selected curves branch. Ctrl-click to remove a branch and choose one path.",
     );
-  const connected = connectedChain(curves[0], source);
+  const connected = connectedChain(curves[0]!, source);
   if (connected.length !== ids.length) {
     const open = endpoints.filter((e) => e.count === 1);
     let nearest = Infinity;
     for (let i = 0; i < open.length; i++)
       for (let j = i + 1; j < open.length; j++)
-        nearest = Math.min(nearest, distance(open[i].point, open[j].point));
+        nearest = Math.min(nearest, distance(open[i]!.point, open[j]!.point));
     const detail = Number.isFinite(nearest)
       ? ` Closest open ends are ${Number(nearest.toFixed(6))} mm apart.`
       : "";
@@ -305,16 +305,16 @@ export function offsetSketchSelection(
       ...entities,
       ...offsetRoundedChain(
         connected,
-        curves[0].kind === "arc" ? -amount : amount,
+        curves[0]!.kind === "arc" ? -amount : amount,
       ),
     ],
     constraints: [...constraints],
     removedConstraints: 0,
     offsetChain: {
       closed:
-        distance(chainStart(connected[0]), chainEnd(connected.at(-1)!)) < EPS,
-      endGap: distance(chainStart(connected[0]), chainEnd(connected.at(-1)!)),
-      ends: [chainStart(connected[0]), chainEnd(connected.at(-1)!)],
+        distance(chainStart(connected[0]!), chainEnd(connected.at(-1)!)) < EPS,
+      endGap: distance(chainStart(connected[0]!), chainEnd(connected.at(-1)!)),
+      ends: [chainStart(connected[0]!), chainEnd(connected.at(-1)!)],
     },
     ...(gaps.count ? { joinedGaps: gaps } : {}),
   };
@@ -363,7 +363,7 @@ export function findOffsetConnector(
     )
       matches.push(e.id);
   }
-  return matches.length === 1 ? matches[0] : null;
+  return matches.length === 1 ? matches[0]! : null;
 }
 
 /** Repair near-coincident ends in a temporary offset source, never in the sketch. */
@@ -398,8 +398,8 @@ function joinOffsetEndpoints(
   const candidates: { a: number; b: number; gap: number }[] = [];
   for (let a = 0; a < open.length; a++)
     for (let b = a + 1; b < open.length; b++) {
-      if (open[a].ends[0].curve.id === open[b].ends[0].curve.id) continue;
-      const gap = distance(open[a].point, open[b].point);
+      if (open[a]!.ends[0]!.curve.id === open[b]!.ends[0]!.curve.id) continue;
+      const gap = distance(open[a]!.point, open[b]!.point);
       if (gap <= tolerance && gap >= EPS) candidates.push({ a, b, gap });
     }
   candidates.sort((a, b) => a.gap - b.gap);
@@ -421,8 +421,8 @@ function joinOffsetEndpoints(
       throw new Error(
         "Several endpoints fall within the join tolerance. Reduce the tolerance or select one clear path.",
       );
-    const ea = open[a].ends[0],
-      eb = open[b].ends[0];
+    const ea = open[a]!.ends[0]!,
+      eb = open[b]!.ends[0]!;
     const ga = geometry(ea.curve, source),
       gb = geometry(eb.curve, source);
     let target: XY | undefined;
@@ -527,7 +527,7 @@ export function offsetSketch(
     const loop = [g.a, g.b],
       used = new Set([entityId]);
     if (chain)
-      while (distance(loop.at(-1)!, loop[0]) > EPS) {
+      while (distance(loop.at(-1)!, loop[0]!) > EPS) {
         const candidates = entities
           .filter(
             (e) =>
@@ -542,11 +542,11 @@ export function offsetSketch(
               distance(h.b, loop.at(-1)!) < EPS,
           );
         if (candidates.length !== 1) break;
-        const h = candidates[0];
+        const h = candidates[0]!;
         used.add(h.e.id);
         loop.push(distance(h.a, loop.at(-1)!) < EPS ? h.b : h.a);
       }
-    const closed = loop.length > 3 && distance(loop[0], loop.at(-1)!) < EPS;
+    const closed = loop.length > 3 && distance(loop[0]!, loop.at(-1)!) < EPS;
     const shift = (a: XY, b: XY) => {
       const len = distance(a, b);
       if (len < EPS) throw new Error("Cannot offset a zero-length line.");
@@ -559,8 +559,8 @@ export function offsetSketch(
       const vertices = loop.slice(0, -1),
         n = vertices.length;
       const shifted = vertices.map((a, i) => {
-        const prev = vertices[(i + n - 1) % n],
-          next = vertices[(i + 1) % n];
+        const prev = vertices[(i + n - 1) % n]!,
+          next = vertices[(i + 1) % n]!;
         const p = shift(prev, a),
           q = shift(a, next),
           d = sub(a, prev),
@@ -577,17 +577,18 @@ export function offsetSketch(
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
         if (
-          dot(sub(shifted[j], shifted[i]), sub(vertices[j], vertices[i])) <= EPS
+          dot(sub(shifted[j]!, shifted[i]!), sub(vertices[j]!, vertices[i]!)) <=
+          EPS
         )
           throw new Error(
             "Offset collapses this loop. Use a smaller distance.",
           );
         for (let k = i + 2; k < n; k++) {
           if ((k + 1) % n === i) continue;
-          const a = shifted[i],
-            b = shifted[j],
-            c = shifted[k],
-            d = shifted[(k + 1) % n];
+          const a = shifted[i]!,
+            b = shifted[j]!,
+            c = shifted[k]!,
+            d = shifted[(k + 1) % n]!;
           const den = cross(sub(b, a), sub(d, c));
           if (Math.abs(den) < EPS) continue;
           const t = cross(sub(c, a), sub(d, c)) / den,
@@ -597,7 +598,7 @@ export function offsetSketch(
         }
       }
       const ids = shifted.map(point);
-      ids.forEach((id, i) => line(id, ids[(i + 1) % n]));
+      ids.forEach((id, i) => line(id, ids[(i + 1) % n]!));
     } else {
       const a = shift(g.a, g.b),
         d = sub(g.b, g.a);
@@ -653,8 +654,8 @@ function connectedChain(seed: Curve, entities: SketchEntity[]): ChainSegment[] {
   ];
   const used = new Set([seed.id]);
   for (const atEnd of [true, false]) {
-    while (distance(chainStart(chain[0]), chainEnd(chain.at(-1)!)) > EPS) {
-      const target = atEnd ? chainEnd(chain.at(-1)!) : chainStart(chain[0]);
+    while (distance(chainStart(chain[0]!), chainEnd(chain.at(-1)!)) > EPS) {
+      const target = atEnd ? chainEnd(chain.at(-1)!) : chainStart(chain[0]!);
       const candidates = all.filter(
         (g) =>
           !used.has(g.e.id) &&
@@ -662,7 +663,7 @@ function connectedChain(seed: Curve, entities: SketchEntity[]): ChainSegment[] {
       );
       if (!candidates.length) break;
       if (candidates.length > 1) break; // Stop at branches; never guess a path.
-      const g = candidates[0];
+      const g = candidates[0]!;
       const segment = {
         g,
         reversed: atEnd
@@ -681,7 +682,7 @@ function offsetRoundedChain(
   chain: ChainSegment[],
   amount: number,
 ): SketchEntity[] {
-  const closed = distance(chainStart(chain[0]), chainEnd(chain.at(-1)!)) < EPS;
+  const closed = distance(chainStart(chain[0]!), chainEnd(chain.at(-1)!)) < EPS;
   const shifted = chain.map(({ g, reversed }) => {
     if (g.e.kind === "line") {
       const length = distance(g.a, g.b);
@@ -710,9 +711,9 @@ function offsetRoundedChain(
     return { a: scale(g.a), b: scale(g.b), c: g.c, r };
   });
   const geom = (i: number): Geometry => {
-    const s = shifted[i];
+    const s = shifted[i]!;
     const e =
-      chain[i].g.e.kind === "line"
+      chain[i]!.g.e.kind === "line"
         ? { id: "curve", kind: "line" as const, p1: "a", p2: "b" }
         : {
             id: "curve",
@@ -732,10 +733,10 @@ function offsetRoundedChain(
   };
   for (let i = 0; i < chain.length - (closed ? 0 : 1); i++) {
     const j = (i + 1) % chain.length;
-    const endKey = chain[i].reversed ? "a" : "b",
-      startKey = chain[j].reversed ? "b" : "a";
-    const a = shifted[i][endKey],
-      b = shifted[j][startKey];
+    const endKey = chain[i]!.reversed ? "a" : "b",
+      startKey = chain[j]!.reversed ? "b" : "a";
+    const a = shifted[i]![endKey],
+      b = shifted[j]![startKey];
     let joint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     if (distance(a, b) > EPS) {
       const candidates = intersections(geom(i), geom(j));
@@ -744,16 +745,16 @@ function offsetRoundedChain(
         throw new Error(
           "Offset cannot connect these corners. Use a smaller distance or offset a single curve.",
         );
-      joint = candidates[0];
+      joint = candidates[0]!;
     }
-    shifted[i][endKey] = joint;
-    shifted[j][startKey] = joint;
+    shifted[i]![endKey] = joint;
+    shifted[j]![startKey] = joint;
   }
   const curves = shifted.map((s, i) => {
     if (
       distance(s.a, s.b) < EPS ||
-      (chain[i].g.e.kind === "line" &&
-        dot(sub(s.b, s.a), sub(chain[i].g.b, chain[i].g.a)) <= EPS)
+      (chain[i]!.g.e.kind === "line" &&
+        dot(sub(s.b, s.a), sub(chain[i]!.g.b, chain[i]!.g.a)) <= EPS)
     )
       throw new Error("Offset collapses this chain. Use a smaller distance.");
     return geom(i);
@@ -762,8 +763,8 @@ function offsetRoundedChain(
     for (let j = i + 2; j < curves.length; j++) {
       if (closed && i === 0 && j === curves.length - 1) continue;
       if (
-        intersections(curves[i], curves[j]).some(
-          (p) => curves[i].contains(p) && curves[j].contains(p),
+        intersections(curves[i]!, curves[j]!).some(
+          (p) => curves[i]!.contains(p) && curves[j]!.contains(p),
         )
       )
         throw new Error("Offset crosses itself. Use a smaller distance.");
@@ -780,8 +781,8 @@ function offsetRoundedChain(
   };
   shifted.forEach((s, i) => {
     const id = newId("e"),
-      construction = chain[i].g.e.construction;
-    if (chain[i].g.e.kind === "line")
+      construction = chain[i]!.g.e.construction;
+    if (chain[i]!.g.e.kind === "line")
       added.push({
         id,
         kind: "line",

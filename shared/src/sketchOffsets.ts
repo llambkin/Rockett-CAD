@@ -54,7 +54,7 @@ export function editSketchOffset(
   let entities = sketch.entities;
   const updated = offsets.map((o) => (o.id === id ? { ...o, distance } : o));
   for (let i = start; i < updated.length; i++) {
-    const offset = updated[i];
+    const offset = updated[i]!;
     const owned = new Set(offset.entityIds);
     const existing = offset.entityIds.map((entityId) =>
       entities.find((e) => e.id === entityId),
