@@ -504,6 +504,16 @@ button.doc-name:hover .doc-name-pen {
   border-color: var(--danger);
 }
 
+.quick-edit {
+  transform: none;
+  gap: 8px;
+  padding: 4px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px var(--shadow-menu);
+}
+
 /* typed sizes while drawing: follows the cursor, digits lock the active field */
 .dim-entry {
   position: fixed;

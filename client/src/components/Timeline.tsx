@@ -1,8 +1,3 @@
-/**
- * Feature timeline (bottom bar): chronological feature chips, rollback
- * marker, per-feature context menu (edit/rename/suppress/delete).
- */
-
 import { useState } from "react";
 import type { Feature } from "@rockett/shared";
 import {
@@ -13,6 +8,7 @@ import {
 } from "../store";
 import { alignCameraToActiveSketch } from "../viewportRef";
 import { ContextMenu } from "./ContextMenu";
+import { QuickEdit, quickValues } from "./QuickEdit";
 
 const TYPE_ICONS: Record<string, string> = {
   importStep: "⇩",
@@ -47,6 +43,11 @@ export function Timeline() {
     x: number;
     y: number;
     feature: Feature;
+    anchor: { left: number; top: number };
+  } | null>(null);
+  const [quick, setQuick] = useState<{
+    feature: Feature;
+    anchor: { left: number; top: number };
   } | null>(null);
   const [renaming, setRenaming] = useState<{
     id: string;
@@ -119,7 +120,13 @@ export function Timeline() {
                 onDoubleClick={() => openEditor(f)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, feature: f });
+                  const { left, top } = e.currentTarget.getBoundingClientRect();
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    feature: f,
+                    anchor: { left, top },
+                  });
                 }}
               >
                 <span className="tl-icon">{TYPE_ICONS[f.type] ?? "•"}</span>
@@ -167,6 +174,9 @@ export function Timeline() {
           onClose={() => setMenu(null)}
           items={[
             { label: "Edit", action: () => openEditor(menu.feature) },
+            ...(mode.name === "idle" && quickValues(menu.feature).length > 0
+              ? [{ label: "Quick edit", action: () => setQuick(menu) }]
+              : []),
             {
               label: "Rename",
               action: () =>
@@ -186,6 +196,13 @@ export function Timeline() {
                 void useStore.getState().deleteFeature(menu.feature.id),
             },
           ]}
+        />
+      )}
+      {quick && (
+        <QuickEdit
+          feature={quick.feature}
+          anchor={quick.anchor}
+          onClose={() => setQuick(null)}
         />
       )}
     </div>

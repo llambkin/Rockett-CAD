@@ -5,7 +5,7 @@ client/src/components/FeatureDialog.tsx 20
 client/src/components/MeasurePanel.tsx 1
 client/src/components/ModelTree.tsx 4
 client/src/components/SketchOffsetIndicators.tsx 1
-client/src/components/Timeline.tsx 7
+client/src/components/Timeline.tsx 3
 client/src/components/Toolbar.tsx 7
 client/src/components/ViewportView.tsx 165
 client/src/dialogPicks.ts 3

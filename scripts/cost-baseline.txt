@@ -9,7 +9,7 @@ client/src/components/ProjectItems.tsx ItemRow 87
 client/src/components/ProjectItems.tsx ProjectItems 141
 client/src/components/ProjectList.tsx ProjectList 107
 client/src/components/SketchOffsetPanel.tsx OffsetBody 244
-client/src/components/Timeline.tsx Timeline 154
+client/src/components/Timeline.tsx Timeline 175
 client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 202
 client/src/components/Toolbar.tsx Toolbar 92

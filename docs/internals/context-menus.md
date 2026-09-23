@@ -28,7 +28,7 @@ nothing, so it never competes with the pick the mode waits for.
 | Body row                              | `ModelTree.tsx`            | Move, Rename, Show / Hide, Isolate, Show all bodies                                                       |
 | Selected body rows, more than one     | `ModelTree.tsx`            | Move, Group, Show / Hide, Isolate, Show all bodies, each one undo step                                    |
 | Body or sketch group row              | `ModelTree.tsx`            | Rename, Show / Hide all, Select members, Ungroup                                                          |
-| Timeline chip                         | `Timeline.tsx`, `.tl-chip` | Edit, Rename, Suppress or Unsuppress, Delete                                                              |
+| Timeline chip                         | `Timeline.tsx`, `.tl-chip` | Edit, Quick edit when idle and the feature has a main value, Rename, Suppress or Unsuppress, Delete       |
 | Face                                  | `ViewportContextMenu.tsx`  | Create Sketch on face, Extrude face, Press / Pull, Shell when planar; Hide body, Measure                  |
 | Edge                                  | `ViewportContextMenu.tsx`  | Fillet edge, Chamfer edge, Measure                                                                        |
 | Vertex                                | `ViewportContextMenu.tsx`  | Measure                                                                                                   |
@@ -40,6 +40,11 @@ nothing, so it never competes with the pick the mode waits for.
 Length and angle opens the BUG-026 editor with both fields. It shows only
 while sketching, because the editor works on the open sketch; on a committed
 sketch Edit sketch comes first.
+
+Quick edit (CUST-028) opens `QuickEdit.tsx` above the chip: the feature's
+main values from `quickValues` in the sketch dimension editor's `dim-edit`
+look. Typing previews through the KIT-029 dwell, Enter or OK commits one undo
+step, and Escape or a pointer down outside reverts the preview.
 
 The empty viewport items reuse `NAMED_VIEWS` and `toggleProjection` from
 `Toolbar.tsx`, so the toolbar and the menu cannot drift.

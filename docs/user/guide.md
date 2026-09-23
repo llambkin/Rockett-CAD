@@ -87,7 +87,11 @@ them to real dimensions with two points.
 ### Feature timeline
 
 Rename, edit, suppress, delete and roll back features, or insert features
-mid-history. Broken references are flagged, never silently dropped.
+mid-history. Right-click a chip and choose Quick edit to change its main
+value, such as an extrude distance or fillet radius, in a small box above the
+chip. The model previews as you type; Enter keeps the change as one undo step
+and Escape or clicking away reverts it. Broken references are flagged, never
+silently dropped.
 [FEATURE_TIMELINE.md](../../FEATURE_TIMELINE.md) covers the semantics.
 
 ## Inspect
