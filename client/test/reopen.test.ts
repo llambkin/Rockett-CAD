@@ -242,6 +242,7 @@ beforeEach(() => {
 
 /** Render the open dialog and press its primary button. */
 async function pressOk(): Promise<void> {
+  panels.length = 0;
   // SSR reads zustand's server snapshot (initial state), so mirror the live state into it
   Object.assign(useStore.getInitialState(), useStore.getState());
   renderToString(createElement(FeatureDialog));
@@ -357,4 +358,32 @@ it("extrude edit overwrites stored optional keys", async () => {
     "ex",
     expect.objectContaining({ faces: [], distance2: 4, startOffset: 0 }),
   );
+});
+
+it("tangentChain absent reopens as false and new defaults to true", async () => {
+  const addFeature = vi.fn(async () => {});
+  useStore.setState({ addFeature });
+  const bare: Feature[] = [
+    { ...base, id: "fiBare", type: "fillet", edges: [edge], radius: 3 },
+    { ...base, id: "chBare", type: "chamfer", edges: [edge], distance: 2 },
+  ];
+  for (const f of bare) {
+    useStore.getState().document!.features.push(f);
+    await openFeatureEditor(f);
+    expect(useStore.getState().dialogParams.tangentChain).toBe(false);
+    await pressOk();
+    expect(updateFeature).toHaveBeenCalledWith(
+      f.id,
+      expect.objectContaining({ tangentChain: false }),
+    );
+    useStore.setState({
+      mode: { name: "dialog", dialog: f.type as "fillet" | "chamfer" },
+      selection: [edge],
+      dialogParams: {},
+    });
+    await pressOk();
+    expect(addFeature).toHaveBeenCalledWith(
+      expect.objectContaining({ type: f.type, tangentChain: true }),
+    );
+  }
 });
