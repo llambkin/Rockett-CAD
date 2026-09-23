@@ -2,7 +2,8 @@ import { useStore, type Selection } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { NAMED_VIEWS } from "../three/camera";
-import { toggleProjection } from "./Toolbar";
+import { addSketchConstraints, toggleProjection } from "./Toolbar";
+import { relationsFor, sketchSelectionIds } from "../sketchRelations";
 
 async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   const s = useStore.getState();
@@ -36,6 +37,17 @@ function viewItems(): MenuItem[] {
   ];
 }
 
+function relationItems(): MenuItem[] {
+  const s = useStore.getState();
+  if (s.mode.name !== "sketch" || !s.draftSketch) return [];
+  return relationsFor(s.draftSketch, sketchSelectionIds(s.selection)).map(
+    (r) => ({
+      label: r.label,
+      action: () => void addSketchConstraints(r.constraints),
+    }),
+  );
+}
+
 export function ViewportContextMenu({
   menu,
   onClose,
@@ -54,7 +66,7 @@ export function ViewportContextMenu({
 }) {
   const { sel } = menu;
   const s = useStore.getState();
-  const items: MenuItem[] = [];
+  const items = relationItems();
   const shown = () => (
     <ContextMenu x={menu.x} y={menu.y} items={items} onClose={onClose} />
   );
@@ -70,9 +82,7 @@ export function ViewportContextMenu({
   };
 
   if (sel.kind === "sketchEntity" || sel.kind === "sketchPoint") {
-    const selectedIds = s.selection
-      .filter((x) => x.kind === "sketchEntity" || x.kind === "sketchPoint")
-      .map((x: any) => x.entityId);
+    const selectedIds = sketchSelectionIds(s.selection);
     const many = selectedIds.length > 1;
     if (s.mode.name !== "sketch") {
       if (sel.kind === "sketchEntity") {

@@ -4,7 +4,7 @@
  */
 
 import { useStore, type DialogType, type SketchTool } from "../store";
-import { newId, type SketchConstraint } from "@rockett/shared";
+import type { SketchConstraint } from "@rockett/shared";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { NAMED_VIEWS } from "../three/camera";
 import { filterSelectionFor } from "../dialogPicks";
@@ -14,6 +14,12 @@ import { withKey } from "../shortcuts";
 import { ToolButton } from "./ToolButton";
 import { NumField } from "./form/fields";
 import type { IconId } from "../icons";
+import {
+  CONSTRAINTS,
+  constraintFor,
+  sketchSelectionIds,
+  type RelationType,
+} from "../sketchRelations";
 
 type DialogButton = { id: DialogType & IconId; label: string; title: string };
 
@@ -70,31 +76,16 @@ const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
   { id: "offset", label: "Offset" },
 ];
 
-const CONSTRAINTS: Array<{ type: IconId; label: string; title: string }> = [
-  { type: "horizontal", label: "Horizontal", title: "Horizontal" },
-  { type: "vertical", label: "Vertical", title: "Vertical" },
-  {
-    type: "coincident",
-    label: "Coincident",
-    title: "Coincident (2 points, or a point on a line, circle or arc)",
-  },
-  { type: "parallel", label: "Parallel", title: "Parallel (2 lines)" },
-  {
-    type: "perpendicular",
-    label: "Perpendicular",
-    title: "Perpendicular (2 lines)",
-  },
-  { type: "tangent", label: "Tangent", title: "Tangent (line + circle)" },
-  { type: "equal", label: "Equal", title: "Equal (2 lines / 2 circles)" },
-  {
-    type: "concentric",
-    label: "Concentric",
-    title: "Concentric (2 circles/arcs)",
-  },
-  { type: "midpoint", label: "Midpoint", title: "Midpoint (point + line)" },
-  { type: "collinear", label: "Collinear", title: "Collinear (2 lines)" },
-  { type: "fix", label: "Fix", title: "Fix point" },
-];
+export async function addSketchConstraints(constraints: SketchConstraint[]) {
+  const s = useStore.getState();
+  if (!s.draftSketch) return;
+  s.updateDraftSketch(s.draftSketch.entities, [
+    ...s.draftSketch.constraints,
+    ...constraints,
+  ]);
+  await s.commitDraftSketch();
+  useStore.getState().setSelection([]);
+}
 
 /** Opens a feature dialog, keeping any pre-selected geometry it can use (select-then-command). */
 export function openDialog(dialog: DialogType) {
@@ -287,8 +278,6 @@ function SketchToolbar() {
   const setMode = useStore((s) => s.setMode);
   const selection = useStore((s) => s.selection);
   const draft = useStore((s) => s.draftSketch);
-  const updateDraft = useStore((s) => s.updateDraftSketch);
-  const commit = useStore((s) => s.commitDraftSketch);
   const setError = useStore((s) => s.setError);
   const dialogParams = useStore((s) => s.dialogParams);
   const setDialogParams = useStore((s) => s.setDialogParams);
@@ -296,122 +285,16 @@ function SketchToolbar() {
   if (mode.name !== "sketch") return null;
   const tool = mode.tool;
 
-  const applyConstraint = async (type: string) => {
+  const applyConstraint = async (type: RelationType) => {
     if (!draft) return;
-    const entityIds = selection
-      .filter((s) => s.kind === "sketchEntity" || s.kind === "sketchPoint")
-      .map((s: any) => s.entityId);
-    const find = (id: string) => draft.entities.find((e) => e.id === id);
-    const points = entityIds.filter((id) => find(id)?.kind === "point");
-    const lines = entityIds.filter((id) => find(id)?.kind === "line");
-    const circleLikes = entityIds.filter((id) => {
-      const k = find(id)?.kind;
-      return k === "circle" || k === "arc";
-    });
-
-    let c: SketchConstraint | null = null;
-    const id = newId("c");
-    switch (type) {
-      case "horizontal":
-        if (lines.length >= 1) c = { id, type: "horizontal", line: lines[0] };
-        break;
-      case "vertical":
-        if (lines.length >= 1) c = { id, type: "vertical", line: lines[0] };
-        break;
-      case "coincident": {
-        const [point] = points;
-        const [circle] = circleLikes;
-        const [line] = lines;
-        const own = (curve: string) => {
-          const e = find(curve);
-          if (e?.kind === "line") return [e.p1, e.p2];
-          if (e?.kind === "circle") return [e.center];
-          if (e?.kind === "arc") return [e.center, e.start, e.end];
-          return [];
-        };
-        const at = (p: string) => {
-          const e = find(p);
-          return e?.kind === "point" ? e : { x: NaN, y: NaN };
-        };
-        const offCurve = (p: string) => {
-          const e = find(circle);
-          if (e?.kind !== "circle" && e?.kind !== "arc") return Infinity;
-          const o = at(e.center);
-          const r =
-            e.kind === "circle"
-              ? e.radius
-              : Math.hypot(at(e.start).x - o.x, at(e.start).y - o.y);
-          return Math.abs(Math.hypot(at(p).x - o.x, at(p).y - o.y) - r);
-        };
-        if (points.length >= 2)
-          c = { id, type: "coincident", a: points[0], b: points[1] };
-        else if (point && circle && !own(circle).includes(point))
-          c = { id, type: "pointOnCircle", point, circle };
-        else if (point && line && !own(line).includes(point))
-          c = { id, type: "pointOnLine", point, line };
-        else if (!point && line && circle)
-          c = {
-            id,
-            type: "pointOnCircle",
-            point: own(line).reduce((a, b) =>
-              offCurve(b) < offCurve(a) ? b : a,
-            ),
-            circle,
-          };
-        break;
-      }
-      case "parallel":
-        if (lines.length >= 2)
-          c = { id, type: "parallel", a: lines[0], b: lines[1] };
-        break;
-      case "perpendicular":
-        if (lines.length >= 2)
-          c = { id, type: "perpendicular", a: lines[0], b: lines[1] };
-        break;
-      case "tangent":
-        if (lines.length >= 1 && circleLikes.length >= 1)
-          c = { id, type: "tangent", a: lines[0], b: circleLikes[0] };
-        else if (circleLikes.length >= 2)
-          c = { id, type: "tangent", a: circleLikes[0], b: circleLikes[1] };
-        break;
-      case "equal":
-        if (lines.length >= 2)
-          c = { id, type: "equal", a: lines[0], b: lines[1] };
-        else if (circleLikes.length >= 2)
-          c = { id, type: "equal", a: circleLikes[0], b: circleLikes[1] };
-        break;
-      case "concentric":
-        if (circleLikes.length >= 2)
-          c = { id, type: "concentric", a: circleLikes[0], b: circleLikes[1] };
-        break;
-      case "midpoint":
-        if (points.length >= 1 && lines.length >= 1)
-          c = { id, type: "midpoint", point: points[0], line: lines[0] };
-        break;
-      case "collinear":
-        if (lines.length >= 2)
-          c = { id, type: "collinear", a: lines[0], b: lines[1] };
-        break;
-      case "fix":
-        if (points.length >= 1) c = { id, type: "fix", point: points[0] };
-        break;
-    }
+    const c = constraintFor(draft, sketchSelectionIds(selection), type);
     if (!c) {
       setError(
         `Selection doesn't match the ${type} constraint — check the tooltip`,
       );
       return;
     }
-    updateDraft(draft.entities, [...draft.constraints, c]);
-    await commit();
-    useStore.getState().setSelection([]);
-  };
-
-  const deleteSelected = async () => {
-    const ids = selection
-      .filter((s) => s.kind === "sketchEntity" || s.kind === "sketchPoint")
-      .map((s: any) => s.entityId);
-    await useStore.getState().deleteSketchEntities(ids);
+    await addSketchConstraints([c]);
   };
 
   return (
@@ -464,7 +347,11 @@ function SketchToolbar() {
           icon="delete"
           label="Delete"
           title="Delete selected (Del)"
-          onClick={() => void deleteSelected()}
+          onClick={() =>
+            void useStore
+              .getState()
+              .deleteSketchEntities(sketchSelectionIds(selection))
+          }
         />
       </ToolGroup>
       <ToolGroup title="INSERT">

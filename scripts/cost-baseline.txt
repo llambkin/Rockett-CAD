@@ -12,10 +12,9 @@ client/src/components/ProjectList.tsx ProjectList 109
 client/src/components/SketchOffsetPanel.tsx OffsetBody 244
 client/src/components/Timeline.tsx Timeline 178
 client/src/components/Timeline.tsx openFeatureEditor 175
-client/src/components/Toolbar.tsx SketchToolbar 202
+client/src/components/Toolbar.tsx SketchToolbar 98
 client/src/components/Toolbar.tsx Toolbar 92
-client/src/components/Toolbar.tsx applyConstraint 110
-client/src/components/ViewportContextMenu.tsx ViewportContextMenu 138
+client/src/components/ViewportContextMenu.tsx ViewportContextMenu 136
 client/src/components/ViewportView.tsx 3116
 client/src/components/ViewportView.tsx ViewportView 2882
 client/src/components/ViewportView.tsx computeGizmoSource 102

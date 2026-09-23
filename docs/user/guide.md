@@ -13,6 +13,8 @@ The constraint solver handles horizontal, vertical, parallel, perpendicular,
 tangent, coincident, concentric, equal, midpoint, collinear and fix.
 Dimensions are editable: length, distance, radius, diameter and angle. The
 sketch shows its degrees of freedom and constrained state live.
+Right-click with sketch geometry selected, on it or on empty space, to list the
+relations that fit the whole selection; pick one to apply it.
 
 ### Sketch offsets
 
