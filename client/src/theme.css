@@ -437,7 +437,7 @@ button.doc-name:hover .doc-name-pen {
   cursor: grab;
   touch-action: none;
   background: var(--label-fill);
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--accent);
   color: var(--text);
   padding: 0 5px;
   border-radius: 3px;
@@ -742,7 +742,7 @@ kbd {
 }
 
 .sel-info.have {
-  border-color: var(--accent-dim);
+  border-color: var(--accent);
 }
 
 .sel-info.have b {
@@ -785,7 +785,7 @@ kbd {
 }
 
 .measure-block.main {
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--accent);
 }
 
 .measure-head {
@@ -885,7 +885,7 @@ kbd {
 }
 
 .tl-chip:hover {
-  border-color: var(--accent-dim);
+  border-color: var(--accent);
 }
 
 .tl-chip.error {
@@ -1045,7 +1045,7 @@ kbd {
 }
 
 .project-open:hover {
-  border-color: var(--accent-dim);
+  border-color: var(--accent);
 }
 
 .project-open span {

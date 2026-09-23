@@ -218,6 +218,41 @@ may still confuse them. Z shares `accent` with selection, as `MoveGizmo`
 already does. `edge` reaches 1.68 against black, so a silhouette on the
 shaded side of a body may fade; SET-011's browser check should look for it.
 
+### Graded greys
+
+Mark's Greys ruling (SET-023) brought back the four greys, so the values below
+replace the black surfaces and the tokens that failed on them. Every other
+value in the tables above stands. The lightest surface, `bg3`, sets each
+floor. The fills are the opaque base colours of today's translucent ones,
+since a label over a white body would lose contrast at any alpha.
+
+| Surface                           | Value     |
+| --------------------------------- | --------- |
+| `bg0`, `hint-fill`                | `#1e2124` |
+| `bg1`, `label-fill`, `entry-fill` | `#26292d` |
+| `bg2`                             | `#2e3237` |
+| `bg3`                             | `#383d43` |
+| `bg-glow`                         | `#2a2f36` |
+| `offset-fill`                     | `#282b30` |
+| `viewport-bg`                     | `#2a2d30` |
+
+| Token           | SET-011   | Now       | On `bg0` | On `bg3` | Target |
+| --------------- | --------- | --------- | -------- | -------- | ------ |
+| `text-dim`      | `#b3b3b3` | `#cfcfcf` | 10.38    | 7.03     | 7:1    |
+| `accent`        | `#66b3ff` | `#a7d4ff` | 10.40    | 7.05     | 7:1    |
+| `ok`            | `#4cc36a` | `#9bdeac` | 10.35    | 7.01     | 7:1    |
+| `warn`          | `#ffc247` | `#ffc652` | 10.36    | 7.02     | 7:1    |
+| `err`, `danger` | `#ff8080` | `#ffbfbf` | 10.37    | 7.02     | 7:1    |
+| `border`        | `#737373` | `#868686` | 4.44     | 3.01     | 3:1    |
+
+`text` (10.96 on `bg3`) and `offset` (7.35) pass unchanged. The viewport
+keeps `#66b3ff` for selection, gizmo, `axis-z` and profile fill, `#ff8080`
+and `#4cc36a` for the X and Y axes and cut preview, and `#b3b3b3` for
+inactive sketches: each clears 3:1 on `viewport-bg`, and the ruling keeps
+the accent. `sketch-dimmed` and the view cube edges follow `border` (3.80 on
+`viewport-bg`). The `accent-dim` borders listed above now use `accent`.
+`edge` reaches 1.11 on `viewport-bg`, as it did before SET-011.
+
 ## Contrast method
 
 Every figure above comes from the WCAG 2.2 relative-luminance formula, rounded

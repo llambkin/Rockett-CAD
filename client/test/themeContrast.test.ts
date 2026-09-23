@@ -10,9 +10,9 @@ it("matches known WCAG ratios", () => {
   expect(contrastRatio("#123456", "#123456")).toBe(1);
 });
 
-it("paints the background black and the primary text white", () => {
-  expect(THEME_TOKENS.bg0).toBe("#000000");
-  expect(THEME_TOKENS["viewport-bg"]).toBe("#000000");
+it("paints the graded greys and the primary text white", () => {
+  expect(THEME_TOKENS.bg0).toBe("#1e2124");
+  expect(THEME_TOKENS["viewport-bg"]).toBe("#2a2d30");
   expect(THEME_TOKENS.text).toBe("#ffffff");
 });
 
@@ -21,6 +21,7 @@ const surfaces: ThemeColor[] = [
   "bg1",
   "bg2",
   "bg3",
+  "bg-glow",
   "hint-fill",
   "label-fill",
   "entry-fill",

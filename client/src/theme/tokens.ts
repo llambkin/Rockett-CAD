@@ -1,71 +1,71 @@
-const bg = "#000000";
-const raised = "#1a1a1a";
-const border = "#737373";
+const bg0 = "#1e2124";
+const bg1 = "#26292d";
+const border = "#868686";
 const text = "#ffffff";
-const textDim = "#b3b3b3";
-const accent = "#66b3ff";
 const accentFill = "#0b3d73";
-const ok = "#4cc36a";
-const err = "#ff8080";
+const err = "#ffbfbf";
 const offset = "#ffcc66";
 const hover = "#ffd166";
 const originPlane = "#999faf";
+const blue = "#66b3ff";
+const red = "#ff8080";
+const green = "#4cc36a";
 
 export const THEME_TOKENS = {
-  bg0: bg,
-  bg1: bg,
-  bg2: raised,
-  bg3: raised,
+  bg0,
+  bg1,
+  bg2: "#2e3237",
+  bg3: "#383d43",
   border,
   text,
-  "text-dim": textDim,
-  accent,
+  "text-dim": "#cfcfcf",
+  accent: "#a7d4ff",
   "accent-dim": accentFill,
-  ok,
-  warn: "#ffc247",
+  ok: "#9bdeac",
+  warn: "#ffc652",
   err,
   danger: err,
   "on-accent": text,
   "err-fill": "#3d0f0f",
   "err-fill-text": text,
-  "bg-glow": bg,
+  "bg-glow": "#2a2f36",
   offset,
   "offset-border": offset,
-  "offset-fill": raised,
-  "hint-fill": raised,
-  "label-fill": raised,
-  "entry-fill": raised,
+  "offset-fill": "#282b30",
+  "hint-fill": bg0,
+  "label-fill": bg1,
+  "entry-fill": bg1,
   "accent-wash": accentFill,
   "shadow-strong": "rgba(0, 0, 0, 0.9)",
   "shadow-menu": "rgba(0, 0, 0, 0.5)",
   "shadow-panel": "rgba(0, 0, 0, 0.4)",
-  "viewport-bg": bg,
+  "viewport-bg": "#2a2d30",
   body: "#b7bcc1",
   edge: "#30343a",
-  selection: accent,
+  selection: blue,
   hover,
   "sketch-line": text,
   "sketch-point": text,
-  "sketch-inactive": textDim,
+  "sketch-inactive": "#b3b3b3",
   "sketch-dimmed": border,
   "sketch-construction": "#8f7fe8",
   "sketch-external": "#bb88ff",
-  "profile-fill": accent,
+  "profile-fill": blue,
   plane: "#4fd1c5",
   "origin-plane": originPlane,
   "origin-plane-border": originPlane,
-  "axis-x": err,
-  "axis-y": ok,
-  "axis-z": accent,
-  gizmo: accent,
+  "axis-x": red,
+  "axis-y": green,
+  "axis-z": blue,
+  gizmo: blue,
   "gizmo-hover": hover,
   "gizmo-handle": "#ffd166",
-  "gizmo-cut": err,
-  "move-axis-x": err,
-  "move-axis-y": ok,
-  "move-axis-z": accent,
+  "gizmo-cut": red,
+  "move-axis-x": red,
+  "move-axis-y": green,
+  "move-axis-z": blue,
   "move-axis-hover": hover,
-  "viewcube-face": raised,
+  "viewcube-face": "#1a1a1a",
   "viewcube-border": border,
   "viewcube-edge": border,
   "viewcube-label": text,
