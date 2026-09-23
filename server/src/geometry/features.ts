@@ -71,6 +71,7 @@ import {
   type NameMap,
   type NamedBody,
 } from "./naming.js";
+import { ShapeMap } from "./shapeMap.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -494,7 +495,7 @@ function buildPrism(
     }
     const shape = prism.Shape();
 
-    const provisional: NameMap = new Map();
+    const provisional: NameMap = new ShapeMap();
     // side faces from profile edges
     for (const e of edgesOf(face)) {
       const entityId = offsetEdgeEntity.get(shapeHash(e));
@@ -502,7 +503,7 @@ function buildPrism(
       const gen = listToArray(prism.Generated(e));
       for (const g of gen) {
         if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(shapeHash(g), `f:${featureId}:s:${entityId}`);
+          provisional.set(g, `f:${featureId}:s:${entityId}`);
         }
       }
       release(gen);
@@ -510,11 +511,11 @@ function buildPrism(
     // caps
     const firstShape = prism.FirstShape_1();
     for (const cap of facesOf(firstShape)) {
-      provisional.set(shapeHash(cap), `f:${featureId}:cap:start`);
+      provisional.set(cap, `f:${featureId}:cap:start`);
     }
     const lastShape = prism.LastShape_1();
     for (const cap of facesOf(lastShape)) {
-      provisional.set(shapeHash(cap), `f:${featureId}:cap:end`);
+      provisional.set(cap, `f:${featureId}:cap:end`);
     }
     const names = finalizeNames(shape, provisional, featureId);
     prism.delete();
@@ -664,24 +665,24 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
         );
       }
       const shape = revol.Shape();
-      const provisional: NameMap = new Map();
+      const provisional: NameMap = new ShapeMap();
       for (const e of edgesOf(pf.face)) {
         const entityId = pf.edgeEntity.get(shapeHash(e));
         if (!entityId) continue;
         const gen = listToArray(revol.Generated(e));
         for (const g of gen) {
           if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-            provisional.set(shapeHash(g), `f:${f.id}:s:${entityId}`);
+            provisional.set(g, `f:${f.id}:s:${entityId}`);
           }
         }
         release(gen);
       }
       if (!full) {
         for (const cap of facesOf(revol.FirstShape_1())) {
-          provisional.set(shapeHash(cap), `f:${f.id}:cap:start`);
+          provisional.set(cap, `f:${f.id}:cap:start`);
         }
         for (const cap of facesOf(revol.LastShape_1())) {
-          provisional.set(shapeHash(cap), `f:${f.id}:cap:end`);
+          provisional.set(cap, `f:${f.id}:cap:end`);
         }
       }
       const names = finalizeNames(shape, provisional, f.id);
@@ -770,7 +771,7 @@ function evalSweep(state: EvalState, f: SweepFeature): void {
       );
     }
     const shape = pipe.Shape();
-    const names = finalizeNames(shape, new Map(), f.id);
+    const names = finalizeNames(shape, new ShapeMap(), f.id);
     pipe.delete();
     return { shape, names };
   });
@@ -800,7 +801,7 @@ function evalLoft(state: EvalState, f: LoftFeature): void {
       throw new Error("loft failed — sections may be incompatible");
     }
     const shape = thru.Shape();
-    const names = finalizeNames(shape, new Map(), f.id);
+    const names = finalizeNames(shape, new ShapeMap(), f.id);
     thru.delete();
     return { shape, names };
   });
@@ -920,15 +921,15 @@ function blendNames(
 ): NameMap {
   const k = getKernel();
   // Modified faces keep names; generated fillet faces are named per edge.
-  const provisional: NameMap = new Map();
+  const provisional: NameMap = new ShapeMap();
   const bodyFaces = facesOf(body.shape);
   try {
     for (const face of bodyFaces) {
-      const name = body.names.get(shapeHash(face));
+      const name = body.names.get(face);
       if (!name || op.IsDeleted(face)) continue;
       const modified = listToArray(op.Modified(face));
       for (const mf of modified.length > 0 ? modified : [face]) {
-        provisional.set(shapeHash(mf), name);
+        provisional.set(mf, name);
       }
       release(modified);
     }
@@ -940,7 +941,7 @@ function blendNames(
     gen.forEach((g, j) => {
       if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
         provisional.set(
-          shapeHash(g),
+          g,
           `f:${featureId}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
         );
       }
@@ -1225,8 +1226,8 @@ function chamferByEnvelope(
 
     // Names: the band's slanted faces are the chamfer faces, named per source
     // edge like ChFi3d does; its face on the cap plane keeps the cap's name.
-    const envNames: NameMap = new Map();
-    const capName = current.names.get(shapeHash(cap.face));
+    const envNames: NameMap = new ShapeMap();
+    const capName = current.names.get(cap.face);
     const mids = cap.edges.map((e) => ({ e, c: edgeCentroid(e) }));
     for (const face of facesOf(envelope)) {
       const c = faceCentroid(face);
@@ -1239,7 +1240,7 @@ function chamferByEnvelope(
         n,
       );
       if (Math.abs(depth) < LINEAR_TOL) {
-        if (capName) envNames.set(shapeHash(face), capName);
+        if (capName) envNames.set(face, capName);
         continue;
       }
       // only the band's slanted faces sit strictly between the cap plane and
@@ -1258,7 +1259,7 @@ function chamferByEnvelope(
       const idx = selected.findIndex(
         (s) => shapeHash(s.edge) === shapeHash(mids[best]!.e),
       );
-      envNames.set(shapeHash(face), `f:${featureId}:fe:${idx + 1}`);
+      envNames.set(face, `f:${featureId}:fe:${idx + 1}`);
     }
 
     const common = new k.BRepAlgoAPI_Common_3(
@@ -1465,7 +1466,7 @@ function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
         throw new Error("offset face prism failed");
       }
       const toolShape = prism.Shape();
-      const toolNames = finalizeNames(toolShape, new Map(), f.id);
+      const toolNames = finalizeNames(toolShape, new ShapeMap(), f.id);
       prism.delete();
       v.delete();
 
@@ -1864,14 +1865,14 @@ export function evaluateFeature(
         state,
         `b:${feature.id}`,
         shape,
-        finalizeNames(shape, new Map(), feature.id),
+        finalizeNames(shape, new ShapeMap(), feature.id),
       );
       return;
     }
     case "importMesh": {
       const { shape, warning } = readMesh(feature),
         bodyId = `b:${feature.id}`,
-        names = finalizeNames(shape, new Map(), feature.id);
+        names = finalizeNames(shape, new ShapeMap(), feature.id);
       if (warning) state.bodies.set(bodyId, { bodyId, shape, names });
       else registerBodySolids(state, bodyId, shape, names);
       return warning;

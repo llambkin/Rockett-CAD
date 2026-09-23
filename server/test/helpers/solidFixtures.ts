@@ -1,4 +1,5 @@
 import { edges, getKernel } from "../../src/geometry/kernel.js";
+import { ShapeMap } from "../../src/geometry/shapeMap.js";
 
 export function filletedCube(size: number, radius: number) {
   const k = getKernel();
@@ -9,7 +10,11 @@ export function filletedCube(size: number, radius: number) {
   );
   for (const edge of edges(box.Shape())) op.Add_2(radius, edge);
   op.Build(new k.Message_ProgressRange_1());
-  const body = { bodyId: "b", shape: op.Shape(), names: new Map() };
+  const body = {
+    bodyId: "b",
+    shape: op.Shape(),
+    names: new ShapeMap<string>(),
+  };
   op.delete();
   box.delete();
   return body;

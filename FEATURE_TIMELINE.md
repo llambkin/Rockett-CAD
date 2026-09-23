@@ -52,11 +52,14 @@ whatever produces them. The engine evaluates chronologically, so dependencies
 are always evaluated first; an edit invalidates exactly the downstream suffix
 (snapshot cache, CAD_MODEL.md → "Regeneration").
 
-Snapshots own the kernel shapes in their state. The kernel never frees a
-shape by itself, so when snapshots are truncated, invalidated or their engine
-is dropped, `releaseSnapshots` in `engine.ts` deletes every body shape that
-only discarded snapshots hold. A shape a kept snapshot shares through
-`cloneState` stays. A failed feature releases its partial state the same way.
+Snapshots own the kernel shapes and face name maps in their state. The
+kernel never frees a shape by itself, so when snapshots are truncated,
+invalidated or their engine is dropped, `releaseSnapshots` in `engine.ts`
+deletes every body shape and name map that only discarded snapshots hold. A
+shape or map a kept snapshot shares through `cloneState` stays. A failed
+feature releases its partial state the same way. Name maps made while a
+feature evaluates are released when it ends unless a body in its result holds
+them.
 A caller that needs a shape after its engine is dropped reads what it needs
 first. Short-lived handles, such as explored faces and edges, name lookups
 and adaptors, are deleted by the code that made them.

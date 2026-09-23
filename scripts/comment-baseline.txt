@@ -37,7 +37,7 @@ server/src/geometry/features.ts 104
 server/src/geometry/frames.ts 21
 server/src/geometry/kernel.ts 21
 server/src/geometry/measure.ts 4
-server/src/geometry/naming.ts 47
+server/src/geometry/naming.ts 45
 server/src/geometry/sketchGeom.ts 46
 server/src/geometry/tangentEdges.ts 6
 server/src/geometry/tessellate.ts 10

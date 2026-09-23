@@ -129,6 +129,10 @@ chamfer, shell, or offset operation we walk the input faces and ask OCCT
   (e.g. `MakePrism.Generated(edge)`, `MakeFillet.Generated(edge)`), otherwise
   the deterministic fallback.
 
+A name map is a `ShapeMap` (`server/src/geometry/shapeMap.ts`): the shape hash
+only picks a bucket, and a lookup matches with OCCT's `IsSame` (same TShape
+and location), so two faces whose hashes collide keep their own names.
+
 When one input face yields several result faces (e.g. a boolean splits a
 face) the copies are disambiguated with a `~n` suffix in centroid order: by
 x, then y, then z. `suffixDuplicates` in `server/src/geometry/naming.ts` owns
@@ -296,7 +300,8 @@ sampled polyline tagged with its name, each vertex a named point. The client
 raycasts triangles/segments/points and resolves hits to persistent CAD
 references, so selection is CAD topology, never "triangle 512". Face normals
 come from the kernel (`ComputeNormals`), respecting face orientation.
-Tessellations are cached per body-shape hash; export meshes a copy of each
+Tessellations are cached per body id and shape hash, and a hit must be the
+same live shape (`IsSame`); export meshes a copy of each
 body at user-selected quality, so neither mesh reuses the other. Both go
 through `meshShape` in `server/src/geometry/mesh.ts`, the one loop that reads
 face triangulations.

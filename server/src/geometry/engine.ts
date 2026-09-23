@@ -29,7 +29,8 @@ import {
 import type { Sources } from "./importers.js";
 import { tessellateBody } from "./tessellate.js";
 import type { NamedBody } from "./naming.js";
-import { shapeHash } from "./kernel.js";
+import { shapeHash, type Shape } from "./kernel.js";
+import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
 
 interface Snapshot {
   /** JSON of the feature this snapshot is the result of (cache key). */
@@ -42,11 +43,32 @@ function releaseSnapshots(
   discarded: Pick<Snapshot, "state">[],
   retained: Pick<Snapshot, "state">[],
 ): void {
-  const shapes = (snapshots: Pick<Snapshot, "state">[]) =>
-    snapshots.flatMap((s) => [...s.state.bodies.values()].map((b) => b.shape));
-  const kept = new Set(shapes(retained));
-  for (const shape of new Set(shapes(discarded)))
-    if (!kept.has(shape)) shape.delete();
+  const bodies = (snapshots: Pick<Snapshot, "state">[]) =>
+    snapshots.flatMap((s) => [...s.state.bodies.values()]);
+  const kept = bodies(retained);
+  const keptShapes = new Set(kept.map((b) => b.shape));
+  const keptNames = new Set(kept.map((b) => b.names));
+  const dropped = bodies(discarded);
+  for (const shape of new Set(dropped.map((b) => b.shape)))
+    if (!keptShapes.has(shape)) shape.delete();
+  for (const names of new Set(dropped.map((b) => b.names)))
+    if (!keptNames.has(names)) names.release();
+}
+
+function evaluateTracked(
+  next: EvalState,
+  feature: CadDocument["features"][number],
+  earlier: CadDocument["features"],
+): string | void {
+  const made: ShapeMap<unknown>[] = [];
+  try {
+    return trackShapeMaps(made, () => evaluateFeature(next, feature, earlier));
+  } finally {
+    const held = new Set<ShapeMap<unknown>>(
+      [...next.bodies.values()].map((b) => b.names),
+    );
+    for (const map of made) if (!held.has(map)) map.release();
+  }
 }
 
 /** Cache key for a feature: its JSON minus display-only fields, so hiding a
@@ -64,9 +86,14 @@ function payloadBytes(p: BodyPayload): number {
   return numbers * 8;
 }
 
+interface Tessellation {
+  shape: Shape;
+  payload: BodyPayload;
+}
+
 class DocumentEngine {
   private snapshots: Snapshot[] = [];
-  private tessCache = new Map<string, BodyPayload>();
+  private tessCache = new Map<string, Tessellation>();
   private tessBytes = 0;
 
   evaluate(
@@ -106,7 +133,7 @@ class DocumentEngine {
         status = { featureId: feature.id, status: "suppressed" };
       } else {
         try {
-          const warning = evaluateFeature(
+          const warning = evaluateTracked(
             next,
             feature,
             doc.features.slice(0, i),
@@ -192,18 +219,23 @@ class DocumentEngine {
     meta: { name: string; visible: boolean },
   ): BodyPayload {
     const cached = this.tessCache.get(cacheKey);
-    if (cached) {
-      this.tessCache.delete(cacheKey);
+    this.tessCache.delete(cacheKey);
+    if (
+      cached &&
+      !cached.shape.isDeleted() &&
+      cached.shape.IsSame(body.shape)
+    ) {
       this.tessCache.set(cacheKey, cached);
-      return cached;
+      return cached.payload;
     }
+    if (cached) this.tessBytes -= payloadBytes(cached.payload);
     const payload = tessellateBody(body, meta);
-    this.tessCache.set(cacheKey, payload);
+    this.tessCache.set(cacheKey, { shape: body.shape, payload });
     this.tessBytes += payloadBytes(payload);
     for (const [key, old] of this.tessCache) {
       if (this.tessBytes <= TESS_CACHE_BYTES) break;
       this.tessCache.delete(key);
-      this.tessBytes -= payloadBytes(old);
+      this.tessBytes -= payloadBytes(old.payload);
     }
     return payload;
   }

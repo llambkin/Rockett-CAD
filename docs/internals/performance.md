@@ -500,12 +500,12 @@ change bounds the heap. Mark chose on 2026-09-23 to recycle the worker, so
 PERF-018 owns the heap bound, and the soak asserts live handles instead: under
 500 a cycle from cycle 100 to the last, in every phase.
 
-Since deleted shapes never return their memory, no new shape can reuse a freed
-address, so a shape hash in the tessellation cache key cannot name a stale
-body. A kernel build whose shapes free would break that; REF-004's identity
-key must land with it. On PERF-034's cache every edit-tail cycle adds an
-entry: 301 entries and 288 MB more JS heap after 300 cycles, bounded by its
-256 MB payload cap.
+The tessellation cache key stays the body id and shape hash, and since REF-004
+each entry keeps the body shape it meshed: a hit needs that shape undeleted
+and `IsSame` as the body's. A hash collision, or a kernel build whose freed
+shapes reuse addresses, re-meshes instead of serving a stale body. On
+PERF-034's cache every edit-tail cycle adds an entry: 301 entries and 288 MB
+more JS heap after 300 cycles, bounded by its 256 MB payload cap.
 
 ## Cost table
 

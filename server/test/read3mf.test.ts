@@ -10,6 +10,7 @@ import {
   type Shape,
 } from "../src/geometry/kernel.js";
 import { engineFor } from "../src/geometry/engine.js";
+import { ShapeMap } from "../src/geometry/shapeMap.js";
 import { write3mf } from "../src/geometry/exporters.js";
 import { startTestApp, type TestApp } from "./helpers/testApp.js";
 import { cube } from "./helpers/meshFixtures.js";
@@ -61,7 +62,11 @@ function box(x: number, size: number) {
   const k = getKernel(),
     make = new k.BRepPrimAPI_MakeBox_3(pnt(x, 0, 0), size, size, size);
   return {
-    body: { bodyId: `box${x}`, shape: make.Shape(), names: new Map() },
+    body: {
+      bodyId: `box${x}`,
+      shape: make.Shape(),
+      names: new ShapeMap<string>(),
+    },
     name: `Box ${x}`,
   };
 }

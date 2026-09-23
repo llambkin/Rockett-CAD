@@ -21,7 +21,6 @@ import {
   lengthOf,
   release,
   scoped,
-  shapeHash,
   type Shape,
 } from "./kernel.js";
 import { meshShape } from "./mesh.js";
@@ -86,7 +85,7 @@ export function tessellateBody(
       }
 
       faceInfos.push({
-        name: body.names.get(shapeHash(m.face)) ?? "?",
+        name: body.names.get(m.face) ?? "?",
         start,
         count: indices.length - start,
         surface: surfaceInfo(m.face),

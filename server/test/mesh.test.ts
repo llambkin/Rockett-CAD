@@ -4,13 +4,18 @@ import { getKernel, initKernel } from "../src/geometry/kernel.js";
 import { meshShape } from "../src/geometry/mesh.js";
 import { tessellateBody } from "../src/geometry/tessellate.js";
 import { writeStl } from "../src/geometry/exporters.js";
+import { ShapeMap } from "../src/geometry/shapeMap.js";
 
 beforeAll(initKernel, 120000);
 
 it("meshes a box once for the viewport and STL at equal deflection", () => {
   const k = getKernel();
   const box = new k.BRepPrimAPI_MakeBox_2(20, 30, 10);
-  const body = { bodyId: "b", shape: box.Shape(), names: new Map() };
+  const body = {
+    bodyId: "b",
+    shape: box.Shape(),
+    names: new ShapeMap<string>(),
+  };
   const deflection = { linear: 0.05, angular: 0.3 };
 
   const faces = meshShape(body.shape, deflection);

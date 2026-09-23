@@ -5,9 +5,9 @@ import {
   getKernel,
   initKernel,
   pnt,
-  shapeHash,
 } from "../src/geometry/kernel.js";
-import { finalizeNames, type NameMap } from "../src/geometry/naming.js";
+import { finalizeNames } from "../src/geometry/naming.js";
+import { ShapeMap } from "../src/geometry/shapeMap.js";
 
 beforeAll(initKernel, 120_000);
 
@@ -30,18 +30,17 @@ function namesWithNoise(noise: number) {
   builder.MakeCompound(pair);
   builder.Add(pair, low);
   builder.Add(pair, high);
-  const provisional: NameMap = new Map([
-    [shapeHash(low), "f:pad:cap:end"],
-    [shapeHash(high), "f:pad:cap:end"],
-  ]);
+  const provisional = new ShapeMap<string>()
+    .set(low, "f:pad:cap:end")
+    .set(high, "f:pad:cap:end");
 
   const names = finalizeNames(pair, provisional, "pad");
   const gap = faceCentroid(high).map((c, i) => c - faceCentroid(low)[i]!);
   builder.delete();
   return {
     gap,
-    low: names.get(shapeHash(low)),
-    high: names.get(shapeHash(high)),
+    low: names.get(low),
+    high: names.get(high),
   };
 }
 
