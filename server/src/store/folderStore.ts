@@ -25,12 +25,11 @@ export class FolderStore {
       name: "folders",
       key: /^folders$/,
       file: "folders.json",
-      migrate: (raw) => {
-        try {
-          return parse(foldersFile, raw);
-        } catch {
-          throw new StoreError("folders.json is corrupted", "internal");
-        }
+      migrations: {
+        namespace: "folders",
+        current: FOLDERS_VERSION,
+        field: "version",
+        steps: {},
       },
       validate: (value) => parse(foldersFile, value),
     });
@@ -110,12 +109,18 @@ export class FolderStore {
   }
 
   private async read(): Promise<FoldersFile> {
+    let raw: FoldersFile;
     try {
-      return await this.file.read(KEY);
+      raw = await this.file.read(KEY);
     } catch (err) {
       if (err instanceof StoreError && err.code === "not_found")
         return { version: FOLDERS_VERSION, folders: [], placement: {} };
       throw err;
+    }
+    try {
+      return parse(foldersFile, raw);
+    } catch {
+      throw new StoreError("folders.json is corrupted", "internal");
     }
   }
 

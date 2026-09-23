@@ -3,7 +3,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { ProjectStore } from "../src/store/projectStore.js";
-import { migrateDocument } from "../src/store/migrations.js";
+import {
+  documentMigrations,
+  migrate,
+  TooNewError,
+} from "../src/store/migrations.js";
 import { createEmptyDocument, SCHEMA_VERSION } from "@rockett/shared";
 
 async function tempStore(): Promise<ProjectStore> {
@@ -19,10 +23,19 @@ describe("project store", () => {
       ...createEmptyDocument("legacy", "Legacy"),
       schemaVersion: 1,
     };
-    const upgraded = migrateDocument(legacy);
+    const upgraded = migrate(documentMigrations, legacy);
     expect(upgraded.schemaVersion).toBe(SCHEMA_VERSION);
     expect(upgraded.features).toEqual(legacy.features);
     expect(legacy.schemaVersion).toBe(1);
+  });
+
+  it("refuses to load a document from a newer schema", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-test-"));
+    const store = new ProjectStore(dir);
+    const doc = await store.create("Future");
+    const file = path.join(dir, "projects", doc.id, "document.json");
+    await fs.writeFile(file, JSON.stringify({ ...doc, schemaVersion: 99 }));
+    await expect(store.load(doc.id)).rejects.toBeInstanceOf(TooNewError);
   });
   it("keeps concurrent saves atomic without temporary-file collisions", async () => {
     const store = await tempStore();

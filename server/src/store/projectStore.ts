@@ -19,7 +19,7 @@ import {
   type ProjectSummary,
 } from "@rockett/shared";
 import { JsonStore, StoreError } from "./jsonStore.js";
-import { migrateDocument } from "./migrations.js";
+import { documentMigrations } from "./migrations.js";
 import { LocalStorage, type Storage } from "./storage.js";
 
 export { StoreError };
@@ -73,7 +73,7 @@ export class ProjectStore {
       name: "project",
       key: ID_RE,
       file: "document.json",
-      migrate: migrateDocument,
+      migrations: documentMigrations,
       validate: (doc) => {
         if (doc.schemaVersion !== SCHEMA_VERSION)
           throw new StoreError(

@@ -5,7 +5,7 @@ import {
   ValidationError,
   type Feature,
 } from "@rockett/shared";
-import { migrateDocument } from "../src/store/migrations.js";
+import { documentMigrations, migrate } from "../src/store/migrations.js";
 import { validateDocument, validateFeature } from "../src/api/validate.js";
 
 const base = { id: "f1", name: "F1", suppressed: false };
@@ -411,7 +411,8 @@ describe("validateFeature", () => {
 
 describe("validateDocument", () => {
   it("document base shape", () => {
-    const fixture = migrateDocument(
+    const fixture = migrate(
+      documentMigrations,
       JSON.parse(
         readFileSync(
           new URL("./fixtures/invalid-top-fillet.json", import.meta.url),

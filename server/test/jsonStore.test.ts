@@ -18,7 +18,12 @@ async function tempStore(onWrite: (root: string) => void = () => {}) {
     name: "note",
     key: /^[a-z0-9]+$/,
     file: "note.json",
-    migrate: (raw) => ({ ...(raw as Note), version: 2 }),
+    migrations: {
+      namespace: "note",
+      current: 2,
+      field: "version",
+      steps: { 1: (note) => note },
+    },
     validate: (note) => {
       if (!note.text) throw new Error("empty note");
       onWrite(root);

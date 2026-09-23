@@ -42,7 +42,6 @@ server/src/geometry/sketchGeom.ts 46
 server/src/geometry/tangentEdges.ts 6
 server/src/geometry/tessellate.ts 14
 server/src/index.ts 8
-server/src/store/migrations.ts 9
 server/src/store/projectQueue.ts 1
 server/src/store/projectStore.ts 14
 server/test/api.test.ts 21

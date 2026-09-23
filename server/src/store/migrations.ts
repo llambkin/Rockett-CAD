@@ -1,40 +1,62 @@
-/**
- * Document schema migrations.
- *
- * Every breaking change to the shared model bumps SCHEMA_VERSION and adds a
- * step here so older projects keep opening.
- */
-
 import { SCHEMA_VERSION, type CadDocument } from "@rockett/shared";
 
-type Migration = (doc: any) => any;
+type Value = Record<string, unknown>;
 
-/** Keyed by the version the migration upgrades FROM. */
-const MIGRATIONS: Record<number, Migration> = {
-  1: (doc) => ({ ...doc, schemaVersion: 2 }),
-  2: (doc) => ({ ...doc, schemaVersion: 3 }),
-  3: (doc) => ({ ...doc, schemaVersion: 4 }),
-  4: (doc) => ({ ...doc, schemaVersion: 5 }),
-  // 1 → 2 example:
-  // 1: (doc) => ({ ...doc, schemaVersion: 2, somethingNew: [] }),
-};
+export interface Migrations<T> {
+  namespace: string;
+  current: number;
+  field: keyof T & string;
+  steps: Record<number, (value: Value) => Value>;
+}
 
-export function migrateDocument(doc: any): CadDocument {
-  let current = doc;
-  let guard = 0;
-  while (current.schemaVersion < SCHEMA_VERSION && guard++ < 100) {
-    const step = MIGRATIONS[current.schemaVersion];
-    if (!step) {
-      throw new Error(
-        `no migration path from schema ${current.schemaVersion} to ${SCHEMA_VERSION}`,
-      );
-    }
-    current = step(current);
-  }
-  if (current.schemaVersion > SCHEMA_VERSION) {
-    throw new Error(
-      `project uses schema ${current.schemaVersion}, newer than this server (${SCHEMA_VERSION}) — upgrade the application`,
+export class MissingStepError extends Error {
+  constructor(
+    readonly namespace: string,
+    readonly from: unknown,
+    readonly current: number,
+  ) {
+    super(
+      `no ${namespace} migration from version ${String(from)} to ${current}`,
     );
   }
-  return current as CadDocument;
 }
+
+export class TooNewError extends Error {
+  constructor(
+    readonly namespace: string,
+    readonly version: number,
+    readonly current: number,
+  ) {
+    super(
+      `${namespace} version ${version} is newer than this server reads (${current}); upgrade the application`,
+    );
+  }
+}
+
+export function migrate<T>(table: Migrations<T>, value: unknown): T {
+  const record = (typeof value === "object" && value ? value : {}) as Value;
+  const version = record[table.field];
+  if (typeof version !== "number" || !Number.isInteger(version))
+    throw new MissingStepError(table.namespace, version, table.current);
+  if (version > table.current)
+    throw new TooNewError(table.namespace, version, table.current);
+  let current = record;
+  for (let from = version; from < table.current; from++) {
+    const step = table.steps[from];
+    if (!step) throw new MissingStepError(table.namespace, from, table.current);
+    current = { ...step(current), [table.field]: from + 1 };
+  }
+  return current as T;
+}
+
+export const documentMigrations: Migrations<CadDocument> = {
+  namespace: "document",
+  current: SCHEMA_VERSION,
+  field: "schemaVersion",
+  steps: {
+    1: (doc) => doc,
+    2: (doc) => doc,
+    3: (doc) => doc,
+    4: (doc) => doc,
+  },
+};

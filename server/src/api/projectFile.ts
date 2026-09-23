@@ -11,7 +11,7 @@ import {
 } from "@rockett/shared";
 import type { Request, Response } from "express";
 import type { ProjectStore } from "../store/projectStore.js";
-import { migrateDocument } from "../store/migrations.js";
+import { documentMigrations, migrate } from "../store/migrations.js";
 import { validateDocument } from "./validate.js";
 
 const ATTR_CHAR = /[A-Za-z0-9!#$&+.^_`|~-]/;
@@ -87,7 +87,7 @@ export const uploadProjectFile =
       throw new ValidationError(
         `project schema ${file.document.schemaVersion} is newer than this server's schema ${SCHEMA_VERSION}`,
       );
-    const document = migrateDocument(file.document);
+    const document = migrate(documentMigrations, file.document);
     validateDocument(document);
     const referenced = referencedAssets(document);
     for (const name of Object.keys(file.assets))

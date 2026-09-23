@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { ApiErrorCode } from "@rockett/shared";
+import { migrate, type Migrations } from "./migrations.js";
 import { ProjectQueue } from "./projectQueue.js";
 import type { Storage } from "./storage.js";
 
@@ -18,7 +19,7 @@ export interface JsonStoreOptions<T> {
   name: string;
   key: RegExp;
   file: string;
-  migrate: (raw: unknown) => T;
+  migrations: Migrations<T>;
   validate?: (value: T) => void;
 }
 
@@ -53,7 +54,7 @@ export class JsonStore<T> {
         "internal",
       );
     }
-    return this.options.migrate(value);
+    return migrate(this.options.migrations, value);
   }
 
   write(key: string, value: T): Promise<void> {

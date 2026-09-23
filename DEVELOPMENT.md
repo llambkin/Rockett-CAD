@@ -93,8 +93,8 @@ boxes, face counts). Never rely on visual confirmation alone.
 - New feature types touch: `shared/src/model.ts` (schema + label),
   `server/src/geometry/features.ts` (evaluator + dispatcher),
   `server/src/api/validate.ts`, client dialog + `dialogPicks.ts`, and a test.
-- Schema changes bump `SCHEMA_VERSION` and add a migration in
-  `server/src/store/migrations.ts`.
+- Schema changes bump `SCHEMA_VERSION` and add a step, keyed by the old
+  version, to `documentMigrations` in `server/src/store/migrations.ts`.
 
 ## Conventions
 
