@@ -108,8 +108,9 @@ The last two need masterrulez cloned to `~/masterrulez`. See
 | [API.md](API.md)                           | REST API reference                                                |
 | [DOCKER.md](DOCKER.md)                     | Deployment (Docker / Compose / Unraid)                            |
 | [DEVELOPMENT.md](DEVELOPMENT.md)           | Repo layout, workflows, testing                                   |
-| [ROADMAP.md](ROADMAP.md)                   | Current status and planned work                                   |
+| [WORK-ORDER.md](WORK-ORDER.md)             | Scope, rulings and planned work                                   |
 | [CHANGELOG.md](CHANGELOG.md)               | Changes per release, release and schema conventions               |
+| [Brief.md](Brief.md)                       | Original 3D-printing brief, kept as history                       |
 
 ## Viewport controls
 

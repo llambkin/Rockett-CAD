@@ -1,3 +1,5 @@
+This is the original 3D-printing brief, kept as history. `WORK-ORDER.md` owns scope.
+
 Project Brief: Self-Hosted Parametric CAD Application
 
 
