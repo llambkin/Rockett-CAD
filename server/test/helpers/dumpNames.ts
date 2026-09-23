@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import {
   createEmptyDocument,
   detectProfiles,
+  type EvaluateResult,
   type ExtrudeFeature,
   type Feature,
   type SketchFeature,
@@ -121,6 +122,23 @@ export const TIMELINES: Record<string, () => Feature[]> = {
   ],
 };
 
+export function evaluateTimeline(id: string, features: Feature[]) {
+  const doc = createEmptyDocument(id, id);
+  doc.features = features;
+  doc.timelinePosition = features.length;
+  const result = engineFor(id).evaluate(doc);
+  dropEngine(id);
+  return result;
+}
+
+export const xSpans = (result: EvaluateResult) =>
+  Object.fromEntries(
+    result.bodies.map((b) => [
+      b.bodyId,
+      [Math.round(b.bbox.min[0]) + 0, Math.round(b.bbox.max[0]) + 0],
+    ]),
+  );
+
 export type NameDump = Record<
   string,
   {
@@ -137,11 +155,7 @@ export type NameDump = Record<
 export function dumpNames(order = Object.keys(TIMELINES)): NameDump {
   const dump: NameDump = {};
   for (const key of order) {
-    const doc = createEmptyDocument(`names-${key}`, key);
-    doc.features = TIMELINES[key]!();
-    doc.timelinePosition = doc.features.length;
-    const result = engineFor(doc.id).evaluate(doc);
-    dropEngine(doc.id);
+    const result = evaluateTimeline(`names-${key}`, TIMELINES[key]!());
     dump[key] = {
       statuses: result.featureStatuses.map((s) => s.status),
       bodies: result.bodies.map((b) => ({

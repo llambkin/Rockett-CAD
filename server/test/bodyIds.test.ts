@@ -1,31 +1,26 @@
 import { beforeAll, expect, it } from "vitest";
 import {
-  createEmptyDocument,
   detectProfiles,
   type Feature,
   type ProfileRef,
   type SketchFeature,
 } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
-import { dropEngine, engineFor } from "../src/geometry/engine.js";
-import { box, meta, rect } from "./helpers/dumpNames.js";
+import {
+  box,
+  evaluateTimeline,
+  meta,
+  rect,
+  xSpans,
+} from "./helpers/dumpNames.js";
 
 beforeAll(initKernel, 120_000);
 
 function evaluate(features: Feature[]) {
-  const doc = createEmptyDocument("body-ids", "body-ids");
-  doc.features = features;
-  doc.timelinePosition = features.length;
-  const result = engineFor(doc.id).evaluate(doc);
-  dropEngine(doc.id);
+  const result = evaluateTimeline("body-ids", features);
   return {
     status: result.featureStatuses.at(-1),
-    xSpans: Object.fromEntries(
-      result.bodies.map((b) => [
-        b.bodyId,
-        [Math.round(b.bbox.min[0]) + 0, Math.round(b.bbox.max[0]) + 0],
-      ]),
-    ),
+    xSpans: xSpans(result),
     filletFaces: result.bodies.map((b) => [
       b.bodyId,
       b.faces.map((f) => f.name).filter((n) => n.startsWith("f:fil:")),
