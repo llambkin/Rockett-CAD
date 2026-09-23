@@ -150,7 +150,7 @@ function resolveAxis(
   ref: AxisRef,
 ): { origin: Vec3; direction: Vec3 } {
   if (ref.kind === "originAxis") {
-    const dirs: Record<string, Vec3> = {
+    const dirs: Record<"X" | "Y" | "Z", Vec3> = {
       X: [1, 0, 0],
       Y: [0, 1, 0],
       Z: [0, 0, 1],
@@ -197,8 +197,8 @@ function resolveProfiles(
   refs: ProfileRef[],
 ): { faces: ProfileFace[]; sketch: EvaluatedSketch } {
   if (refs.length === 0) throw new Error("no profiles selected");
-  const sketch = state.sketches.get(refs[0].sketchId);
-  if (!sketch) throw new Error(`sketch ${refs[0].sketchId} not found`);
+  const sketch = state.sketches.get(refs[0]!.sketchId);
+  if (!sketch) throw new Error(`sketch ${refs[0]!.sketchId} not found`);
   const out: ProfileFace[] = [];
   for (const ref of refs) {
     const s = state.sketches.get(ref.sketchId);
@@ -223,7 +223,7 @@ function bboxOverlap(a: Shape, b: Shape): boolean {
   const bb = bboxOf(b);
   const margin = 1e-6;
   for (let i = 0; i < 3; i++) {
-    if (ba.max[i] < bb.min[i] - margin || bb.max[i] < ba.min[i] + -margin) {
+    if (ba.max[i]! < bb.min[i]! - margin || bb.max[i]! < ba.min[i]! + -margin) {
       return false;
     }
   }
@@ -596,10 +596,14 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
   }
 
   // merge multiple profile prisms into one tool
-  let tool = tools[0];
+  let tool = tools[0]!;
   const k = getKernel();
   for (let i = 1; i < tools.length; i++) {
-    const op = new k.BRepAlgoAPI_Fuse_3(tool.shape, tools[i].shape, progress());
+    const op = new k.BRepAlgoAPI_Fuse_3(
+      tool.shape,
+      tools[i]!.shape,
+      progress(),
+    );
     op.Build(progress());
     if (!op.IsDone()) {
       op.delete();
@@ -610,7 +614,7 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
       op,
       [
         { shape: tool.shape, names: tool.names },
-        { shape: tools[i].shape, names: tools[i].names },
+        { shape: tools[i]!.shape, names: tools[i]!.names },
       ],
       merged,
       f.id,
@@ -694,16 +698,20 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
     return;
   }
 
-  let tool = tools[0];
+  let tool = tools[0]!;
   for (let i = 1; i < tools.length; i++) {
-    const op = new k.BRepAlgoAPI_Fuse_3(tool.shape, tools[i].shape, progress());
+    const op = new k.BRepAlgoAPI_Fuse_3(
+      tool.shape,
+      tools[i]!.shape,
+      progress(),
+    );
     op.Build(progress());
     const merged = op.Shape();
     const names = propagateNames(
       op,
       [
         { shape: tool.shape, names: tool.names },
-        { shape: tools[i].shape, names: tools[i].names },
+        { shape: tools[i]!.shape, names: tools[i]!.names },
       ],
       merged,
       f.id,
@@ -745,7 +753,7 @@ function evalSweep(state: EvalState, f: SweepFeature): void {
   });
 
   const tool = kernelCall("sweep", () => {
-    const pipe = new k.BRepOffsetAPI_MakePipe_1(wire, profileFaces[0].face);
+    const pipe = new k.BRepOffsetAPI_MakePipe_1(wire, profileFaces[0]!.face);
     pipe.Build(progress());
     if (!pipe.IsDone()) {
       pipe.delete();
@@ -877,7 +885,7 @@ function sketchEntityToEdge(
 function evalFillet(state: EvalState, f: FilletFeature): void {
   if (f.edges.length === 0) throw new Error("no edges selected");
   if (f.radius <= 0) throw new Error("fillet radius must be positive");
-  const bodyId = f.edges[0].bodyId;
+  const bodyId = f.edges[0]!.bodyId;
   const body = state.bodies.get(bodyId);
   if (!body) throw new Error(`body ${bodyId} no longer exists`);
   const k = getKernel();
@@ -1086,7 +1094,7 @@ function chamferByEnvelope(
       return out;
     };
     const innerPts = verticesOf(inner).map(point);
-    const nearestInner = (q: Vec3): Vec3 => {
+    const nearestInner = (q: Vec3): Vec3 | undefined => {
       let best = innerPts[0];
       let bestDist = Infinity;
       for (const c of innerPts) {
@@ -1114,11 +1122,11 @@ function chamferByEnvelope(
     for (const e of cap.edges) {
       const ends = verticesOf(e).map(point);
       if (ends.length !== 2) return null;
-      const q1 = nearestInner(ends[0]);
-      const q2 = nearestInner(ends[1]);
-      if (q1 === q2) return null; // this edge collapses at that depth
+      const q1 = nearestInner(ends[0]!);
+      const q2 = nearestInner(ends[1]!);
+      if (!q1 || !q2 || q1 === q2) return null; // this edge collapses at that depth
       const poly = new k.BRepBuilderAPI_MakePolygon_1();
-      for (const p of [deeper(ends[0]), deeper(ends[1]), q2, q1]) {
+      for (const p of [deeper(ends[0]!), deeper(ends[1]!), q2, q1]) {
         poly.Add_1(pnt(p[0], p[1], p[2]));
       }
       poly.Close();
@@ -1196,7 +1204,7 @@ function chamferByEnvelope(
       });
       if (best < 0) continue;
       const idx = selected.findIndex(
-        (s) => shapeHash(s.edge) === shapeHash(mids[best].e),
+        (s) => shapeHash(s.edge) === shapeHash(mids[best]!.e),
       );
       envNames.set(shapeHash(face), `f:${featureId}:fe:${idx + 1}`);
     }
@@ -1231,7 +1239,7 @@ function chamferByEnvelope(
 function evalChamfer(state: EvalState, f: ChamferFeature): void {
   if (f.edges.length === 0) throw new Error("no edges selected");
   if (f.distance <= 0) throw new Error("chamfer distance must be positive");
-  const bodyId = f.edges[0].bodyId;
+  const bodyId = f.edges[0]!.bodyId;
   const body = state.bodies.get(bodyId);
   if (!body) throw new Error(`body ${bodyId} no longer exists`);
   const k = getKernel();
@@ -1338,8 +1346,8 @@ function evalCombine(state: EvalState, f: CombineFeature): void {
 function evalShell(state: EvalState, f: ShellFeature): void {
   if (f.thickness <= 0) throw new Error("shell thickness must be positive");
   const bodyId = f.openFaces[0]?.bodyId ?? [...state.bodies.keys()][0];
-  const body = state.bodies.get(bodyId);
-  if (!body) throw new Error("no body to shell");
+  const body = bodyId === undefined ? undefined : state.bodies.get(bodyId);
+  if (bodyId === undefined || !body) throw new Error("no body to shell");
   const k = getKernel();
   kernelCall("shell", () => {
     const closing = new k.TopTools_ListOfShape_1();
@@ -1396,7 +1404,7 @@ function evalShell(state: EvalState, f: ShellFeature): void {
 function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
   if (f.faces.length === 0) throw new Error("no faces selected");
   if (f.distance === 0) throw new Error("offset distance must be non-zero");
-  const bodyId = f.faces[0].bodyId;
+  const bodyId = f.faces[0]!.bodyId;
   const body = state.bodies.get(bodyId);
   if (!body) throw new Error(`body ${bodyId} not found`);
   const k = getKernel();
@@ -1644,7 +1652,7 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
   const k = getKernel();
   let direction: Vec3;
   if (f.direction.kind === "axis") {
-    const dirs: Record<string, Vec3> = {
+    const dirs: Record<"X" | "Y" | "Z", Vec3> = {
       X: [1, 0, 0],
       Y: [0, 1, 0],
       Z: [0, 0, 1],

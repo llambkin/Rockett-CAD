@@ -60,7 +60,7 @@ class DocumentEngine {
     while (
       valid < this.snapshots.length &&
       valid < doc.features.length &&
-      this.snapshots[valid].featureKey === featureKey(doc.features[valid])
+      this.snapshots[valid]!.featureKey === featureKey(doc.features[valid]!)
     ) {
       valid++;
     }
@@ -68,12 +68,12 @@ class DocumentEngine {
     const start = Math.min(valid, upTo);
 
     let state: EvalState =
-      start === 0 ? emptyState() : cloneState(this.snapshots[start - 1].state);
+      start === 0 ? emptyState() : cloneState(this.snapshots[start - 1]!.state);
     let statuses: FeatureStatus[] =
-      start === 0 ? [] : [...this.snapshots[start - 1].statuses];
+      start === 0 ? [] : [...this.snapshots[start - 1]!.statuses];
 
     for (let i = start; i < upTo; i++) {
-      const feature = doc.features[i];
+      const feature = doc.features[i]!;
       const next = cloneState(state);
       let status: FeatureStatus;
       if (feature.suppressed) {
@@ -107,7 +107,7 @@ class DocumentEngine {
     for (let i = upTo; i < doc.features.length; i++) {
       statuses = [
         ...statuses,
-        { featureId: doc.features[i].id, status: "rolledBack" },
+        { featureId: doc.features[i]!.id, status: "rolledBack" },
       ];
     }
 
@@ -166,7 +166,7 @@ class DocumentEngine {
       doc.features.length,
     );
     if (upTo === 0) return emptyState();
-    return this.snapshots[upTo - 1].state;
+    return this.snapshots[upTo - 1]!.state;
   }
 
   invalidate(): void {

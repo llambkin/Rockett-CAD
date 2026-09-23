@@ -11,7 +11,7 @@
  *   from the plane normal.
  */
 
-import type { PlaneFrame, Vec3 } from "@rockett/shared";
+import type { OriginPlaneName, PlaneFrame, Vec3 } from "@rockett/shared";
 
 export const V = {
   add: (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
@@ -30,7 +30,7 @@ export const V = {
   },
 };
 
-export const ORIGIN_FRAMES: Record<string, PlaneFrame> = {
+export const ORIGIN_FRAMES: Record<OriginPlaneName, PlaneFrame> = {
   XY: {
     origin: [0, 0, 0],
     xAxis: [1, 0, 0],

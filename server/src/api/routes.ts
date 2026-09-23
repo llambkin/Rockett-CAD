@@ -179,8 +179,8 @@ export function createApiRouter(store: ProjectStore): Router {
     if (metaChanged) {
       evaluation.bodies = evaluation.bodies.map((body) => ({
         ...body,
-        name: doc.bodyMeta[body.bodyId].name,
-        visible: doc.bodyMeta[body.bodyId].visible,
+        name: doc.bodyMeta[body.bodyId]!.name,
+        visible: doc.bodyMeta[body.bodyId]!.visible,
       }));
       await store.save(doc);
     }
@@ -366,14 +366,14 @@ export function createApiRouter(store: ProjectStore): Router {
       if (idx < 0) throw new StoreError("feature not found", "not_found");
       const patch = req.body?.feature as Partial<Feature>;
       record(patch, "feature");
-      if (patch.type !== undefined && patch.type !== doc.features[idx].type) {
+      if (patch.type !== undefined && patch.type !== doc.features[idx]!.type) {
         throw new ValidationError("feature type cannot change");
       }
-      knownKeys(patch, doc.features[idx].type);
+      knownKeys(patch, doc.features[idx]!.type);
       const updated = {
         ...doc.features[idx],
         ...patch,
-        id: doc.features[idx].id,
+        id: doc.features[idx]!.id,
       };
       validateFeature(updated as Feature);
       doc.features[idx] = updated as Feature;

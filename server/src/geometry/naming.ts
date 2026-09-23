@@ -50,7 +50,7 @@ export function suffixDuplicates<T>(
   const named: Array<[T, string]> = [];
   for (const [base, group] of groups) {
     if (group.length === 1) {
-      named.push([group[0], base]);
+      named.push([group[0]!, base]);
       continue;
     }
     group
@@ -174,7 +174,7 @@ export function historyNames(
   const provisional: NameMap = new Map();
   for (const [hash, names] of candidates) {
     const bases = [...new Set(names.map((n) => n.replace(/~\d+$/, "")))].sort();
-    provisional.set(hash, bases[0]);
+    provisional.set(hash, bases[0]!);
   }
   return finalizeNames(resultShape, provisional, featureId);
 }

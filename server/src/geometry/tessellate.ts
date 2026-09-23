@@ -53,27 +53,27 @@ export function tessellateBody(
     const start = indices.length;
     const vertexOffset = positions.length / 3;
     for (let i = 0; i < m.positions.length; i++) {
-      positions.push(m.positions[i]);
-      normals.push(m.normals[i]);
+      positions.push(m.positions[i]!);
+      normals.push(m.normals[i]!);
     }
 
     const P = m.positions;
     let area = 0;
     for (let i = 0; i < m.indices.length; i += 3) {
-      const a = m.indices[i] * 3,
-        b = m.indices[i + 1] * 3,
-        c = m.indices[i + 2] * 3;
+      const a = m.indices[i]! * 3,
+        b = m.indices[i + 1]! * 3,
+        c = m.indices[i + 2]! * 3;
       indices.push(
-        vertexOffset + m.indices[i],
-        vertexOffset + m.indices[i + 1],
-        vertexOffset + m.indices[i + 2],
+        vertexOffset + m.indices[i]!,
+        vertexOffset + m.indices[i + 1]!,
+        vertexOffset + m.indices[i + 2]!,
       );
-      const ux = P[b] - P[a],
-        uy = P[b + 1] - P[a + 1],
-        uz = P[b + 2] - P[a + 2];
-      const vx = P[c] - P[a],
-        vy = P[c + 1] - P[a + 1],
-        vz = P[c + 2] - P[a + 2];
+      const ux = P[b]! - P[a]!,
+        uy = P[b + 1]! - P[a + 1]!,
+        uz = P[b + 2]! - P[a + 2]!;
+      const vx = P[c]! - P[a]!,
+        vy = P[c + 1]! - P[a + 1]!,
+        vz = P[c + 2]! - P[a + 2]!;
       area +=
         Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
     }

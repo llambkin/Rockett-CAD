@@ -56,24 +56,24 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
   const chosen = new Set(seeds.map((r) => r.edgeName)),
     queue = [...chosen];
   const coincident = (a: Vec3, b: Vec3) =>
-    Math.hypot(...a.map((v, j) => v - b[j])) < 1e-6;
+    Math.hypot(...a.map((v, j) => v - b[j]!)) < 1e-6;
   const continues = (a: Vec3, b: Vec3) =>
-    a.reduce((sum, v, j) => sum + v * b[j], 0) < -Math.cos(Math.PI / 180);
+    a.reduce((sum, v, j) => sum + v * b[j]!, 0) < -Math.cos(Math.PI / 180);
   for (let i = 0; i < queue.length; i++) {
-    for (const end of ends.get(queue[i]) ?? []) {
+    for (const end of ends.get(queue[i]!) ?? []) {
       const candidates = [...ends].filter(
         ([name, endpoints]) =>
           name !== queue[i] &&
           endpoints.some(
             (other) =>
-              Math.hypot(...end.p.map((v, j) => v - other.p[j])) < 1e-6 &&
-              end.d.reduce((sum, v, j) => sum + v * other.d[j], 0) <
+              Math.hypot(...end.p.map((v, j) => v - other.p[j]!)) < 1e-6 &&
+              end.d.reduce((sum, v, j) => sum + v * other.d[j]!, 0) <
                 -Math.cos(Math.PI / 180),
           ),
       );
-      if (candidates.length === 1 && !chosen.has(candidates[0][0])) {
-        chosen.add(candidates[0][0]);
-        queue.push(candidates[0][0]);
+      if (candidates.length === 1 && !chosen.has(candidates[0]![0])) {
+        chosen.add(candidates[0]![0]);
+        queue.push(candidates[0]![0]);
       }
       if (candidates.length !== 0) continue;
       // A tiny step between otherwise parallel edges is common after joining
@@ -83,31 +83,31 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
       for (const [name, endpoints] of ends) {
         if (
           name === queue[i] ||
-          lengths.get(name)! > Math.min(0.01, lengths.get(queue[i])! * 0.01)
+          lengths.get(name)! > Math.min(0.01, lengths.get(queue[i]!)! * 0.01)
         )
           continue;
         const at = endpoints.findIndex((other) => coincident(end.p, other.p));
         if (at < 0) continue;
-        const far = endpoints[1 - at];
+        const far = endpoints[1 - at]!;
         const neighbours = [...ends].filter(
           ([n, es]) =>
             n !== name &&
             n !== queue[i] &&
             es.some((e) => coincident(far.p, e.p) && continues(end.d, e.d)) &&
             faceEdges.some((face) =>
-              [queue[i], name, n].every((id) =>
+              [queue[i]!, name, n].every((id) =>
                 face.has(shapeHash(names.get(id)!)),
               ),
             ),
         );
         // Stop at junctions rather than guessing a path through another feature.
         if (neighbours.length !== 1) continue;
-        const [next] = neighbours[0];
+        const [next] = neighbours[0]!;
         if (lengths.get(name)! > lengths.get(next)! * 0.01) continue;
         bridges.push([name, next]);
       }
       if (bridges.length === 1)
-        for (const name of bridges[0]) {
+        for (const name of bridges[0]!) {
           if (!chosen.has(name)) {
             chosen.add(name);
             queue.push(name);

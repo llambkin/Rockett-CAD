@@ -40,15 +40,15 @@ export function writeStl(bodies: NamedBody[], quality = 0.05): Buffer {
   for (const mesh of meshes) {
     const { positions: P, indices: I } = mesh;
     for (let t = 0; t < I.length; t += 3) {
-      const a = I[t] * 3,
-        b = I[t + 1] * 3,
-        c = I[t + 2] * 3;
-      const ux = P[b] - P[a],
-        uy = P[b + 1] - P[a + 1],
-        uz = P[b + 2] - P[a + 2];
-      const vx = P[c] - P[a],
-        vy = P[c + 1] - P[a + 1],
-        vz = P[c + 2] - P[a + 2];
+      const a = I[t]! * 3,
+        b = I[t + 1]! * 3,
+        c = I[t + 2]! * 3;
+      const ux = P[b]! - P[a]!,
+        uy = P[b + 1]! - P[a + 1]!,
+        uz = P[b + 2]! - P[a + 2]!;
+      const vx = P[c]! - P[a]!,
+        vy = P[c + 1]! - P[a + 1]!,
+        vz = P[c + 2]! - P[a + 2]!;
       let nx = uy * vz - uz * vy,
         ny = uz * vx - ux * vz,
         nz = ux * vy - uy * vx;
@@ -59,15 +59,15 @@ export function writeStl(bodies: NamedBody[], quality = 0.05): Buffer {
       buffer.writeFloatLE(nx, off);
       buffer.writeFloatLE(ny, off + 4);
       buffer.writeFloatLE(nz, off + 8);
-      buffer.writeFloatLE(P[a], off + 12);
-      buffer.writeFloatLE(P[a + 1], off + 16);
-      buffer.writeFloatLE(P[a + 2], off + 20);
-      buffer.writeFloatLE(P[b], off + 24);
-      buffer.writeFloatLE(P[b + 1], off + 28);
-      buffer.writeFloatLE(P[b + 2], off + 32);
-      buffer.writeFloatLE(P[c], off + 36);
-      buffer.writeFloatLE(P[c + 1], off + 40);
-      buffer.writeFloatLE(P[c + 2], off + 44);
+      buffer.writeFloatLE(P[a]!, off + 12);
+      buffer.writeFloatLE(P[a + 1]!, off + 16);
+      buffer.writeFloatLE(P[a + 2]!, off + 20);
+      buffer.writeFloatLE(P[b]!, off + 24);
+      buffer.writeFloatLE(P[b + 1]!, off + 28);
+      buffer.writeFloatLE(P[b + 2]!, off + 32);
+      buffer.writeFloatLE(P[c]!, off + 36);
+      buffer.writeFloatLE(P[c + 1]!, off + 40);
+      buffer.writeFloatLE(P[c + 2]!, off + 44);
       buffer.writeUInt16LE(0, off + 48);
       off += 50;
     }
@@ -96,7 +96,7 @@ export function write3mf(
     const verts: string[] = [];
     for (let v = 0; v < mesh.positions.length; v += 3) {
       verts.push(
-        `<vertex x="${mesh.positions[v].toFixed(6)}" y="${mesh.positions[v + 1].toFixed(6)}" z="${mesh.positions[v + 2].toFixed(6)}"/>`,
+        `<vertex x="${mesh.positions[v]!.toFixed(6)}" y="${mesh.positions[v + 1]!.toFixed(6)}" z="${mesh.positions[v + 2]!.toFixed(6)}"/>`,
       );
     }
     const tris: string[] = [];

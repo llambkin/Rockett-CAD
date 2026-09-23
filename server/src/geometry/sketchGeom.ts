@@ -311,7 +311,7 @@ export function subtractSketchRegionsFromFace(
       const out: [number, number][] = [];
       const step = Math.max(1, Math.ceil(n / 48));
       for (let i = 0; i < n; i += step) {
-        out.push([polygon[i * 2], polygon[i * 2 + 1]]);
+        out.push([polygon[i * 2]!, polygon[i * 2 + 1]!]);
       }
       return out;
     };
