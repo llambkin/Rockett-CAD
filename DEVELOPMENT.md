@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js ≥ 22
+- Node.js ≥ 24
 - npm ≥ 10 (workspaces)
 - Docker (only for container builds)
 

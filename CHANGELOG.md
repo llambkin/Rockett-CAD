@@ -24,8 +24,13 @@ separately in `shared/src/model.ts`; `/api/health` reports both.
 
 - `/api/health` returns `version`, `schemaVersion` and `commit`.
 - `npm test` runs `tsc` on all workspaces first.
-- Docker: Node 22 base image pinned by digest; build and runtime installs use
-  `npm ci` from the lockfile. `docker/runtime-package.json` is removed.
+- Docker: base image pinned by digest; build and runtime installs use `npm ci`
+  from the lockfile. `docker/runtime-package.json` is removed.
+- Dependencies at their latest releases, pinned exactly: Express 5, multer 2,
+  React 19, three 0.186, Vite 8, Vitest 5, TypeScript 7, esbuild 0.28.
+  `npm audit` reports 0 vulnerabilities, down from 8 (1 critical, 1 high).
+  Node 24 is the minimum; the image is `node:24-trixie-slim`.
+  `npm-run-all` is replaced by its maintained fork `npm-run-all2`.
 
 ## 0.1.0
 

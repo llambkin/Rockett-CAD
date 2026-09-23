@@ -42,7 +42,7 @@ async function main() {
   const clientDir = candidates.find((c) => fs.existsSync(path.join(c, "index.html")));
   if (clientDir) {
     app.use(express.static(clientDir));
-    app.get("*", (_req, res) => {
+    app.get("/{*splat}", (_req, res) => {
       res.sendFile(path.join(clientDir, "index.html"));
     });
     console.log(`[rockett] serving client from ${clientDir}`);

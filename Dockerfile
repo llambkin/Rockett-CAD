@@ -4,7 +4,7 @@
 # The runtime runs as a non-root user and stores all state under /data.
 
 # ---------- build ----------
-FROM node:22-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS build
+FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -20,7 +20,7 @@ RUN npm run build --workspace server \
   && npm run build --workspace client
 
 # ---------- runtime ----------
-FROM node:22-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
+FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS runtime
 # Reported by /api/health; pass --build-arg ROCKETT_COMMIT=$(git rev-parse HEAD).
 ARG ROCKETT_COMMIT=
 LABEL org.opencontainers.image.revision=$ROCKETT_COMMIT

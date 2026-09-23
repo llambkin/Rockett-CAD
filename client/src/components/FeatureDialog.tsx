@@ -4,7 +4,7 @@
  * feature through the API.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type {
   AxisRef,
   EdgeRef,
@@ -178,7 +178,7 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
   }, [params.tx, params.ty, params.tz, dialog, editId]);
 
   let title = "";
-  let body: JSX.Element | null = null;
+  let body: ReactElement | null = null;
   let onOk: (() => Promise<void>) | null = null;
 
   switch (dialog) {

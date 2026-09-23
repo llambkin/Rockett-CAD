@@ -1,6 +1,6 @@
 # Deployment (Docker / Unraid)
 
-Rockett CAD ships as a single container: Node 22 serving the API and the
+Rockett CAD ships as a single container: Node 24 serving the API and the
 built client, with the OpenCascade kernel embedded as WebAssembly (no native
 dependencies). All persistent state lives under **one volume: `/data`**.
 
