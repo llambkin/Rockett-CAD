@@ -1,13 +1,14 @@
-client/src/App.tsx Workspace 250
-client/src/components/DraggablePanel.tsx DraggablePanel 125
+client/src/App.tsx Workspace 137
+client/src/components/ControlsHelp.tsx ControlsHelp 121
+client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/FeatureDialog.tsx 1297
 client/src/components/FeatureDialog.tsx DialogBody 920
 client/src/components/FeatureDialog.tsx ReferenceImagePanel 188
 client/src/components/ModelTree.tsx 610
 client/src/components/ModelTree.tsx ModelTree 478
-client/src/components/ProjectItems.tsx 517
-client/src/components/ProjectItems.tsx ItemRow 89
-client/src/components/ProjectItems.tsx ProjectItems 153
+client/src/components/ProjectItems.tsx 526
+client/src/components/ProjectItems.tsx ItemRow 92
+client/src/components/ProjectItems.tsx ProjectItems 154
 client/src/components/ProjectList.tsx ProjectList 109
 client/src/components/SketchOffsetPanel.tsx OffsetBody 244
 client/src/components/Timeline.tsx Timeline 178
