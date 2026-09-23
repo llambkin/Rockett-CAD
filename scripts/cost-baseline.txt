@@ -12,18 +12,18 @@ client/src/components/Timeline.tsx Timeline 167
 client/src/components/Timeline.tsx openFeatureEditor 175
 client/src/components/Toolbar.tsx SketchToolbar 162
 client/src/components/Toolbar.tsx Toolbar 140
-client/src/components/ViewportView.tsx 3180
+client/src/components/ViewportView.tsx 3265
 client/src/components/ViewportView.tsx ViewportContextMenu 191
-client/src/components/ViewportView.tsx ViewportView 2773
+client/src/components/ViewportView.tsx ViewportView 2849
 client/src/components/ViewportView.tsx computeGizmoSource 102
 client/src/components/ViewportView.tsx handleHover 130
 client/src/components/ViewportView.tsx handlePrimaryUp 186
-client/src/components/ViewportView.tsx handleSketchClick 223
+client/src/components/ViewportView.tsx handleSketchClick 231
 client/src/components/ViewportView.tsx onPointerMove 114
 client/src/components/ViewportView.tsx pointerToSketchUV 224
-client/src/components/ViewportView.tsx useEffect() 106
+client/src/components/ViewportView.tsx useEffect() 112
 client/src/components/ViewportView.tsx useEffect()#2 275
-client/src/sketchTools.ts 718
+client/src/sketchTools.ts 804
 client/src/store.ts 898
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 631
@@ -37,20 +37,20 @@ client/src/three/sketchRender.ts renderSketches 168
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 614
 server/src/api/routes.ts createApiRouter 484
-server/src/api/validate.ts 507
-server/src/api/validate.ts validateFeature 217
+server/src/api/validate.ts 516
+server/src/api/validate.ts validateFeature 224
 server/src/geometry/engine.ts evaluate 110
-server/src/geometry/features.ts 1905
+server/src/geometry/features.ts 1914
 server/src/geometry/features.ts applyToolOperation 89
 server/src/geometry/features.ts buildPrism 81
-server/src/geometry/features.ts chamferByEnvelope 266
+server/src/geometry/features.ts chamferByEnvelope 272
 server/src/geometry/features.ts evalExtrude 110
 server/src/geometry/features.ts evalRevolve 95
 server/src/geometry/sketchGeom.ts buildWire 81
 server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 88
-shared/src/model.ts 503
+shared/src/model.ts 509
 shared/src/profiles.ts 633
 shared/src/profiles.ts detectProfiles 405
 shared/src/sketchModify.ts 806
@@ -58,5 +58,5 @@ shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts modifySketch 144
 shared/src/sketchModify.ts offsetRoundedChain 124
 shared/src/sketchModify.ts offsetSketch 159
-shared/src/solver.ts 616
-shared/src/solver.ts buildProblem 348
+shared/src/solver.ts 628
+shared/src/solver.ts buildProblem 360
