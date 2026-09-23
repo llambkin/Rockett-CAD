@@ -37,6 +37,7 @@ import {
   type SplitBodyFeature,
   type SweepFeature,
   type Vec3,
+  Placement,
 } from "@rockett/shared";
 import {
   bboxOf,
@@ -48,6 +49,7 @@ import {
   getKernel,
   kernelCall,
   listToArray,
+  placementToTrsf,
   planarFacePlane,
   pnt,
   progress,
@@ -1603,14 +1605,13 @@ function evalMirror(state: EvalState, f: MirrorFeature): void {
 function evalMove(state: EvalState, f: MoveFeature, earlier: Feature[]): void {
   if (f.bodies.length === 0)
     throw new Error("select at least one body to move");
-  const [tx, ty, tz] = f.translation;
+  const placement = Placement.fromTranslation(f.translation);
   const k = getKernel();
   kernelCall("move", () => {
     for (const bodyId of f.bodies) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
-      const trsf = new k.gp_Trsf_1();
-      trsf.SetTranslation_1(vec(tx, ty, tz));
+      const trsf = placementToTrsf(placement);
       const tr = new k.BRepBuilderAPI_Transform_2(body.shape, trsf, true);
       const moved = tr.Shape();
       // empty prefix: keep the original persistent names
@@ -1649,14 +1650,7 @@ function evalMove(state: EvalState, f: MoveFeature, earlier: Feature[]): void {
     if (follows) {
       state.sketches.set(skId, {
         ...sk,
-        frame: {
-          ...sk.frame,
-          origin: [
-            sk.frame.origin[0] + tx,
-            sk.frame.origin[1] + ty,
-            sk.frame.origin[2] + tz,
-          ],
-        },
+        frame: Placement.applyToFrame(placement, sk.frame),
       });
     }
   }
@@ -1683,13 +1677,8 @@ function evalLinearPattern(state: EvalState, f: LinearPatternFeature): void {
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
       for (let i = 1; i < f.count; i++) {
-        const trsf = new k.gp_Trsf_1();
-        trsf.SetTranslation_1(
-          vec(
-            direction[0] * f.spacing * i,
-            direction[1] * f.spacing * i,
-            direction[2] * f.spacing * i,
-          ),
+        const trsf = placementToTrsf(
+          Placement.fromTranslation(V.scale(V.scale(direction, f.spacing), i)),
         );
         const tr = new k.BRepBuilderAPI_Transform_2(body.shape, trsf, true);
         const instance = tr.Shape();
@@ -1744,17 +1733,14 @@ function evalCircularPattern(
   const fullCircle = Math.abs((f.totalAngle || 360) - 360) < ANGULAR_TOL_DEG;
   const step = fullCircle ? total / f.count : total / (f.count - 1);
   kernelCall("circularPattern", () => {
-    const ax1 = new k.gp_Ax1_2(
-      pnt(axis.origin[0], axis.origin[1], axis.origin[2]),
-      dir(axis.direction[0], axis.direction[1], axis.direction[2]),
-    );
     for (const bodyId of f.bodies) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
       for (let i = 1; i < f.count; i++) {
-        const trsf = new k.gp_Trsf_1();
-        trsf.SetRotation_1(ax1, step * i);
+        const trsf = placementToTrsf(
+          Placement.fromAxisAngle(axis.direction, step * i, axis.origin),
+        );
         const tr = new k.BRepBuilderAPI_Transform_2(body.shape, trsf, true);
         const instance = tr.Shape();
         const instNames = transformNames(tr, body, `p${i}:${f.id}`);
@@ -1794,7 +1780,6 @@ function evalCircularPattern(
         registerBodySolids(state, bodyId, combined.shape, combined.names);
       }
     }
-    ax1.delete();
   });
 }
 

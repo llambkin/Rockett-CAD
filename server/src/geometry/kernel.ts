@@ -5,6 +5,8 @@
  * kernel instance via `getKernel()` after `initKernel()` resolves.
  */
 
+import type { Placement } from "@rockett/shared";
+
 // The opencascade.js typings are enormous; we treat the instance as `any`
 // and keep all raw-kernel access inside server/src/geometry.
 export type OC = any;
@@ -129,6 +131,18 @@ export function dir(x: number, y: number, z: number): any {
 export function vec(x: number, y: number, z: number): any {
   const k = getKernel();
   return new k.gp_Vec_4(x, y, z);
+}
+
+export function placementToTrsf(placement: Placement): any {
+  const k = getKernel();
+  const rotation = new k.gp_Quaternion_2(...placement.rotation);
+  const translation = vec(...placement.translation);
+  const trsf = new k.gp_Trsf_1();
+  trsf.SetRotation_2(rotation);
+  trsf.SetTranslationPart(translation);
+  rotation.delete();
+  translation.delete();
+  return trsf;
 }
 
 export function progress(): any {
