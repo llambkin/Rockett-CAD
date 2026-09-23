@@ -1,73 +1,13 @@
-/**
- * Feature/document validation — modelling parameters are validated before
- * they reach the kernel so the API never executes arbitrary input.
- */
-
 import {
+  documentSchema,
   FEATURE_SCHEMAS,
-  LINEAR_TOL,
-  MAX_DIM,
   parse,
-  SCHEMA_VERSION,
-  UNIT_TO_MM,
   ValidationError,
   type CadDocument,
   type Feature,
+  type FeatureType,
   type SketchFeature,
 } from "@rockett/shared";
-
-function num(v: unknown, label: string, min?: number, max?: number): void {
-  if (typeof v !== "number" || !Number.isFinite(v)) {
-    throw new ValidationError(`${label} must be a finite number`);
-  }
-  if (min !== undefined && v < min) {
-    throw new ValidationError(`${label} must be ≥ ${min}`);
-  }
-  if (max !== undefined && v > max) {
-    throw new ValidationError(`${label} must be ≤ ${max}`);
-  }
-}
-
-function int(v: unknown, label: string, min?: number, max?: number): void {
-  num(v, label, min, max);
-  if (!Number.isInteger(v))
-    throw new ValidationError(`${label} must be an integer`);
-}
-
-function str(v: unknown, label: string, maxLen = 200): void {
-  if (typeof v !== "string" || v.length === 0 || v.length > maxLen) {
-    throw new ValidationError(
-      `${label} must be a non-empty string (≤${maxLen})`,
-    );
-  }
-}
-
-function list(
-  v: unknown,
-  label: string,
-  min: number,
-  max: number,
-  item: (v: unknown, label: string) => void,
-): void {
-  if (!Array.isArray(v) || v.length < min || v.length > max) {
-    throw new ValidationError(`${label} requires ${min}-${max} items`);
-  }
-  for (const x of v) item(x, label);
-}
-
-function oneOf(v: unknown, label: string, values: readonly string[]): void {
-  if (typeof v !== "string" || !values.includes(v)) {
-    throw new ValidationError(`${label} must be one of ${values.join(", ")}`);
-  }
-}
-
-function bool(v: unknown, label: string): void {
-  if (typeof v !== "boolean") {
-    throw new ValidationError(`${label} must be a boolean`);
-  }
-}
-
-const OPERATIONS = ["newBody", "join", "cut", "intersect"] as const;
 
 export function record(v: unknown, label: string): void {
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
@@ -75,175 +15,22 @@ export function record(v: unknown, label: string): void {
   }
 }
 
-function profileRef(v: unknown, label: string): void {
-  record(v, label);
-  const ref = v as { sketchId?: unknown; profileId?: unknown };
-  str(ref.sketchId, `${label} sketch`, 100);
-  str(ref.profileId, `${label} profile`);
+function schemaFor(type: unknown) {
+  if (typeof type !== "string" || !Object.hasOwn(FEATURE_SCHEMAS, type))
+    throw new ValidationError(`unknown feature type ${String(type)}`);
+  return FEATURE_SCHEMAS[type as FeatureType];
 }
-
-function faceRef(v: unknown, label: string): void {
-  record(v, label);
-  const ref = v as { kind?: unknown; bodyId?: unknown; faceName?: unknown };
-  if (ref.kind !== "face")
-    throw new ValidationError(`${label} must reference a face`);
-  str(ref.bodyId, `${label} body`);
-  str(ref.faceName, `${label} face`, 2000);
-}
-
-function edgeRef(v: unknown, label: string): void {
-  record(v, label);
-  const ref = v as { kind?: unknown; bodyId?: unknown; edgeName?: unknown };
-  if (ref.kind !== "edge")
-    throw new ValidationError(`${label} must reference an edge`);
-  str(ref.bodyId, `${label} body`);
-  str(ref.edgeName, `${label} edge`, 2000);
-}
-
-const AXES = ["X", "Y", "Z"] as const;
-
-function planeRef(v: unknown, label: string): void {
-  record(v, label);
-  const ref = v as {
-    kind?: unknown;
-    plane?: unknown;
-    featureId?: unknown;
-    face?: unknown;
-  };
-  if (ref.kind === "origin")
-    oneOf(ref.plane, `${label} origin plane`, ["XY", "XZ", "YZ"]);
-  else if (ref.kind === "construction")
-    str(ref.featureId, `${label} feature`, 100);
-  else if (ref.kind === "face") faceRef(ref.face, `${label} face`);
-  else throw new ValidationError(`${label} must be a plane reference`);
-}
-
-function axisRef(v: unknown, label: string): void {
-  record(v, label);
-  const ref = v as {
-    kind?: unknown;
-    axis?: unknown;
-    edge?: unknown;
-    sketchId?: unknown;
-    entityId?: unknown;
-  };
-  if (ref.kind === "originAxis") oneOf(ref.axis, `${label} axis`, AXES);
-  else if (ref.kind === "edge") edgeRef(ref.edge, `${label} edge`);
-  else if (ref.kind === "sketchLine") {
-    str(ref.sketchId, `${label} sketch`, 100);
-    str(ref.entityId, `${label} line`, 100);
-  } else throw new ValidationError(`${label} must be an axis reference`);
-}
-
-function directionRef(v: unknown, label: string): void {
-  record(v, label);
-  const ref = v as { kind?: unknown; axis?: unknown; edge?: unknown };
-  if (ref.kind === "axis") oneOf(ref.axis, `${label} axis`, AXES);
-  else if (ref.kind === "edge") edgeRef(ref.edge, `${label} edge`);
-  else throw new ValidationError(`${label} must be an axis or edge`);
-}
-
-type FeatureKeys = {
-  [T in Feature["type"]]: Record<keyof Extract<Feature, { type: T }>, true>;
-};
-
-const BASE_KEYS = {
-  id: true,
-  type: true,
-  name: true,
-  suppressed: true,
-} as const;
-
-const FEATURE_KEYS: FeatureKeys = {
-  importStep: { ...BASE_KEYS, filename: true, data: true },
-  sketch: {
-    ...BASE_KEYS,
-    plane: true,
-    entities: true,
-    constraints: true,
-    offsets: true,
-    visible: true,
-  },
-  extrude: {
-    ...BASE_KEYS,
-    profiles: true,
-    faces: true,
-    distance: true,
-    distance2: true,
-    startOffset: true,
-    direction: true,
-    operation: true,
-  },
-  revolve: {
-    ...BASE_KEYS,
-    profiles: true,
-    axis: true,
-    angle: true,
-    operation: true,
-  },
-  sweep: { ...BASE_KEYS, profiles: true, pathSketchId: true, operation: true },
-  loft: { ...BASE_KEYS, sections: true, operation: true },
-  fillet: { ...BASE_KEYS, tangentChain: true, edges: true, radius: true },
-  chamfer: { ...BASE_KEYS, tangentChain: true, edges: true, distance: true },
-  shell: { ...BASE_KEYS, openFaces: true, thickness: true },
-  combine: {
-    ...BASE_KEYS,
-    operation: true,
-    targetBody: true,
-    toolBodies: true,
-    keepTools: true,
-  },
-  splitBody: { ...BASE_KEYS, body: true, tool: true },
-  offsetFace: { ...BASE_KEYS, faces: true, distance: true },
-  mirror: { ...BASE_KEYS, bodies: true, plane: true, combine: true },
-  linearPattern: {
-    ...BASE_KEYS,
-    bodies: true,
-    direction: true,
-    count: true,
-    spacing: true,
-    combine: true,
-  },
-  circularPattern: {
-    ...BASE_KEYS,
-    bodies: true,
-    axis: true,
-    count: true,
-    totalAngle: true,
-    combine: true,
-  },
-  constructionPlane: { ...BASE_KEYS, method: true },
-  referenceImage: {
-    ...BASE_KEYS,
-    plane: true,
-    assetId: true,
-    fileName: true,
-    transform: true,
-    opacity: true,
-    visible: true,
-    width: true,
-    height: true,
-  },
-  emboss: { ...BASE_KEYS, profiles: true, depth: true, mode: true },
-  move: { ...BASE_KEYS, bodies: true, translation: true },
-};
 
 export function knownKeys(v: object, type: unknown): void {
-  if (typeof type !== "string" || !Object.hasOwn(FEATURE_KEYS, type))
-    throw new ValidationError(`unknown feature type ${String(type)}`);
-  const known = FEATURE_KEYS[type as Feature["type"]];
+  const known = schemaFor(type).properties;
   const unknown = Object.keys(v).filter((key) => !Object.hasOwn(known, key));
   if (unknown.length)
-    throw new ValidationError(`unknown ${type} key ${unknown.join(", ")}`);
+    throw new ValidationError(
+      `unknown ${String(type)} key ${unknown.join(", ")}`,
+    );
 }
 
 const MIN_OFFSET_MM = 1e-7;
-
-type SchemaFeature = Extract<Feature, { type: keyof typeof FEATURE_SCHEMAS }>;
-
-function hasSchema(f: Feature): f is SchemaFeature {
-  return Object.hasOwn(FEATURE_SCHEMAS, f.type);
-}
 
 function sketchReferences(f: SketchFeature): void {
   const offsetIds = new Set<string>();
@@ -286,146 +73,12 @@ function sketchReferences(f: SketchFeature): void {
 
 export function validateFeature(f: Feature): void {
   record(f, "feature");
-  if (hasSchema(f)) {
-    parse(FEATURE_SCHEMAS[f.type], f);
-    if (f.type === "sketch") sketchReferences(f);
-    return;
-  }
-  str(f.id, "feature id", 100);
-  if (f.name !== undefined) str(f.name, "feature name", 120);
-  bool(f.suppressed, "feature suppressed");
-  switch (f.type) {
-    case "extrude": {
-      // signed: a negative distance extrudes to the other side of the sketch
-      num(f.distance, "extrude distance", -MAX_DIM, MAX_DIM);
-      if (Math.abs(f.distance) < LINEAR_TOL)
-        throw new ValidationError("extrude distance must be non-zero");
-      oneOf(f.direction, "extrude direction", [
-        "normal",
-        "reverse",
-        "symmetric",
-        "twoSided",
-      ]);
-      oneOf(f.operation, "extrude operation", OPERATIONS);
-      if (f.distance2 !== undefined)
-        num(f.distance2, "second distance", 0, MAX_DIM);
-      if (f.startOffset !== undefined)
-        num(f.startOffset, "start offset", -MAX_DIM, MAX_DIM);
-      list(f.profiles, "extrude profiles", 0, 64, profileRef);
-      if (f.faces !== undefined) list(f.faces, "extrude faces", 0, 64, faceRef);
-      const sourceCount = f.profiles.length + (f.faces?.length ?? 0);
-      if (sourceCount === 0 || sourceCount > 64) {
-        throw new ValidationError("extrude requires 1-64 profiles or faces");
-      }
-      break;
-    }
-    case "revolve":
-      list(f.profiles, "revolve profiles", 1, 64, profileRef);
-      axisRef(f.axis, "revolve axis");
-      num(f.angle, "revolve angle", -360, 360);
-      oneOf(f.operation, "revolve operation", OPERATIONS);
-      break;
-    case "sweep":
-      list(f.profiles, "sweep profiles", 1, 64, profileRef);
-      str(f.pathSketchId, "sweep path sketch", 100);
-      oneOf(f.operation, "sweep operation", OPERATIONS);
-      break;
-    case "loft":
-      list(f.sections, "loft sections", 2, 64, profileRef);
-      oneOf(f.operation, "loft operation", OPERATIONS);
-      break;
-    case "fillet":
-      if (f.tangentChain !== undefined) bool(f.tangentChain, "tangentChain");
-      num(f.radius, "fillet radius", LINEAR_TOL, MAX_DIM);
-      list(f.edges, "fillet edges", 1, 256, edgeRef);
-      break;
-    case "chamfer":
-      if (f.tangentChain !== undefined) bool(f.tangentChain, "tangentChain");
-      num(f.distance, "chamfer distance", LINEAR_TOL, MAX_DIM);
-      list(f.edges, "chamfer edges", 1, 256, edgeRef);
-      break;
-    case "shell":
-      num(f.thickness, "shell thickness", LINEAR_TOL, MAX_DIM);
-      list(f.openFaces, "shell open faces", 0, 256, faceRef);
-      break;
-    case "combine":
-      oneOf(f.operation, "combine operation", ["join", "cut", "intersect"]);
-      str(f.targetBody, "combine target body");
-      list(f.toolBodies, "combine tool bodies", 1, 64, str);
-      bool(f.keepTools, "combine keepTools");
-      break;
-    case "splitBody":
-      str(f.body, "split body");
-      planeRef(f.tool, "split tool");
-      break;
-    case "mirror":
-      list(f.bodies, "mirror bodies", 1, 64, str);
-      planeRef(f.plane, "mirror plane");
-      bool(f.combine, "mirror combine");
-      break;
-    case "linearPattern":
-      list(f.bodies, "pattern bodies", 1, 64, str);
-      num(f.count, "pattern count", 2, 500);
-      directionRef(f.direction, "pattern direction");
-      num(f.spacing, "pattern spacing", -MAX_DIM, MAX_DIM);
-      bool(f.combine, "pattern combine");
-      break;
-    case "circularPattern":
-      list(f.bodies, "pattern bodies", 1, 64, str);
-      num(f.count, "pattern count", 2, 500);
-      axisRef(f.axis, "pattern axis");
-      num(f.totalAngle, "pattern angle", -360, 360);
-      bool(f.combine, "pattern combine");
-      break;
-    case "offsetFace":
-      num(f.distance, "offset distance", -MAX_DIM, MAX_DIM);
-      list(f.faces, "offset faces", 1, 256, faceRef);
-      break;
-    case "move":
-      list(f.bodies, "move bodies", 1, 64, str);
-      list(f.translation, "move translation", 3, 3, (v, label) =>
-        num(v, label, -MAX_DIM, MAX_DIM),
-      );
-      break;
-    default: {
-      const unknown: never = f;
-      throw new ValidationError(
-        `unknown feature type ${String((unknown as { type?: unknown }).type)}`,
-      );
-    }
-  }
+  parse(schemaFor(f.type), f);
+  if (f.type === "sketch") sketchReferences(f);
 }
 
 export function validateDocument(doc: CadDocument): void {
-  str(doc.id, "document id", 100);
-  str(doc.name, "document name", 200);
-  if (!Array.isArray(doc.features) || doc.features.length > 2000) {
-    throw new ValidationError("features list invalid");
-  }
-  if (doc.schemaVersion !== SCHEMA_VERSION)
-    throw new ValidationError(`schema version must be ${SCHEMA_VERSION}`);
-  oneOf(doc.units, "units", Object.keys(UNIT_TO_MM));
-  str(doc.createdAt, "createdAt");
-  str(doc.modifiedAt, "modifiedAt");
-  int(doc.timelinePosition, "timeline position", 0, doc.features.length);
-  record(doc.bodyMeta, "body meta");
-  for (const meta of Object.values(doc.bodyMeta)) {
-    record(meta, "body meta");
-    if (typeof meta.name !== "string")
-      throw new ValidationError("body name must be a string");
-    bool(meta.visible, "body visible");
-  }
-  record(doc.counters, "counters");
-  for (const n of Object.values(doc.counters)) int(n, "counter", 0);
-  if (doc.camera !== undefined) {
-    record(doc.camera, "camera");
-    for (const key of ["position", "target", "up"] as const)
-      list(doc.camera[key], `camera ${key}`, 3, 3, num);
-    oneOf(doc.camera.projection, "camera projection", [
-      "orthographic",
-      "perspective",
-    ]);
-  }
+  parse(documentSchema, doc);
   const ids = new Set<string>();
   for (const f of doc.features) {
     validateFeature(f);

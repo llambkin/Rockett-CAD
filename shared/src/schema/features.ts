@@ -1,5 +1,7 @@
 import { Type, type TProperties } from "typebox";
+import { SCHEMA_VERSION } from "../model.js";
 import { LINEAR_TOL } from "../tolerance.js";
+import { UNIT_TO_MM, type Units } from "../units.js";
 
 export const MAX_DIM = 100_000;
 const MAX_STEP_BYTES = 10 * 1024 * 1024;
@@ -31,10 +33,27 @@ const planeRef = Type.Union([
   Type.Object({ kind: Type.Literal("face"), face: faceRef }),
 ]);
 
+const axis = Type.Enum(["X", "Y", "Z"]);
+
+const axisRef = Type.Union([
+  Type.Object({ kind: Type.Literal("originAxis"), axis }),
+  Type.Object({ kind: Type.Literal("sketchLine"), sketchId: id, entityId: id }),
+  Type.Object({ kind: Type.Literal("edge"), edge: edgeRef }),
+]);
+
 const profileRef = Type.Object({
   sketchId: id,
   profileId: Type.String({ minLength: 1, maxLength: 200 }),
 });
+
+const operation = Type.Enum(["newBody", "join", "cut", "intersect"]);
+const positive = Type.Number({ minimum: LINEAR_TOL, maximum: MAX_DIM });
+const degrees = Type.Number({ minimum: -360, maximum: 360 });
+const bodies = Type.Array(bodyId, { minItems: 1, maxItems: 64 });
+const edges = Type.Array(edgeRef, { minItems: 1, maxItems: 256 });
+const profiles = (minItems: number) =>
+  Type.Array(profileRef, { minItems, maxItems: 64 });
+const patternCount = Type.Number({ minimum: 2, maximum: 500 });
 
 const feature = <const T extends string, P extends TProperties>(
   type: T,
@@ -181,9 +200,106 @@ const importStep = feature("importStep", {
 });
 
 const emboss = feature("emboss", {
-  profiles: Type.Array(profileRef, { minItems: 1, maxItems: 64 }),
-  depth: Type.Number({ minimum: LINEAR_TOL, maximum: MAX_DIM }),
+  profiles: profiles(1),
+  depth: positive,
   mode: Type.Enum(["emboss", "deboss"]),
+});
+
+const extrude = Type.Refine(
+  feature("extrude", {
+    profiles: profiles(0),
+    faces: Type.Optional(Type.Array(faceRef, { maxItems: 64 })),
+    distance: Type.Refine(
+      coordinate,
+      (distance) => Math.abs(distance) >= LINEAR_TOL,
+      () => "must be non-zero",
+    ),
+    distance2: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_DIM })),
+    startOffset: Type.Optional(coordinate),
+    direction: Type.Enum(["normal", "reverse", "symmetric", "twoSided"]),
+    operation,
+  }),
+  (f) => {
+    const sources = f.profiles.length + (f.faces?.length ?? 0);
+    return sources >= 1 && sources <= 64;
+  },
+  () => "needs 1 to 64 profiles or faces",
+);
+
+const revolve = feature("revolve", {
+  profiles: profiles(1),
+  axis: axisRef,
+  angle: degrees,
+  operation,
+});
+
+const sweep = feature("sweep", {
+  profiles: profiles(1),
+  pathSketchId: id,
+  operation,
+});
+
+const loft = feature("loft", { sections: profiles(2), operation });
+
+const fillet = feature("fillet", {
+  tangentChain: flag,
+  edges,
+  radius: positive,
+});
+
+const chamfer = feature("chamfer", {
+  tangentChain: flag,
+  edges,
+  distance: positive,
+});
+
+const shell = feature("shell", {
+  openFaces: Type.Array(faceRef, { maxItems: 256 }),
+  thickness: positive,
+});
+
+const combine = feature("combine", {
+  operation: Type.Enum(["join", "cut", "intersect"]),
+  targetBody: bodyId,
+  toolBodies: bodies,
+  keepTools: Type.Boolean(),
+});
+
+const splitBody = feature("splitBody", { body: bodyId, tool: planeRef });
+
+const offsetFace = feature("offsetFace", {
+  faces: Type.Array(faceRef, { minItems: 1, maxItems: 256 }),
+  distance: coordinate,
+});
+
+const mirror = feature("mirror", {
+  bodies,
+  plane: planeRef,
+  combine: Type.Boolean(),
+});
+
+const linearPattern = feature("linearPattern", {
+  bodies,
+  direction: Type.Union([
+    Type.Object({ kind: Type.Literal("axis"), axis }),
+    Type.Object({ kind: Type.Literal("edge"), edge: edgeRef }),
+  ]),
+  count: patternCount,
+  spacing: coordinate,
+  combine: Type.Boolean(),
+});
+
+const circularPattern = feature("circularPattern", {
+  bodies,
+  axis: axisRef,
+  count: patternCount,
+  totalAngle: degrees,
+  combine: Type.Boolean(),
+});
+
+const move = feature("move", {
+  bodies,
+  translation: Type.Tuple([coordinate, coordinate, coordinate]),
 });
 
 export const FEATURE_SCHEMAS = {
@@ -192,4 +308,49 @@ export const FEATURE_SCHEMAS = {
   referenceImage,
   importStep,
   emboss,
+  extrude,
+  revolve,
+  sweep,
+  loft,
+  fillet,
+  chamfer,
+  shell,
+  combine,
+  splitBody,
+  offsetFace,
+  mirror,
+  linearPattern,
+  circularPattern,
+  move,
 };
+
+const vector = Type.Tuple([Type.Number(), Type.Number(), Type.Number()]);
+const text = Type.String({ minLength: 1, maxLength: 200 });
+
+export const documentSchema = Type.Refine(
+  Type.Object({
+    schemaVersion: Type.Literal(SCHEMA_VERSION),
+    id,
+    name: text,
+    units: Type.Enum(Object.keys(UNIT_TO_MM) as Units[]),
+    createdAt: text,
+    modifiedAt: text,
+    features: Type.Array(Type.Unknown(), { maxItems: 2000 }),
+    timelinePosition: Type.Integer({ minimum: 0 }),
+    bodyMeta: Type.Record(
+      Type.String(),
+      Type.Object({ name: Type.String(), visible: Type.Boolean() }),
+    ),
+    counters: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
+    camera: Type.Optional(
+      Type.Object({
+        position: vector,
+        target: vector,
+        up: vector,
+        projection: Type.Enum(["orthographic", "perspective"]),
+      }),
+    ),
+  }),
+  (doc) => doc.timelinePosition <= doc.features.length,
+  () => "has timelinePosition past the last feature",
+);

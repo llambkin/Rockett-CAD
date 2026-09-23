@@ -109,18 +109,19 @@ checks profile, face, edge, plane and axis references in depth, every list
 item, and each enum and flag (`operation`, extrude `direction`, emboss `mode`,
 `combine`, `keepTools`, `visible`).
 
-Features of type `sketch`, `constructionPlane`, `referenceImage`, `importStep`
-and `emboss` are parsed against their schema in `shared/src/schema/features.ts`,
-which also checks each sketch entity and constraint shape and requires a
-non-empty `name`. A mismatch returns the JSON Pointer inside the feature in
-`detail`, such as `/transform/scale`.
+Every feature is parsed against its type's schema in
+`shared/src/schema/features.ts`, which also checks each sketch entity and
+constraint shape and requires a non-empty `name`. The declared top-level keys
+are that schema's properties. A mismatch returns the JSON Pointer inside the
+feature in `detail`, such as `/transform/scale`.
 
-`PUT /projects/:id/document` also checks the document shape: `schemaVersion`
-equals the current version, `units` is `mm`, `cm`, `m` or `in`, `bodyMeta`
-values are `{ name: string, visible: boolean }`, `counters` are non-negative
-integers, `createdAt` and `modifiedAt` are strings, `timelinePosition` is an
-integer and `camera` has its shape when present. Loading a saved project
-migrates it without validating.
+`PUT /projects/:id/document` also parses the document against
+`documentSchema` in the same file: `schemaVersion` equals the current version,
+`units` is `mm`, `cm`, `m` or `in`, `bodyMeta` values are
+`{ name: string, visible: boolean }`, `counters` are non-negative integers,
+`createdAt` and `modifiedAt` are non-empty strings, `timelinePosition` is an
+integer no greater than the feature count and `camera` has its shape when
+present. Loading a saved project migrates it without validating.
 
 Every validation failure returns 400 and nothing is saved.
 

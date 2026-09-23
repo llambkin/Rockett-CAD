@@ -224,6 +224,8 @@ describe("validateFeature", () => {
     for (const f of valid)
       expect(() => validateFeature(f as any)).not.toThrow();
     const invalid = [
+      { ...extrude, distance: 0 },
+      { ...extrude, profiles: [] },
       { ...extrude, profiles: [null] },
       { ...extrude, profiles: [{ sketchId: 1, profileId: "p" }] },
       { ...extrude, faces: [edge] },
@@ -317,6 +319,7 @@ describe("validateFeature", () => {
       { kind: "face" },
       { kind: "face", face: edge },
       { kind: "face", face: { kind: "face", bodyId: "b1" } },
+      { kind: "face", face: { kind: "face", faceName: "f" } },
     ];
     const goodAxes = [
       ...["X", "Y", "Z"].map((name) => ({ kind: "originAxis", axis: name })),

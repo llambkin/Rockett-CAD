@@ -31,7 +31,6 @@ client/test/perpSnap.test.ts 13
 client/test/reopen.test.ts 11
 client/vite.config.ts 1
 server/src/api/routes.ts 24
-server/src/api/validate.ts 5
 server/src/geometry/engine.ts 23
 server/src/geometry/exporters.ts 12
 server/src/geometry/features.ts 104

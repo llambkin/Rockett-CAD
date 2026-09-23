@@ -37,7 +37,6 @@ client/src/three/sketchRender.ts renderSketches 168
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/routes.ts 603
 server/src/api/routes.ts createApiRouter 447
-server/src/api/validate.ts validateFeature 111
 server/src/geometry/engine.ts evaluate 110
 server/src/geometry/features.ts 1914
 server/src/geometry/features.ts applyToolOperation 89

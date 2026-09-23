@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
 import type { Static } from "typebox";
 import type {
+  CadDocument,
+  ChamferFeature,
+  CircularPatternFeature,
+  CombineFeature,
   ConstructionPlaneFeature,
   EmbossFeature,
+  ExtrudeFeature,
+  FilletFeature,
   ImportStepFeature,
+  LinearPatternFeature,
+  LoftFeature,
+  MirrorFeature,
+  MoveFeature,
+  OffsetFaceFeature,
   ReferenceImageFeature,
+  RevolveFeature,
+  ShellFeature,
   SketchFeature,
+  SplitBodyFeature,
+  SweepFeature,
 } from "../src/model.js";
-import { FEATURE_SCHEMAS } from "../src/schema/features.js";
+import { documentSchema, FEATURE_SCHEMAS } from "../src/schema/features.js";
 import { parse, ValidationError } from "../src/schema/index.js";
 
 type Flat<T> = T extends object ? { [K in keyof T]: Flat<T[K]> } : T;
@@ -31,16 +46,55 @@ const typesMatch: {
   >;
   importStep: Equal<Static<Schemas["importStep"]>, ImportStepFeature>;
   emboss: Equal<Static<Schemas["emboss"]>, EmbossFeature>;
+  extrude: Equal<Static<Schemas["extrude"]>, ExtrudeFeature>;
+  revolve: Equal<Static<Schemas["revolve"]>, RevolveFeature>;
+  sweep: Equal<Static<Schemas["sweep"]>, SweepFeature>;
+  loft: Equal<Static<Schemas["loft"]>, LoftFeature>;
+  fillet: Equal<Static<Schemas["fillet"]>, FilletFeature>;
+  chamfer: Equal<Static<Schemas["chamfer"]>, ChamferFeature>;
+  shell: Equal<Static<Schemas["shell"]>, ShellFeature>;
+  combine: Equal<Static<Schemas["combine"]>, CombineFeature>;
+  splitBody: Equal<Static<Schemas["splitBody"]>, SplitBodyFeature>;
+  offsetFace: Equal<Static<Schemas["offsetFace"]>, OffsetFaceFeature>;
+  mirror: Equal<Static<Schemas["mirror"]>, MirrorFeature>;
+  linearPattern: Equal<Static<Schemas["linearPattern"]>, LinearPatternFeature>;
+  circularPattern: Equal<
+    Static<Schemas["circularPattern"]>,
+    CircularPatternFeature
+  >;
+  move: Equal<Static<Schemas["move"]>, MoveFeature>;
+  document: Equal<
+    Omit<Static<typeof documentSchema>, "features" | "schemaVersion">,
+    Omit<CadDocument, "features" | "schemaVersion">
+  >;
 } = {
   sketch: true,
   constructionPlane: true,
   referenceImage: true,
   importStep: true,
   emboss: true,
+  extrude: true,
+  revolve: true,
+  sweep: true,
+  loft: true,
+  fillet: true,
+  chamfer: true,
+  shell: true,
+  combine: true,
+  splitBody: true,
+  offsetFace: true,
+  mirror: true,
+  linearPattern: true,
+  circularPattern: true,
+  move: true,
+  document: true,
 };
 
 const base = { id: "f1", name: "F1", suppressed: false };
 const plane = { kind: "origin", plane: "XY" } as const;
+const profile = { sketchId: "sk", profileId: "p" };
+const face = { kind: "face", bodyId: "b", faceName: "f" } as const;
+const edge = { kind: "edge", bodyId: "b", edgeName: "e" } as const;
 
 const fixtures: {
   [T in keyof Schemas]: {
@@ -178,6 +232,203 @@ const fixtures: {
       mode: "raise",
     },
     path: "/mode",
+  },
+  extrude: {
+    valid: {
+      ...base,
+      type: "extrude",
+      profiles: [],
+      faces: [face],
+      distance: -5,
+      distance2: 2,
+      startOffset: -1,
+      direction: "twoSided",
+      operation: "cut",
+    },
+    invalid: {
+      ...base,
+      type: "extrude",
+      profiles: [],
+      distance: 5,
+      direction: "normal",
+      operation: "newBody",
+    },
+    path: "",
+  },
+  revolve: {
+    valid: {
+      ...base,
+      type: "revolve",
+      profiles: [profile],
+      axis: { kind: "edge", edge },
+      angle: -90,
+      operation: "join",
+    },
+    invalid: {
+      ...base,
+      type: "revolve",
+      profiles: [profile],
+      axis: { kind: "sketchLine", sketchId: "sk" },
+      angle: 90,
+      operation: "join",
+    },
+    path: "/axis",
+  },
+  sweep: {
+    valid: {
+      ...base,
+      type: "sweep",
+      profiles: [profile],
+      pathSketchId: "path",
+      operation: "intersect",
+    },
+    invalid: {
+      ...base,
+      type: "sweep",
+      profiles: [profile],
+      pathSketchId: "",
+      operation: "intersect",
+    },
+    path: "/pathSketchId",
+  },
+  loft: {
+    valid: {
+      ...base,
+      type: "loft",
+      sections: [profile, profile],
+      operation: "newBody",
+    },
+    invalid: {
+      ...base,
+      type: "loft",
+      sections: [profile],
+      operation: "newBody",
+    },
+    path: "/sections",
+  },
+  fillet: {
+    valid: {
+      ...base,
+      type: "fillet",
+      tangentChain: true,
+      edges: [edge],
+      radius: 1,
+    },
+    invalid: { ...base, type: "fillet", edges: [edge], radius: 0 },
+    path: "/radius",
+  },
+  chamfer: {
+    valid: { ...base, type: "chamfer", edges: [edge], distance: 1 },
+    invalid: { ...base, type: "chamfer", edges: [face], distance: 1 },
+    path: "/edges/0",
+  },
+  shell: {
+    valid: { ...base, type: "shell", openFaces: [], thickness: 1 },
+    invalid: { ...base, type: "shell", openFaces: [], thickness: -1 },
+    path: "/thickness",
+  },
+  combine: {
+    valid: {
+      ...base,
+      type: "combine",
+      operation: "join",
+      targetBody: "b1",
+      toolBodies: ["b2"],
+      keepTools: true,
+    },
+    invalid: {
+      ...base,
+      type: "combine",
+      operation: "newBody",
+      targetBody: "b1",
+      toolBodies: ["b2"],
+      keepTools: true,
+    },
+    path: "/operation",
+  },
+  splitBody: {
+    valid: {
+      ...base,
+      type: "splitBody",
+      body: "b1",
+      tool: { kind: "face", face },
+    },
+    invalid: {
+      ...base,
+      type: "splitBody",
+      body: "b1",
+      tool: { kind: "face", face: { kind: "face", faceName: "f" } },
+    },
+    path: "/tool",
+  },
+  offsetFace: {
+    valid: { ...base, type: "offsetFace", faces: [face], distance: -1 },
+    invalid: { ...base, type: "offsetFace", faces: [], distance: 1 },
+    path: "/faces",
+  },
+  mirror: {
+    valid: {
+      ...base,
+      type: "mirror",
+      bodies: ["b1"],
+      plane: { kind: "construction", featureId: "cp" },
+      combine: true,
+    },
+    invalid: {
+      ...base,
+      type: "mirror",
+      bodies: ["b1"],
+      plane,
+      combine: 1,
+    },
+    path: "/combine",
+  },
+  linearPattern: {
+    valid: {
+      ...base,
+      type: "linearPattern",
+      bodies: ["b1"],
+      direction: { kind: "edge", edge },
+      count: 3,
+      spacing: -5,
+      combine: false,
+    },
+    invalid: {
+      ...base,
+      type: "linearPattern",
+      bodies: ["b1"],
+      direction: { kind: "originAxis", axis: "X" },
+      count: 3,
+      spacing: 5,
+      combine: false,
+    },
+    path: "/direction",
+  },
+  circularPattern: {
+    valid: {
+      ...base,
+      type: "circularPattern",
+      bodies: ["b1"],
+      axis: { kind: "sketchLine", sketchId: "sk", entityId: "l1" },
+      count: 2,
+      totalAngle: 360,
+      combine: true,
+    },
+    invalid: {
+      ...base,
+      type: "circularPattern",
+      bodies: ["b1"],
+      axis: { kind: "originAxis", axis: "Z" },
+      count: 1,
+      totalAngle: 360,
+      combine: true,
+    },
+    path: "/count",
+  },
+  move: {
+    valid: { ...base, type: "move", bodies: ["b1"], translation: [0, 0, 1] },
+    invalid: { ...base, type: "move", bodies: ["b1"], translation: [0, 0] },
+    path: "/translation",
   },
 };
 
