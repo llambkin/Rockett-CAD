@@ -217,8 +217,8 @@ function Workspace() {
                 Drag the ViewCube to orbit; click a face for a standard view.
               </p>
               <p>
-                Middle-drag pans; right-drag or Shift+middle-drag orbits. Scroll
-                to zoom.
+                Middle-drag or two-finger scroll pans; right-drag or
+                Shift+middle-drag orbits. Wheel or pinch zooms to the cursor.
               </p>
               <p>
                 <kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view
