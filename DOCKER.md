@@ -117,4 +117,7 @@ persistence tests and was smoke-tested against a live container.
   LAN. The auth layer is intentionally separable from the CAD logic
   (see ARCHITECTURE.md).
 - Healthcheck hits `/api/health` (60 s start period, because the WASM
-  kernel takes a few seconds to load on first boot).
+  kernel takes a few seconds to load on first boot). A long regeneration
+  blocks the event loop, so each probe waits 10 s and the container turns
+  unhealthy only after 10 failed probes in a row, 30 s apart: about five
+  minutes.
