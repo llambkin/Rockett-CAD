@@ -23,6 +23,26 @@ head -n 1 "$root/LAST-RUN.md" | grep -qx '# Last run' || fail "LAST-RUN.md must 
 result=$(awk -F '|' -v mode="$mode" '
 function trim(value) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", value); return value }
 function reject(message) { print "ERROR " message; bad = 1 }
+/^## / { section = substr($0, 4) }
+section == "Rulings" && /^- Deferred / {
+    line = substr($0, 12)
+    colon = index(line, ":")
+    if (!colon || trim(substr(line, colon + 1)) == "") { reject("Deferred ruling needs IDs, a colon and a reason: " substr($0, 1, 60)); next }
+    n = split(substr(line, 1, colon - 1), list, /,[[:space:]]*/)
+    for (i = 1; i <= n; i++) ruled[trim(list[i])] = 1
+    next
+}
+section == "Proposed" && /^(- |[0-9]+\. )/ {
+    line = $0
+    sub(/^(- |[0-9]+\. )/, "", line)
+    colon = index(line, ":")
+    if (!colon) next
+    head = substr(line, 1, colon - 1)
+    if (head !~ /^[A-Z]+-([0-9][0-9][0-9]|CP)(,[[:space:]]*[A-Z]+-([0-9][0-9][0-9]|CP))*$/) next
+    n = split(head, list, /,[[:space:]]*/)
+    for (i = 1; i <= n; i++) proposed[list[i]] = 1
+    next
+}
 /^\|/ {
     if (NF != 8) { if (in_table) reject("row has " NF - 2 " cells, expected 6: " substr($0, 1, 60)); next }
     c1 = trim($2); c2 = trim($3); c3 = trim($4); c4 = trim($5); c5 = trim($6); c6 = trim($7)
@@ -36,11 +56,16 @@ function reject(message) { print "ERROR " message; bad = 1 }
     id = c1
     if (id !~ /^[A-Z]+-([0-9][0-9][0-9]|CP)$/) reject("invalid ID " id)
     if (id in state) reject("duplicate ID " id)
-    if (c3 !~ /^(todo|in-flight|done|decision|operator)$/) reject(id " has invalid status " c3)
+    if (c3 !~ /^(todo|in-flight|done|decision|operator|deferred)$/) reject(id " has invalid status " c3)
     if (c2 == "" || c5 == "" || c6 == "") reject(id " has an empty cell")
     if (c4 != "-") {
         n = split(c4, list, /,[[:space:]]*/)
         for (i = 1; i <= n; i++) if (!(list[i] in state)) reject(id " depends on " list[i] ", which is missing or not earlier in the file")
+    }
+    if (id ~ /-CP$/ && (e = index(c2, "Explicitly excluded:"))) {
+        rest = substr(c2, e + 20)
+        if (dot = index(rest, ".")) rest = substr(rest, 1, dot - 1)
+        excluded[id] = trim(rest)
     }
     state[id] = c3; deps[id] = c4; order[++count] = id
     if (c3 == "in-flight") active = active ? active " " id : id
@@ -50,12 +75,40 @@ function reject(message) { print "ERROR " message; bad = 1 }
 END {
     if (!count) reject("no rows")
     if (split(active, a, " ") > 1) reject("more than one in-flight row: " active)
+    for (id in proposed) if (!(id in state)) reject("Proposed names unknown row " id)
+    for (id in ruled) {
+        if (!(id in state)) reject("Deferred ruling names unknown row " id)
+        else if (state[id] != "deferred") reject("Deferred ruling names " id ", which is " state[id])
+    }
     for (k = 1; k <= count; k++) {
         id = order[k]
-        parked[id] = (state[id] == "decision" || state[id] == "operator")
+        if (state[id] == "deferred" && !(id in ruled)) reject(id " is deferred without a Deferred ruling under Rulings")
+        if (state[id] == "in-flight" && id in proposed) reject(id " is in-flight but a Proposed entry names it")
+        parked[id] = (state[id] == "decision" || state[id] == "operator" || state[id] == "deferred" || (id in proposed && state[id] != "done"))
         if (deps[id] == "-") continue
         n = split(deps[id], list, /,[[:space:]]*/)
-        for (i = 1; i <= n; i++) if (parked[list[i]]) parked[id] = 1
+        for (i = 1; i <= n; i++) {
+            d = list[i]
+            if ((state[id] == "done" || state[id] == "in-flight") && state[d] != "done") reject(id " is " state[id] " but depends on " d ", which is " state[d])
+            if (parked[d]) parked[id] = 1
+            if (id ~ /-CP$/) covered[id, d] = 1
+        }
+    }
+    for (k = 1; k <= count; k++) {
+        cp = order[k]
+        if (cp !~ /-CP$/) continue
+        prefix = substr(cp, 1, length(cp) - 2)
+        n = excluded[cp] == "" ? 0 : split(excluded[cp], list, /,[[:space:]]*/)
+        for (i = 1; i <= n; i++) {
+            x = list[i]
+            if (!(x in state) || index(x, prefix) != 1) reject(cp " excludes " x ", which is not a row of its phase")
+            else if ((cp, x) in covered) reject(cp " both depends on and excludes " x)
+            else covered[cp, x] = 1
+        }
+        for (j = 1; j <= count; j++) {
+            r = order[j]
+            if (r != cp && index(r, prefix) == 1 && !((cp, r) in covered)) reject(cp " neither depends on nor excludes " r)
+        }
     }
     for (k = 1; k <= count; k++) {
         id = order[k]
@@ -72,11 +125,11 @@ END {
     if (open && !active && next_id == "") reject("todo rows remain but none is dependency-ready")
     if (bad) exit 1
     if (mode == "--complete") {
-        for (k = 1; k <= count; k++) if (state[order[k]] != "done" && state[order[k]] != "operator") left = left " " order[k]
+        for (k = 1; k <= count; k++) if (state[order[k]] != "done" && state[order[k]] != "deferred") left = left " " order[k]
         if (left != "") { print "ERROR unfinished rows:" left; exit 1 }
     }
     if (mode == "--next") { print (active != "" ? active : next_id); exit 0 }
-    printf "OK %d rows, %d open, %d waiting on decisions or operators, next %s\n", count, open, waiting + 0, (active != "" ? active : (next_id != "" ? next_id : "none"))
+    printf "OK %d rows, %d open, %d waiting on decisions, operators, deferrals or proposals, next %s\n", count, open, waiting + 0, (active != "" ? active : (next_id != "" ? next_id : "none"))
 }' "$file") || { printf '%s\n' "$result" | sed 's/^ERROR /work order check failed: /' >&2; exit 1; }
 
 printf '%s\n' "$result"

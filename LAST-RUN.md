@@ -1,9 +1,14 @@
 # Last run
 
-- Adopted the masterrulez agent layout: `AGENTS.md`, `CLAUDE.md`, `WORK-ORDER.md`.
-- Drafted 432 rows over 18 phases from code audits; each row names scope and a rejecting check.
-- `scripts/check-work-order.sh` validates the queue and prints the next row.
-- Phase checkpoints wait only on rows no decision parks, so open decisions do not stall later phases.
+- DEC-003 done: Mark adopted the 2026-09-23 revision of `WORK-ORDER.md`. The
+  proposal notice is gone; `## Proposed` reads None.
+- OPS-029 done: `scripts/check-work-order.sh` rejects done or in-flight rows on
+  unfinished dependencies, adds the ruled `deferred` status, parks rows named by
+  Proposed entries and checks checkpoint coverage. `--complete` rejects every
+  unfinished row.
+- `scripts/test-work-order.sh` covers each rule with 20 fixtures; 14 fail
+  against the old checker.
+- `AGENTS.md` Verification names the checker tests.
 
 ## Next
 
