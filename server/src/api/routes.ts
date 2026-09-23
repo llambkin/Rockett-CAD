@@ -92,7 +92,6 @@ export function createApiRouter(store: ProjectStore): Router {
 
   // Serialize the whole load/edit/save/evaluate operation for each project.
   // Locking only save() would still allow two requests to edit stale copies.
-  // Reads also participate because evaluation can persist body metadata.
   const projects = new ProjectQueue();
 
   const wrap =
@@ -137,11 +136,11 @@ export function createApiRouter(store: ProjectStore): Router {
       }
     }
     if (metaChanged) {
-      for (const body of evaluation.bodies) {
-        const meta = doc.bodyMeta[body.bodyId];
-        body.name = meta.name;
-        body.visible = meta.visible;
-      }
+      evaluation.bodies = evaluation.bodies.map((body) => ({
+        ...body,
+        name: doc.bodyMeta[body.bodyId].name,
+        visible: doc.bodyMeta[body.bodyId].visible,
+      }));
       await store.save(doc);
     }
     return evaluation;
@@ -219,11 +218,7 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/evaluate",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const evaluation = await evaluateAndSync(
-        doc,
-        evaluationPosition(req, doc),
-      );
-      res.json(evaluation);
+      res.json(engineFor(doc.id).evaluate(doc, evaluationPosition(req, doc)));
     }),
   );
 

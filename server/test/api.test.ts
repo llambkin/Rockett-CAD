@@ -142,6 +142,29 @@ describe("REST API MVP workflow", () => {
     ).toBe(400);
     expect(await api("GET", "/projects")).toEqual(before);
   });
+  it("evaluates a body without display meta without writing the document", async () => {
+    const form = new FormData();
+    form.append("file", new Blob([stepFixture()]), "Fixture.stp");
+    const response = await fetch(`${base}/projects/import-step`, {
+      method: "POST",
+      body: form,
+    });
+    const { document } = await response.json();
+    const file = path.join(storeDir, "projects", document.id, "document.json");
+    const stored = JSON.parse(await fs.readFile(file, "utf8"));
+    stored.bodyMeta = {};
+    await fs.writeFile(file, JSON.stringify(stored, null, 1), "utf8");
+    const bytes = await fs.readFile(file);
+    const evaluation = await api(
+      "GET",
+      `/projects/${document.id}/evaluate?position=1`,
+    );
+    expect(await fs.readFile(file)).toEqual(bytes);
+    expect((await api("GET", `/projects/${document.id}`)).document).toEqual(
+      stored,
+    );
+    expect(evaluation.bodies[0].name).toBe(evaluation.bodies[0].bodyId);
+  });
   it("prepares projections from earlier geometry only, without changing the document", async () => {
     const { document } = await api("POST", "/projects", {
       name: "Projection test",
