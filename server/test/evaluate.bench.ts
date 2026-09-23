@@ -1,17 +1,24 @@
 import { readFileSync } from "node:fs";
 import { beforeAll, expect, test } from "vitest";
-import type { BenchResult } from "vitest";
 import {
   createEmptyDocument,
   type CadDocument,
+  type EvaluateResult,
   type Feature,
   type PlaneRef,
   type SketchFeature,
 } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../src/geometry/engine.js";
+import { manyFeaturePart, record, SAMPLES } from "./helpers/perfFixtures.js";
 
-const SAMPLES = { iterations: 10, warmupIterations: 2, time: 0, warmupTime: 0 };
+const REGENERATION = {
+  iterations: 2,
+  warmupIterations: 0,
+  time: 0,
+  warmupTime: 0,
+  retainSamples: true,
+};
 const COLUMNS = [
   "metric",
   "fixture",
@@ -101,10 +108,17 @@ const cells = (line: string) =>
     .split("|")
     .map((c) => c.trim());
 
-function summary(result: BenchResult) {
-  const samples = result.latency.samples ?? [];
-  const p95 = samples[Math.ceil(samples.length * 0.95) - 1];
-  return { samples: samples.length, median: result.latency.p50, p95 };
+function alternate(
+  doc: CadDocument,
+  index: number,
+  edit: (feature: Feature) => Feature,
+) {
+  const edited = {
+    ...doc,
+    features: doc.features.map((f, i) => (i === index ? edit(f) : f)),
+  };
+  let calls = 0;
+  return () => (calls++ % 2 === 0 ? edited : doc);
 }
 
 let golden: CadDocument;
@@ -137,22 +151,54 @@ test("evaluate golden", async ({ bench }) => {
     bench("evaluate warm golden", () => {
       warm.evaluate(golden);
     }),
-    { ...SAMPLES, retainSamples: true },
+    SAMPLES,
   );
   dropEngine("bench-warm");
   expect(coldRuns).toBeGreaterThanOrEqual(
     SAMPLES.warmupIterations + SAMPLES.iterations,
   );
-  for (const name of [
-    "evaluate cold golden",
-    "evaluate warm golden",
-  ] as const) {
-    const s = summary(results.get(name));
-    console.log(
-      `${name}: ${s.samples} samples, median ${s.median.toFixed(3)} ms, p95 ${s.p95!.toFixed(3)} ms`,
+  for (const name of ["evaluate cold golden", "evaluate warm golden"] as const)
+    record(name, results.get(name), SAMPLES.iterations);
+});
+
+test("evaluate many-feature", { timeout: 1_800_000 }, async ({ bench }) => {
+  const doc = manyFeaturePart();
+  const id = "bench-many-feature";
+  let cold: EvaluateResult | undefined;
+  const sync = { async: false };
+  record(
+    "evaluate cold many-feature",
+    await bench("evaluate cold many-feature", sync, () => {
+      dropEngine(id);
+      cold = engineFor(id).evaluate(doc);
+    }).run(REGENERATION),
+    REGENERATION.iterations,
+  );
+  expect(cold?.featureStatuses.filter((s) => s.status !== "ok")).toEqual([]);
+  expect(cold?.bodies).toHaveLength(1);
+  const engine = engineFor(id);
+  const tail = alternate(doc, doc.features.length - 1, (f) => {
+    if (f.type !== "fillet") throw new Error(`tail is ${f.type}`);
+    return { ...f, radius: 0.6 };
+  });
+  const head = alternate(doc, 1, (f) => {
+    if (f.type !== "extrude") throw new Error(`head is ${f.type}`);
+    return { ...f, distance: 11 };
+  });
+  const runs = [
+    ["evaluate noop many-feature", () => doc, SAMPLES],
+    ["evaluate edit-tail", tail, SAMPLES],
+    ["evaluate edit-head", head, REGENERATION],
+  ] as const;
+  for (const [name, next, plan] of runs)
+    record(
+      name,
+      await bench(name, sync, () => {
+        engine.evaluate(next());
+      }).run(plan),
+      plan.iterations,
     );
-    expect(s.samples).toBe(SAMPLES.iterations);
-  }
+  dropEngine(id);
 });
 
 test("every baseline row fills every column", () => {
