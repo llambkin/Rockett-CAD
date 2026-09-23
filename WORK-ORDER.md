@@ -102,6 +102,7 @@ Decisions ruled by Mark on 2026-09-23, each accepting its recommendation:
 - Shaded edges: body edges are faint on the shaded faces. Lighting renders the `body` faces from `#66686c` to `#818589`, where `edge` `#30343a` reaches 2.24 to 3.37; this needs a lighting or edge-style decision (found by BUG-034).
 - Dead backdrop: the `.ctx-backdrop` rule in `client/src/theme.css` has no user since every menu moved to `ContextMenu.tsx`, and the comment on the viewport `onContextMenu` in `ViewportView.tsx` still describes that backdrop (found by BUG-029).
 - Guide menus: `docs/user/guide.md` says only "Right click on geometry". It omits the right-click menus that now exist: project rows (Open, Rename, Duplicate, Download, Delete), model tree planes, sketches, bodies and reference images, timeline chips (Edit, Rename, Suppress, Delete), empty viewport space (Fit, named views, projection), and faces, edges, regions and sketch entities in the viewport.
+- Folder sort and filter: `docs/internals/design-projects.md` (DEC-406) draws a sort control and a filter across the whole tree above the project list, but neither CUST-023 nor any other row builds them (found by CUST-023).
 
 ## Delivery and acceptance
 
