@@ -30,6 +30,7 @@ import { buildRevolveGhost } from "../three/revolveGhost";
 import { RevolveGizmo } from "../three/RevolveGizmo";
 import { GizmoSlot } from "../three/gizmoSlot";
 import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
+import { listenWheel } from "../three/wheel";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
 import {
   previewBodyTints,
@@ -1092,11 +1093,6 @@ export function ViewportView() {
       if (b === 0) handlePrimaryUp(e, dragMoved);
     };
 
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      vp.zoomBy(e.deltaY > 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
-    };
-
     const onContext = (e: Event) => e.preventDefault();
 
     const onDblClick = (e: MouseEvent) => {
@@ -1106,14 +1102,14 @@ export function ViewportView() {
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
     el.addEventListener("pointerup", onPointerUp);
-    el.addEventListener("wheel", onWheel, { passive: false });
+    const unlistenWheel = listenWheel(el, vp);
     el.addEventListener("contextmenu", onContext);
     el.addEventListener("dblclick", onDblClick);
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
-      el.removeEventListener("wheel", onWheel);
+      unlistenWheel();
       el.removeEventListener("contextmenu", onContext);
       el.removeEventListener("dblclick", onDblClick);
     };

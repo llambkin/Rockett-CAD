@@ -117,7 +117,10 @@ export class CadViewport {
     start: number;
     poseAt: (t: number) => CameraPose;
   } = null;
+  private pendingZoom: { factor: number; x: number; y: number } | null = null;
+  private pendingPan: [number, number] | null = null;
   private frames = frameScheduler((now) => {
+    this.applyQueuedInput();
     this.stepAnimation(now);
     this.render();
     return this.animating !== null;
@@ -277,6 +280,27 @@ export class CadViewport {
         this.perspCam.position.add(shift);
       }
     }
+  }
+
+  queueZoom(factor: number, clientX: number, clientY: number) {
+    const factorSoFar = this.pendingZoom?.factor ?? 1;
+    this.pendingZoom = { factor: factorSoFar * factor, x: clientX, y: clientY };
+    this.requestRender();
+  }
+
+  queuePan(dx: number, dy: number) {
+    const [x, y] = this.pendingPan ?? [0, 0];
+    this.pendingPan = [x + dx, y + dy];
+    this.requestRender();
+  }
+
+  private applyQueuedInput() {
+    const zoom = this.pendingZoom;
+    const pan = this.pendingPan;
+    this.pendingZoom = null;
+    this.pendingPan = null;
+    if (pan) this.pan(pan[0], pan[1]);
+    if (zoom) this.zoomBy(zoom.factor, zoom.x, zoom.y);
   }
 
   /** Project a screen point onto a plane (default: view plane through target). */
