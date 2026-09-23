@@ -29,16 +29,48 @@ function str(v: unknown, label: string, maxLen = 200): void {
   }
 }
 
-function list(v: unknown, label: string, min: number, max: number): void {
+function list(
+  v: unknown,
+  label: string,
+  min: number,
+  max: number,
+  item: (v: unknown, label: string) => void,
+): void {
   if (!Array.isArray(v) || v.length < min || v.length > max) {
     throw new ValidationError(`${label} requires ${min}-${max} items`);
   }
+  for (const x of v) item(x, label);
 }
 
 function record(v: unknown, label: string): void {
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
     throw new ValidationError(`${label} must be an object`);
   }
+}
+
+function profileRef(v: unknown, label: string): void {
+  record(v, label);
+  const ref = v as { sketchId?: unknown; profileId?: unknown };
+  str(ref.sketchId, `${label} sketch`, 100);
+  str(ref.profileId, `${label} profile`);
+}
+
+function faceRef(v: unknown, label: string): void {
+  record(v, label);
+  const ref = v as { kind?: unknown; bodyId?: unknown; faceName?: unknown };
+  if (ref.kind !== "face")
+    throw new ValidationError(`${label} must reference a face`);
+  str(ref.bodyId, `${label} body`);
+  str(ref.faceName, `${label} face`, 2000);
+}
+
+function edgeRef(v: unknown, label: string): void {
+  record(v, label);
+  const ref = v as { kind?: unknown; bodyId?: unknown; edgeName?: unknown };
+  if (ref.kind !== "edge")
+    throw new ValidationError(`${label} must reference an edge`);
+  str(ref.bodyId, `${label} body`);
+  str(ref.edgeName, `${label} edge`, 2000);
 }
 
 function planeRef(v: unknown, label: string): void {
@@ -129,10 +161,7 @@ export function validateFeature(f: Feature): void {
             `Missing endpoint on sketch entity ${e.id}`,
           );
         if (e.kind !== "point" && e.projection) {
-          if (e.projection.kind !== "edge")
-            throw new ValidationError("projection must reference an edge");
-          str(e.projection.bodyId, "projection body");
-          str(e.projection.edgeName, "projection edge", 2000);
+          edgeRef(e.projection, "projection");
           if (!e.external)
             throw new ValidationError("projected curves must be external");
         }
@@ -154,8 +183,8 @@ export function validateFeature(f: Feature): void {
         num(f.distance2, "second distance", 0, MAX_DIM);
       if (f.startOffset !== undefined)
         num(f.startOffset, "start offset", -MAX_DIM, MAX_DIM);
-      list(f.profiles, "extrude profiles", 0, 64);
-      if (f.faces !== undefined) list(f.faces, "extrude faces", 0, 64);
+      list(f.profiles, "extrude profiles", 0, 64, profileRef);
+      if (f.faces !== undefined) list(f.faces, "extrude faces", 0, 64, faceRef);
       const sourceCount = f.profiles.length + (f.faces?.length ?? 0);
       if (sourceCount === 0 || sourceCount > 64) {
         throw new ValidationError("extrude requires 1-64 profiles or faces");
@@ -163,29 +192,31 @@ export function validateFeature(f: Feature): void {
       break;
     }
     case "revolve":
+      list(f.profiles, "revolve profiles", 1, 64, profileRef);
       num(f.angle, "revolve angle", -360, 360);
       break;
     case "sweep":
-      list(f.profiles, "sweep profiles", 1, 64);
+      list(f.profiles, "sweep profiles", 1, 64, profileRef);
       str(f.pathSketchId, "sweep path sketch", 100);
       break;
     case "loft":
-      list(f.sections, "loft sections", 2, 64);
+      list(f.sections, "loft sections", 2, 64, profileRef);
       break;
     case "fillet":
       if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean")
         throw new ValidationError("tangentChain must be boolean");
       num(f.radius, "fillet radius", 0.000001, MAX_DIM);
-      list(f.edges, "fillet edges", 1, 256);
+      list(f.edges, "fillet edges", 1, 256, edgeRef);
       break;
     case "chamfer":
       if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean")
         throw new ValidationError("tangentChain must be boolean");
       num(f.distance, "chamfer distance", 0.000001, MAX_DIM);
-      list(f.edges, "chamfer edges", 1, 256);
+      list(f.edges, "chamfer edges", 1, 256, edgeRef);
       break;
     case "shell":
       num(f.thickness, "shell thickness", 0.000001, MAX_DIM);
+      list(f.openFaces, "shell open faces", 0, 256, faceRef);
       break;
     case "combine":
       if (!["join", "cut", "intersect"].includes(f.operation)) {
@@ -194,23 +225,23 @@ export function validateFeature(f: Feature): void {
         );
       }
       str(f.targetBody, "combine target body");
-      list(f.toolBodies, "combine tool bodies", 1, 64);
-      for (const id of f.toolBodies) str(id, "combine tool body");
+      list(f.toolBodies, "combine tool bodies", 1, 64, str);
       break;
     case "splitBody":
       str(f.body, "split body");
       planeRef(f.tool, "split tool");
       break;
     case "mirror":
-      list(f.bodies, "mirror bodies", 1, 64);
-      for (const id of f.bodies) str(id, "mirror body");
+      list(f.bodies, "mirror bodies", 1, 64, str);
       planeRef(f.plane, "mirror plane");
       break;
     case "linearPattern":
+      list(f.bodies, "pattern bodies", 1, 64, str);
       num(f.count, "pattern count", 2, 500);
       num(f.spacing, "pattern spacing", -MAX_DIM, MAX_DIM);
       break;
     case "circularPattern":
+      list(f.bodies, "pattern bodies", 1, 64, str);
       num(f.count, "pattern count", 2, 500);
       num(f.totalAngle, "pattern angle", -360, 360);
       break;
@@ -229,16 +260,17 @@ export function validateFeature(f: Feature): void {
       break;
     case "offsetFace":
       num(f.distance, "offset distance", -MAX_DIM, MAX_DIM);
+      list(f.faces, "offset faces", 1, 256, faceRef);
       break;
     case "emboss":
+      list(f.profiles, "emboss profiles", 1, 64, profileRef);
       num(f.depth, "emboss depth", 0.000001, MAX_DIM);
       break;
     case "move":
-      list(f.bodies, "move bodies", 1, 64);
-      list(f.translation, "move translation", 3, 3);
-      num(f.translation[0], "move X", -MAX_DIM, MAX_DIM);
-      num(f.translation[1], "move Y", -MAX_DIM, MAX_DIM);
-      num(f.translation[2], "move Z", -MAX_DIM, MAX_DIM);
+      list(f.bodies, "move bodies", 1, 64, str);
+      list(f.translation, "move translation", 3, 3, (v, label) =>
+        num(v, label, -MAX_DIM, MAX_DIM),
+      );
       break;
     default: {
       const unknown: never = f;
