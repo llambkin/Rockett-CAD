@@ -49,7 +49,7 @@ server/src/geometry/features.ts evalRevolve 95
 server/src/geometry/sketchGeom.ts buildWire 81
 server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
-server/src/geometry/tessellate.ts tessellateBody 88
+server/src/geometry/tessellate.ts tessellateBody 87
 shared/src/model.ts 510
 shared/src/profiles.ts 633
 shared/src/profiles.ts detectProfiles 405
