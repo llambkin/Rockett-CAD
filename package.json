@@ -18,11 +18,12 @@
     "lint:comments": "sh scripts/check-comments.sh",
     "lint:writing": "node ~/masterrulez/scripts/lint-writing",
     "start": "npm run start --workspace server",
-    "test": "npm run typecheck && npm run test --workspace shared && npm run test --workspace server && npm run test:client",
+    "test": "npm run typecheck && vitest run",
     "test:client": "vitest run client/test",
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
   },
   "devDependencies": {
+    "happy-dom": "20.14.5",
     "npm-run-all2": "9.0.3",
     "oxlint": "1.79.0",
     "prettier": "3.9.6",
