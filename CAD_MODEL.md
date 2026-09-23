@@ -286,7 +286,9 @@ diameter); angles come from plane normals / line directions.
 - **3MF**: OPC container written directly (`fflate` zip +
   `3D/3dmodel.model` XML), `unit="millimeter"`, one `<object>` per body with
   the body's display name preserved, so multi-body prints arrive in the slicer
-  as separate named objects.
+  as separate named objects. Vertices on a 1e-6 mm grid (`LINEAR_TOL`) are
+  welded across faces and triangles that collapse are dropped, so each object
+  is a closed mesh with every edge shared by two outward triangles.
 
 ## Associative sketch projection (schema 2)
 

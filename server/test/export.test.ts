@@ -16,6 +16,7 @@ import { createApiRouter } from "../src/api/routes.js";
 import { FolderStore } from "../src/store/folderStore.js";
 import { LocalStorage } from "../src/store/storage.js";
 import { expectEvidence } from "./helpers/interopEvidence.js";
+import { filletedCube } from "./helpers/solidFixtures.js";
 
 let server: Server | undefined;
 let apiUrl = "";
@@ -72,6 +73,43 @@ function boxDoc(id: string) {
   ];
   doc.timelinePosition = 2;
   return doc;
+}
+
+function meshOf3mf(data: Buffer) {
+  const model = strFromU8(unzipSync(new Uint8Array(data))["3D/3dmodel.model"]!);
+  const vertices = [
+    ...model.matchAll(/<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"\/>/g),
+  ].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])] as const);
+  const triangles = [
+    ...model.matchAll(/<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"\/>/g),
+  ].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])] as const);
+  return { vertices, triangles };
+}
+
+function expectClosedOutward(mesh: ReturnType<typeof meshOf3mf>) {
+  const directed = new Map<string, number>();
+  for (const [a, b, c] of mesh.triangles)
+    for (const [p, q] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ] as const)
+      directed.set(`${p},${q}`, (directed.get(`${p},${q}`) ?? 0) + 1);
+  const unpaired = [...directed].filter(([edge, count]) => {
+    const [p, q] = edge.split(",");
+    return p === q || count !== 1 || directed.get(`${q},${p}`) !== 1;
+  });
+  expect(unpaired).toEqual([]);
+  let volume = 0;
+  for (const [a, b, c] of mesh.triangles) {
+    const [p, q, r] = [a, b, c].map((i) => mesh.vertices[i]!);
+    volume +=
+      (p![0] * (q![1] * r![2] - q![2] * r![1]) +
+        p![1] * (q![2] * r![0] - q![0] * r![2]) +
+        p![2] * (q![0] * r![1] - q![1] * r![0])) /
+      6;
+  }
+  return volume;
 }
 
 describe("exporters", () => {
@@ -138,7 +176,18 @@ describe("exporters", () => {
     expect(model).toContain("<vertex ");
     expect(model).toContain("<triangle ");
     expect(model).toContain('<item objectid="1"/>');
+    const mesh = meshOf3mf(data);
+    expect([mesh.vertices.length, mesh.triangles.length]).toEqual([8, 12]);
+    expect(expectClosedOutward(mesh)).toBeCloseTo(4000, 6);
     expectEvidence("box.3mf", data);
+  });
+
+  it("writes a filleted box as one closed outward mesh", () => {
+    const mesh = meshOf3mf(write3mf([{ body: filletedCube(5, 1), name: "F" }]));
+    const exact = 125 - 36 * (1 - Math.PI / 4) - 8 * (1 - Math.PI / 6);
+    const volume = expectClosedOutward(mesh);
+    expect(volume / exact).toBeGreaterThan(0.99);
+    expect(volume / exact).toBeLessThan(1);
   });
 
   it("export request validation", async () => {

@@ -9,6 +9,7 @@
  */
 
 import { zipSync, strToU8 } from "fflate";
+import { LINEAR_TOL } from "@rockett/shared";
 import { getKernel } from "./kernel.js";
 import { meshShape } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
@@ -96,6 +97,30 @@ function xmlEscape(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function weld({ positions: P, indices }: Mesh): Mesh {
+  const at = new Map<string, number>();
+  const welded: Mesh = { positions: [], indices: [] };
+  const remap: number[] = [];
+  const q = (v: number) => Math.round(P[v]! / LINEAR_TOL);
+  for (let v = 0; v < P.length; v += 3) {
+    const key = `${q(v)},${q(v + 1)},${q(v + 2)}`;
+    let i = at.get(key);
+    if (i === undefined) {
+      i = welded.positions.length / 3;
+      at.set(key, i);
+      welded.positions.push(P[v]!, P[v + 1]!, P[v + 2]!);
+    }
+    remap.push(i);
+  }
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = remap[indices[t]!]!,
+      b = remap[indices[t + 1]!]!,
+      c = remap[indices[t + 2]!]!;
+    if (a !== b && b !== c && c !== a) welded.indices.push(a, b, c);
+  }
+  return welded;
+}
+
 /** 3MF: one <object> per body, names preserved, units = millimeter. */
 export function write3mf(
   bodies: { body: NamedBody; name: string }[],
@@ -104,7 +129,7 @@ export function write3mf(
   const objectsXml: string[] = [];
   const itemsXml: string[] = [];
   bodies.forEach(({ body, name }, i) => {
-    const mesh = exportMesh(body, quality);
+    const mesh = weld(exportMesh(body, quality));
     const id = i + 1;
     const verts: string[] = [];
     for (let v = 0; v < mesh.positions.length; v += 3) {

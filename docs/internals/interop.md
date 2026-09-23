@@ -73,15 +73,14 @@ The two reference files are reader-written known-good samples.
 
 ## Results, 2026-09-23
 
-| File                | Verdict  | Reader output                                                                               |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `xde-assembly.step` | accepted | 758 entities, 1 root, 3 valid solids, volume 12125 mm3                                      |
-| `xde-assembly.glb`  | accepted | 0 errors, 0 warnings, 2 materials, 36 triangles                                             |
-| `reference-box.3mf` | accepted | 1 object, 8 vertices, 12 triangles, manifold                                                |
-| `reference-r12.dxf` | accepted | AC1009, 2 LINE, 1 ARC, 1 CIRCLE, 1 POINT, no audit errors                                   |
-| `box.3mf`           | rejected | no strict-mode warning, but `MainBody` has 24 vertices for 12 triangles and is not manifold |
+| File                | Verdict  | Reader output                                             |
+| ------------------- | -------- | --------------------------------------------------------- |
+| `xde-assembly.step` | accepted | 758 entities, 1 root, 3 valid solids, volume 12125 mm3    |
+| `xde-assembly.glb`  | accepted | 0 errors, 0 warnings, 2 materials, 36 triangles           |
+| `reference-box.3mf` | accepted | 1 object, 8 vertices, 12 triangles, manifold              |
+| `reference-r12.dxf` | accepted | AC1009, 2 LINE, 1 ARC, 1 CIRCLE, 1 POINT, no audit errors |
+| `box.3mf`           | accepted | 1 object, 8 vertices, 12 triangles, manifold              |
 
-`write3mf` writes each B-Rep face's vertices separately, so edges between
-faces are not shared. Each file truncated to half its length is rejected: STEP
-`RetFail`, 3MF `Could not read ZIP file`, GLB
-`GLB_UNEXPECTED_END_OF_CHUNK_DATA`, DXF `StopIteration`.
+Each file truncated to half its length is rejected: STEP `RetFail`, 3MF
+`Could not read ZIP file`, GLB `GLB_UNEXPECTED_END_OF_CHUNK_DATA`, DXF
+`StopIteration`.
