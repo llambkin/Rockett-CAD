@@ -1,7 +1,7 @@
 # Architecture
 
 Rockett CAD follows the layered architecture the project brief prescribes: the
-rendered triangle mesh is only a _visualisation_ of the CAD model — the
+rendered triangle mesh is only a _visualisation_ of the CAD model. The
 authoritative geometry is always the B-Rep model produced by the OpenCascade
 kernel from the parametric document.
 
@@ -33,7 +33,7 @@ B-Rep model (TopoDS solids, faces, edges, vertices)
 **Kernel: OpenCascade via WASM, hosted server-side.**
 `opencascade.js` (OCCT 7.6) runs inside the Node process. This gives a full
 B-Rep kernel (booleans, fillets, shells, sweeps, topology interrogation,
-history tracking) with zero native build complexity in Docker — the runtime
+history tracking) with zero native build complexity in Docker. The runtime
 image is plain `node:24-trixie-slim`. The geometry code is isolated behind
 `server/src/geometry/` so it could later move to a worker thread or separate
 process without touching the API; for a single-user deployment, in-process
@@ -44,7 +44,7 @@ first-load regeneration of a moderate model tens of ms).
 (`add/edit/delete feature`, `set timeline position`, …); the server validates,
 persists (autosave on every mutation) and responds with the updated document
 plus a freshly evaluated model. Undo/redo is a client-side stack of document
-snapshots restored through a full-document endpoint — deliberately distinct
+snapshots restored through a full-document endpoint, deliberately distinct
 from the CAD timeline (see FEATURE_TIMELINE.md).
 
 **Shared parametric code.** The constraint solver and profile detection are
@@ -65,7 +65,7 @@ stored geometry.
 
 ## Security posture
 
-- The API exposes _controlled modelling operations only_ — no arbitrary
+- The API exposes _controlled modelling operations only_, with no arbitrary
   command execution surface.
 - All modelling parameters are validated (`server/src/api/validate.ts`)
   before reaching the kernel; document/feature ids are pattern-checked.

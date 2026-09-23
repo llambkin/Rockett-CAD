@@ -1,7 +1,7 @@
-# Feature Timeline
+# Feature timeline
 
 The timeline is the chronological list of parametric features at the bottom of
-the workspace. It is the _product_ — everything else exists to keep it
+the workspace. It is the _product_: everything else exists to keep it
 editable.
 
 ## Semantics
@@ -10,9 +10,9 @@ editable.
   feature (`Sketch1`, `Extrude1`, `Fillet1`, …) with a stable id, a display
   name, a `suppressed` flag, parameters, and references to its inputs
   (profiles by sketch+profile id, topology by persistent face/edge names,
-  bodies by body id — see CAD_MODEL.md).
+  bodies by body id, see CAD_MODEL.md).
 - `document.timelinePosition` is the marker: the number of currently active
-  features. Features after the marker exist but are **rolled back** — they are
+  features. Features after the marker exist but are **rolled back**: they are
   ghosted in the UI and skipped by the engine.
 
 ## Operations
@@ -23,9 +23,9 @@ editable.
 | Rename                | Context menu → inline edit (stored on the feature)                                                                                             |
 | Edit                  | Double-click or context menu; sketches open the sketch editor, other features open their parameter dialog pre-filled (same dialog as creation) |
 | Suppress / unsuppress | Context menu; suppressed features are skipped during evaluation but keep their place in history                                                |
-| Delete                | Context menu (no confirm — Ctrl+Z restores)                                                                                                    |
+| Delete                | Context menu (no confirm, Ctrl+Z restores)                                                                                                     |
 | Roll back / forward   | Click any marker gap, the ⏮◀▶⏭ controls, or drag intent via repeated stepping                                                                  |
-| Insert mid-history    | Roll back to the insertion point, then create features normally — new features insert **at the marker**, and the marker advances past them     |
+| Insert mid-history    | Roll back to the insertion point, then create features normally. New features insert **at the marker**, and the marker advances past them      |
 
 ## Rollback contract (the fundamental requirement)
 
@@ -34,7 +34,7 @@ after feature _k_. While rolled back you can:
 
 - select faces that exist _at that point in history_,
 - sketch on them, dimension, constrain,
-- create features — they are inserted at the marker,
+- create features, which are inserted at the marker,
 - edit earlier features (double-click),
 - then return to the end of the timeline.
 
@@ -55,7 +55,7 @@ are always evaluated first; an edit invalidates exactly the downstream suffix
 If an upstream change removes geometry a downstream feature references, that
 feature is marked in the timeline:
 
-> ⚠ Fillet1 — referenced edge no longer exists: e[f:…|f:…]
+> ⚠ Fillet1: referenced edge no longer exists: e[f:…|f:…]
 
 The model is **never silently corrupted**: the failed feature contributes
 nothing, the pre-failure state carries forward, and the error text names the
@@ -65,7 +65,7 @@ roadmap.
 
 ## Undo/redo is not the timeline
 
-Undo (Ctrl+Z) restores whole document snapshots — it un-does _your editing
+Undo (Ctrl+Z) restores whole document snapshots. It un-does _your editing
 actions_ (created a feature, changed a dimension, renamed, deleted…). The
 timeline is part of the document being snapshotted. The two are independent
 axes, as in mainstream CAD: undo moves through editing history, the marker

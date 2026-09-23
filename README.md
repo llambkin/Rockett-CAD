@@ -7,7 +7,7 @@ portion of Fusion 360:
 > **Sketch → constrain → feature → body → timeline → modify → regenerate → export**
 
 Built on a real B-Rep solid-modelling kernel (OpenCascade / OCCT compiled to
-WebAssembly) — not a mesh editor. Every operation is an editable parametric
+WebAssembly), not a mesh editor. Every operation is an editable parametric
 feature in a chronological timeline; editing an earlier feature rebuilds
 everything downstream against persistent topology references.
 
@@ -15,39 +15,39 @@ everything downstream against persistent topology references.
 
 ## Features
 
-- **Parametric sketcher** — line, rectangle, centre rectangle, circle, 3-point
+- **Parametric sketcher**: line, rectangle, centre rectangle, circle, 3-point
   arc, polygon, slot, points, construction geometry; full constraint solver
   (horizontal, vertical, parallel, perpendicular, tangent, coincident,
   concentric, equal, midpoint, collinear, fix) and editable dimensions
   (length, distance, radius, diameter, angle) with live DOF / constrained-state
   feedback.
-- **Sketch offsets** — select a curve, preview the distance, and reverse the
+- **Sketch offsets**: select a curve, preview the distance, and reverse the
   direction before applying. Chain connected lines and rounded arc corners,
   or offset a single line, circle, or arc. Ctrl-click adds/removes curves to
   choose an explicit chain; curves can be selected in any order.
-- **Solid features** — extrude (new body / join / cut / intersect, symmetric,
+- **Solid features**: extrude (new body / join / cut / intersect, symmetric,
   two-sided, from sketch profiles _or_ planar faces), revolve, sweep, loft,
   emboss/deboss.
-- **Modify** — fillet, chamfer, shell, boolean combine, split body,
+- **Modify**: fillet, chamfer, shell, boolean combine, split body,
   press/pull (offset face).
-- **Replicate** — mirror, rectangular pattern, circular pattern.
-- **Construction** — offset planes, midplanes; sketch on any planar face.
-- **Reference images** — attach PNG/JPEG/WebP canvases to planes, with
+- **Replicate**: mirror, rectangular pattern, circular pattern.
+- **Construction**: offset planes, midplanes; sketch on any planar face.
+- **Reference images**: attach PNG/JPEG/WebP canvases to planes, with
   two-point calibration to real dimensions.
-- **Feature timeline** — rename, edit, suppress, delete, roll back, insert
+- **Feature timeline**: rename, edit, suppress, delete, roll back, insert
   features mid-history; broken references are flagged, never silently dropped.
-- **Inspect** — point/edge/face measurement (distance, ΔXYZ, angle, radius,
+- **Inspect**: point/edge/face measurement (distance, ΔXYZ, angle, radius,
   area, length).
-- **Export** — binary STL and multi-body 3MF (bodies preserved as named
+- **Export**: binary STL and multi-body 3MF (bodies preserved as named
   objects), with tessellation quality control.
-- **STEP import** — start a project with **New project from STEP**, or use
+- **STEP import**: start a project with **New project from STEP**, or use
   **Insert → Import STEP** in an existing project. Accepts `.step`/`.stp`
   files up to 10 MB containing solid bodies. Imported solids support further
   modelling; the source application's sketches and feature history are not imported.
-- **Persistence** — human-inspectable JSON project format that stores the full
+- **Persistence**: human-inspectable JSON project format that stores the full
   parametric history (never just the final mesh); versioned schema with
   migrations; automatic save on every change; survives container recreation.
-- **Undo/redo** — application-level, separate from the CAD timeline.
+- **Undo/redo**: application-level, separate from the CAD timeline.
 
 ## Quick start (Docker)
 
@@ -97,20 +97,20 @@ back to that sketch. **Finish Sketch** regenerates the model at the previously
 saved timeline position. Entering edit mode does not change the saved marker or
 create an undo step.
 
-| Action                          | Input                                                                                                                                                                                   |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Select                          | Left click (Ctrl adds; Alt+click cycles overlapping picks)                                                                                                                              |
-| Context menu                    | Right click on geometry                                                                                                                                                                 |
-| Orbit                           | Right-drag, Shift+middle-drag, or drag the ViewCube                                                                                                                                     |
-| Pan                             | Middle-drag                                                                                                                                                                             |
-| Zoom                            | Scroll wheel (to cursor)                                                                                                                                                                |
-| Named views / fit / ortho–persp | Toolbar (right side) and ViewCube                                                                                                                                                       |
-| Shortcuts                       | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
+| Action                             | Input                                                                                                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Select                             | Left click (Ctrl adds; Alt+click cycles overlapping picks)                                                                                                                              |
+| Context menu                       | Right click on geometry                                                                                                                                                                 |
+| Orbit                              | Right-drag, Shift+middle-drag, or drag the ViewCube                                                                                                                                     |
+| Pan                                | Middle-drag                                                                                                                                                                             |
+| Zoom                               | Scroll wheel (to cursor)                                                                                                                                                                |
+| Named views / fit / ortho or persp | Toolbar (right side) and ViewCube                                                                                                                                                       |
+| Shortcuts                          | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
 
 ## License note
 
 Rockett CAD bundles [opencascade.js](https://github.com/donalffons/opencascade.js)
-(LGPL-2.1) — the WASM build of Open CASCADE Technology.
+(LGPL-2.1), the WASM build of Open CASCADE Technology.
 
 ### Sketch modification tools
 

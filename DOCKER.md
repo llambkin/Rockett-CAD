@@ -1,10 +1,10 @@
-# Deployment (Docker / Unraid)
+# Docker deployment
 
 Rockett CAD ships as a single container: Node 24 serving the API and the
 built client, with the OpenCascade kernel embedded as WebAssembly (no native
 dependencies). All persistent state lives under **one volume: `/data`**.
 
-## Docker Compose
+## Compose
 
 ```bash
 ROCKETT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
@@ -71,8 +71,8 @@ docker run -d --name rockett-cad \
 ```
 
 Documents are written atomically (tmp file + rename), so a crash or container
-kill never corrupts a project. **The container is stateless outside `/data`**
-— recreating it (upgrades, host moves) loses nothing; this is verified by the
+kill never corrupts a project. **The container is stateless outside `/data`**.
+Recreating it (upgrades, host moves) loses nothing; this is verified by the
 persistence tests and was smoke-tested against a live container.
 
 ## Environment
@@ -90,9 +90,9 @@ persistence tests and was smoke-tested against a live container.
   ephemeral writable path, and `--read-only` with the `/data` volume serves.
   The base image's `/tmp` stays world-writable unless the root is read-only.
 - No outbound network use; no cloud services; fully offline-capable.
-- Single-user by design for v1 — put it behind your reverse proxy
+- Single-user by design for v1. Put it behind your reverse proxy
   (basic auth, Authelia, Cloudflare Access, …) if it is reachable beyond your
   LAN. The auth layer is intentionally separable from the CAD logic
   (see ARCHITECTURE.md).
-- Healthcheck hits `/api/health` (60 s start period — the WASM kernel takes a
-  few seconds to load on first boot).
+- Healthcheck hits `/api/health` (60 s start period, because the WASM
+  kernel takes a few seconds to load on first boot).

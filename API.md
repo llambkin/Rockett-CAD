@@ -4,7 +4,7 @@ Base path: `/api`. All bodies are JSON unless noted. Errors return
 `{ "error": string }` with an appropriate 4xx/5xx status. Types live in
 `shared/src/api.ts` and `shared/src/model.ts`.
 
-Mutating endpoints return `{ document, evaluation }` — the updated document
+Mutating endpoints return `{ document, evaluation }`: the updated document
 plus a fresh incremental evaluation (bodies with tagged tessellation, feature
 statuses, solved sketches with profiles, construction-plane frames). The
 server persists on every mutation (autosave).
@@ -25,11 +25,11 @@ snapshots sent by different clients.
 
 | Method & path                  | Body        | Returns                                                                                      |
 | ------------------------------ | ----------- | -------------------------------------------------------------------------------------------- |
-| `GET /health`                  | –           | `{ ok: true, version, schemaVersion, commit }` (`commit` from `ROCKETT_COMMIT`, else `null`) |
-| `GET /projects`                | –           | `ProjectSummary[]`                                                                           |
+| `GET /health`                  | none        | `{ ok: true, version, schemaVersion, commit }` (`commit` from `ROCKETT_COMMIT`, else `null`) |
+| `GET /projects`                | none        | `ProjectSummary[]`                                                                           |
 | `POST /projects`               | `{ name }`  | `{ document }`                                                                               |
-| `GET /projects/:id`            | –           | `{ document }`                                                                               |
-| `DELETE /projects/:id`         | –           | `{ ok }`                                                                                     |
+| `GET /projects/:id`            | none        | `{ document }`                                                                               |
+| `DELETE /projects/:id`         | none        | `{ ok }`                                                                                     |
 | `POST /projects/:id/duplicate` | `{ name? }` | `{ document }` (assets copied)                                                               |
 | `POST /projects/:id/rename`    | `{ name }`  | `{ document }`                                                                               |
 
@@ -47,11 +47,11 @@ source is embedded in the document; uploads that take the document beyond
 
 | Method & path                        | Body                    | Notes                                                                        |
 | ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |
-| `GET /projects/:id/evaluate`         | –                       | Evaluate to the timeline marker; returns `EvaluateResult`                    |
+| `GET /projects/:id/evaluate`         | none                    | Evaluate to the timeline marker; returns `EvaluateResult`                    |
 | `PUT /projects/:id/document`         | `{ document }`          | Full replace (undo/redo restore); validated; 404 if project no longer exists |
 | `POST /projects/:id/features`        | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
 | `PUT /projects/:id/features/:fid`    | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
-| `DELETE /projects/:id/features/:fid` | –                       | Marker adjusts if needed                                                     |
+| `DELETE /projects/:id/features/:fid` | none                    | Marker adjusts if needed                                                     |
 | `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
 | `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Body display metadata                                                        |
 
@@ -67,7 +67,7 @@ source is embedded in the document; uploads that take the document beyond
 | Method & path                       | Body              | Notes                                                 |
 | ----------------------------------- | ----------------- | ----------------------------------------------------- |
 | `POST /projects/:id/assets`         | multipart `image` | PNG/JPEG/WebP by magic bytes, ≤ 25 MB → `{ assetId }` |
-| `GET /projects/:id/assets/:assetId` | –                 | Serves the image                                      |
+| `GET /projects/:id/assets/:assetId` | none              | Serves the image                                      |
 
 ## Validation
 

@@ -39,17 +39,17 @@
 - Covered by regression tests: upstream projection resizing and cold reload,
   missing sources, cyclic projection rejection, trimmed-arc/offset B-Rep volumes.
 
-- **Reference repair UI** — re-pick a missing face/edge on a failed feature
-- **Sketch tools** — sketch mirror/patterns, intersect model geometry,
+- **Reference repair UI**: re-pick a missing face/edge on a failed feature
+- **Sketch tools**: sketch mirror/patterns, intersect model geometry,
   ellipse/spline projections
 - **Selection filters** and window selection
 - **Named parameters & expressions** (`wallThickness = 2.4`,
-  `caseWidth / 2`) — the schema already stores plain numbers per feature, so
+  `caseWidth / 2`). The schema already stores plain numbers per feature, so
   an expression table + resolver layer slots in front of evaluation
 - **Construction axes/points** as timeline features (schema supports them)
 - **Server-side revisions/checkpoints** of `document.json`
-- **Assemblies-ready auth** — local login / OIDC / reverse-proxy header auth
-- **Performance** — move kernel evaluation to a worker thread; binary
+- **Assemblies-ready auth**: local login / OIDC / reverse-proxy header auth
+- **Performance**: move kernel evaluation to a worker thread; binary
   tessellation payloads
 
 ## Later

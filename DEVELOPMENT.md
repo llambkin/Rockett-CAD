@@ -23,7 +23,7 @@ Data in dev goes to `./data/` (gitignored).
 
 | Workspace | Commands                                                                                                            |
 | --------- | ------------------------------------------------------------------------------------------------------------------- |
-| `shared`  | `npm test -w shared` — solver + profile-detection tests                                                             |
+| `shared`  | `npm test -w shared`: solver + profile-detection tests                                                              |
 | `server`  | `npm run dev -w server`, `npm test -w server`, `npm run build -w server` (esbuild bundle → `server/dist/server.js`) |
 | `client`  | `npm run dev -w client`, `npm run build -w client` (Vite → `client/dist`)                                           |
 
@@ -38,32 +38,32 @@ npm test          # shared + server suites
 
 The suites map to the layers the brief requires:
 
-- **Geometry** (`server/test/geometry.test.ts`) — extrude dimensions/volumes,
+- **Geometry** (`server/test/geometry.test.ts`): extrude dimensions/volumes,
   boolean cut volume, fillet volume delta, face/edge/vertex counts and
   persistent names, parametric regeneration after upstream edits, timeline
   rollback, broken-reference error reporting.
-- **Face extrude** (`server/test/faceExtrude.test.ts`) — extruding body faces
+- **Face extrude** (`server/test/faceExtrude.test.ts`): extruding body faces
   directly (boss + pocket).
-- **Solver** (`shared/test/solver.test.ts`) — dimensioned rectangle converges
+- **Solver** (`shared/test/solver.test.ts`): dimensioned rectangle converges
   exactly, DOF classification, conflicting constraints detected, tangent,
   drag-with-polish.
-- **Profiles** (`shared/test/profiles.test.ts`) — region extraction, holes,
+- **Profiles** (`shared/test/profiles.test.ts`): region extraction, holes,
   shared-edge subdivision, stable profile ids.
-- **Persistence** (`server/test/store.test.ts`) — round-trip, duplicate, list,
+- **Persistence** (`server/test/store.test.ts`): round-trip, duplicate, list,
   delete, path-traversal rejection.
-- **Export** (`server/test/export.test.ts`) — binary STL structure + bounds,
+- **Export** (`server/test/export.test.ts`): binary STL structure + bounds,
   3MF unzips with named objects and millimetre units.
-- **API integration** (`server/test/api.test.ts`) — the complete MVP workflow
+- **API integration** (`server/test/api.test.ts`): the complete MVP workflow
   over real HTTP, ending in reload-and-verify.
 
 Write geometry tests as _reproducible numeric models_ (exact volumes, bounding
-boxes, face counts) — never rely on visual confirmation alone.
+boxes, face counts). Never rely on visual confirmation alone.
 
 ## Working on the geometry layer
 
 - All raw kernel access stays inside `server/src/geometry/`. The OCCT API is
   typed loosely (`OC = any`); check binding signatures against
-  `node_modules/opencascade.js/dist/opencascade.full.d.ts` — emscripten
+  `node_modules/opencascade.js/dist/opencascade.full.d.ts`. Emscripten
   overloads carry `_1`, `_2`, … suffixes.
 - Every feature evaluator must: validate inputs, use `kernelCall()` so kernel
   aborts become readable errors, and propagate persistent names
@@ -77,7 +77,7 @@ boxes, face counts) — never rely on visual confirmation alone.
 ## Conventions
 
 - Internal units are always millimetres; convert only at display.
-- Never reference topology by index — persistent names only (CAD_MODEL.md).
+- Never reference topology by index. Use persistent names only (CAD_MODEL.md).
 - The engine must keep working through feature failures: catch, record an
   actionable error, continue with the pre-failure state.
 - Keep the working app runnable at every commit: `npm test` + open the UI and

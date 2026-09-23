@@ -15,6 +15,7 @@
     "dev:server": "npm run dev --workspace server",
     "format:check": "prettier --check .",
     "lint": "oxlint",
+    "lint:writing": "node ~/masterrulez/scripts/lint-writing",
     "start": "npm run start --workspace server",
     "test": "npm run typecheck && npm run test --workspace shared && npm run test --workspace server && npm run test:client",
     "test:client": "vitest run client/test",

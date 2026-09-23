@@ -1,4 +1,4 @@
-# CAD Model
+# CAD model
 
 How Rockett CAD represents, regenerates, names, tessellates, measures and
 exports geometry. This is the most load-bearing document in the repo.
@@ -29,7 +29,7 @@ retained from mixed files. Each upload is limited to 10 MB.
 
 Bodies get stable ids derived from the feature that created them:
 
-- `b:{featureId}` — a `newBody` extrude/revolve/sweep/loft. A `newBody`
+- `b:{featureId}`: a `newBody` extrude/revolve/sweep/loft. A `newBody`
   extrude/revolve of several sketch regions makes one body per region, in
   selection order (`b:x`, `b:x:2`, …); `join` is what merges regions into a
   single solid (with no existing body to join, the merged solid becomes the new
@@ -78,8 +78,8 @@ face) the copies are disambiguated with a `~n` suffix in centroid order.
 An extrude's `distance` is signed: a negative value builds the prism on the
 opposite side of the sketch plane (after `direction` is applied; `symmetric`
 ignores the sign). An optional `startOffset` moves the start plane along the
-profile's (or face's) own normal before the distance is applied — Fusion's
-"Start → Offset" — so a boss or cut can begin above or below the sketch. The dialog treats a typed negative value as "into the part"
+profile's (or face's) own normal before the distance is applied (Fusion's
+"Start → Offset"), so a boss or cut can begin above or below the sketch. The dialog treats a typed negative value as "into the part"
 and switches Join to Cut, previewing the tool in red.
 
 Extrude and revolve tools built from several sketch regions pass through
@@ -87,7 +87,7 @@ Extrude and revolve tools built from several sketch regions pass through
 one face instead of showing the sketch's internal boundaries as edges. Names
 follow the unify history: a face merged from several inputs takes their shared
 base name (the `~n` suffix dropped), or the first distinct base name in sorted
-order when they differ. This runs on the tool only — a later join whose cap is
+order when they differ. This runs on the tool only. A later join whose cap is
 coplanar with an existing face keeps that edge, so downstream references to
 existing faces never move.
 
@@ -139,16 +139,16 @@ suffixes in deterministic centroid order.
 A sketch stores entities (points, lines, circles, center+endpoints arcs) and
 constraints. Points are first-class entities referenced by id, so endpoint
 sharing is exact. The solver (`shared/src/solver.ts`) builds residual
-functions per constraint and minimises with Levenberg–Marquardt over the free
+functions per constraint and minimises with Levenberg-Marquardt over the free
 variables (point coordinates, circle radii); degrees of freedom are computed
 from the Jacobian rank at the solution, driving the
 unconstrained / partially / fully / over-constrained badge.
 
 **Drawing inference** (client, `client/src/sketchTools.ts`): while a line is
 being drawn, the cursor snaps first to existing points, the origin and line
-midpoints. Otherwise a _direction lock_ may engage from the start point — axis
+midpoints. Otherwise a _direction lock_ may engage from the start point: axis
 alignment, or a right angle to any line that ends there when within 4°
-(`perpendicularSnap`) — and curve snapping then runs on the steered cursor: a
+(`perpendicularSnap`). Curve snapping then runs on the steered cursor: a
 hit on a line is placed exactly where the locked direction crosses it
 (`rayLineIntersection`), so a shape can be closed onto another line while
 staying square. Snaps that imply geometry become constraints on the created
@@ -161,14 +161,14 @@ length keeps it.
 (`shared/src/profiles.ts`): minimal enclosed cycles become selectable regions;
 full circles form disc regions; containment builds an even-odd region tree so
 inner loops become holes. A profile's id is a hash of the entity ids bounding
-it — stable across regeneration while the same entities enclose the region.
+it, stable across regeneration while the same entities enclose the region.
 
 **Sketch planes** resolve to a frame (origin, x-axis, y-axis, normal):
 
 - Origin planes have canonical frames (XY: +Z, XZ: x=(1,0,0),y=(0,0,1),
   YZ: x=(0,1,0),y=(0,0,1)).
 - Face planes: normal = outward face normal; origin = the point on the plane
-  closest to the global origin (stable under lateral model edits — the sketch
+  closest to the global origin (stable under lateral model edits: the sketch
   rides the face if it moves along its normal); axes derived deterministically
   from the global axes.
 - Construction planes: base frame offset along its normal / averaged for
@@ -182,7 +182,7 @@ it — stable across regeneration while the same entities enclose the region.
    (bodies + solved sketches + construction frames).
 2. After each feature a **snapshot** is stored, keyed by the feature's JSON.
 3. On the next evaluation the longest prefix whose feature JSON is unchanged
-   is reused; evaluation restarts from the first changed feature — editing
+   is reused; evaluation restarts from the first changed feature, so editing
    feature _k_ re-evaluates only _k..end_ ("retain valid cached state,
    invalidate downstream").
 4. The timeline marker simply truncates evaluation; rolled-back features are
@@ -199,7 +199,7 @@ toggling suppression invalidates exactly the right suffix.
 `BRepMesh_IncrementalMesh` (0.08 mm / 0.35 rad for the viewport) produces per
 face triangulations. The payload keeps the CAD structure: each face's triangle
 range is tagged with its persistent name, each edge is a sampled polyline
-tagged with its name, each vertex a named point — the client raycasts
+tagged with its name, each vertex a named point. The client raycasts
 triangles/segments/points and resolves hits to persistent CAD references, so
 selection is CAD topology, never "triangle 512". Face normals come from the
 kernel (`ComputeNormals`), respecting face orientation. Tessellations are
@@ -214,11 +214,11 @@ diameter); angles come from plane normals / line directions.
 
 ## Export
 
-- **STL** — binary, written directly from the export-quality tessellation
+- **STL**: binary, written directly from the export-quality tessellation
   (selected bodies merged), units mm.
-- **3MF** — OPC container written directly (`fflate` zip +
+- **3MF**: OPC container written directly (`fflate` zip +
   `3D/3dmodel.model` XML), `unit="millimeter"`, one `<object>` per body with
-  the body's display name preserved — multi-body prints arrive in the slicer
+  the body's display name preserved, so multi-body prints arrive in the slicer
   as separate named objects.
 
 ## Associative sketch projection (schema 2)
