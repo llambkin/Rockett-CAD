@@ -1,3 +1,4 @@
+import { fromMm, toMm, type Units } from "@rockett/shared";
 import { useEffect, useState } from "react";
 
 export function NumField({
@@ -53,6 +54,38 @@ export function NumField({
       />
     </label>
   );
+}
+
+export function LengthField({
+  label,
+  value,
+  units,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  units: Units;
+  onChange: (mm: number) => void;
+}) {
+  return (
+    <NumField
+      label={`${label} (${units})`}
+      value={fromMm(value, units)}
+      onChange={(v) => onChange(toMm(v, units))}
+    />
+  );
+}
+
+export function AngleField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (deg: number) => void;
+}) {
+  return <NumField label={`${label} (°)`} value={value} onChange={onChange} />;
 }
 
 export function SelectField({

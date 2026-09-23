@@ -1,7 +1,12 @@
 import { act, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { AxisField, NumField } from "../../src/components/form/fields";
+import {
+  AngleField,
+  AxisField,
+  LengthField,
+  NumField,
+} from "../../src/components/form/fields";
 
 async function mount(element: ReactElement) {
   const host = document.body.appendChild(document.createElement("div"));
@@ -84,5 +89,36 @@ it("switches AxisField to the selected edge", async () => {
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(onChange).toHaveBeenCalledWith({ axisSource: "edge" });
+  await unmount();
+});
+
+it("shows LengthField in its units and reports millimetres", async () => {
+  const onChange = vi.fn();
+  const { host, unmount } = await mount(
+    <LengthField
+      label="Distance"
+      value={25.4}
+      units="in"
+      onChange={onChange}
+    />,
+  );
+  const input = host.querySelector("input")!;
+  expect(host.querySelector("span")!.textContent).toBe("Distance (in)");
+  expect(input.value).toBe("1");
+  await type(input, "2");
+  expect(onChange.mock.calls).toEqual([[50.8]]);
+  await unmount();
+});
+
+it("shows AngleField in degrees", async () => {
+  const onChange = vi.fn();
+  const { host, unmount } = await mount(
+    <AngleField label="Angle" value={90} onChange={onChange} />,
+  );
+  const input = host.querySelector("input")!;
+  expect(host.querySelector("span")!.textContent).toBe("Angle (°)");
+  expect(input.value).toBe("90");
+  await type(input, "45");
+  expect(onChange.mock.calls).toEqual([[45]]);
   await unmount();
 });
