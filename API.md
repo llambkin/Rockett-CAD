@@ -69,6 +69,22 @@ upload rules, and every referenced asset must be present. A file with a newer
 returns 400 and creates nothing: a project half made when an asset fails is
 removed.
 
+Two optional text fields go with `file`. `folderId` places the new project in
+that folder in the same write, as `POST /projects` does; a missing folder is
+400 and creates nothing. `temporary` set to `true` makes a temporary project.
+Any other `temporary` value is 400, and so is `temporary` with `folderId`.
+
+### Temporary projects
+
+A temporary project is the server copy of a project kept in the browser. It
+is an ordinary project directory plus `temporary.json`,
+`{ owner, touchedAt }`, with `owner` `null` until accounts own copies. Every
+route that works on a project works on it. `GET /projects` leaves it out,
+`PUT /projects/:id/folder` answers 400 for it, and `DELETE /projects/:id`
+removes it. Any request to `/projects/:id` or a path below it refreshes
+`touchedAt`, written at most once a minute. A sweep at startup and every hour
+deletes temporary projects untouched for 24 hours; a request after that gets 404. A temporary project is never backed up before a migration.
+
 ## Folders
 
 One folder tree is shared by every user. `GET /folders` returns

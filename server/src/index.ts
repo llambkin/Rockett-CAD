@@ -15,7 +15,7 @@ import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { FolderStore } from "./store/folderStore.js";
 import { LocalStorage } from "./store/storage.js";
-import { createApp } from "./app.js";
+import { createApp, scheduleSweep } from "./app.js";
 import { parseAllowedOrigins } from "./auth/origin.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -61,7 +61,7 @@ async function main() {
   const clientDir = candidates.find((c) =>
     fs.existsSync(path.join(c, "index.html")),
   );
-  const app = createApp({
+  const { app, sweep } = createApp({
     store,
     folders: new FolderStore(storage),
     clientDir,
@@ -79,6 +79,7 @@ async function main() {
     const { port } = server.address() as AddressInfo;
     console.log(`[rockett] listening on http://0.0.0.0:${port}`);
   });
+  scheduleSweep(server, sweep);
 }
 
 main().catch((err) => {

@@ -1,4 +1,4 @@
-import { ROUTES, type Route } from "@rockett/shared";
+import { ROUTES, ValidationError, type Route } from "@rockett/shared";
 import type { FolderStore } from "../store/folderStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
 
@@ -39,6 +39,10 @@ export function folderRoutes(
       ROUTES.placeProject,
       async (req, res) => {
         await store.load(req.params.id);
+        if (await store.isTemporary(req.params.id))
+          throw new ValidationError(
+            "A temporary project cannot move to a folder",
+          );
         await folders.place(req.params.id, req.body.folderId);
         res.json({ ok: true });
       },

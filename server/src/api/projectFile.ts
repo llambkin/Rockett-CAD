@@ -1,4 +1,5 @@
 import {
+  folderId as folderIdSchema,
   parse,
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_VERSION,
@@ -9,6 +10,7 @@ import {
   type ProjectFile,
 } from "@rockett/shared";
 import type { Request, Response } from "express";
+import type { FolderStore } from "../store/folderStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import { documentMigrations, migrate } from "../store/migrations.js";
 import { validateDocument } from "./validate.js";
@@ -74,8 +76,23 @@ export const downloadProjectFile =
     res.json(file);
   };
 
+function placement(fields: Record<string, unknown> = {}) {
+  const { folderId, temporary } = fields;
+  if (temporary !== undefined && temporary !== "true")
+    throw new ValidationError("temporary must be true", "/temporary");
+  if (folderId === undefined) return { temporary: temporary === "true" };
+  if (temporary !== undefined)
+    throw new ValidationError(
+      "A temporary project cannot go in a folder",
+      "/folderId",
+    );
+  return { folderId: parse(folderIdSchema, folderId) };
+}
+
 export const uploadProjectFile =
-  (store: ProjectStore) => async (req: Request, res: Response) => {
+  (store: ProjectStore, folders: FolderStore) =>
+  async (req: Request, res: Response) => {
+    const { folderId, temporary = false } = placement(req.body);
     if (!req.file) throw new ValidationError("Choose a .rockett project file");
     const file = parse(projectFileEnvelope, readJson(req.file.buffer));
     if (file.version > PROJECT_FILE_VERSION)
@@ -100,5 +117,11 @@ export const uploadProjectFile =
         decodeAsset(name, file.assets[name]),
       ]),
     );
-    res.json({ document: await store.importProject(document, assets) });
+    const imported = () => store.importProject(document, assets, temporary);
+    res.json({
+      document:
+        folderId === undefined
+          ? await imported()
+          : await folders.createIn(folderId, imported),
+    });
   };

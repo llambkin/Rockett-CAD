@@ -16,32 +16,36 @@ export interface TestApp {
   origin: string;
   dataDir: string;
   store: ProjectStore;
+  sweep(): Promise<void>;
   request(url: string, init?: TestRequest): Promise<Response>;
   close(): Promise<void>;
 }
 
 export async function startTestApp(
-  options: { clientDir?: string; allowedOrigins?: string[] } = {},
+  options: {
+    clientDir?: string;
+    allowedOrigins?: string[];
+    now?: () => number;
+  } = {},
 ): Promise<TestApp> {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "rockett-app-"));
   const storage = new LocalStorage(dataDir, fs);
-  const store = new ProjectStore(storage);
+  const store = new ProjectStore(storage, options.now);
   const server = http.createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  server.on(
-    "request",
-    createApp({
-      store,
-      folders: new FolderStore(storage),
-      clientDir: options.clientDir,
-      allowedOrigins: [origin, ...(options.allowedOrigins ?? [])],
-    }),
-  );
+  const { app, sweep } = createApp({
+    store,
+    folders: new FolderStore(storage),
+    clientDir: options.clientDir,
+    allowedOrigins: [origin, ...(options.allowedOrigins ?? [])],
+  });
+  server.on("request", app);
   return {
     origin,
     dataDir,
     store,
+    sweep,
     request(url, { cookie, headers, ...init } = {}) {
       const merged = new Headers(headers);
       if (!merged.has("Origin")) merged.set("Origin", origin);

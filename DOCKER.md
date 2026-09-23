@@ -100,6 +100,7 @@ docker run -d --name rockett-cad \
 └── projects/
     └── {projectId}/
         ├── document.json   # the parametric document (full history)
+        ├── temporary.json  # present only on a temporary copy of a browser project
         ├── assets/         # uploaded reference images
         └── exports/        # server-retained exports (opt-in per export)
 ```
@@ -110,10 +111,12 @@ by the old schema and a hash of its contents, so a second migration of
 different contents never overwrites the first backup. While the migration runs,
 `backups/projects/{projectId}/migrating.json` records it; at startup, and before
 the next save, a project with that record is restored from its backup. Startup
-also logs how many projects still predate the current schema. Backups are
-never pruned. To restore one by hand, stop the container, run
-`sha256sum -c ../SHA256SUMS` inside its `files/` directory, and copy `files/`
-over the project directory.
+also logs how many projects still predate the current schema. A temporary
+project, the server copy of a project kept in the browser, is never backed up
+before migration and its backups directory is never created; the server
+deletes it after 24 hours without a request. Backups are never pruned. To
+restore one by hand, stop the container, run `sha256sum -c ../SHA256SUMS`
+inside its `files/` directory, and copy `files/` over the project directory.
 
 Documents, assets and retained exports are written atomically (temp file,
 fsync, rename, directory fsync), so a crash or container kill never corrupts a

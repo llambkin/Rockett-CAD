@@ -159,6 +159,7 @@ function evaluationPosition(req: any, doc: CadDocument): number | undefined {
 export function createApiRouter(
   store: ProjectStore,
   folders: FolderStore,
+  projects = new ProjectQueue(),
 ): Router {
   const router = Router();
   router.use(json({ limit: "50mb" }));
@@ -171,12 +172,11 @@ export function createApiRouter(
 
   // Serialize the whole load/edit/save/evaluate operation for each project.
   // Locking only save() would still allow two requests to edit stale copies.
-  const projects = new ProjectQueue();
-
   const wrap =
     (fn: (req: any, res: any) => Promise<void>) => (req: any, res: any) => {
-      const result = req.params.id
-        ? projects.run(req.params.id, () => fn(req, res))
+      const { id } = req.params;
+      const result = id
+        ? projects.run(id, () => store.touch(id).then(() => fn(req, res)))
         : fn(req, res);
       result.catch((err) => fail(res, err));
     };
@@ -241,7 +241,7 @@ export function createApiRouter(
   on(
     ROUTES.uploadProjectFile,
     receiveProjectFile,
-    wrap(uploadProjectFile(store)),
+    wrap(uploadProjectFile(store, folders)),
   );
 
   on(

@@ -16,6 +16,9 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ASSET_ID_RE = /^[a-f0-9]{16}\.(png|jpg|webp)$/;
 const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
+
 export const IMAGE_LIMIT_MB = 25;
 
 const IMAGE_TYPES: Array<{ ext: string; test: (b: Buffer) => boolean }> = [
@@ -37,6 +40,8 @@ const IMAGE_TYPES: Array<{ ext: string; test: (b: Buffer) => boolean }> = [
   },
 ];
 
+const newId = () => crypto.randomBytes(6).toString("hex");
+
 function imageExt(data: Buffer, label: string): string {
   if (data.length > IMAGE_LIMIT_MB * 1024 * 1024)
     throw new StoreError(`${label}image is over ${IMAGE_LIMIT_MB} MB`);
@@ -51,7 +56,10 @@ function imageExt(data: Buffer, label: string): string {
 export class ProjectStore {
   private documents: JsonStore<CadDocument>;
 
-  constructor(private readonly storage: Storage) {
+  constructor(
+    private readonly storage: Storage,
+    private readonly now: () => number = Date.now,
+  ) {
     this.documents = new JsonStore({
       storage,
       root: "projects",
@@ -59,6 +67,7 @@ export class ProjectStore {
       key: ID_RE,
       file: "document.json",
       migrations: documentMigrations,
+      unbacked: (id) => this.isTemporary(id),
       validate: (doc) => {
         if (doc.schemaVersion !== SCHEMA_VERSION)
           throw new StoreError(
@@ -75,6 +84,7 @@ export class ProjectStore {
   async list(): Promise<ProjectSummary[]> {
     const out: ProjectSummary[] = [];
     for (const id of await this.documents.keys()) {
+      if (await this.isTemporary(id)) continue;
       try {
         const doc = await this.load(id);
         out.push({
@@ -93,7 +103,7 @@ export class ProjectStore {
   }
 
   async create(name: string): Promise<CadDocument> {
-    const id = crypto.randomBytes(6).toString("hex");
+    const id = newId();
     const doc = createEmptyDocument(id, name || "Untitled");
     await this.save(doc);
     return doc;
@@ -113,7 +123,7 @@ export class ProjectStore {
   async duplicate(id: string, newName?: string): Promise<CadDocument> {
     const src = await this.load(id);
     const copy: CadDocument = JSON.parse(JSON.stringify(src));
-    copy.id = crypto.randomBytes(6).toString("hex");
+    copy.id = newId();
     copy.name = newName || `${src.name} (copy)`;
     copy.createdAt = new Date().toISOString();
     const from = this.assetDir(id);
@@ -124,6 +134,58 @@ export class ProjectStore {
       );
     await this.save(copy);
     return copy;
+  }
+
+  async isTemporary(id: string): Promise<boolean> {
+    return (await this.touchedAt(id)) !== undefined;
+  }
+
+  async touch(id: string): Promise<void> {
+    const at = await this.touchedAt(id);
+    if (at !== undefined && this.now() - at >= MINUTE)
+      await this.writeMarker(id);
+  }
+
+  async temporaryIds(): Promise<string[]> {
+    const out: string[] = [];
+    for (const id of await this.documents.keys())
+      if (await this.isTemporary(id)) out.push(id);
+    return out;
+  }
+
+  async expire(id: string): Promise<boolean> {
+    const at = await this.touchedAt(id);
+    if (at === undefined || this.now() - at < DAY) return false;
+    await this.remove(id);
+    return true;
+  }
+
+  private markerFile(id: string): string {
+    return path.posix.join(this.documents.dir(id), "temporary.json");
+  }
+
+  private writeMarker(id: string): Promise<void> {
+    return this.storage.writeAtomic(
+      this.markerFile(id),
+      JSON.stringify({
+        owner: null,
+        touchedAt: new Date(this.now()).toISOString(),
+      }),
+    );
+  }
+
+  private async touchedAt(id: string): Promise<number | undefined> {
+    let raw: Buffer;
+    try {
+      raw = await this.storage.read(this.markerFile(id));
+    } catch {
+      return undefined;
+    }
+    try {
+      return Date.parse(JSON.parse(raw.toString("utf8")).touchedAt) || 0;
+    } catch {
+      return 0;
+    }
   }
 
   remove(id: string): Promise<void> {
@@ -142,9 +204,11 @@ export class ProjectStore {
   async importProject(
     doc: CadDocument,
     assets: ReadonlyMap<string, Buffer>,
+    temporary = false,
   ): Promise<CadDocument> {
-    const { id } = await this.create(doc.name);
+    const id = newId();
     try {
+      if (temporary) await this.writeMarker(id);
       for (const [assetId, data] of assets)
         await this.writeAsset(id, assetId, data, `asset ${assetId}: `);
       const imported = { ...doc, id };

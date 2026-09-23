@@ -21,6 +21,7 @@ export interface JsonStoreOptions<T> {
   key: RegExp;
   file: string;
   migrations: Migrations<T>;
+  unbacked?: (key: string) => Promise<boolean>;
   validate?: (value: T) => void;
 }
 
@@ -89,7 +90,7 @@ export class JsonStore<T> {
   write(key: string, value: T): Promise<void> {
     return this.writes.run(key, async () => {
       this.options.validate?.(value);
-      await this.upgrade(key);
+      if (!(await this.options.unbacked?.(key))) await this.upgrade(key);
       await this.options.storage.writeAtomic(
         this.file(key),
         JSON.stringify(value, null, 1),
