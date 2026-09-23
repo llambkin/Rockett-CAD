@@ -11,7 +11,7 @@ import { LocalStorage } from "../src/store/storage.js";
 const fixtures = path.join(import.meta.dirname, "fixtures", "schema");
 
 describe("schema fixtures", () => {
-  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])(
     "loads v%i at the current schema with features unchanged apart from STEP sources",
     async (version) => {
       const raw = await fs.readFile(
@@ -37,6 +37,7 @@ describe("schema fixtures", () => {
       expect(loaded.groups).toEqual(fixture.groups ?? []);
       expect(loaded.revision).toBe(fixture.revision ?? 0);
       expect(loaded.savedWith).toEqual(fixture.savedWith ?? null);
+      expect(loaded.extensions).toEqual({});
       await fs.rm(dir, { recursive: true, force: true });
     },
   );

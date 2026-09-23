@@ -394,6 +394,16 @@ caller sent, so a new project saves as 1 and a read never changes it.
 build that wrote the file. The 6 to 7 migration adds `revision: 0` and
 `savedWith: null`.
 
+## Extensions (schema 10)
+
+`extensions` holds data that modules keep in the document, keyed by a dotted
+module id such as `acme.gears` that matches
+`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$`. Each value is `{ version, data }`.
+The server checks that envelope and never reads `data`, so it survives load,
+migration, feature edits and `PUT /document` as an equal JSON value. The 9 to
+10 migration adds `extensions: {}`. A server older than schema 10 refuses the
+file instead of saving it without the extension data.
+
 ## Tangent edge chains
 
 Fillet/Chamfer store optional tangentChain metadata (absent preserves prior

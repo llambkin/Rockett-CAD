@@ -11,7 +11,7 @@
 
 import type { Units } from "./units.js";
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -418,6 +418,11 @@ export interface CameraState {
   projection: "orthographic" | "perspective";
 }
 
+export interface ExtensionData {
+  version: number;
+  data: unknown;
+}
+
 export interface CadDocument {
   schemaVersion: number;
   revision: number;
@@ -438,6 +443,7 @@ export interface CadDocument {
   /** Per-type counters used for default names (Sketch1, Extrude2, ...). */
   counters: Record<string, number>;
   groups: TreeGroup[];
+  extensions: Record<string, ExtensionData>;
   camera?: CameraState;
 }
 
@@ -510,6 +516,7 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
     bodyMeta: {},
     counters: {},
     groups: [],
+    extensions: {},
   };
 }
 

@@ -55,6 +55,8 @@ change gets a `Schema N` line in the section that ships it.
 
 ### Changed
 
+- Schema 10: a document keeps module data in `extensions`, keyed by a dotted
+  module id. The 9 to 10 migration adds an empty `extensions`.
 - Schema 5: a sketch line can keep its angle from the sketch +X axis
   (`lineAngle`). A typed ∠ is stored, and double-click edits a line's
   length and angle. The 4 to 5 migration only bumps the version.

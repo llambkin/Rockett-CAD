@@ -106,5 +106,6 @@ export const documentMigrations: Migrations<CadDocument> = {
           : feature,
       ),
     }),
+    9: (doc) => ({ ...doc, extensions: doc.extensions ?? {} }),
   },
 };

@@ -377,6 +377,17 @@ export const documentSchema = Type.Refine(
     ),
     counters: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
     groups: groupsSchema,
+    extensions: Type.Record(
+      Type.String({
+        pattern: "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$",
+        maxLength: 200,
+      }),
+      Type.Object({
+        version: Type.Integer({ minimum: 0 }),
+        data: Type.Unknown(),
+      }),
+      { additionalProperties: false },
+    ),
     camera: Type.Optional(
       Type.Object({
         position: vector,

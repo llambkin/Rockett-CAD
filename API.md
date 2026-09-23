@@ -241,6 +241,9 @@ feature in `detail`, such as `/transform/scale`.
 `{ name: string, visible: boolean }`, `counters` are non-negative integers,
 `groups` have unique ids, a name of 1 to 200 characters, `kind` `body` or
 `sketch`, and no member in two groups,
+`extensions` keys match `^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$` and each
+value is `{ version, data }` with `version` a non-negative integer and `data`
+any JSON value,
 `createdAt` and `modifiedAt` are non-empty strings, `timelinePosition` is an
 integer no greater than the feature count and `camera` has its shape when
 present. Loading a saved project migrates it without validating.

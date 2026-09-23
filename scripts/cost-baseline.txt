@@ -50,7 +50,7 @@ server/src/geometry/sketchGeom.ts buildWire 81
 server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 105
-shared/src/model.ts 523
+shared/src/model.ts 530
 shared/src/profiles.ts 633
 shared/src/profiles.ts detectProfiles 405
 shared/src/sketchModify.ts 806
