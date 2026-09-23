@@ -235,6 +235,36 @@ interface State {
   runMeasure: () => Promise<void>;
 }
 
+const preview: {
+  seq: number;
+  pending: { fid: string; patch: Partial<Feature> } | null;
+  inFlight: Promise<void> | null;
+} = { seq: 0, pending: null, inFlight: null };
+
+async function sendPreviews(): Promise<void> {
+  while (preview.pending) {
+    const { fid, patch } = preview.pending;
+    preview.pending = null;
+    const seq = preview.seq;
+    const { document } = useStore.getState();
+    if (!document) break;
+    try {
+      const m = await api.updateFeature(document.id, fid, patch);
+      if (seq === preview.seq)
+        useStore.setState({ document: m.document, evaluation: m.evaluation });
+    } catch (e: any) {
+      if (seq === preview.seq) useStore.setState({ error: e.message });
+    }
+  }
+  preview.inFlight = null;
+}
+
+function endPreviews(): Promise<void> | null {
+  preview.seq++;
+  preview.pending = null;
+  return preview.inFlight;
+}
+
 export const useStore = create<State>((set, get) => ({
   projectId: null,
   document: null,
@@ -300,6 +330,7 @@ export const useStore = create<State>((set, get) => ({
     const snapshot = previewBaseline ?? JSON.parse(JSON.stringify(document));
     set({ busy: true, error: null });
     try {
+      await endPreviews();
       const m = await fn();
       set((s) => ({
         document: m.document,
@@ -321,22 +352,28 @@ export const useStore = create<State>((set, get) => ({
     if (!previewBaseline) {
       set({ previewBaseline: JSON.parse(JSON.stringify(document)) });
     }
-    try {
-      const m = await api.updateFeature(document.id, fid, patch);
-      set({ document: m.document, evaluation: m.evaluation });
-    } catch (e: any) {
-      set({ error: e.message });
-    }
+    preview.seq++;
+    preview.pending =
+      preview.pending?.fid === fid
+        ? {
+            fid,
+            patch: { ...preview.pending.patch, ...patch } as Partial<Feature>,
+          }
+        : { fid, patch };
+    preview.inFlight ??= sendPreviews();
+    return preview.inFlight;
   },
 
   async cancelPreview() {
     const { previewBaseline, projectId } = get();
+    const settling = endPreviews();
     if (!previewBaseline || !projectId) {
       set({ previewBaseline: null });
       return;
     }
     set({ busy: true });
     try {
+      await settling;
       const m = await api.replaceDocument(projectId, previewBaseline);
       set({
         document: m.document,
