@@ -95,16 +95,44 @@ function UndoRedoButtons() {
   );
 }
 
+function useHoldUnload(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", hold);
+    return () => window.removeEventListener("beforeunload", hold);
+  }, [active]);
+}
+
+export function RecoveryBanner() {
+  const recovery = useStore((s) => s.recovery);
+  const recover = useStore((s) => s.recover);
+  useHoldUnload(recovery !== null);
+  if (!recovery) return null;
+  return (
+    <div className="error-banner" role="alert">
+      {recovery.message}{" "}
+      <button className="btn" onClick={() => void recover("reapply")}>
+        {recovery.kind === "offline" ? "Retry" : "Reload and reapply my change"}
+      </button>{" "}
+      <button
+        className="btn"
+        onClick={() => {
+          if (window.confirm("Discard your unsaved change and reload?"))
+            void recover("discard");
+        }}
+      >
+        Discard my change
+      </button>
+    </div>
+  );
+}
+
 function NotSavedBanner() {
   const notSaved = useStore((s) => s.notSaved);
   const projectId = useStore((s) => s.projectId);
   const setError = useStore((s) => s.setError);
-  useEffect(() => {
-    if (!notSaved) return;
-    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", hold);
-    return () => window.removeEventListener("beforeunload", hold);
-  }, [notSaved]);
+  useHoldUnload(notSaved !== null);
   if (!notSaved || !projectId) return null;
   return (
     <div className="error-banner" role="alert">
@@ -120,6 +148,22 @@ function NotSavedBanner() {
         Download
       </button>
     </div>
+  );
+}
+
+function SaveIndicator() {
+  const saveState = useStore((s) => s.saveState);
+  const busy = useStore((s) => s.busy);
+  const error = useStore((s) => s.error);
+  const saved = busy ? "Working…" : error ? "Check message" : "Changes saved";
+  return (
+    <span
+      className="save-indicator"
+      aria-live="polite"
+      title="Changes save automatically after each operation"
+    >
+      {{ unsaved: "Not saved", saving: "Saving…", saved }[saveState]}
+    </span>
   );
 }
 
@@ -217,13 +261,7 @@ function Workspace() {
         <ProjectName name={projectName} />
         <UndoRedoButtons />
         {busy && <span className="busy-indicator">⟳ working…</span>}
-        <span
-          className="save-indicator"
-          aria-live="polite"
-          title="Changes save automatically after each operation"
-        >
-          {busy ? "Working…" : error ? "Check message" : "Changes saved"}
-        </span>
+        <SaveIndicator />
         <button
           className="icon-btn"
           title="Keyboard and mouse controls (?)"
@@ -234,6 +272,7 @@ function Workspace() {
         </button>
       </div>
       <Toolbar />
+      <RecoveryBanner />
       <NotSavedBanner />
       <div className="main-row">
         <ModelTree />

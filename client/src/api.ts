@@ -29,6 +29,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: ApiErrorCode,
     readonly detail?: string,
+    readonly revision?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -38,7 +39,13 @@ export class ApiError extends Error {
 async function toApiError(res: Response): Promise<ApiError> {
   const body: Partial<ApiErrorBody> | null = await res.json().catch(() => null);
   if (typeof body?.error === "string" && typeof body.code === "string")
-    return new ApiError(body.error, res.status, body.code, body.detail);
+    return new ApiError(
+      body.error,
+      res.status,
+      body.code,
+      body.detail,
+      body.revision,
+    );
   return new ApiError(
     res.statusText || `HTTP ${res.status}`,
     res.status,
@@ -120,6 +127,9 @@ export async function request(
     ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
     ...(signal && { signal }),
     ...(keepalive && { keepalive }),
+  }).catch((e: unknown) => {
+    if (e instanceof Error && e.name === "AbortError") throw e;
+    throw new ApiError("Could not reach the server.", 0, "internal");
   });
   if (!res.ok) {
     const error = await toApiError(res);
