@@ -12,7 +12,6 @@ import type {
   BodyPayload,
   ConstructionPlanePayload,
   PlaneFrame,
-  SketchPayload,
   Vec3,
 } from "@rockett/shared";
 import type { Selection } from "../store";
@@ -524,7 +523,7 @@ export class CadViewport {
       this.bodyRoot.add(objs.group);
       objs.group.visible = p.visible;
     }
-    for (const [id, objs] of [...this.bodies]) {
+    for (const [id, objs] of Array.from(this.bodies)) {
       if (!seen.has(id)) {
         this.bodyRoot.remove(objs.group);
         disposeGroup(objs.group);

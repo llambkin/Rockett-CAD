@@ -22,7 +22,7 @@ function ensureGroup(viewport: CadViewport): THREE.Group {
 
 export function clearToolPreview(viewport: CadViewport | null): void {
   if (!viewport || !group) return;
-  for (const child of [...group.children]) {
+  for (const child of Array.from(group.children)) {
     group.remove(child);
     (child as any).geometry?.dispose?.();
     (child as any).material?.dispose?.();

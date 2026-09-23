@@ -9,12 +9,7 @@
  */
 
 import { zipSync, strToU8 } from "fflate";
-import {
-  getKernel,
-  faces as facesOf,
-  shapeHash,
-  type Shape,
-} from "./kernel.js";
+import { getKernel, faces as facesOf } from "./kernel.js";
 import type { NamedBody } from "./naming.js";
 
 interface Mesh {

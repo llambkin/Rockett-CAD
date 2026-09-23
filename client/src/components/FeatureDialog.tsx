@@ -46,7 +46,6 @@ function DialogBody({
   const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
   const document_ = useStore((s) => s.document);
-  const evaluation = useStore((s) => s.evaluation);
   const [pending, setPending] = useState(false);
 
   const profiles = selection.filter((s) => s.kind === "profile") as Extract<
@@ -100,7 +99,6 @@ function DialogBody({
     ) {
       setParams({ axisSource: "edge" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edges.length, sketchLines.length, dialog]);
 
   const profileRefs = (): ProfileRef[] =>
@@ -186,7 +184,6 @@ function DialogBody({
       setParams({ operation: "cut", autoCut: true });
     else if (sign > 0 && op === "cut" && params.autoCut)
       setParams({ operation: "join", autoCut: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.distance, dialog]);
 
   // Move edits live-preview (fields or gizmo drag both go through params)
@@ -203,7 +200,6 @@ function DialogBody({
       } as any);
     }, 200);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.tx, params.ty, params.tz, dialog, editId]);
 
   let title = "";
@@ -1186,7 +1182,6 @@ function ReferenceImagePanel({
       } as any);
     }, 150);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opacity, scale, rotation, u, v]);
 
   const onOk = async () => {

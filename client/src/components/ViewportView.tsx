@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type {
   PlaneFrame,
-  ReferenceImageFeature,
   SketchConstraint,
   SketchEntity,
 } from "@rockett/shared";
@@ -182,7 +181,7 @@ export function ViewportView() {
       vp.scene.add(leaderGroupRef.current);
     }
     const g = leaderGroupRef.current;
-    for (const child of [...g.children]) {
+    for (const child of Array.from(g.children)) {
       g.remove(child);
       (child as any).geometry?.dispose?.();
       (child as any).material?.dispose?.();
@@ -516,7 +515,6 @@ export function ViewportView() {
       gizmoRef.current?.dispose();
       gizmoRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selection, evaluation]);
 
   // typing in the dialog moves the arrow too; Cut tints the preview red
@@ -579,7 +577,6 @@ export function ViewportView() {
       moveGizmoRef.current?.dispose();
       moveGizmoRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selection, evaluation]);
 
   // typing in the move dialog updates the arrows/ghost too
@@ -714,7 +711,6 @@ export function ViewportView() {
         revolveGhostRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selection, evaluation, dialogParams]);
 
   // rotational drag handle for the revolve angle (ring around the axis)
@@ -778,7 +774,6 @@ export function ViewportView() {
     // axisSource/axis in deps: the axis dropdown may switch AFTER mount
     // (auto-switch on edge pick) — the ring must follow. Angle deliberately
     // excluded so drags don't rebuild the ring under the pointer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selection, evaluation, dialogParams.axisSource, dialogParams.axis]);
 
   // typing an angle moves the handle too
@@ -1111,7 +1106,6 @@ export function ViewportView() {
       el.removeEventListener("dblclick", onDblClick);
     };
     // handlers read latest state via zustand getState
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ------ mode-aware handlers (read state fresh from the store) ------
@@ -2499,7 +2493,7 @@ export function ViewportView() {
         }
         refreshDim();
         refreshGhost();
-      } else if (/^[0-9.\-]$/.test(e.key)) {
+      } else if (/^[0-9.-]$/.test(e.key)) {
         swallow();
         if (!f.locked) {
           f.text = "";
@@ -2563,7 +2557,6 @@ export function ViewportView() {
       } as any);
     }, 150);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection, mode, editingProfiles, document_]);
 
   // Hold Ctrl/⌘ while editing to see the model WITHOUT this feature — its
@@ -2749,7 +2742,7 @@ export function ViewportView() {
               } else {
                 setDimEdit({
                   constraintId: l.id,
-                  value: l.text.replace(/[^\d.\-]/g, ""),
+                  value: l.text.replace(/[^\d.-]/g, ""),
                   x: e.clientX,
                   y: e.clientY,
                 });

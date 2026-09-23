@@ -108,7 +108,7 @@ function buildProblem(input: SolveInput): Problem {
     const vi = pointVarIndex.get(id)!;
     if (vi < 0) {
       const fx = p.x;
-      return (_: Float64Array) => fx;
+      return () => fx;
     }
     return (x: Float64Array) => x[vi];
   };
@@ -117,7 +117,7 @@ function buildProblem(input: SolveInput): Problem {
     const vi = pointVarIndex.get(id)!;
     if (vi < 0) {
       const fy = p.y;
-      return (_: Float64Array) => fy;
+      return () => fy;
     }
     return (x: Float64Array) => x[vi + 1];
   };
@@ -127,7 +127,7 @@ function buildProblem(input: SolveInput): Problem {
       const vi = radiusVarIndex.get(id)!;
       if (vi < 0) {
         const r = c.radius;
-        return (_: Float64Array) => r;
+        return () => r;
       }
       return (x: Float64Array) => x[vi];
     }

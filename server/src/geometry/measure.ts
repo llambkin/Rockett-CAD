@@ -4,12 +4,7 @@
 
 import type { MeasureRequest, MeasureResult, Vec3 } from "@rockett/shared";
 import { areaOf, getKernel, lengthOf, progress, type Shape } from "./kernel.js";
-import {
-  computeEdgeNames,
-  computeVertexNames,
-  findFace,
-  type NamedBody,
-} from "./naming.js";
+import { computeEdgeNames, computeVertexNames, findFace } from "./naming.js";
 import type { EvalState } from "./features.js";
 
 interface Resolved {

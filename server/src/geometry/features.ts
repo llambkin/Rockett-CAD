@@ -4,7 +4,6 @@
  */
 
 import {
-  UNIT_TO_MM,
   detectProfiles,
   solveSketch,
   projectEdge,
@@ -356,7 +355,7 @@ function applyToolOperation(
   if (operation === "cut") {
     // Cut affects every overlapping body.
     let any = false;
-    for (const body of [...state.bodies.values()]) {
+    for (const body of Array.from(state.bodies.values())) {
       if (!bboxOverlap(body.shape, tool.shape)) continue;
       any = true;
       const op = new k.BRepAlgoAPI_Cut_3(body.shape, tool.shape, progress());

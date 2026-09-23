@@ -10,7 +10,7 @@
  * same entities still enclose the region.
  */
 
-import type { SketchArc, SketchEntity, SketchPoint } from "./model.js";
+import type { SketchEntity, SketchPoint } from "./model.js";
 
 export interface OrientedCurve {
   entityId: string;
