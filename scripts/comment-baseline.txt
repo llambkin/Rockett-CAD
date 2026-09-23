@@ -7,7 +7,7 @@ client/src/components/ModelTree.tsx 6
 client/src/components/SketchOffsetIndicators.tsx 1
 client/src/components/Timeline.tsx 8
 client/src/components/Toolbar.tsx 7
-client/src/components/ViewportView.tsx 174
+client/src/components/ViewportView.tsx 173
 client/src/dialogPicks.ts 3
 client/src/dimensionLayout.ts 2
 client/src/panelPlacement.ts 1

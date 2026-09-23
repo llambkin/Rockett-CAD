@@ -23,6 +23,7 @@ import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
 import { buildRevolveGhost } from "../three/revolveGhost";
 import { RevolveGizmo } from "../three/RevolveGizmo";
+import { GizmoSlot } from "../three/gizmoSlot";
 import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
 import { useStore, type Selection } from "../store";
@@ -78,12 +79,9 @@ export function ViewportView() {
     sel: Selection;
   } | null>(null);
 
-  const gizmoRef = useRef<ExtrudeGizmo | null>(null);
-  const gizmoDragRef = useRef(false);
-  const moveGizmoRef = useRef<MoveGizmo | null>(null);
-  const moveDragRef = useRef(false);
-  const revolveGizmoRef = useRef<RevolveGizmo | null>(null);
-  const revolveDragRef = useRef(false);
+  const [extrudeSlot] = useState(() => new GizmoSlot<ExtrudeGizmo>());
+  const [moveSlot] = useState(() => new GizmoSlot<MoveGizmo>());
+  const [revolveSlot] = useState(() => new GizmoSlot<RevolveGizmo>());
   /** in-progress dimension-label drag (repositioning the label) */
   const dimDragRef = useRef<{
     id: string;
@@ -257,6 +255,9 @@ export function ViewportView() {
       window.removeEventListener("resize", onResize);
       observer.disconnect();
       cube.dispose();
+      extrudeSlot.release();
+      moveSlot.release();
+      revolveSlot.release();
       vp.dispose();
       viewportRef.current = null;
       viewportHandle.current = null;
@@ -495,15 +496,15 @@ export function ViewportView() {
 
   // build / rebuild the gizmo when the extrude dialog selection changes
   useEffect(() => {
-    // never rebuild mid-drag (live previews change `evaluation` while dragging)
-    if (gizmoDragRef.current) return;
-    gizmoRef.current?.dispose();
-    gizmoRef.current = null;
+    extrudeSlot.rebuild(buildExtrudeGizmo);
+  }, [mode, selection, evaluation]);
+
+  function buildExtrudeGizmo(): ExtrudeGizmo | null {
     setGizmoLabel(null);
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp) return null;
     const src = computeGizmoSource();
-    if (!src) return;
+    if (!src) return null;
     const s = useStore.getState();
     // when editing, the real geometry live-updates — skip the ghost preview
     if (s.mode.name === "dialog" && s.mode.editFeatureId) {
@@ -516,24 +517,19 @@ export function ViewportView() {
     const dist = Number.isFinite(distRaw) ? distRaw : 10;
     const sign = s.dialogParams.direction === "reverse" ? -1 : 1;
     const startRaw = Number(s.dialogParams.startOffset);
-    gizmoRef.current = new ExtrudeGizmo(
+    return new ExtrudeGizmo(
       vp,
       src,
       sign * dist,
       (s.dialogParams.operation ?? "join") === "cut",
       Number.isFinite(startRaw) ? startRaw : 0,
     );
-    return () => {
-      if (gizmoDragRef.current) return;
-      gizmoRef.current?.dispose();
-      gizmoRef.current = null;
-    };
-  }, [mode, selection, evaluation]);
+  }
 
   // typing in the dialog moves the arrow too; Cut tints the preview red
   useEffect(() => {
-    const g = gizmoRef.current;
-    if (!g || gizmoDragRef.current) return;
+    const g = extrudeSlot.current;
+    if (!g || extrudeSlot.isDragging) return;
     g.setCut((dialogParams.operation ?? "join") === "cut");
     const startRaw = Number(dialogParams.startOffset);
     g.setStartOffset(Number.isFinite(startRaw) ? startRaw : 0);
@@ -545,21 +541,22 @@ export function ViewportView() {
 
   // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
   useEffect(() => {
-    if (moveDragRef.current) return;
-    moveGizmoRef.current?.dispose();
-    moveGizmoRef.current = null;
+    moveSlot.rebuild(buildMoveGizmo);
+  }, [mode, selection, evaluation]);
+
+  function buildMoveGizmo(): MoveGizmo | null {
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp) return null;
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "move") return;
+    if (s.mode.name !== "dialog" || s.mode.dialog !== "move") return null;
     const bodyIds = s.selection
       .filter((x) => x.kind === "body")
       .map((x: any) => x.bodyId);
-    if (bodyIds.length === 0) return;
+    if (bodyIds.length === 0) return null;
     const bodies = (s.evaluation?.bodies ?? []).filter((b) =>
       bodyIds.includes(b.bodyId),
     );
-    if (bodies.length === 0) return;
+    if (bodies.length === 0) return null;
     const t: [number, number, number] = [
       Number(s.dialogParams.tx) || 0,
       Number(s.dialogParams.ty) || 0,
@@ -584,18 +581,13 @@ export function ViewportView() {
     const ghosts = editing
       ? []
       : bodies.map((b) => ({ positions: b.positions, indices: b.indices }));
-    moveGizmoRef.current = new MoveGizmo(vp, center, t, ghosts);
-    return () => {
-      if (moveDragRef.current) return;
-      moveGizmoRef.current?.dispose();
-      moveGizmoRef.current = null;
-    };
-  }, [mode, selection, evaluation]);
+    return new MoveGizmo(vp, center, t, ghosts);
+  }
 
   // typing in the move dialog updates the arrows/ghost too
   useEffect(() => {
-    const g = moveGizmoRef.current;
-    if (!g || moveDragRef.current) return;
+    const g = moveSlot.current;
+    if (!g || moveSlot.isDragging) return;
     g.update([
       Number(dialogParams.tx) || 0,
       Number(dialogParams.ty) || 0,
@@ -722,16 +714,20 @@ export function ViewportView() {
 
   // rotational drag handle for the revolve angle (ring around the axis)
   useEffect(() => {
-    if (revolveDragRef.current) return;
-    revolveGizmoRef.current?.dispose();
-    revolveGizmoRef.current = null;
+    revolveSlot.rebuild(buildRevolveGizmo);
+    // axisSource/axis in deps: the axis dropdown may switch AFTER mount
+    // (auto-switch on edge pick) — the ring must follow. Angle deliberately
+    // excluded so drags don't rebuild the ring under the pointer.
+  }, [mode, selection, evaluation, dialogParams.axisSource, dialogParams.axis]);
+
+  function buildRevolveGizmo(): RevolveGizmo | null {
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp) return null;
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "revolve") return;
+    if (s.mode.name !== "dialog" || s.mode.dialog !== "revolve") return null;
     const sel = selectedRevolveProfile();
     const axis = resolveRevolveAxis();
-    if (!sel || !axis) return;
+    if (!sel || !axis) return null;
     const { sk, profile } = sel;
 
     // ring through the profile centroid, perpendicular to the axis
@@ -765,7 +761,7 @@ export function ViewportView() {
       radius = wpp * 50;
     }
     const angle = Number(s.dialogParams.angle);
-    revolveGizmoRef.current = new RevolveGizmo(
+    return new RevolveGizmo(
       vp,
       center,
       d,
@@ -773,20 +769,12 @@ export function ViewportView() {
       radius,
       Number.isFinite(angle) ? angle : 360,
     );
-    return () => {
-      if (revolveDragRef.current) return;
-      revolveGizmoRef.current?.dispose();
-      revolveGizmoRef.current = null;
-    };
-    // axisSource/axis in deps: the axis dropdown may switch AFTER mount
-    // (auto-switch on edge pick) — the ring must follow. Angle deliberately
-    // excluded so drags don't rebuild the ring under the pointer.
-  }, [mode, selection, evaluation, dialogParams.axisSource, dialogParams.axis]);
+  }
 
   // typing an angle moves the handle too
   useEffect(() => {
-    const g = revolveGizmoRef.current;
-    if (!g || revolveDragRef.current) return;
+    const g = revolveSlot.current;
+    if (!g || revolveSlot.isDragging) return;
     const a = Number(dialogParams.angle);
     if (Number.isFinite(a)) g.update(a);
   }, [dialogParams]);
@@ -834,22 +822,21 @@ export function ViewportView() {
       }
       if (e.button === 0) {
         // gizmo drags take priority over everything else
-        if (gizmoRef.current?.hitTest(e.clientX, e.clientY)) {
-          gizmoDragRef.current = true;
+        if (extrudeSlot.current?.hitTest(e.clientX, e.clientY)) {
+          extrudeSlot.beginDrag();
           e.preventDefault();
           return;
         }
-        const moveAxis =
-          moveGizmoRef.current?.hitTest(e.clientX, e.clientY) ?? -1;
-        if (moveAxis >= 0 && moveGizmoRef.current) {
-          moveGizmoRef.current.beginDrag(moveAxis, e.clientX, e.clientY);
-          moveDragRef.current = true;
+        const moveAxis = moveSlot.current?.hitTest(e.clientX, e.clientY) ?? -1;
+        if (moveAxis >= 0 && moveSlot.current) {
+          moveSlot.current.beginDrag(moveAxis, e.clientX, e.clientY);
+          moveSlot.beginDrag();
           e.preventDefault();
           return;
         }
-        if (revolveGizmoRef.current?.hitTest(e.clientX, e.clientY)) {
-          revolveGizmoRef.current.beginDrag(e.clientX, e.clientY);
-          revolveDragRef.current = true;
+        if (revolveSlot.current?.hitTest(e.clientX, e.clientY)) {
+          revolveSlot.current.beginDrag(e.clientX, e.clientY);
+          revolveSlot.beginDrag();
           e.preventDefault();
           return;
         }
@@ -861,8 +848,8 @@ export function ViewportView() {
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
-      if (revolveDragRef.current && revolveGizmoRef.current) {
-        const g = revolveGizmoRef.current;
+      if (revolveSlot.isDragging && revolveSlot.current) {
+        const g = revolveSlot.current;
         const a = g.dragAngle(e.clientX, e.clientY);
         g.update(a);
         const s = useStore.getState();
@@ -883,8 +870,8 @@ export function ViewportView() {
         lastY = e.clientY;
         return;
       }
-      if (moveDragRef.current && moveGizmoRef.current) {
-        const g = moveGizmoRef.current;
+      if (moveSlot.isDragging && moveSlot.current) {
+        const g = moveSlot.current;
         const t = g.dragOffset(e.clientX, e.clientY);
         g.update(t);
         const s = useStore.getState();
@@ -914,8 +901,8 @@ export function ViewportView() {
         lastY = e.clientY;
         return;
       }
-      if (gizmoDragRef.current && gizmoRef.current) {
-        const g = gizmoRef.current;
+      if (extrudeSlot.isDragging && extrudeSlot.current) {
+        const g = extrudeSlot.current;
         // Ctrl while dragging: collapse the extrude to zero so the sketch
         // profiles reappear and can be re-picked.
         const zeroed = e.ctrlKey || e.metaKey;
@@ -974,9 +961,8 @@ export function ViewportView() {
 
     const onPointerUp = (e: PointerEvent) => {
       el.releasePointerCapture(e.pointerId);
-      if (revolveDragRef.current && revolveGizmoRef.current) {
-        revolveGizmoRef.current.endDrag();
-        revolveDragRef.current = false;
+      if (revolveSlot.isDragging && revolveSlot.current) {
+        revolveSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
         const s = useStore.getState();
@@ -992,9 +978,8 @@ export function ViewportView() {
         }
         return;
       }
-      if (moveDragRef.current && moveGizmoRef.current) {
-        moveGizmoRef.current.endDrag();
-        moveDragRef.current = false;
+      if (moveSlot.isDragging && moveSlot.current) {
+        moveSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
         const s = useStore.getState();
@@ -1013,8 +998,8 @@ export function ViewportView() {
         }
         return;
       }
-      if (gizmoDragRef.current) {
-        gizmoDragRef.current = false;
+      if (extrudeSlot.isDragging) {
+        extrudeSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
         // editing: make sure the final dragged value is applied
@@ -1408,17 +1393,17 @@ export function ViewportView() {
   function handleHover(e: PointerEvent) {
     const vp = viewportRef.current;
     if (!vp) return;
-    if (gizmoRef.current) {
-      gizmoRef.current.setHover(gizmoRef.current.hitTest(e.clientX, e.clientY));
-    }
-    if (moveGizmoRef.current && !moveDragRef.current) {
-      moveGizmoRef.current.setHover(
-        moveGizmoRef.current.hitTest(e.clientX, e.clientY),
+    if (extrudeSlot.current) {
+      extrudeSlot.current.setHover(
+        extrudeSlot.current.hitTest(e.clientX, e.clientY),
       );
     }
-    if (revolveGizmoRef.current && !revolveDragRef.current) {
-      revolveGizmoRef.current.setHover(
-        revolveGizmoRef.current.hitTest(e.clientX, e.clientY),
+    if (moveSlot.current && !moveSlot.isDragging) {
+      moveSlot.current.setHover(moveSlot.current.hitTest(e.clientX, e.clientY));
+    }
+    if (revolveSlot.current && !revolveSlot.isDragging) {
+      revolveSlot.current.setHover(
+        revolveSlot.current.hitTest(e.clientX, e.clientY),
       );
     }
     const s = useStore.getState();
