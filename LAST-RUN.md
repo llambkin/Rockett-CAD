@@ -1,21 +1,21 @@
 # Last run
 
-- 137 commits since adoption (`e328a0f`). Done: OPS-001 to 022, 024 to 034
-  and OPS-CP; BUG-001 to 003, 009 to 033 and BUG-CP; KIT-001 to 007, 010,
-  014, 016 to 027; AUTH-002 to 004, 008, 011; SET-006, 008, 009, 011, 023;
-  PERF-001, 009, 020; CUST-003, 019, 022; DOC-028; EXCH-001, 013, 014;
-  DEC-403, 406.
-- Since `cc3d66a`, 29 rows landed: OPS-017, 032 to 034 and OPS-CP; KIT-010,
-  014, 018, 024 to 027; BUG-026 to 033; SET-009, 011, 023; CUST-019, 022;
-  EXCH-013, 014; DOC-028; DEC-406.
-- New rows: BUG-028 to 033, SET-023, CUST-019 to 024, DOC-028, DOC-029,
-  DEC-405 to 407, EXCH-013 to 020.
-- Dev runs `18a105d`. Prod is unchanged.
-- In flight: BUG-034, EXCH-016, EXCH-017, PERF-002, DOC-001, DOC-002.
+- KIT-CP is done. Each of its 25 dependencies passed its own check again at
+  `936f58b`, and `npm run check` passed: 93 files and 725 tests, 7 browser
+  tests, work order OK.
+- KIT-025, KIT-026 and KIT-027 sit outside the checkpoint. The done file lists
+  them at `745bf80`, `ccfda02` and `1d1887f`; their checks pass, but the
+  checkpoint does not vouch for them.
+- ARCHITECTURE.md now names the shared units, tolerance, placement and route
+  modules and the dialog form kit. API.md names the route table and the client
+  `request`. CAD_MODEL.md adds placements, `meshShape` and the `~n` order.
+- 165 rows are done. OPS, BUG and KIT have passed their checkpoints. DOC,
+  AUTH, SET, CUST, PERF and EXCH are part done. No row is in flight.
+- This run deployed nothing. Prod is unchanged.
 
 ## Next
 
-KIT-008
+DOC-007
 
 ## Stuck
 

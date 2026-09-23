@@ -21,12 +21,12 @@ B-Rep model (TopoDS solids, faces, edges, vertices)
 
 ## Repository layout
 
-| Path      | Role                                                                                                                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `shared/` | The document schema (`model.ts`), the sketch constraint solver (`solver.ts`), profile/region detection (`profiles.ts`), API DTOs (`api.ts`). Runs identically in browser and server. |
-| `server/` | Express REST API, project store, and the geometry layer: kernel bootstrap, feature evaluators, persistent-naming, regeneration engine, tessellation, exporters, measurement.         |
-| `client/` | React + three.js UI: viewport, sketcher, timeline, model tree, feature dialogs.                                                                                                      |
-| `docker/` | Unraid template.                                                                                                                                                                     |
+| Path      | Role                                                                                                                                                                                                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/` | The document schema (`model.ts`), the sketch constraint solver (`solver.ts`), profile/region detection (`profiles.ts`), API DTOs (`api.ts`), the route table (`routes.ts`), units (`units.ts`), modelling tolerances (`tolerance.ts`) and rigid placements (`placement.ts`). Runs identically in browser and server. |
+| `server/` | Express REST API, project store, and the geometry layer: kernel bootstrap, feature evaluators, persistent-naming, regeneration engine, tessellation, exporters, measurement.                                                                                                                                         |
+| `client/` | React + three.js UI: viewport, sketcher, timeline, model tree, feature dialogs. `api.ts` sends every call through one `request`; `components/form/` holds the dialog fields and footer; `three/` holds shared disposal, screen projection and the `Manipulator` gizmo base.                                          |
+| `docker/` | Unraid template.                                                                                                                                                                                                                                                                                                     |
 
 ## Key decisions
 
@@ -60,8 +60,19 @@ tessellations so an edit to feature _k_ re-evaluates only features _k..end_
 (see CAD_MODEL.md, "Regeneration").
 
 **Units.** All geometry is internally millimetres. `Units` on the document is
-display metadata; conversions are explicit (`UNIT_TO_MM`) and never mutate
-stored geometry.
+display metadata. `shared/src/units.ts` owns the conversions (`toMm`,
+`fromMm`) and length and angle formatting; they never mutate stored geometry.
+`LengthField` shows a length in its `units` prop and reports millimetres.
+Every dialog passes `mm` today.
+
+**Dialog form kit.** `client/src/components/form/fields.tsx` holds the dialog
+inputs: `NumField`, `LengthField`, `AngleField`, `SelectField`, `AxisField`,
+`CheckField` and `SelInfo`. `NumField` reports only finite values within its
+`min` and `max`, so an empty or partial box never writes 0 or NaN. No other
+component renders a raw number input. `DialogFooter.tsx` is the one OK and
+Cancel footer. Inside its panel, Enter in an input triggers OK and Escape
+triggers Cancel; feature dialogs take Escape from anywhere. A field marked `autoFocus` takes focus with its value
+selected when the dialog opens, so typing replaces it.
 
 ## Security posture
 

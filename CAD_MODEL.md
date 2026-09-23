@@ -115,7 +115,9 @@ chamfer, shell, or offset operation we walk the input faces and ask OCCT
   the deterministic fallback.
 
 When one input face yields several result faces (e.g. a boolean splits a
-face) the copies are disambiguated with a `~n` suffix in centroid order.
+face) the copies are disambiguated with a `~n` suffix in centroid order: by
+x, then y, then z. `suffixDuplicates` in `server/src/geometry/naming.ts` owns
+that order for faces, edges and vertices; a vertex sorts by its point.
 
 An extrude's `distance` is signed: a negative value builds the prism on the
 opposite side of the sketch plane (after `direction` is applied; `symmetric`
@@ -259,6 +261,16 @@ Solver convergence and pivot guards stay in `shared/src/solver.ts`, sketch
 region merging in `shared/src/profiles.ts`. No fingerprint quantisation exists
 yet; it gets its own constant when it does.
 
+## Placements
+
+`shared/src/placement.ts` defines `Placement`: a unit quaternion `rotation`
+`[x, y, z, w]` and a `translation` in mm. Its functions compose, invert and
+apply placements to points, directions and sketch frames.
+`placementToTrsf` in `server/src/geometry/kernel.ts` turns one into an OCCT
+transform. Move, linear pattern and circular pattern build their transforms
+this way, and a move carries its bodies' sketch frames with `applyToFrame`.
+The document is unchanged: `MoveFeature` still stores a `translation`.
+
 ## Tessellation
 
 `BRepMesh_IncrementalMesh` produces per face triangulations. The viewport uses
@@ -270,7 +282,9 @@ raycasts triangles/segments/points and resolves hits to persistent CAD
 references, so selection is CAD topology, never "triangle 512". Face normals
 come from the kernel (`ComputeNormals`), respecting face orientation.
 Tessellations are cached per body-shape hash; export meshes a copy of each
-body at user-selected quality, so neither mesh reuses the other.
+body at user-selected quality, so neither mesh reuses the other. Both go
+through `meshShape` in `server/src/geometry/mesh.ts`, the one loop that reads
+face triangulations.
 
 ## Measurement
 

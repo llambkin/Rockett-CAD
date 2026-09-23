@@ -3,6 +3,13 @@
 Base path: `/api`. All bodies are JSON unless noted. Types live in
 `shared/src/api.ts` and `shared/src/model.ts`.
 
+Every route is declared once in `ROUTES` in `shared/src/routes.ts`. The server
+registers each handler from its entry, and the client builds each path with
+`pathFor`, which URL-encodes every parameter. The client sends every call
+through `request` in `client/src/api.ts`, which turns an error response into
+`ApiError` with its `status` and `code`. A body without `error` and `code`
+becomes code `internal`.
+
 Route errors return `ApiErrorBody`: `{ "error": string, "code": ApiErrorCode,
 "detail"?: string }`. `error` is a message for the user. The code fixes the
 status:
