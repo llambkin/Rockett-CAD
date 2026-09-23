@@ -5,3 +5,4 @@ export * from "./api.js";
 export * from "./projection.js";
 export * from "./sketchModify.js";
 export * from "./sketchOffsets.js";
+export * from "./meshFormat.js";
