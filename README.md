@@ -31,7 +31,8 @@ everything downstream against persistent topology references.
   Offsets made before schema 4 are plain geometry; recreate them to get a badge.
 - **Solid features**: extrude (new body / join / cut / intersect, symmetric,
   two-sided, from sketch profiles _or_ planar faces), revolve, sweep, loft,
-  emboss/deboss.
+  emboss/deboss. Sweep paths take lines and arcs drawn in any order; a
+  branched or broken path fails with "sweep path is not a connected chain".
 - **Modify**: fillet, chamfer, shell, boolean combine, split body,
   press/pull (offset face), move (translate whole bodies along X, Y and Z by
   typed values or the arrow gizmo).
@@ -62,19 +63,38 @@ docker compose up -d
 
 Then open http://localhost:8788. All state lives in the `rockett-cad_data`
 volume; DOCKER.md covers LAN access and running dev and prod side by side.
+The container runs as the unprivileged `rockett` user: `/app` is root-owned
+and `/data` is the only path it writes.
 
 For Unraid, see [DOCKER.md](DOCKER.md) and the template in
 `docker/unraid-rockett-cad.xml`.
 
+## Running build
+
+The bottom-right corner of the project list and the workspace shows the
+running build: the image's `git describe` output, else `v<version> <commit>`,
+else `v<version> dev`. Hover it for the full commit, version and schema.
+`GET /api/health` returns the same fields.
+
+A plain `docker compose up` records neither, so the label reads
+`v<version> dev`. For a granular label, build with
+`--build-arg ROCKETT_COMMIT=$(git rev-parse HEAD) --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty)`.
+[DOCKER.md](DOCKER.md) has the full Compose and `docker build` commands.
+
 ## Development
 
 ```bash
-npm install
-npm run dev        # server on :8788 + Vite client on :5173
-npm test           # geometry, solver, timeline, persistence, API tests
+npm ci                 # .npmrc: install scripts off, exact pins on save
+npm run dev            # server on :8788 + Vite client on :5173
+npm test               # typecheck, then shared, server and client tests
+npm run lint           # oxlint
+npm run format:check   # Prettier
+npm run lint:comments  # comment ratchet: no file may gain a comment
+npm run lint:writing   # writing lint over tracked markdown
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md).
+The last two need masterrulez cloned to `~/masterrulez`. See
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Documentation
 
@@ -87,6 +107,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md).
 | [DOCKER.md](DOCKER.md)                     | Deployment (Docker / Compose / Unraid)                            |
 | [DEVELOPMENT.md](DEVELOPMENT.md)           | Repo layout, workflows, testing                                   |
 | [ROADMAP.md](ROADMAP.md)                   | Current status and planned work                                   |
+| [CHANGELOG.md](CHANGELOG.md)               | Changes per release, release and schema conventions               |
 
 ## Viewport controls
 
@@ -126,7 +147,7 @@ Tool panels keep their action buttons within the window; the arrow in the title
 bar restores their docked position. Errors remain visible until dismissed or
 the next operation starts, and their text can be selected and copied.
 
-Fillet and Chamfer now default to **Select tangent chain**. Clicking an edge
+Fillet and Chamfer default to **Select tangent chain**. Clicking an edge
 selects smooth connected edges (including line/arc joins); sharp corners and
 ambiguous branches stop the chain. Clicking a fully selected chain deselects it.
 Uncheck the option to pick edges individually. OCCT may still propagate a fillet
