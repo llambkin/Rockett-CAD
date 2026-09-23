@@ -16,6 +16,7 @@ import type {
 import { newId } from "@rockett/shared";
 import {
   featurePatch,
+  previewedFeature,
   useStore,
   type DialogType,
   type Selection,
@@ -45,6 +46,15 @@ function attempt(build: (() => Feature) | null): Feature | null {
   } catch {
     return null;
   }
+}
+
+function hasBodyToCut(): boolean {
+  const s = useStore.getState();
+  const own = previewedFeature(s)?.id;
+  return (s.evaluation?.bodies ?? []).some(
+    (b) =>
+      !own || (b.bodyId !== `b:${own}` && !b.bodyId.startsWith(`b:${own}:`)),
+  );
 }
 
 function useLivePreview(editId: string | undefined, draft: Feature | null) {
@@ -192,25 +202,28 @@ function DialogBody({
 
   const close = () => setMode({ name: "idle" });
 
-  // Extrude: typing a negative distance means "into the part" — switch Join to
-  // Cut automatically (Fusion-style); going positive again undoes only that
-  // automatic switch, never an operation the user picked themselves.
+  // Extrude: a negative distance, Reversed or a drag below the surface means
+  // "into the part", so Join switches to Cut when a body exists; going back
+  // undoes only that automatic switch, never an operation the user picked.
   const extrudeSign = useRef<number | null>(null);
   useEffect(() => {
     if (dialog !== "extrude") return;
+    const direction = params.direction ?? "normal";
+    if (direction !== "normal" && direction !== "reverse") return;
     // unset = the dialog's default of 10, so the very first negative counts
-    const d = Number(params.distance ?? 10);
+    const d =
+      Number(params.distance ?? 10) * (direction === "reverse" ? -1 : 1);
     if (!Number.isFinite(d) || d === 0) return;
     const sign = d < 0 ? -1 : 1;
     const prev = extrudeSign.current;
     extrudeSign.current = sign;
     if (prev === null || prev === sign) return;
     const op = params.operation ?? "join";
-    if (sign < 0 && op === "join")
+    if (sign < 0 && op === "join" && hasBodyToCut())
       setParams({ operation: "cut", autoCut: true });
     else if (sign > 0 && op === "cut" && params.autoCut)
       setParams({ operation: "join", autoCut: false });
-  }, [params.distance, dialog]);
+  }, [params.distance, params.direction, dialog]);
 
   let title = "";
   let body: ReactElement | null = null;

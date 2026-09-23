@@ -596,8 +596,9 @@ export function ViewportView() {
   // typing in the dialog moves the arrow too; Cut tints the preview red
   useEffect(() => {
     const g = extrudeSlot.current;
-    if (!g || extrudeSlot.isDragging) return;
+    if (!g) return;
     g.setCut((dialogParams.operation ?? "join") === "cut");
+    if (extrudeSlot.isDragging) return;
     const startRaw = Number(dialogParams.startOffset);
     g.setStartOffset(Number.isFinite(startRaw) ? startRaw : 0);
     const dist = Number(dialogParams.distance);
@@ -1022,6 +1023,7 @@ export function ViewportView() {
                     distance: Math.abs(v),
                     direction:
                       patch.direction ?? s.dialogParams.direction ?? "normal",
+                    operation: s.dialogParams.operation,
                   }) as any,
             );
           }
@@ -1095,6 +1097,7 @@ export function ViewportView() {
               suppressed: false,
               distance: dist,
               direction: s.dialogParams.direction ?? "normal",
+              operation: s.dialogParams.operation,
             } as any);
           } else if (dist === 0) {
             // Ctrl-zeroed: leave the feature suppressed so profiles stay
