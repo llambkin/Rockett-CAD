@@ -1419,12 +1419,11 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
     if (!document_) return;
     setPending(true);
     try {
-      const { blob, fileName } = await api.exportModel(
-        document_.id,
+      const { blob, fileName } = await api.exportModel(document_.id, {
         format,
-        selectedBodies,
+        bodyIds: selectedBodies,
         quality,
-      );
+      });
       const a = window.document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = fileName;

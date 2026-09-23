@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api, request } from "../src/api";
 
 afterEach(() => {
@@ -86,4 +86,64 @@ it("rejects with AbortError when the signal aborts", async () => {
       signal: controller.signal,
     }),
   );
+});
+
+describe("upload and export", () => {
+  it("turns a 413 upload into a too_large ApiError", async () => {
+    const fetchStub = vi.fn(async (_url: string, _init: RequestInit) =>
+      Response.json(
+        { error: "File too large", code: "too_large" },
+        { status: 413 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const controller = new AbortController();
+    const file = new File(["x"], "big.png", { type: "image/png" });
+    const err = await api
+      .uploadImage("p1", file, controller.signal)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 413, code: "too_large" });
+    const [url, init] = fetchStub.mock.calls[0]!;
+    expect(url).toBe("/api/projects/p1/assets");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(init.headers).toBeUndefined();
+    expect(init.signal).toBe(controller.signal);
+  });
+
+  it("returns the export file name from Content-Disposition", async () => {
+    const fetchStub = vi.fn(
+      async (_url: string, _init: RequestInit) =>
+        new Response("solid", {
+          headers: { "Content-Disposition": 'attachment; filename="part.stl"' },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const { blob, fileName } = await api.exportModel("p1", {
+      format: "stl",
+      bodyIds: [],
+    });
+    expect(fileName).toBe("part.stl");
+    expect(await blob.text()).toBe("solid");
+    expect(fetchStub.mock.calls[0]![1].body).toBe(
+      JSON.stringify({ format: "stl", bodyIds: [] }),
+    );
+  });
+
+  it("turns a failed STEP import into an ApiError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: "File too large", code: "too_large" },
+          { status: 413 },
+        ),
+      ),
+    );
+    const file = new File(["x"], "a.step");
+    await expect(api.importStep(file)).rejects.toMatchObject({
+      status: 413,
+      code: "too_large",
+    });
+  });
 });

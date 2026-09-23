@@ -5,6 +5,7 @@ import type {
   ApiErrorCode,
   CadDocument,
   EvaluateResult,
+  ExportRequest,
   Feature,
   MeasureRequest,
   MeasureResult,
@@ -50,37 +51,66 @@ async function toApiError(res: Response): Promise<ApiError> {
   );
 }
 
-export async function request<T>(
+interface RequestOptions {
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
+export interface Download {
+  blob: Blob;
+  fileName: string | undefined;
+}
+
+export function request<T>(
   method: string,
   path: string,
-  { body, signal }: { body?: unknown; signal?: AbortSignal } = {},
-): Promise<T> {
+  options?: RequestOptions,
+): Promise<T>;
+export function request(
+  method: string,
+  path: string,
+  options: RequestOptions & { response: "blob" },
+): Promise<Download>;
+export async function request(
+  method: string,
+  path: string,
+  { body, signal, response }: RequestOptions & { response?: "blob" } = {},
+): Promise<unknown> {
+  const form = body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     method,
     headers:
-      body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+      body !== undefined && !form
+        ? { "Content-Type": "application/json" }
+        : undefined,
+    body: form ? body : body !== undefined ? JSON.stringify(body) : undefined,
     signal,
   });
   if (!res.ok) throw await toApiError(res);
-  return res.json() as Promise<T>;
+  if (response !== "blob") return res.json();
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  return {
+    blob: await res.blob(),
+    fileName: disposition.match(/filename="([^"]+)"/)?.[1],
+  };
+}
+
+function fileForm(name: string, file: File): FormData {
+  const form = new FormData();
+  form.append(name, file);
+  return form;
 }
 
 export const api = {
   health: () => (health ??= request<Health>("GET", "/health")),
-  async importStep(file: File, projectId?: string): Promise<MutationResponse> {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch(
+  importStep: (file: File, projectId?: string, signal?: AbortSignal) =>
+    request<MutationResponse>(
+      "POST",
       projectId
-        ? `/api/projects/${projectId}/import-step`
-        : "/api/projects/import-step",
-      { method: "POST", body: form },
-    );
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error ?? "STEP import failed");
-    return result;
-  },
+        ? `/projects/${projectId}/import-step`
+        : "/projects/import-step",
+      { body: fileForm("file", file), signal },
+    ),
   listProjects: () => request<ProjectSummary[]>("GET", "/projects"),
   createProject: (name: string) =>
     request<{ document: CadDocument }>("POST", "/projects", { body: { name } }),
@@ -158,40 +188,22 @@ export const api = {
 
   async exportModel(
     id: string,
-    format: "stl" | "3mf",
-    bodyIds: string[],
-    quality?: number,
+    exportRequest: ExportRequest,
+    signal?: AbortSignal,
   ): Promise<{ blob: Blob; fileName: string }> {
-    const res = await fetch(`/api/projects/${id}/export`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ format, bodyIds, quality }),
+    const { blob, fileName } = await request("POST", `/projects/${id}/export`, {
+      body: exportRequest,
+      signal,
+      response: "blob",
     });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(j.error);
-    }
-    const disposition = res.headers.get("Content-Disposition") ?? "";
-    const m = disposition.match(/filename="([^"]+)"/);
-    return {
-      blob: await res.blob(),
-      fileName: m?.[1] ?? `export.${format}`,
-    };
+    return { blob, fileName: fileName ?? `export.${exportRequest.format}` };
   },
 
-  async uploadImage(id: string, file: File): Promise<{ assetId: string }> {
-    const form = new FormData();
-    form.append("image", file);
-    const res = await fetch(`/api/projects/${id}/assets`, {
-      method: "POST",
-      body: form,
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(j.error);
-    }
-    return res.json();
-  },
+  uploadImage: (id: string, file: File, signal?: AbortSignal) =>
+    request<{ assetId: string }>("POST", `/projects/${id}/assets`, {
+      body: fileForm("image", file),
+      signal,
+    }),
 
   assetUrl: (id: string, assetId: string) =>
     `/api/projects/${id}/assets/${assetId}`,
