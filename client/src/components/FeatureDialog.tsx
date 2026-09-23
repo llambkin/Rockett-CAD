@@ -18,6 +18,13 @@ import { useStore, type DialogType, type Selection } from "../store";
 import { api, saveDownload } from "../api";
 import { viewportHandle } from "../viewportRef";
 import { DraggablePanel } from "./DraggablePanel";
+import {
+  AxisField,
+  CheckField,
+  NumField,
+  SelInfo,
+  SelectField,
+} from "./form/fields";
 
 export function FeatureDialog() {
   const mode = useStore((s) => s.mode);
@@ -353,22 +360,10 @@ function DialogBody({
             count={edges.length + sketchLines.length}
             hint="click a sketch line or body edge, or pick X/Y/Z"
           />
-          <SelectField
-            label="Axis"
-            value={
-              p("axisSource", "origin") === "edge" ? "edge" : p("axis", "Z")
-            }
-            options={[
-              ["X", "X axis"],
-              ["Y", "Y axis"],
-              ["Z", "Z axis"],
-              ["edge", "Selected line/edge"],
-            ]}
-            onChange={(v) =>
-              v === "edge"
-                ? setParams({ axisSource: "edge" })
-                : setParams({ axisSource: "origin", axis: v })
-            }
+          <AxisField
+            axisSource={params.axisSource}
+            axis={params.axis}
+            onChange={setParams}
           />
           <NumField
             label="Angle (°)"
@@ -882,22 +877,10 @@ function DialogBody({
       body = (
         <>
           <SelInfo label="Bodies" count={bodies.length} hint="click bodies" />
-          <SelectField
-            label="Axis"
-            value={
-              p("axisSource", "origin") === "edge" ? "edge" : p("axis", "Z")
-            }
-            options={[
-              ["X", "X axis"],
-              ["Y", "Y axis"],
-              ["Z", "Z axis"],
-              ["edge", "Selected edge"],
-            ]}
-            onChange={(v) =>
-              v === "edge"
-                ? setParams({ axisSource: "edge" })
-                : setParams({ axisSource: "origin", axis: v })
-            }
+          <AxisField
+            axisSource={params.axisSource}
+            axis={params.axis}
+            onChange={setParams}
           />
           <NumField
             label="Quantity"
@@ -1037,116 +1020,6 @@ function DialogBody({
         </button>
       </div>
     </DraggablePanel>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Field helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Numeric field that tolerates partial input: while focused it shows what the
- * user typed (so "-" or "1." don't collapse to NaN and wipe the box) and only
- * reports finite numbers upward.
- */
-function NumField({
-  label,
-  value,
-  onChange,
-  int,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  int?: boolean;
-}) {
-  const [text, setText] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    if (!focused) setText(Number.isFinite(value) ? String(value) : "");
-  }, [value, focused]);
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        type="number"
-        step={int ? 1 : "any"}
-        value={focused ? text : Number.isFinite(value) ? String(value) : ""}
-        onFocus={() => {
-          setText(Number.isFinite(value) ? String(value) : "");
-          setFocused(true);
-        }}
-        onBlur={() => setFocused(false)}
-        onChange={(e) => {
-          setText(e.target.value);
-          const v = Number(e.target.value);
-          if (e.target.value.trim() !== "" && Number.isFinite(v)) onChange(v);
-        }}
-      />
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: [string, string][];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function CheckField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="field check">
-      <input
-        type="checkbox"
-        checked={value}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-function SelInfo({
-  label,
-  count,
-  hint,
-}: {
-  label: string;
-  count: number;
-  hint: string;
-}) {
-  return (
-    <div className={`sel-info ${count > 0 ? "have" : ""}`}>
-      <span>{label}</span>
-      <b>{count > 0 ? `${count} selected` : hint}</b>
-    </div>
   );
 }
 
