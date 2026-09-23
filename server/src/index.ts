@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import type { AddressInfo } from "node:net";
+import { SCHEMA_VERSION } from "@rockett/shared";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { FolderStore } from "./store/folderStore.js";
@@ -39,6 +40,17 @@ async function main() {
   const storage = new LocalStorage(DATA_DIR, fs.promises);
   const store = new ProjectStore(storage);
   console.log(`[rockett] data dir: ${DATA_DIR}`);
+  const { recovered, outdated, failed } = await store.inventory();
+  for (const id of recovered)
+    console.log(
+      `[rockett] project ${id}: rolled back an interrupted migration`,
+    );
+  for (const { key, error } of failed)
+    console.error(`[rockett] project ${key}: ${error}`);
+  if (outdated.length)
+    console.log(
+      `[rockett] ${outdated.length} projects predate schema ${SCHEMA_VERSION}; each is backed up and migrated on its next save`,
+    );
 
   // static client (production build)
   const candidates = [

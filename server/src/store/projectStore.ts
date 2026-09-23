@@ -6,7 +6,7 @@ import {
   type CadDocument,
   type ProjectSummary,
 } from "@rockett/shared";
-import { JsonStore, StoreError } from "./jsonStore.js";
+import { JsonStore, StoreError, type Inventory } from "./jsonStore.js";
 import { documentMigrations } from "./migrations.js";
 import type { Storage } from "./storage.js";
 
@@ -66,6 +66,10 @@ export class ProjectStore {
           );
       },
     });
+  }
+
+  inventory(): Promise<Inventory> {
+    return this.documents.inventory();
   }
 
   async list(): Promise<ProjectSummary[]> {

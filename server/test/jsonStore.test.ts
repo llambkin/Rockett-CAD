@@ -58,7 +58,7 @@ describe("json store", () => {
     });
     const texts = Array.from({ length: 12 }, (_, i) => `v${i}`);
     await Promise.all(
-      texts.map((text) => store.write("a", { version: 1, text })),
+      texts.map((text) => store.write("a", { version: 2, text })),
     );
     expect(onDisk).toEqual(["", ...texts.slice(0, -1)]);
     expect((await store.read("a")).text).toBe("v11");

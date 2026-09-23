@@ -90,6 +90,11 @@ docker run -d --name rockett-cad \
 
 ```
 /data
+├── backups/
+│   └── projects/{projectId}/
+│       └── v{schema}-{hash}/   # the project as it was before a migration
+│           ├── SHA256SUMS      # written last; the backup is complete once it exists
+│           └── files/          # byte-for-byte copy of the project directory
 ├── folders/
 │   └── folders.json        # the shared folder tree and project placement
 └── projects/
@@ -98,6 +103,17 @@ docker run -d --name rockett-cad \
         ├── assets/         # uploaded reference images
         └── exports/        # server-retained exports (opt-in per export)
 ```
+
+A project saved by an older schema is migrated on disk by its next save.
+Before that write, the whole project directory is copied to `backups/`, named
+by the old schema and a hash of its contents, so a second migration of
+different contents never overwrites the first backup. While the migration runs,
+`backups/projects/{projectId}/migrating.json` records it; at startup, and before
+the next save, a project with that record is restored from its backup. Startup
+also logs how many projects still predate the current schema. Backups are
+never pruned. To restore one by hand, stop the container, run
+`sha256sum -c ../SHA256SUMS` inside its `files/` directory, and copy `files/`
+over the project directory.
 
 Documents, assets and retained exports are written atomically (temp file,
 fsync, rename, directory fsync), so a crash or container kill never corrupts a

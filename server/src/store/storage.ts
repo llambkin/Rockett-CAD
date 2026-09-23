@@ -6,6 +6,7 @@ export interface Storage {
   read(file: string): Promise<Buffer>;
   writeAtomic(file: string, data: string | Uint8Array): Promise<void>;
   list(dir: string): Promise<string[]>;
+  files(dir: string): Promise<string[]>;
   remove(target: string): Promise<void>;
 }
 
@@ -71,6 +72,27 @@ export class LocalStorage implements Storage {
   async list(dir: string): Promise<string[]> {
     try {
       return await this.fs.readdir(this.resolve(dir, true));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+  }
+
+  async files(dir: string): Promise<string[]> {
+    const root = this.resolve(dir);
+    try {
+      const entries = await this.fs.readdir(root, {
+        recursive: true,
+        withFileTypes: true,
+      });
+      return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) =>
+          path
+            .relative(root, path.join(entry.parentPath, entry.name))
+            .split(path.sep)
+            .join("/"),
+        );
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;

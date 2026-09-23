@@ -50,6 +50,11 @@ describe.each(storages)("%s storage", (_, make) => {
     expect((await storage.read("a/one.json")).toString()).toBe("2");
     expect(new Set(await storage.list(""))).toEqual(new Set(["a", "b"]));
     expect(await storage.list("a")).toEqual(["one.json"]);
+    await storage.writeAtomic("b/c/d/three.json", "3");
+    const nested = await storage.files("b");
+    nested.sort();
+    expect(nested).toEqual(["c/d/three.json", "two.json"]);
+    expect(await storage.files("missing")).toEqual([]);
     await storage.remove("a");
     await expect(storage.read("a/one.json")).rejects.toThrow();
     expect(await storage.list("")).toEqual(["b"]);
@@ -63,6 +68,7 @@ describe.each(storages)("%s storage", (_, make) => {
         "invalid storage path",
       );
       await expect(storage.remove(bad)).rejects.toThrow("invalid storage path");
+      await expect(storage.files(bad)).rejects.toThrow("invalid storage path");
     }
     await expect(storage.list("..")).rejects.toThrow("invalid storage path");
   });
