@@ -74,6 +74,10 @@ export interface PreviewTint {
   ranges: { start: number; count: number }[];
 }
 
+export interface PreviewGhost extends PreviewTint {
+  body: BodyPayload;
+}
+
 function sameTriangles(
   a: BodyPayload,
   fa: FaceInfo,

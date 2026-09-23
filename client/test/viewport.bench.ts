@@ -113,6 +113,34 @@ test("preview tints many-body", async ({ bench }) => {
   expect(previewTints(join, bodies, after).size).toBe(0);
 });
 
+test("preview ghost many-body", async ({ bench }) => {
+  const fillet = { type: "fillet" } as Feature;
+  const after: BodyPayload[] = JSON.parse(JSON.stringify(bodies));
+  after[0] = {
+    ...after[0]!,
+    meshKey: `${after[0]!.meshKey}'`,
+    positions: after[0]!.positions.map((v) => v + 1),
+  };
+  vp.syncBodies(bodies);
+  record(
+    "preview ghost many-body",
+    await bench("preview ghost many-body", sync, () => {
+      vp.syncBodies(bodies);
+      vp.setPreviewGhosts(
+        [...previewTints(fillet, bodies, after)].map(([id, t]) => ({
+          body: after.find((b) => b.bodyId === id)!,
+          tint: t.tint,
+          ranges: t.ranges,
+        })),
+      );
+    }).run(SAMPLES),
+    SAMPLES.iterations,
+  );
+  expect(previewTints(fillet, bodies, after).size).toBe(1);
+  vp.setPreviewGhosts([]);
+  vp.syncBodies([]);
+});
+
 test("sketch hover 2000 entities", async ({ bench }) => {
   const sketch = squareSketch();
   expect(sketch.entities).toHaveLength(2000);

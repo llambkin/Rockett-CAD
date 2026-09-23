@@ -171,13 +171,15 @@ confirm button and Escape inside a panel presses Cancel. Escape from anywhere
 cancels an open feature dialog, reverts its live preview and clears the
 selection.
 
-A feature dialog previews its result in the model 0.3 seconds after your last
-change, for a new feature as well as an edit. Until you press OK, the faces it
-adds are tinted, and a new body is tinted whole: green when the feature adds
-material, red when it removes material (cut, intersect, deboss, shell, fillet,
-chamfer, a negative face offset). An edit that adds no face tints the faces
-that moved. Everything else looks as usual. OK keeps the previewed feature as one undo step
-and clears the tint; Cancel, Escape or closing the dialog removes it.
+While a feature dialog is open, new or edit, the model shows as it was before
+that feature, so its picks stay highlighted and you can click any original edge
+or face, including one the feature consumed. The dialog previews its result
+0.3 seconds after your last change as a see-through ghost of only the faces it
+adds, and a new body whole: green when the feature adds material, red when it
+removes material (cut, intersect, deboss, shell, fillet, chamfer, a negative
+face offset). An edit that adds no face ghosts the faces that moved. The ghost
+cannot be picked. OK keeps the previewed feature as one undo step and shows the
+result; Cancel, Escape or closing the dialog returns to the saved model.
 
 A feature dialog lists its picks under each selection box, one row per edge,
 face, body, profile, plane or sketch line, such as `Edge 3, Body 1`. Hover a row

@@ -73,7 +73,7 @@ everything downstream against persistent topology references.
 - **Tool panels**: open with the main number selected and list each pick to remove; Enter confirms, Escape reverts.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.
 - **Tree selection**: Ctrl or Cmd+click adds bodies or sketches, Shift+click selects a range; right-click acts on all.
-- **Live preview**: feature dialogs show the result after you stop typing, tinted green for added and red for removed material until OK.
+- **Live preview**: feature dialogs keep the model before the feature pickable and ghost the result, green added, red removed, until OK.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions, sketch selections their relations; right-drag still orbits.
 - **Projects**: sort into folders; create, rename, move or delete by button, right-click or drag; unreadable ones show why.
 - **Project files**: download a project as one `.rockett` file, or open one as a new project.

@@ -164,6 +164,9 @@ async function previewExtrude(operation: string) {
 function colours() {
   const found: Record<string, string> = {};
   viewportHandle.current!.scene.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.userData.ghostOf)
+      found[`${o.userData.ghostOf} ghost`] =
+        `${(o.material as THREE.MeshStandardMaterial).color.getHexString()} x${o.geometry.index!.count / 3}`;
     if (!(o instanceof THREE.Mesh) || !o.userData.bodyId) return;
     const materials = [o.material].flat() as THREE.MeshStandardMaterial[];
     const groups: { materialIndex?: number }[] = o.geometry.groups.length
@@ -179,38 +182,51 @@ function colours() {
 const button = (label: string) =>
   [...host.querySelectorAll("button")].find((b) => b.textContent === label)!;
 
-it("tints the body a previewed join changes green and leaves the others alone", async () => {
+it("ghosts the body a previewed join changes in green and leaves the others alone", async () => {
   await previewExtrude("join");
   expect(api.addFeature).toHaveBeenCalledOnce();
-  expect(colours()).toEqual({ b1: ADDED, b2: NORMAL });
+  expect(colours()).toEqual({
+    b1: NORMAL,
+    "b1 ghost": `${ADDED} x1`,
+    b2: NORMAL,
+  });
 });
 
-it("tints the body a previewed cut changes red", async () => {
+it("ghosts the body a previewed cut changes in red", async () => {
   await previewExtrude("cut");
-  expect(colours()).toEqual({ b1: REMOVED, b2: NORMAL });
+  expect(colours()).toEqual({
+    b1: NORMAL,
+    "b1 ghost": `${REMOVED} x1`,
+    b2: NORMAL,
+  });
 });
 
-it("tints only the face a previewed cut adds", async () => {
+it("ghosts only the face a previewed cut adds", async () => {
   next = filleted;
   await previewExtrude("cut");
-  expect(colours()).toEqual({ b1: `${NORMAL},${REMOVED}`, b2: NORMAL });
+  expect(colours()).toEqual({
+    b1: NORMAL,
+    "b1 ghost": `${REMOVED} x1`,
+    b2: NORMAL,
+  });
+  expect(viewportHandle.current!.bodyPayloads()[0]!.meshKey).toBe("b1:1");
   await act(async () => button("Cancel").click());
   await wait(0);
   expect(colours()).toEqual({ b1: NORMAL, b2: NORMAL });
 });
 
-it("clears the tint on Cancel", async () => {
+it("clears the ghost on Cancel", async () => {
   await previewExtrude("join");
-  expect(colours().b1).toBe(ADDED);
+  expect(colours()["b1 ghost"]).toBe(`${ADDED} x1`);
   await act(async () => button("Cancel").click());
   await wait(0);
   expect(useStore.getState().previewBaseline).toBeNull();
   expect(colours()).toEqual({ b1: NORMAL, b2: NORMAL });
 });
 
-it("clears the tint on OK and keeps the committed geometry", async () => {
+it("clears the ghost on OK and keeps the committed geometry", async () => {
   await previewExtrude("join");
-  expect(colours().b1).toBe(ADDED);
+  expect(colours()["b1 ghost"]).toBe(`${ADDED} x1`);
   await act(async () => button("OK").click());
   await wait(0);
   expect(useStore.getState().mode).toEqual({ name: "idle" });

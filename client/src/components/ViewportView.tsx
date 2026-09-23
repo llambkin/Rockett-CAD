@@ -33,7 +33,8 @@ import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
 import { listenWheel } from "../three/wheel";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
 import {
-  previewBodyTints,
+  loadPreviewBase,
+  previewScene,
   previewedFeature,
   useStore,
   type Selection,
@@ -89,6 +90,9 @@ export function ViewportView() {
   const draftSketch = useStore((s) => s.draftSketch);
   const dialogParams = useStore((s) => s.dialogParams);
   const previewBaseline = useStore((s) => s.previewBaseline);
+  const dialogOpen = mode.name === "dialog";
+  const editFeatureId = dialogOpen ? mode.editFeatureId : undefined;
+  const [baseLoads, setBaseLoads] = useState(0);
 
   const [dimEdit, setDimEdit] = useState<{
     fields: DimEditField[];
@@ -299,9 +303,31 @@ export function ViewportView() {
 
   // ---- sync bodies ----
   useEffect(() => {
+    if (!editFeatureId) return;
+    void loadPreviewBase(editFeatureId).then(
+      (loaded) => loaded && setBaseLoads((n) => n + 1),
+    );
+  }, [editFeatureId]);
+
+  useEffect(() => {
     const vp = viewportRef.current;
     if (!vp || !evaluation) return;
-    vp.syncBodies(evaluation.bodies);
+    const scene = previewScene(useStore.getState());
+    vp.syncBodies(scene.bodies);
+    vp.setBodyTints(scene.tints);
+    vp.setPreviewGhosts(scene.ghosts);
+  }, [
+    evaluation,
+    document_,
+    previewBaseline,
+    dialogOpen,
+    editFeatureId,
+    baseLoads,
+  ]);
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp || !evaluation) return;
     const names = new Map<string, string>();
     const visible = new Set<string>();
     for (const f of document_?.features ?? []) {
@@ -311,10 +337,6 @@ export function ViewportView() {
     vp.syncConstructionPlanes(evaluation.planes, names, visible);
     syncReferenceImages(vp, document_, evaluation);
   }, [evaluation, document_]);
-
-  useEffect(() => {
-    viewportRef.current?.setBodyTints(previewBodyTints(useStore.getState()));
-  }, [evaluation, previewBaseline]);
 
   // ---- sync sketches / profiles / highlights ----
   useEffect(() => {
@@ -428,7 +450,7 @@ export function ViewportView() {
     vp.clearHighlights();
     for (const s of selection) vp.addHighlight(s, "select");
     if (hover) vp.addHighlight(hover, "hover");
-  }, [evaluation, document_, mode, selection, hover, draftSketch]);
+  }, [evaluation, document_, mode, selection, hover, draftSketch, baseLoads]);
 
   const [, setLabelTick] = useState(0);
   useEffect(() => {

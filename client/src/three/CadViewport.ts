@@ -15,7 +15,7 @@ import type {
   Vec3,
 } from "@rockett/shared";
 import type { Selection } from "../store";
-import type { PreviewTint } from "../livePreview";
+import type { PreviewGhost, PreviewTint } from "../livePreview";
 import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 import { themeColor } from "../theme/tokens";
@@ -107,6 +107,7 @@ export class CadViewport {
   private container: HTMLElement;
   private bodies = new Map<string, BodyObjects>();
   private bodyRoot = new THREE.Group();
+  private ghostRoot = new THREE.Group();
   private sketchRoot = new THREE.Group();
   private planeRoot = new THREE.Group();
   private overlayRoot = new THREE.Group();
@@ -164,6 +165,7 @@ export class CadViewport {
     this.scene.add(this.originRoot);
     this.scene.add(this.planeRoot);
     this.scene.add(this.bodyRoot);
+    this.scene.add(this.ghostRoot);
     this.scene.add(this.sketchRoot);
     this.scene.add(this.overlayRoot);
 
@@ -639,6 +641,42 @@ export class CadViewport {
       const end = geom.index?.count ?? 0;
       if (end > at) geom.addGroup(at, end - at, 0);
       b.mesh.material = [b.material, b.tint];
+    }
+    this.requestRender();
+  }
+
+  setPreviewGhosts(ghosts: readonly PreviewGhost[]) {
+    clearGroup(this.ghostRoot);
+    for (const { body, tint, ranges } of ghosts) {
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(body.positions, 3),
+      );
+      geom.setAttribute(
+        "normal",
+        new THREE.Float32BufferAttribute(body.normals, 3),
+      );
+      geom.setIndex(
+        ranges.flatMap(({ start, count }) =>
+          body.indices.slice(start, start + count),
+        ),
+      );
+      const mesh = new THREE.Mesh(
+        geom,
+        new THREE.MeshStandardMaterial({
+          color: themeColor(tint),
+          metalness: 0.15,
+          roughness: 0.55,
+          transparent: true,
+          opacity: 0.45,
+          depthTest: false,
+          depthWrite: false,
+        }),
+      );
+      mesh.renderOrder = 3;
+      mesh.userData.ghostOf = body.bodyId;
+      this.ghostRoot.add(mesh);
     }
     this.requestRender();
   }

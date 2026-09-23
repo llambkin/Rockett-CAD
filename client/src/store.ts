@@ -28,7 +28,11 @@ import {
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
-import { previewTints, type PreviewTint } from "./livePreview";
+import {
+  previewTints,
+  type PreviewGhost,
+  type PreviewTint,
+} from "./livePreview";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
 
 // ---------------------------------------------------------------------------
@@ -280,7 +284,7 @@ export function previewedFeature(s: {
   return s.document?.features.find((f) => f.id === id);
 }
 
-export function previewBodyTints(s: {
+function previewBodyTints(s: {
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
 }): Map<string, PreviewTint> {
@@ -289,6 +293,50 @@ export function previewBodyTints(s: {
   if (!base || !feature || feature.suppressed || !s.evaluation)
     return new Map();
   return previewTints(feature, base.bodies, s.evaluation.bodies);
+}
+
+export function previewScene(s: {
+  mode: Mode;
+  document: CadDocument | null;
+  evaluation: EvaluateResult | null;
+}): {
+  bodies: BodyPayload[];
+  tints: Map<string, PreviewTint>;
+  ghosts: PreviewGhost[];
+} {
+  const bodies = s.evaluation?.bodies ?? [];
+  const tints = previewBodyTints(s);
+  if (s.mode.name !== "dialog" || !preview.base)
+    return { bodies, tints, ghosts: [] };
+  return {
+    bodies: preview.base.bodies,
+    tints: new Map(),
+    ghosts: bodies.flatMap((body) => {
+      const tint = tints.get(body.bodyId);
+      return tint && body.visible ? [{ body, ...tint }] : [];
+    }),
+  };
+}
+
+export async function loadPreviewBase(fid: string): Promise<boolean> {
+  const { document } = useStore.getState();
+  const index = document?.features.findIndex((f) => f.id === fid) ?? -1;
+  if (!document || index < 0 || index >= document.timelinePosition)
+    return false;
+  try {
+    const { bodies } = await api.evaluate(document.id, index);
+    const { mode, projectId } = useStore.getState();
+    if (
+      mode.name !== "dialog" ||
+      mode.editFeatureId !== fid ||
+      projectId !== document.id
+    )
+      return false;
+    preview.base = { fid, bodies };
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function sendPreviews(): Promise<void> {
@@ -516,7 +564,7 @@ export const useStore = create<State>((set, get) => ({
     const { document, evaluation, previewBaseline, recovery } = get();
     if (!document || recovery) return;
     if (!previewBaseline) {
-      preview.base = { fid, bodies: evaluation?.bodies ?? [] };
+      preview.base ??= { fid, bodies: evaluation?.bodies ?? [] };
       set({ previewBaseline: JSON.parse(JSON.stringify(document)) });
     }
     preview.seq++;
