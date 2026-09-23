@@ -106,14 +106,15 @@ could never open again.
 
 ## Eviction
 
-- IndexedDB is best effort by default. Under storage pressure a browser may
-  delete the whole site's data; Safari can after seven days without a visit.
-  Clearing site data always deletes it.
+- IndexedDB is best effort. Clearing site data deletes it; under storage
+  pressure a browser may delete the whole site's data. Safari also deletes
+  it after seven days of use with no tap or click on the site, unless it
+  runs from the Home Screen.
 - The first move to this browser calls `navigator.storage.persist()`. Chrome
-  grants or refuses silently; Firefox asks. The storage line shows the result,
-  with usage from `navigator.storage.estimate()`.
+  and Safari answer silently, Safari granting mostly to Home Screen apps;
+  Firefox asks. The line shows the result and `estimate()` usage.
 - `navigator.storage` exists only in a secure context, HTTPS or localhost.
-  Over plain HTTP on a LAN, IndexedDB works but cannot ask to be kept.
+  Over plain HTTP, IndexedDB works but cannot ask to be kept or show usage.
 - Storage is per origin. Another host name or port for the same server has
   an empty list. Named risk: a changed address looks like data loss.
 - No server backup covers browser projects. Download is the backup.
