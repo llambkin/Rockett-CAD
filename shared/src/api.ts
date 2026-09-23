@@ -58,6 +58,7 @@ export interface BodyPayload {
   bodyId: string;
   name: string;
   visible: boolean;
+  meshKey: string;
   positions: number[];
   normals: number[];
   indices: number[];

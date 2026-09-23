@@ -36,6 +36,31 @@ describe("createApp", () => {
     expect(await res.json()).toEqual({ error: "Not found" });
   });
 
+  it("gzips a large JSON response only for a client that accepts gzip", async () => {
+    const doc = await app.store.create("Large");
+    for (let i = 0; i < 5000; i++)
+      doc.bodyMeta[`b:${i}`] = { name: `Body${i}`, visible: true };
+    await app.store.save(doc);
+    const get = (encoding: string) =>
+      app.request(`/api/projects/${doc.id}`, {
+        headers: { "Accept-Encoding": encoding },
+      });
+
+    const gzipped = await get("gzip");
+    expect(gzipped.headers.get("content-encoding")).toBe("gzip");
+    expect(gzipped.headers.get("vary")).toContain("Accept-Encoding");
+    expect((await gzipped.json()).document).toEqual(doc);
+
+    const plain = await get("identity");
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect((await plain.json()).document).toEqual(doc);
+
+    const small = await app.request("/api/health", {
+      headers: { "Accept-Encoding": "gzip" },
+    });
+    expect(small.headers.get("content-encoding")).toBeNull();
+  });
+
   it("serves static client files", async () => {
     const res = await app.request("/app.js");
     expect(res.status).toBe(200);

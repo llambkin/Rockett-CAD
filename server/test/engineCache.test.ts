@@ -7,18 +7,27 @@ import {
 import { initKernel } from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
 import { evaluateFeature } from "../src/geometry/features.js";
+import { tessellateBody } from "../src/geometry/tessellate.js";
+import { manyBodyPart } from "./helpers/perfFixtures.js";
 
 vi.mock("../src/geometry/features.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../src/geometry/features.js")>();
   return { ...actual, evaluateFeature: vi.fn(actual.evaluateFeature) };
 });
+vi.mock("../src/geometry/tessellate.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/geometry/tessellate.js")>();
+  return { ...actual, tessellateBody: vi.fn(actual.tessellateBody) };
+});
 
 beforeAll(initKernel, 120000);
 
 const evaluated = vi.mocked(evaluateFeature);
+const tessellated = vi.mocked(tessellateBody);
 beforeEach(() => {
   evaluated.mockClear();
+  tessellated.mockClear();
 });
 const evaluatedIds = () => evaluated.mock.calls.map(([, f]) => f.id);
 
@@ -141,3 +150,28 @@ it("move ignores later features", () => {
   expect(origin("free")).toEqual([0, 0, 0]);
   dropEngine(id);
 });
+
+it(
+  "re-evaluates an unchanged or renamed 1,000-body document without tessellating",
+  {
+    timeout: 300_000,
+  },
+  () => {
+    const doc = manyBodyPart(),
+      engine = engineFor(doc.id);
+    expect(engine.evaluate(doc).bodies).toHaveLength(1000);
+    expect(tessellated.mock.calls.length).toBe(1000);
+
+    tessellated.mockClear();
+    expect(engine.evaluate(doc).bodies).toHaveLength(1000);
+    expect(tessellated.mock.calls.length).toBe(0);
+
+    doc.bodyMeta["b:box"] = { name: "Renamed", visible: false };
+    const renamed = engine
+      .evaluate(doc)
+      .bodies.find((b) => b.bodyId === "b:box");
+    expect(renamed).toMatchObject({ name: "Renamed", visible: false });
+    expect(tessellated.mock.calls.length).toBe(0);
+    dropEngine(doc.id);
+  },
+);

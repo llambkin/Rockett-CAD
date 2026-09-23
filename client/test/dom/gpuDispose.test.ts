@@ -15,6 +15,7 @@ import {
   renderSketches,
   type SketchRenderInput,
 } from "../../src/three/sketchRender";
+import { manyBodyPayloads } from "../helpers/perfFixtures";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -269,6 +270,7 @@ describe("CadViewport ownership", () => {
     bodyId: "b1",
     name: "Body",
     visible: true,
+    meshKey: "b1:1",
     positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
     normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
     indices: [0, 1, 2],
@@ -297,6 +299,29 @@ describe("CadViewport ownership", () => {
     expect(disposedIds(geometryDispose)).toEqual(
       idsBetween(geometriesBefore, geometriesAfter),
     );
+    vp.dispose();
+  });
+
+  it("keeps the objects of every body whose mesh key is unchanged", async () => {
+    const vp = await mountViewport();
+    const bodies = manyBodyPayloads();
+    vp.syncBodies(bodies);
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, "dispose");
+    const renamed = bodies.map((p) => ({ ...p, name: `${p.name}'` }));
+
+    const before = nextGeometryId();
+    vp.syncBodies(renamed);
+    expect(idsBetween(before, nextGeometryId()).length).toBe(0);
+    expect(geometryDispose).not.toHaveBeenCalled();
+    expect(vp.bodyPayloads()[0]).toBe(renamed[0]);
+
+    const edited = renamed.map((p, i) =>
+      i === 0 ? { ...p, meshKey: `${p.meshKey}'` } : p,
+    );
+    const beforeEdit = nextGeometryId();
+    vp.syncBodies(edited);
+    expect(idsBetween(beforeEdit, nextGeometryId()).length).toBe(3);
+    expect(geometryDispose).toHaveBeenCalledTimes(3);
     vp.dispose();
   });
 

@@ -7,6 +7,7 @@
  * client can do CAD-topology selection (body/face/edge/vertex) on the mesh.
  */
 
+import { createHash } from "node:crypto";
 import type {
   BodyPayload,
   EdgeInfo,
@@ -109,10 +110,7 @@ export function tessellateBody(
     p.delete();
   }
 
-  return {
-    bodyId: body.bodyId,
-    name: meta.name,
-    visible: meta.visible,
+  const mesh = {
     positions,
     normals,
     indices,
@@ -120,6 +118,13 @@ export function tessellateBody(
     edges: edgeInfos,
     vertices: vertexInfos,
     bbox,
+  };
+  return {
+    bodyId: body.bodyId,
+    name: meta.name,
+    visible: meta.visible,
+    meshKey: createHash("sha256").update(JSON.stringify(mesh)).digest("hex"),
+    ...mesh,
   };
 }
 

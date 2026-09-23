@@ -93,7 +93,8 @@ selected when the dialog opens, so typing replaces it.
 ## Performance notes
 
 - Regeneration is incremental (feature-snapshot cache keyed by feature JSON).
-- Tessellations are cached per body-shape hash; only changed bodies re-mesh.
+- Tessellations are cached per body id and shape hash, bounded at 256 MB per
+  engine; only changed bodies re-mesh. A rename or visibility change does not.
 - Viewport work (orbit/pan/zoom, hover, drag previews) never invokes the
   kernel.
 - Sketch drag solving runs locally in the browser at pointer-move rate; the

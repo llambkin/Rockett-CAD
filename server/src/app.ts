@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import type { Server } from "node:http";
 import path from "node:path";
 import { createApiRouter } from "./api/routes.js";
+import { gzipJson } from "./api/gzipJson.js";
 import { requireAllowedOrigin } from "./auth/origin.js";
 import type { ProjectStore } from "./store/projectStore.js";
 import type { FolderStore } from "./store/folderStore.js";
@@ -27,6 +28,7 @@ export function createApp({
   const projects = new ProjectQueue();
   app.disable("x-powered-by");
   app.use("/api", requireAllowedOrigin(allowedOrigins));
+  app.use("/api", gzipJson);
   app.use("/api", createApiRouter(store, folders, projects));
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "Not found" });

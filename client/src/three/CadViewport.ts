@@ -499,7 +499,8 @@ export class CadViewport {
     for (const p of payloads) {
       seen.add(p.bodyId);
       const existing = this.bodies.get(p.bodyId);
-      if (existing && existing.payload === p) {
+      if (existing && existing.payload.meshKey === p.meshKey) {
+        existing.payload = p;
         existing.group.visible = p.visible;
         continue;
       }

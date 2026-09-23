@@ -118,10 +118,10 @@ the OS temp directory, keyed by the box count and a content version.
 - `evaluate noop large STEP`: the same document again on the engine of the
   last import sample.
 
-The no-op is not a cache hit. The tessellation cache holds 64 bodies
-(`engine.ts:133`) and evicts in insertion order, so with 355 bodies every
-lookup misses and each no-op re-tessellates every body. No row owns that cap
-yet; PERF-008's 5 ms target needs it lifted as well as its own key change.
+The PERF-003 no-op figures below predate PERF-034. The tessellation cache
+then held 64 bodies and evicted in insertion order, so with 355 bodies every
+lookup missed and each no-op re-tessellated every body. PERF-034 bounds the
+cache by bytes instead; see Edits on many-body.
 
 ## Baselines
 
@@ -169,6 +169,52 @@ The payload size moves by a byte with the digit count of `kernelMs`. Its
 the feature count: one probe of `manyFeaturePart(25)` took 10 s cold, so 4
 times the pockets costs about 14 times the time.
 
+## Edits on many-body
+
+PERF-034 measured what an edit costs on the `many-body` fixture, on
+`class-a`, Node 24.12.0, load average 12 to 34. Route figures are one HTTP
+call each over loopback through `createApp`, from request to last byte: three
+calls per route, one for the last two rows.
+
+Before, a no-op evaluation took 5.26 s. Feature evaluation was all cache hits
+and cost nothing, `shapeHash` took 0.3 ms for 1,000 bodies, and
+re-tessellating 1,000 bodies took 4.87 s: the 64-entry cache missed every
+body. `JSON.stringify` of the 25.4 MB result took 127 to 141 ms, and
+`JSON.parse` 59 to 74 ms in Node. On the client, `syncBodies` rebuilt all
+1,000 bodies after every evaluation, because a parsed payload is never the
+same object.
+
+| call                    | before      | after                         |
+| ----------------------- | ----------- | ----------------------------- |
+| engine no-op evaluate   | 5.26 s      | 1 to 2 ms                     |
+| `GET evaluate`          | 5.1 to 25 s | 179 to 276 ms                 |
+| `GET evaluate`, gzip    | 5.5 to 14 s | 230 to 336 ms, 3.4 MB on wire |
+| `PUT groups`            | 5.4 to 13 s | 170 to 260 ms                 |
+| body rename             | 9.9 to 15 s | 176 to 241 ms                 |
+| body visibility         | 6.9 to 12 s | 207 to 248 ms                 |
+| add a sketch at the end | 5.2 s       | 179 to 188 ms                 |
+| pattern count 40 to 41  | 9.8 s       | 9.7 to 10.1 s                 |
+
+The before figures grow between calls because every tessellation leaks
+kernel handles (PERF-006). After PERF-034:
+
+- The tessellation cache is least recently used and bounded at 256 MB per
+  engine, counting 8 bytes per number in the mesh arrays and edge polylines.
+  The fixture's 1,000 bodies count 17.4 MB. The key is the body id and shape
+  hash; name and visibility are applied per response, so a rename re-meshes
+  nothing.
+- A JSON response of 64 KiB or more is gzipped at level 1 when the request
+  accepts gzip: 25.4 MB becomes 3.4 MB for 88 ms of compression. Level 6
+  gives 1.75 MB for 207 ms.
+- Each body carries `meshKey`, a SHA-256 of its mesh JSON without name or
+  visibility, and `syncBodies` keeps a body's objects while the key holds.
+  Hashing adds about 0.2 s to the 10 s cold evaluation. PERF-021's
+  `mesh.hash` replaces it.
+
+A change upstream of the pattern still makes every body a new shape, so it
+re-evaluates the pattern and re-meshes all bodies: the pattern count edit
+above. Responses still carry every mesh until PERF-024.
+
 ## Client benches
 
 `client/test/viewport.bench.ts` runs with `npm run bench:client`, in the `dom`
@@ -198,8 +244,10 @@ rests on these benches.
 
 Benches:
 
-- `sync bodies many-body`: `syncBodies` with new payload objects each sample,
-  so all 1,000 bodies are disposed and rebuilt, as after a re-evaluation.
+- `sync bodies many-body`: `syncBodies` with new payload objects and new
+  mesh keys each sample, so all 1,000 bodies are disposed and rebuilt.
+- `sync bodies unchanged many-body`: `syncBodies` with new payload objects
+  and the same mesh keys, as after an edit that changes no mesh.
 - `pick hover many-body`: a hover pick for faces, edges and vertices at the
   canvas centre after `zoomToFit`. The bench checks it hits.
 - `highlight face many-body`: `clearHighlights` then a hover `addHighlight`,
@@ -217,15 +265,17 @@ Benches:
 ### Client baselines
 
 Ranges span five runs of `npm run bench:client` on 2026-09-23 with a one-minute
-load average of 17 to 22 from other agents.
+load average of 17 to 22 from other agents. The PERF-034 row spans three runs
+on 2026-09-23 at a load average of 38 to 42.
 
-| metric                     | fixture               | hardware class | runtime                         | warm-up | repetitions | median              | p95                 | budget                      | row      |
-| -------------------------- | --------------------- | -------------- | ------------------------------- | ------- | ----------- | ------------------- | ------------------- | --------------------------- | -------- |
-| sync bodies many-body      | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 71.3 to 76.4 ms     | 80.4 to 88.1 ms     | median 1 s, p95 2 s         | PERF-004 |
-| pick hover many-body       | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.614 to 0.729 ms   | 0.917 to 2.571 ms   | median 4 ms, p95 16 ms      | PERF-004 |
-| highlight face many-body   | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.034 to 0.053 ms   | 0.049 to 0.081 ms   | median 2 ms, p95 8 ms       | PERF-004 |
-| sketch hover 2000 entities | square sketch         | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 54.7 to 59.7 ms     | 62.3 to 71.9 ms     | median 16 ms, p95 50 ms     | PERF-004 |
-| texture scene bytes        | 50 images 4096 x 4096 | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 4,473,924,200 bytes | 4,473,924,200 bytes | at most 4,473,924,200 bytes | PERF-004 |
+| metric                          | fixture               | hardware class | runtime                         | warm-up | repetitions | median              | p95                 | budget                      | row      |
+| ------------------------------- | --------------------- | -------------- | ------------------------------- | ------- | ----------- | ------------------- | ------------------- | --------------------------- | -------- |
+| sync bodies many-body           | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 71.3 to 76.4 ms     | 80.4 to 88.1 ms     | median 1 s, p95 2 s         | PERF-004 |
+| sync bodies unchanged many-body | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.154 to 0.294 ms   | 0.366 to 0.585 ms   | median 16 ms, p95 50 ms     | PERF-034 |
+| pick hover many-body            | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.614 to 0.729 ms   | 0.917 to 2.571 ms   | median 4 ms, p95 16 ms      | PERF-004 |
+| highlight face many-body        | many-body payloads    | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 0.034 to 0.053 ms   | 0.049 to 0.081 ms   | median 2 ms, p95 8 ms       | PERF-004 |
+| sketch hover 2000 entities      | square sketch         | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 54.7 to 59.7 ms     | 62.3 to 71.9 ms     | median 16 ms, p95 50 ms     | PERF-004 |
+| texture scene bytes             | 50 images 4096 x 4096 | class-a        | Node 24.12.0, happy-dom 20.14.5 | 2       | 10          | 4,473,924,200 bytes | 4,473,924,200 bytes | at most 4,473,924,200 bytes | PERF-004 |
 
 `sketch hover 2000 entities` misses its budget. Every hover rebuilds all 2,250
 sketch objects and reruns `detectProfiles`; PERF-032 owns that. The texture

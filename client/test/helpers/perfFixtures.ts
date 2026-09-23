@@ -116,6 +116,7 @@ function boxBody(bodyId: string, at: Vec3): BodyPayload {
     bodyId,
     name: bodyId,
     visible: true,
+    meshKey: `box:${at.join(",")}`,
     positions,
     normals,
     indices,

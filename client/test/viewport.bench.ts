@@ -39,7 +39,10 @@ beforeAll(() => {
 afterAll(() => vp.dispose());
 
 test("many-body", async ({ bench }) => {
-  const generations = [bodies, bodies.map((p) => ({ ...p }))];
+  const generations = [
+    bodies,
+    bodies.map((p) => ({ ...p, meshKey: `${p.meshKey}'` })),
+  ];
   let syncs = 0;
   record(
     "sync bodies many-body",
@@ -49,6 +52,13 @@ test("many-body", async ({ bench }) => {
     SAMPLES.iterations,
   );
   expect(vp.bodyPayloads()).toHaveLength(1000);
+  record(
+    "sync bodies unchanged many-body",
+    await bench("sync bodies unchanged many-body", sync, () => {
+      vp.syncBodies(bodies.map((p) => ({ ...p })));
+    }).run(SAMPLES),
+    SAMPLES.iterations,
+  );
   expect(bodies[0]!.indices.length / 3).toBe(2028);
 
   vp.zoomToFit(false);

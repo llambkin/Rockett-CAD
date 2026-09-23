@@ -27,6 +27,7 @@ import {
   type EvalState,
 } from "./features.js";
 import { tessellateBody } from "./tessellate.js";
+import type { NamedBody } from "./naming.js";
 import { shapeHash } from "./kernel.js";
 
 interface Snapshot {
@@ -43,9 +44,18 @@ function featureKey(feature: CadDocument["features"][number]): string {
   return JSON.stringify(geometric);
 }
 
+const TESS_CACHE_BYTES = 256 * 1024 * 1024;
+
+function payloadBytes(p: BodyPayload): number {
+  let numbers = p.positions.length + p.normals.length + p.indices.length;
+  for (const edge of p.edges) numbers += edge.polyline.length;
+  return numbers * 8;
+}
+
 class DocumentEngine {
   private snapshots: Snapshot[] = [];
   private tessCache = new Map<string, BodyPayload>();
+  private tessBytes = 0;
 
   evaluate(doc: CadDocument, position?: number): EvaluateResult {
     const t0 = performance.now();
@@ -124,18 +134,12 @@ class DocumentEngine {
         name: body.bodyId,
         visible: true,
       };
-      const cacheKey = `${body.bodyId}:${shapeHash(body.shape)}:${meta.name}:${meta.visible}`;
-      let payload = this.tessCache.get(cacheKey);
-      if (!payload) {
-        payload = tessellateBody(body, meta);
-        this.tessCache.set(cacheKey, payload);
-        // basic cache size control
-        if (this.tessCache.size > 64) {
-          const firstKey = this.tessCache.keys().next().value;
-          if (firstKey) this.tessCache.delete(firstKey);
-        }
-      }
-      bodies.push(payload);
+      const cacheKey = `${body.bodyId}:${shapeHash(body.shape)}`;
+      bodies.push({
+        ...this.tessellated(cacheKey, body, meta),
+        name: meta.name,
+        visible: meta.visible,
+      });
     }
 
     const sketches: SketchPayload[] = [];
@@ -164,6 +168,28 @@ class DocumentEngine {
     };
   }
 
+  private tessellated(
+    cacheKey: string,
+    body: NamedBody,
+    meta: { name: string; visible: boolean },
+  ): BodyPayload {
+    const cached = this.tessCache.get(cacheKey);
+    if (cached) {
+      this.tessCache.delete(cacheKey);
+      this.tessCache.set(cacheKey, cached);
+      return cached;
+    }
+    const payload = tessellateBody(body, meta);
+    this.tessCache.set(cacheKey, payload);
+    this.tessBytes += payloadBytes(payload);
+    for (const [key, old] of this.tessCache) {
+      if (this.tessBytes <= TESS_CACHE_BYTES) break;
+      this.tessCache.delete(key);
+      this.tessBytes -= payloadBytes(old);
+    }
+    return payload;
+  }
+
   /** Access the evaluated state at the current cache tip (for measure/export). */
   stateAt(doc: CadDocument, position?: number): EvalState {
     this.evaluate(doc, position);
@@ -178,6 +204,7 @@ class DocumentEngine {
   invalidate(): void {
     this.snapshots = [];
     this.tessCache.clear();
+    this.tessBytes = 0;
   }
 }
 

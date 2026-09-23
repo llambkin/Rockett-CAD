@@ -29,6 +29,11 @@ plus a fresh incremental evaluation (bodies with tagged tessellation, feature
 statuses, solved sketches with profiles, construction-plane frames). The
 server persists on every mutation (autosave).
 
+Each body carries `meshKey`, a SHA-256 of its mesh, faces, edges, vertices
+and bbox, without its name or visibility. The client keeps a body's viewport
+objects while its key is unchanged. A JSON response of 64 KiB or more is
+gzipped when the request accepts gzip.
+
 `GET /projects/:id/evaluate`, `PUT /projects/:id/features/:fid`, and
 `PUT /projects/:id/document` accept an optional `?position=N` for the returned
 evaluation. This temporarily evaluates the first N features without moving the
