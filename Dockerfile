@@ -4,14 +4,14 @@
 # The runtime runs as a non-root user and stores all state under /data.
 
 # ---------- build ----------
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS build
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
-RUN npm install --no-audit --no-fund
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
 COPY shared shared
 COPY server server
@@ -20,15 +20,23 @@ RUN npm run build --workspace server \
   && npm run build --workspace client
 
 # ---------- runtime ----------
-FROM node:20-bookworm-slim AS runtime
-ENV NODE_ENV=production \
+FROM node:22-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
+# Reported by /api/health; pass --build-arg ROCKETT_COMMIT=$(git rev-parse HEAD).
+ARG ROCKETT_COMMIT=
+LABEL org.opencontainers.image.revision=$ROCKETT_COMMIT
+ENV ROCKETT_COMMIT=$ROCKETT_COMMIT \
+    NODE_ENV=production \
     DATA_DIR=/data \
     ROCKETT_PORT=8788
 WORKDIR /app
 
-# Runtime dependencies only (the server bundle externalises these).
-COPY docker/runtime-package.json package.json
-RUN npm install --omit=dev --no-audit --no-fund \
+# Runtime dependencies only (the server bundle externalises these),
+# installed from the same lockfile as the build.
+COPY package.json package-lock.json ./
+COPY shared/package.json shared/package.json
+COPY server/package.json server/package.json
+COPY client/package.json client/package.json
+RUN npm ci --omit=dev --workspace server --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
 COPY --from=build /app/server/dist/server.js server.js

@@ -1,17 +1,43 @@
 # Deployment (Docker / Unraid)
 
-Rockett CAD ships as a single container: Node 20 serving the API and the
+Rockett CAD ships as a single container: Node 22 serving the API and the
 built client, with the OpenCascade kernel embedded as WebAssembly (no native
 dependencies). All persistent state lives under **one volume: `/data`**.
 
 ## Docker Compose
 
 ```bash
-docker compose up -d
-# → http://localhost:8788
+ROCKETT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
+# → http://127.0.0.1:8788
 ```
 
-`docker-compose.yml` builds the image locally and bind-mounts `./data`.
+`docker-compose.yml` builds the image locally and keeps `/data` in a named
+volume. It publishes on `127.0.0.1` unless `ROCKETT_BIND` says otherwise;
+the header of the file lists every variable.
+
+### Several instances on one host
+
+`-p` names the instance, so containers, volumes and data stay separate:
+
+```bash
+# dev: rebuild from the checkout you are working in
+ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_HOST_PORT="$DEV_PORT" ROCKETT_TAG=dev \
+ROCKETT_COMMIT=$(git rev-parse HEAD) \
+  docker compose -p rockett-cad-dev up -d --build
+
+# prod: build a revision-tagged image from a clean deploy checkout
+REV=$(git rev-parse --short HEAD)
+ROCKETT_BIND="$BIND_ADDRESS" ROCKETT_TAG=$REV ROCKETT_COMMIT=$(git rev-parse HEAD) \
+  docker compose -p rockett-cad-prod up -d --build
+```
+
+Roll prod back by rerunning `up -d --no-build` with the previous `ROCKETT_TAG`;
+keep that image until the new one is trusted. Confirm what is running with
+`curl http://<host>:<port>/api/health`, whose `commit` must match the intended
+revision.
+
+Back up an instance's data with
+`docker compose -p rockett-cad-prod exec -T rockett-cad tar czf - -C /data . > rockett-prod.tgz`
 
 ## Manual
 
@@ -55,6 +81,7 @@ persistence tests and was smoke-tested against a live container.
 | --- | --- | --- |
 | `ROCKETT_PORT` | `8788` | HTTP port inside the container |
 | `DATA_DIR` | `/data` | Persistent root |
+| `ROCKETT_COMMIT` | empty | Git revision reported by `/api/health` (build arg) |
 
 ## Security
 

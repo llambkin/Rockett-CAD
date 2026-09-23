@@ -25,7 +25,7 @@ snapshots sent by different clients.
 
 | Method & path | Body | Returns |
 | --- | --- | --- |
-| `GET /health` | – | `{ ok: true }` |
+| `GET /health` | – | `{ ok: true, version, schemaVersion, commit }` (`commit` from `ROCKETT_COMMIT`, else `null`) |
 | `GET /projects` | – | `ProjectSummary[]` |
 | `POST /projects` | `{ name }` | `{ document }` |
 | `GET /projects/:id` | – | `{ document }` |

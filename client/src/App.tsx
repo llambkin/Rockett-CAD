@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProjectSummary } from "@rockett/shared";
 import { api } from "./api";
 import { useStore } from "./store";
-import { Toolbar } from "./components/Toolbar";
+import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
@@ -12,6 +12,7 @@ import { MeasurePanel } from "./components/MeasurePanel";
 import { StepImportButton } from "./components/StepImportButton";
 import { DraggablePanel } from "./components/DraggablePanel";
 import { viewportHandle } from "./viewportRef";
+import { IDLE_SHORTCUTS, SKETCH_SHORTCUTS, idleActionFor, sketchToolFor } from "./shortcuts";
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
@@ -277,25 +278,18 @@ function Workspace() {
       }
       const k = e.key.toLowerCase();
       if (s.mode.name === "sketch") {
-        const toolKeys: Record<string, any> = {
-          v: "select",
-          l: "line",
-          r: "rect",
-          c: "circle",
-          d: "dimension",
-          p: "point",
-        };
-        if (toolKeys[k]) s.setSketchTool(toolKeys[k]);
+        const tool = sketchToolFor(k);
+        if (tool) s.setSketchTool(tool);
         if (k === "x") {
           s.setMode({ ...(s.mode as any), constructionMode: !(s.mode as any).constructionMode });
         }
         return;
       }
       if (s.mode.name === "idle") {
-        if (k === "s") s.setMode({ name: "pickPlane", purpose: "sketch" });
-        if (k === "e") s.setMode({ name: "dialog", dialog: "extrude" });
-        if (k === "f") s.setMode({ name: "dialog", dialog: "fillet" });
-        if (k === "m") s.setMode({ name: "measure" });
+        const action = idleActionFor(k);
+        if (action?.kind === "sketch") s.setMode({ name: "pickPlane", purpose: "sketch" });
+        if (action?.kind === "measure") s.setMode({ name: "measure" });
+        if (action?.kind === "dialog") openDialog(action.dialog);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -331,10 +325,10 @@ function Workspace() {
             <p>Middle-drag pans; right-drag or Shift+middle-drag orbits. Scroll to zoom.</p>
             <p><kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view</p>
             <p><b>Modelling</b></p>
-            <p><kbd>S</kbd> Sketch · <kbd>E</kbd> Extrude · <kbd>F</kbd> Fillet · <kbd>M</kbd> Measure</p>
+            <p>{IDLE_SHORTCUTS.map((x, i) => <span key={x.key}>{i > 0 && " · "}<kbd>{x.key}</kbd> {x.label}</span>)}</p>
             <p><b>Sketching</b></p>
-            <p><kbd>V</kbd> Select · <kbd>L</kbd> Line · <kbd>R</kbd> Rectangle · <kbd>C</kbd> Circle</p>
-            <p><kbd>D</kbd> Dimension · <kbd>P</kbd> Point · <kbd>X</kbd> Construction (applies to whatever tool you draw with next: lines, rectangles, circles, arcs, polygons, slots)</p>
+            <p>{SKETCH_SHORTCUTS.map((x, i) => <span key={x.key}>{i > 0 && " · "}<kbd>{x.key}</kbd> {x.label}</span>)}</p>
+            <p><kbd>X</kbd> Construction (applies to whatever tool you draw with next: lines, rectangles, circles, arcs, polygons, slots)</p>
             <p>Double-click a curve to edit its size. Drag a dimension label to move it. Dimensioning something that already has a dimension edits the existing one; the ✕ beside the value (or <kbd>Delete</kbd> on an empty box) removes it.</p>
             <p><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds/removes selections, including profiles. In Extrude, <kbd>Shift</kbd> + click picks a face instead of a profile. <kbd>Esc</kbd> ends the drawing tool.</p>
             <p>While drawing, type a size to lock it, <kbd>Tab</kbd> to move between sizes, <kbd>Enter</kbd> to place the shape.</p>

@@ -1,14 +1,27 @@
+name: rockett-cad
+
+# One file, many instances: pick the instance with `-p` and the environment.
+#   ROCKETT_BIND       host address to publish on (default 127.0.0.1; the app has no auth)
+#   ROCKETT_HOST_PORT  host port (default 8788)
+#   ROCKETT_TAG        image tag (default local)
+#   ROCKETT_MEM_LIMIT  container memory cap (default 6g)
+#   ROCKETT_COMMIT     git revision baked into the image and /api/health
 services:
   rockett-cad:
-    build: .
-    image: rockett-cad:latest
-    container_name: rockett-cad
+    build:
+      context: .
+      args:
+        ROCKETT_COMMIT: ${ROCKETT_COMMIT:-}
+    image: rockett-cad:${ROCKETT_TAG:-local}
     restart: unless-stopped
     ports:
-      - "8788:8788"
-    environment:
-      - DATA_DIR=/data
-      - ROCKETT_PORT=8788
+      - "${ROCKETT_BIND:-127.0.0.1}:${ROCKETT_HOST_PORT:-8788}:8788"
+    mem_limit: ${ROCKETT_MEM_LIMIT:-6g}
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
     volumes:
       # All persistent state: project documents, reference images, exports.
-      - ./data:/data
+      - data:/data
+
+volumes:
+  data:

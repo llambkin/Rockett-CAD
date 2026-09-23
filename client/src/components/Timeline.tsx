@@ -27,6 +27,7 @@ const TYPE_ICONS: Record<string, string> = {
   constructionPlane: "▱",
   referenceImage: "🖼",
   emboss: "℘",
+  move: "✥",
 };
 
 export function Timeline() {
@@ -216,6 +217,16 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   }
   if (anyF.body) selection.push({ kind: "body", bodyId: anyF.body });
 
+  /** Reselect an edge or sketch-line axis so OK rebuilds the same axis. */
+  const pushAxis = (axis: any) => {
+    if (axis?.kind === "edge") {
+      selection.push({ kind: "edge", bodyId: axis.edge.bodyId, edgeName: axis.edge.edgeName });
+    }
+    if (axis?.kind === "sketchLine") {
+      selection.push({ kind: "sketchEntity", sketchId: axis.sketchId, entityId: axis.entityId });
+    }
+  };
+
   const params: Record<string, any> = { name: f.name };
   switch (f.type) {
     case "extrude":
@@ -234,20 +245,7 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         axisSource: anyF.axis?.kind === "originAxis" ? "origin" : "edge",
         axis: anyF.axis?.kind === "originAxis" ? anyF.axis.axis : "Z",
       });
-      if (anyF.axis?.kind === "edge") {
-        selection.push({
-          kind: "edge",
-          bodyId: anyF.axis.edge.bodyId,
-          edgeName: anyF.axis.edge.edgeName,
-        });
-      }
-      if (anyF.axis?.kind === "sketchLine") {
-        selection.push({
-          kind: "sketchEntity",
-          sketchId: anyF.axis.sketchId,
-          entityId: anyF.axis.entityId,
-        } as any);
-      }
+      pushAxis(anyF.axis);
       break;
     case "sweep":
       Object.assign(params, {
@@ -285,6 +283,7 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         axisSource: anyF.direction?.kind === "axis" ? "origin" : "edge",
         axis: anyF.direction?.kind === "axis" ? anyF.direction.axis : "X",
       });
+      pushAxis(anyF.direction);
       break;
     case "circularPattern":
       Object.assign(params, {
@@ -294,6 +293,10 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         axisSource: anyF.axis?.kind === "originAxis" ? "origin" : "edge",
         axis: anyF.axis?.kind === "originAxis" ? anyF.axis.axis : "Z",
       });
+      pushAxis(anyF.axis);
+      break;
+    case "splitBody":
+      if (anyF.tool) selection.push({ kind: "plane", ref: anyF.tool, label: "Tool" });
       break;
     case "constructionPlane":
       Object.assign(params, {
@@ -302,6 +305,10 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       });
       if (anyF.method?.kind === "offset" && anyF.method.base) {
         selection.push({ kind: "plane", ref: anyF.method.base, label: "Base" });
+      }
+      if (anyF.method?.kind === "midplane") {
+        selection.push({ kind: "plane", ref: anyF.method.a, label: "A" });
+        selection.push({ kind: "plane", ref: anyF.method.b, label: "B" });
       }
       break;
     case "emboss":

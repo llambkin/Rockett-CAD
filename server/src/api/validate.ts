@@ -27,6 +27,19 @@ function str(v: unknown, label: string, maxLen = 200): void {
   }
 }
 
+function list(v: unknown, label: string, min: number, max: number): void {
+  if (!Array.isArray(v) || v.length < min || v.length > max) {
+    throw new ValidationError(`${label} requires ${min}-${max} items`);
+  }
+}
+
+function planeRef(v: unknown, label: string): void {
+  const kind = (v as { kind?: unknown } | null)?.kind;
+  if (kind !== "origin" && kind !== "construction" && kind !== "face") {
+    throw new ValidationError(`${label} must be a plane reference`);
+  }
+}
+
 const MAX_DIM = 100_000; // 100 m in mm — sanity bound
 
 export function validateFeature(f: Feature): void {
@@ -99,6 +112,8 @@ export function validateFeature(f: Feature): void {
       if (Math.abs(f.distance) < 0.000001) throw new ValidationError("extrude distance must be non-zero");
       if (f.distance2 !== undefined) num(f.distance2, "second distance", 0, MAX_DIM);
       if (f.startOffset !== undefined) num(f.startOffset, "start offset", -MAX_DIM, MAX_DIM);
+      list(f.profiles, "extrude profiles", 0, 64);
+      if (f.faces !== undefined) list(f.faces, "extrude faces", 0, 64);
       const sourceCount = f.profiles.length + (f.faces?.length ?? 0);
       if (sourceCount === 0 || sourceCount > 64) {
         throw new ValidationError("extrude requires 1-64 profiles or faces");
@@ -108,19 +123,42 @@ export function validateFeature(f: Feature): void {
     case "revolve":
       num(f.angle, "revolve angle", -360, 360);
       break;
+    case "sweep":
+      list(f.profiles, "sweep profiles", 1, 64);
+      str(f.pathSketchId, "sweep path sketch", 100);
+      break;
+    case "loft":
+      list(f.sections, "loft sections", 2, 64);
+      break;
     case "fillet":
       if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean") throw new ValidationError("tangentChain must be boolean");
       num(f.radius, "fillet radius", 0.000001, MAX_DIM);
-      if (f.edges.length === 0 || f.edges.length > 256) {
-        throw new ValidationError("fillet requires 1-256 edges");
-      }
+      list(f.edges, "fillet edges", 1, 256);
       break;
     case "chamfer":
       if (f.tangentChain !== undefined && typeof f.tangentChain !== "boolean") throw new ValidationError("tangentChain must be boolean");
       num(f.distance, "chamfer distance", 0.000001, MAX_DIM);
+      list(f.edges, "chamfer edges", 1, 256);
       break;
     case "shell":
       num(f.thickness, "shell thickness", 0.000001, MAX_DIM);
+      break;
+    case "combine":
+      if (!["join", "cut", "intersect"].includes(f.operation)) {
+        throw new ValidationError("combine operation must be join, cut or intersect");
+      }
+      str(f.targetBody, "combine target body");
+      list(f.toolBodies, "combine tool bodies", 1, 64);
+      for (const id of f.toolBodies) str(id, "combine tool body");
+      break;
+    case "splitBody":
+      str(f.body, "split body");
+      planeRef(f.tool, "split tool");
+      break;
+    case "mirror":
+      list(f.bodies, "mirror bodies", 1, 64);
+      for (const id of f.bodies) str(id, "mirror body");
+      planeRef(f.plane, "mirror plane");
       break;
     case "linearPattern":
       num(f.count, "pattern count", 2, 500);
@@ -148,15 +186,16 @@ export function validateFeature(f: Feature): void {
       num(f.depth, "emboss depth", 0.000001, MAX_DIM);
       break;
     case "move":
-      if (f.bodies.length === 0 || f.bodies.length > 64) {
-        throw new ValidationError("move requires 1-64 bodies");
-      }
+      list(f.bodies, "move bodies", 1, 64);
+      list(f.translation, "move translation", 3, 3);
       num(f.translation[0], "move X", -MAX_DIM, MAX_DIM);
       num(f.translation[1], "move Y", -MAX_DIM, MAX_DIM);
       num(f.translation[2], "move Z", -MAX_DIM, MAX_DIM);
       break;
-    default:
-      break;
+    default: {
+      const unknown: never = f;
+      throw new ValidationError(`unknown feature type ${String((unknown as { type?: unknown }).type)}`);
+    }
   }
 }
 

@@ -55,7 +55,8 @@ everything downstream against persistent topology references.
 docker compose up -d
 ```
 
-Then open http://localhost:8788. All state lives in the `./data` volume.
+Then open http://localhost:8788. All state lives in the `rockett-cad_data`
+volume; DOCKER.md covers LAN access and running dev and prod side by side.
 
 For Unraid, see [DOCKER.md](DOCKER.md) and the template in
 `docker/unraid-rockett-cad.xml`.
@@ -104,7 +105,7 @@ create an undo step.
 | Pan | Middle-drag |
 | Zoom | Scroll wheel (to cursor) |
 | Named views / fit / ortho–persp | Toolbar (right side) and ViewCube |
-| Shortcuts | S sketch · E extrude · F fillet · M measure · Ctrl+Z/Y undo/redo · in sketch: L/R/C/D/P tools, X construction |
+| Shortcuts | S sketch · E extrude · F fillet · M move · I measure (inspect) · Shift+F fit · ? controls · Ctrl+Z/Y undo/redo · in sketch: V/L/R/C/D/P tools, X construction, Delete removes selection |
 
 ## License note
 

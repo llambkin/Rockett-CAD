@@ -8,9 +8,10 @@ import { newId, type SketchConstraint } from "@rockett/shared";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { filterSelectionFor } from "../dialogPicks";
 import { StepImportButton } from "./StepImportButton";
+import { withKey } from "../shortcuts";
 
 const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
-  { id: "extrude", label: "Extrude", title: "Extrude profiles (E)" },
+  { id: "extrude", label: "Extrude", title: withKey("Extrude profiles", "extrude") },
   { id: "revolve", label: "Revolve", title: "Revolve profiles around an axis" },
   { id: "sweep", label: "Sweep", title: "Sweep a profile along a path" },
   { id: "loft", label: "Loft", title: "Loft between profiles" },
@@ -18,13 +19,13 @@ const CREATE: Array<{ id: DialogType; label: string; title: string }> = [
 ];
 
 const MODIFY: Array<{ id: DialogType; label: string; title: string }> = [
-  { id: "fillet", label: "Fillet", title: "Fillet edges (F)" },
+  { id: "fillet", label: "Fillet", title: withKey("Fillet edges", "fillet") },
   { id: "chamfer", label: "Chamfer", title: "Chamfer edges" },
   { id: "shell", label: "Shell", title: "Hollow the body" },
   { id: "combine", label: "Combine", title: "Boolean join/cut/intersect bodies" },
   { id: "splitBody", label: "Split", title: "Split a body with a plane" },
   { id: "offsetFace", label: "Press/Pull", title: "Offset a planar face" },
-  { id: "move", label: "Move", title: "Move bodies (M)" },
+  { id: "move", label: "Move", title: withKey("Move bodies", "move") },
 ];
 
 const PATTERN: Array<{ id: DialogType; label: string; title: string }> = [
@@ -33,17 +34,17 @@ const PATTERN: Array<{ id: DialogType; label: string; title: string }> = [
   { id: "circularPattern", label: "Circ Pattern", title: "Circular pattern" },
 ];
 
-const SKETCH_TOOLS: Array<{ id: SketchTool; label: string; key?: string }> = [
-  { id: "select", label: "Select", key: "V" },
-  { id: "line", label: "Line", key: "L" },
-  { id: "rect", label: "Rect", key: "R" },
+const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
+  { id: "select", label: "Select" },
+  { id: "line", label: "Line" },
+  { id: "rect", label: "Rect" },
   { id: "centerRect", label: "C-Rect" },
-  { id: "circle", label: "Circle", key: "C" },
+  { id: "circle", label: "Circle" },
   { id: "arc3", label: "Arc" },
   { id: "polygon", label: "Polygon" },
   { id: "slot", label: "Slot" },
   { id: "point", label: "Point" },
-  { id: "dimension", label: "Dimension", key: "D" },
+  { id: "dimension", label: "Dimension" },
   { id: "project", label: "Project" },
   { id: "trim", label: "Trim" },
   { id: "extend", label: "Extend" },
@@ -68,20 +69,20 @@ const CONSTRAINTS: Array<{
   { type: "fix", label: "🔒", title: "Fix point" },
 ];
 
+/** Opens a feature dialog, keeping any pre-selected geometry it can use (select-then-command). */
+export function openDialog(dialog: DialogType) {
+  const s = useStore.getState();
+  const kept = filterSelectionFor(dialog, s.selection);
+  s.setMode({ name: "dialog", dialog });
+  s.setSelection(kept);
+}
+
 export function Toolbar() {
   const mode = useStore((s) => s.mode);
   const setMode = useStore((s) => s.setMode);
   const busy = useStore((s) => s.busy);
 
   if (mode.name === "sketch") return <SketchToolbar />;
-
-  const openDialog = (dialog: DialogType) => {
-    // Keep any pre-selected geometry the dialog can use (select-then-command).
-    const s = useStore.getState();
-    const kept = filterSelectionFor(dialog, s.selection);
-    setMode({ name: "dialog", dialog });
-    s.setSelection(kept);
-  };
 
   // A pre-selected plane or planar face starts the sketch there directly;
   // otherwise fall back to pick-a-plane mode.
@@ -117,7 +118,7 @@ export function Toolbar() {
           className="tb-btn primary"
           disabled={busy}
           onClick={() => void createSketch()}
-          title="Create a sketch on a plane or planar face (S)"
+          title={withKey("Create a sketch on a plane or planar face", "sketch")}
         >
           Create Sketch
         </button>
@@ -179,7 +180,7 @@ export function Toolbar() {
         <span className="tb-title">INSPECT</span>
         <button
           className={`tb-btn ${mode.name === "measure" ? "active" : ""}`}
-          title="Measure (M)"
+          title={withKey("Measure", "measure")}
           onClick={() =>
             mode.name === "measure"
               ? setMode({ name: "idle" })
@@ -364,7 +365,7 @@ function SketchToolbar() {
           <button
             key={t.id}
             className={`tb-btn ${tool === t.id ? "active" : ""}`}
-            title={t.key ? `${t.label} (${t.key})` : t.label}
+            title={withKey(t.label, t.id)}
             onClick={() => setSketchTool(t.id)}
           >
             {t.label}

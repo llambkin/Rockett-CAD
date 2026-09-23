@@ -26,7 +26,7 @@ B-Rep model (TopoDS solids, faces, edges, vertices)
 | `shared/` | The document schema (`model.ts`), the sketch constraint solver (`solver.ts`), profile/region detection (`profiles.ts`), API DTOs (`api.ts`). Runs identically in browser and server. |
 | `server/` | Express REST API, project store, and the geometry layer: kernel bootstrap, feature evaluators, persistent-naming, regeneration engine, tessellation, exporters, measurement. |
 | `client/` | React + three.js UI: viewport, sketcher, timeline, model tree, feature dialogs. |
-| `docker/` | Runtime package manifest and Unraid template. |
+| `docker/` | Unraid template. |
 
 ## Key decisions
 
@@ -34,7 +34,7 @@ B-Rep model (TopoDS solids, faces, edges, vertices)
 `opencascade.js` (OCCT 7.6) runs inside the Node process. This gives a full
 B-Rep kernel (booleans, fillets, shells, sweeps, topology interrogation,
 history tracking) with zero native build complexity in Docker — the runtime
-image is plain `node:20-slim`. The geometry code is isolated behind
+image is plain `node:22-bookworm-slim`. The geometry code is isolated behind
 `server/src/geometry/` so it could later move to a worker thread or separate
 process without touching the API; for a single-user deployment, in-process
 evaluation is simple and fast (typical feature evaluation is a few ms; full

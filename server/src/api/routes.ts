@@ -12,9 +12,12 @@ import {
   nextFeatureName,
   newId,
   projectEdge,
+  SCHEMA_VERSION,
   type CadDocument,
+  type ExportRequest,
   type Feature,
 } from "@rockett/shared";
+import { version } from "../../../package.json";
 import type { ProjectStore } from "../store/projectStore.js";
 import { StoreError } from "../store/projectStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
@@ -26,6 +29,7 @@ import { curveInfo } from "../geometry/tessellate.js";
 import { tangentEdges } from "../geometry/tangentEdges.js";
 import { readStep } from "../geometry/stepImport.js";
 import { write3mf, writeStl } from "../geometry/exporters.js";
+import type { NamedBody } from "../geometry/naming.js";
 import { validateDocument, validateFeature, ValidationError } from "./validate.js";
 
 const upload = multer({
@@ -50,6 +54,18 @@ const IMAGE_MAGIC: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
       b.toString("ascii", 8, 12) === "WEBP",
   },
 ];
+
+const EXPORTERS: Record<ExportRequest["format"], {
+  mime: string;
+  write: (bodies: NamedBody[], doc: CadDocument, quality: number) => Buffer;
+}> = {
+  stl: { mime: "model/stl", write: (bodies, _doc, quality) => writeStl(bodies, quality) },
+  "3mf": {
+    mime: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+    write: (bodies, doc, quality) =>
+      write3mf(bodies.map((b) => ({ body: b, name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId })), quality),
+  },
+};
 
 export function createApiRouter(store: ProjectStore): Router {
   const router = Router();
@@ -109,7 +125,7 @@ export function createApiRouter(store: ProjectStore): Router {
   }
 
   router.get("/health", (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, version, schemaVersion: SCHEMA_VERSION, commit: process.env.ROCKETT_COMMIT || null });
   });
 
   // ----- projects -----
@@ -266,6 +282,9 @@ export function createApiRouter(store: ProjectStore): Router {
       if (idx < 0) throw new StoreError("feature not found", 404);
       const patch = req.body?.feature as Partial<Feature>;
       if (!patch) throw new ValidationError("feature required");
+      if (patch.type !== undefined && patch.type !== doc.features[idx].type) {
+        throw new ValidationError("feature type cannot change");
+      }
       const updated = { ...doc.features[idx], ...patch, id: doc.features[idx].id };
       validateFeature(updated as Feature);
       doc.features[idx] = updated as Feature;
@@ -383,7 +402,11 @@ export function createApiRouter(store: ProjectStore): Router {
     "/projects/:id/export",
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      const format = req.body?.format === "3mf" ? "3mf" : "stl";
+      const format = req.body?.format ?? "stl";
+      if (typeof format !== "string" || !Object.hasOwn(EXPORTERS, format)) {
+        throw new ValidationError(`unsupported export format; supported: ${Object.keys(EXPORTERS).join(", ")}`);
+      }
+      const exporter = EXPORTERS[format as ExportRequest["format"]];
       const quality = Math.min(
         Math.max(Number(req.body?.quality) || 0.05, 0.001),
         1
@@ -401,26 +424,9 @@ export function createApiRouter(store: ProjectStore): Router {
         throw new ValidationError("no bodies to export");
       }
       const safeName = doc.name.replace(/[^\w-]+/g, "_").slice(0, 60) || "model";
-      let data: Buffer;
-      let fileName: string;
-      if (format === "stl") {
-        data = writeStl(chosen, quality);
-        fileName = `${safeName}.stl`;
-        res.setHeader("Content-Type", "model/stl");
-      } else {
-        data = write3mf(
-          chosen.map((b) => ({
-            body: b,
-            name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId,
-          })),
-          quality
-        );
-        fileName = `${safeName}.3mf`;
-        res.setHeader(
-          "Content-Type",
-          "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"
-        );
-      }
+      const data = exporter.write(chosen, doc, quality);
+      const fileName = `${safeName}.${format}`;
+      res.setHeader("Content-Type", exporter.mime);
       if (req.body?.retain) {
         await store.saveExport(doc.id, fileName, data);
       }

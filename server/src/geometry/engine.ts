@@ -54,16 +54,18 @@ class DocumentEngine {
       doc.features.length
     );
 
-    // Find longest valid cached prefix.
-    let start = 0;
+    // Drop snapshots from the first stale feature on. Valid snapshots past
+    // upTo stay, so a rewind or stateAt query doesn't discard later work.
+    let valid = 0;
     while (
-      start < upTo &&
-      start < this.snapshots.length &&
-      this.snapshots[start].featureKey === featureKey(doc.features[start])
+      valid < this.snapshots.length &&
+      valid < doc.features.length &&
+      this.snapshots[valid].featureKey === featureKey(doc.features[valid])
     ) {
-      start++;
+      valid++;
     }
-    this.snapshots.length = start;
+    this.snapshots.length = valid;
+    const start = Math.min(valid, upTo);
 
     let state: EvalState =
       start === 0 ? emptyState() : cloneState(this.snapshots[start - 1].state);

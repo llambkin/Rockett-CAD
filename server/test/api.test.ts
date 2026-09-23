@@ -9,7 +9,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { AddressInfo } from "node:net";
-import type { EvaluateResult } from "@rockett/shared";
+import { SCHEMA_VERSION, type EvaluateResult } from "@rockett/shared";
 import { initKernel } from "../src/geometry/kernel.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { createApiRouter } from "../src/api/routes.js";
@@ -382,5 +382,23 @@ describe("REST API MVP workflow", () => {
       })
     ).rejects.toThrow(/400/);
     await expect(api("GET", "/projects/../../etc")).rejects.toThrow();
+    const url = `/projects/${document.id}`;
+    await expect(api("POST", `${url}/features`, { feature: { id: "cam1", type: "cam", name: "x", suppressed: false } }))
+      .rejects.toThrow(/400.*unknown feature type cam/);
+    await api("POST", `${url}/features`, { feature: {
+      id: "sk", type: "sketch", name: "Sketch", suppressed: false, plane: { kind: "origin", plane: "XY" }, entities: [], constraints: [],
+    } });
+    await expect(api("PUT", `${url}/features/sk`, { feature: { type: "extrude" } }))
+      .rejects.toThrow(/400.*type cannot change/);
+    const { document: saved } = await api("GET", url);
+    expect(saved.features.map((f: any) => f.type)).toEqual(["sketch"]);
+    await expect(api("POST", `${url}/export`, { format: "step", bodyIds: [] }))
+      .rejects.toThrow(/400.*supported: stl, 3mf/);
+  });
+
+  it("reports version, schema version and commit on health", async () => {
+    const health = await api("GET", "/health");
+    const root = JSON.parse(await fs.readFile(new URL("../../package.json", import.meta.url), "utf8"));
+    expect(health).toEqual({ ok: true, version: root.version, schemaVersion: SCHEMA_VERSION, commit: process.env.ROCKETT_COMMIT || null });
   });
 });

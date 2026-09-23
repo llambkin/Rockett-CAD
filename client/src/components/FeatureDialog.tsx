@@ -120,7 +120,7 @@ function DialogBody({ dialog, editId }: { dialog: DialogType; editId?: string })
     setPending(true);
     try {
       if (editId) {
-        const { id: _ignored, ...patch } = feature as any;
+        const { id: _ignored, suppressed: _kept, ...patch } = feature as any;
         await updateFeature(editId, patch);
       } else {
         await addFeature(feature);
