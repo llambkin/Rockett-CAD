@@ -37,9 +37,9 @@ client/src/three/ViewCube.ts constructor 95
 client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 162
 client/src/three/toolPreview.ts updateToolPreview 158
-server/src/api/routes.ts 659
-server/src/api/routes.ts createApiRouter 481
-server/src/geometry/engine.ts evaluate 115
+server/src/api/routes.ts 705
+server/src/api/routes.ts createApiRouter 520
+server/src/geometry/engine.ts evaluate 108
 server/src/geometry/features.ts 1933
 server/src/geometry/features.ts applyToolOperation 89
 server/src/geometry/features.ts buildPrism 81
@@ -50,7 +50,7 @@ server/src/geometry/sketchGeom.ts buildWire 81
 server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 105
-shared/src/model.ts 530
+shared/src/model.ts 521
 shared/src/profiles.ts 633
 shared/src/profiles.ts detectProfiles 405
 shared/src/sketchModify.ts 806
