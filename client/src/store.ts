@@ -540,12 +540,12 @@ export const useStore = create<State>((set, get) => ({
       unsent = [];
       showPath(path);
     } catch (e: any) {
+      if (e?.status === 401) return set({ busy: false });
       window.history.replaceState(null, "", "/");
       get().closeProject();
       set({ error: e.message });
     }
   },
-
   closeProject() {
     void get().cancelPreview();
     unsent = [];

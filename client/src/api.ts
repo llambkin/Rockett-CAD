@@ -2,6 +2,7 @@
 
 import {
   DOCUMENT_EDITS,
+  AUTH_ROUTES,
   pathFor,
   ROUTES,
   type ApiErrorBody,
@@ -45,8 +46,25 @@ export class ApiError extends Error {
   }
 }
 
+export class UnauthorizedError extends ApiError {
+  constructor(message: string) {
+    super(message, 401, "internal");
+    this.name = "UnauthorizedError";
+  }
+}
+
+let onUnauthorized: (() => void) | null = null;
+
+export function watchUnauthorized(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 async function toApiError(res: Response): Promise<ApiError> {
   const body: Partial<ApiErrorBody> | null = await res.json().catch(() => null);
+  if (res.status === 401)
+    return new UnauthorizedError(
+      typeof body?.error === "string" ? body.error : "Unauthenticated",
+    );
   if (typeof body?.error === "string" && typeof body.code === "string")
     return new ApiError(
       body.error,
@@ -142,6 +160,7 @@ export async function request(
   });
   if (!res.ok) {
     const error = await toApiError(res);
+    if (error instanceof UnauthorizedError) onUnauthorized?.();
     if (res.status === 404) watch?.onMissing();
     throw error;
   }
@@ -251,6 +270,22 @@ function fileForm(name: string, file: File): FormData {
 }
 
 export const api = {
+  authStatus: () => send(AUTH_ROUTES.status, {}),
+  me: () => send(AUTH_ROUTES.me, {}),
+  login: (username: string, password: string) =>
+    send(AUTH_ROUTES.login, {}, { body: { username, password } }),
+  setup: (
+    token: string,
+    username: string,
+    displayName: string,
+    password: string,
+  ) =>
+    send(
+      AUTH_ROUTES.setup,
+      {},
+      { body: { token, username, displayName, password } },
+    ),
+  logout: () => send(AUTH_ROUTES.logout, {}),
   health: () => (health ??= send(ROUTES.health, {})),
   formats: () => send(ROUTES.formats, {}),
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
