@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type { User } from "@rockett/shared";
 import { api, UnauthorizedError, watchUnauthorized } from "./api";
-import { projectIdFromPath } from "./paths";
+import { projectIdFromPath, showPath } from "./paths";
+import { leaveBrowserProject } from "./browserSession";
 import { useStore } from "./store";
 
 type Setup = Awaited<ReturnType<typeof api.authStatus>>["setup"];
@@ -69,4 +70,26 @@ export async function completeSetup(
 ): Promise<void> {
   await api.setup(token, username, displayName, password);
   await signIn(username, password);
+}
+
+export async function signOut(): Promise<void> {
+  const { notSaved, recovery } = useStore.getState();
+  if (
+    (notSaved || recovery) &&
+    !window.confirm("Your unsaved change will be lost. Sign out?")
+  )
+    return;
+  try {
+    await api.logout();
+  } catch (error) {
+    if (!(error instanceof UnauthorizedError)) throw error;
+  }
+  leaveBrowserProject();
+  useStore.getState().closeProject();
+  useStore.setState(useStore.getInitialState(), true);
+  showPath("/");
+  useSession.setState(
+    { kind: "signed-out", setup: "done", returnProjectId: null },
+    true,
+  );
 }

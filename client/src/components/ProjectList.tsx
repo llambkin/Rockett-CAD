@@ -15,6 +15,7 @@ import { leaveBrowserProject } from "../browserSession";
 import { BrowserItems, ProjectItems, type Renaming } from "./ProjectItems";
 import { StepImportButton } from "./StepImportButton";
 import { VersionLabel } from "./VersionLabel";
+import { UserMenu } from "./UserMenu";
 
 export async function backToProjects(): Promise<void> {
   const { projectId, closeProject, notSaved, recovery } = useStore.getState();
@@ -178,6 +179,7 @@ export function ProjectList() {
       <div className="project-list-card">
         <h1>
           <span className="logo">⬢</span> Rockett CAD
+          <UserMenu />
         </h1>
         <p className="tagline">Your CAD. Your server. Your plugins.</p>
         {error && <div className="error-banner">{error}</div>}

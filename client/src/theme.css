@@ -1020,6 +1020,15 @@ kbd {
   color: var(--err);
 }
 
+.context-menu button:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.context-menu button:disabled:hover {
+  background: transparent;
+}
+
 .ctx-backdrop {
   position: fixed;
   inset: 0;
@@ -1075,6 +1084,13 @@ kbd {
 
 .project-list-card h1 {
   font-size: 22px;
+  position: relative;
+}
+
+.project-list-card h1 .icon-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 
 .project-list-card .logo {

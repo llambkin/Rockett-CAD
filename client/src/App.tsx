@@ -12,6 +12,7 @@ import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { LoginScreen } from "./components/LoginScreen";
+import { UserMenu } from "./components/UserMenu";
 import { bootSession, useSession } from "./session";
 import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
@@ -193,7 +194,6 @@ function Workspace() {
   const redo = useStore((s) => s.redo);
   const mode = useStore((s) => s.mode);
 
-  // global shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -278,6 +278,7 @@ function Workspace() {
         <UndoRedoButtons />
         {busy && <span className="busy-indicator">⟳ working…</span>}
         <SaveIndicator />
+        <UserMenu />
         <button
           className="icon-btn"
           title="Keyboard and mouse controls (?)"

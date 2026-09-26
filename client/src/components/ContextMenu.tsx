@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 
-export interface MenuItem {
+export type MenuItem = {
   label: string;
-  action: () => void;
   danger?: boolean;
-}
+} & (
+  { action: () => void; disabled?: false } | { disabled: true; action?: never }
+);
 
 export function ContextMenu({
   x,
@@ -48,8 +49,9 @@ export function ContextMenu({
         <button
           key={it.label}
           className={it.danger ? "danger" : undefined}
+          disabled={it.disabled}
           onClick={() => {
-            it.action();
+            it.action?.();
             onClose();
           }}
         >
