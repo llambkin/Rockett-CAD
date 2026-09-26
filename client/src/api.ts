@@ -40,6 +40,7 @@ export class ApiError extends Error {
     readonly code: ApiErrorCode,
     readonly detail?: string,
     readonly revision?: number,
+    readonly retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -61,6 +62,14 @@ export function watchUnauthorized(handler: (() => void) | null): void {
 
 async function toApiError(res: Response): Promise<ApiError> {
   const body: Partial<ApiErrorBody> | null = await res.json().catch(() => null);
+  const rawRetryAfter =
+    res.status === 429 ? Number(res.headers.get("Retry-After")) : undefined;
+  const retryAfter =
+    rawRetryAfter !== undefined &&
+    Number.isFinite(rawRetryAfter) &&
+    rawRetryAfter > 0
+      ? rawRetryAfter
+      : undefined;
   if (res.status === 401)
     return new UnauthorizedError(
       typeof body?.error === "string" ? body.error : "Unauthenticated",
@@ -72,11 +81,15 @@ async function toApiError(res: Response): Promise<ApiError> {
       body.code,
       body.detail,
       body.revision,
+      retryAfter,
     );
   return new ApiError(
     res.statusText || `HTTP ${res.status}`,
     res.status,
     "internal",
+    undefined,
+    undefined,
+    retryAfter,
   );
 }
 

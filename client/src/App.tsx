@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./store";
 import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
@@ -11,6 +11,8 @@ import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
+import { LoginScreen } from "./components/LoginScreen";
+import { bootSession, useSession } from "./session";
 import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
 import { viewportHandle } from "./viewportRef";
@@ -18,7 +20,20 @@ import { idleActionFor, sketchToolFor } from "./shortcuts";
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
+  const session = useSession();
+  const [bootError, setBootError] = useState<string | null>(null);
+  const booted = useRef(false);
+  const retryBoot = () => {
+    setBootError(null);
+    void bootSession().catch(() => setBootError("Could not check session."));
+  };
   useEffect(() => {
+    if (booted.current) return;
+    booted.current = true;
+    retryBoot();
+  }, []);
+  useEffect(() => {
+    if (session.kind !== "signed-in") return;
     void followPath();
     window.addEventListener("popstate", followPath);
     window.addEventListener("pagehide", dropBrowserCopy);
@@ -26,7 +41,15 @@ export function App() {
       window.removeEventListener("popstate", followPath);
       window.removeEventListener("pagehide", dropBrowserCopy);
     };
-  }, []);
+  }, [session.kind]);
+  if (session.kind !== "signed-in")
+    return (
+      <LoginScreen
+        session={session}
+        bootError={bootError}
+        retryBoot={retryBoot}
+      />
+    );
   return projectId ? <Workspace /> : <ProjectList />;
 }
 

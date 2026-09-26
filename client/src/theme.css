@@ -1081,6 +1081,22 @@ kbd {
   color: var(--accent);
 }
 
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auth-form .btn {
+  align-self: flex-start;
+}
+
 .tagline {
   color: var(--text-dim);
   margin: 4px 0 18px;

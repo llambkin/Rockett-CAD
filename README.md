@@ -75,6 +75,7 @@ everything downstream against persistent topology references.
 
 ### Workspace
 
+- **Accounts**: first-run setup creates an admin; sign in before opening projects.
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, orthographic or perspective.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.
