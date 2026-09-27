@@ -7,6 +7,7 @@ import {
   type Folder,
   type FoldersFile,
   type FolderTree,
+  type ProjectMember,
 } from "@rockett/shared";
 import { JsonStore, StoreError } from "./jsonStore.js";
 import { ProjectQueue } from "./projectQueue.js";
@@ -29,7 +30,14 @@ export class FolderStore {
         namespace: "folders",
         current: FOLDERS_VERSION,
         field: "version",
-        steps: {},
+        steps: {
+          1: (value) => ({
+            ...value,
+            folders: (value.folders as Folder[]).map((folder) =>
+              Object.assign({}, folder, { owner: null, members: [] }),
+            ),
+          }),
+        },
       },
       validate: (value) => parse(foldersFile, value),
     });
@@ -40,13 +48,19 @@ export class FolderStore {
     return { folders, placement };
   }
 
-  create(name: string, parentId: string | null): Promise<Folder> {
+  create(
+    name: string,
+    parentId: string | null,
+    owner: string | null = null,
+  ): Promise<Folder> {
     return this.change((tree) => {
       exists(tree, parentId, "/parentId");
       const folder = {
         id: crypto.randomBytes(6).toString("hex"),
         name,
         parentId,
+        owner,
+        members: [] as ProjectMember[],
       };
       tree.folders.push(folder);
       return folder;
@@ -96,6 +110,46 @@ export class FolderStore {
     });
   }
 
+  async get(id: string): Promise<Folder> {
+    return find(await this.read(), id);
+  }
+
+  async ancestors(id: string | null): Promise<Folder[]> {
+    return ancestorsOf(await this.read(), id);
+  }
+
+  async containing(projectId: string): Promise<Folder[]> {
+    const tree = await this.read();
+    return ancestorsOf(tree, tree.placement[projectId] ?? null);
+  }
+
+  setAccess(
+    id: string,
+    owner: string,
+    members: ProjectMember[],
+  ): Promise<Folder> {
+    return this.change((tree) => {
+      const folder = find(tree, id);
+      if (folder.owner !== null && folder.owner !== owner)
+        throw new StoreError("folder owner changed", "conflict");
+      folder.owner = owner;
+      folder.members = members;
+      return folder;
+    });
+  }
+
+  revokeFriendShares(first: string, second: string): Promise<void> {
+    return this.change((tree) => {
+      for (const folder of tree.folders)
+        if (folder.owner === first || folder.owner === second)
+          folder.members = folder.members.filter((member) =>
+            folder.owner === first
+              ? member.userId !== second
+              : member.userId !== first,
+          );
+    });
+  }
+
   createIn<T extends { id: string }>(
     folderId: string,
     create: () => Promise<T>,
@@ -138,6 +192,20 @@ function find(tree: FoldersFile, id: string): Folder {
   const folder = tree.folders.find((f) => f.id === id);
   if (!folder) throw new StoreError("folder not found", "not_found");
   return folder;
+}
+
+function ancestorsOf(tree: FoldersFile, id: string | null): Folder[] {
+  const result: Folder[] = [];
+  for (
+    let at = id, step = 0;
+    at !== null && step < tree.folders.length;
+    step++
+  ) {
+    const folder = find(tree, at);
+    result.push(folder);
+    at = folder.parentId;
+  }
+  return result;
 }
 
 function exists(tree: FoldersFile, id: string | null, detail: string): void {

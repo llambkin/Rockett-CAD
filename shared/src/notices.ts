@@ -7,12 +7,17 @@ export type Notice =
       id: string;
       from: Pick<User, "id" | "username" | "displayName">;
     }
-  | { kind: "project"; id: string; name: string };
+  | { kind: "project"; id: string; name: string }
+  | { kind: "folder"; id: string; name: string };
 
 export const NOTICE_ROUTES = {
   list: route<never, { items: Notice[] }>()("GET", "/me/notices"),
   openProject: route<never, { ok: true }>()(
     "POST",
     "/me/notices/projects/:id/open",
+  ),
+  openFolder: route<never, { ok: true }>()(
+    "POST",
+    "/me/notices/folders/:id/open",
   ),
 };

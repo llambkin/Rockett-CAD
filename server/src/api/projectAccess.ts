@@ -7,6 +7,8 @@ import {
 } from "@rockett/shared";
 import { StoreError } from "../store/jsonStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
+import type { FolderStore } from "../store/folderStore.js";
+import type { Folder } from "@rockett/shared";
 
 const READ_POSTS = new Set([
   ROUTES.evaluate.path,
@@ -27,33 +29,72 @@ export function projectRole(
     : members.find((member) => member.userId === user.id)?.role;
 }
 
+export function folderRole(user: User, folder: Folder) {
+  return user.role === "admin" ||
+    folder.owner === null ||
+    folder.owner === user.id
+    ? "edit"
+    : folder.members.find((member) => member.userId === user.id)?.role;
+}
+
+export async function folderAccess(
+  folders: FolderStore,
+  user: User,
+  id: string,
+) {
+  const roles = new Set(
+    (await folders.ancestors(id)).map((folder) => folderRole(user, folder)),
+  );
+  return roles.has("edit") ? "edit" : roles.has("view") ? "view" : undefined;
+}
+
+export async function projectAccess(
+  store: ProjectStore,
+  folders: FolderStore,
+  user: User,
+  id: string,
+) {
+  const { owner, members } = await store.projectAccess(id);
+  const direct = projectRole(user, owner, members);
+  if (direct === "edit") return direct;
+  const inherited = new Set(
+    (await folders.containing(id)).flatMap((folder) => {
+      const role = folderRole(user, folder);
+      return role ? [role] : [];
+    }),
+  );
+  return inherited.has("edit")
+    ? "edit"
+    : (direct ?? (inherited.has("view") ? "view" : undefined));
+}
+
 export const isProjectRoute = (req: Request): boolean =>
   req.route?.path.startsWith("/projects/:id") ?? false;
 
 export async function visibleProjects(
   store: ProjectStore,
+  folders: FolderStore,
   user: User,
 ): Promise<ProjectSummary[]> {
   const listed = await store.list();
   if (user.role === "admin") return listed;
   const visible = await Promise.all(
     listed.map(async (project) => {
-      const { owner, members } = await store.projectAccess(project.id);
-      return projectRole(user, owner, members) ? project : undefined;
+      return (await projectAccess(store, folders, user, project.id))
+        ? project
+        : undefined;
     }),
   );
   return visible.filter((project) => project !== undefined);
 }
 
-export function projectAccessGuard(store: ProjectStore) {
+export function projectAccessGuard(store: ProjectStore, folders: FolderStore) {
   return (req: Request, res: Response, next: NextFunction, id: string) => {
     if (!isProjectRoute(req)) return next();
     const user: User | undefined = res.locals.user;
     if (!user) return next(new Error("auth middleware missing"));
-    store
-      .projectAccess(id)
-      .then(({ owner, members }) => {
-        const access = projectRole(user, owner, members);
+    projectAccess(store, folders, user, id)
+      .then((access) => {
         if (!access)
           return res
             .status(404)

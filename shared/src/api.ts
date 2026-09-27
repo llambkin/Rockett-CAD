@@ -9,6 +9,7 @@ import type {
   FaceRef,
   FilletFeature,
   ShellFeature,
+  ProjectMember,
   SketchSolveStatus,
   SketchEntity,
 } from "./model.js";
@@ -228,6 +229,8 @@ export interface Folder {
   id: string;
   name: string;
   parentId: string | null;
+  owner: string | null;
+  members: ProjectMember[];
 }
 
 export interface FolderTree {

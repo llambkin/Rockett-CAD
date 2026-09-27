@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 export type MenuItem = {
   label: string;
@@ -23,6 +23,14 @@ export function ContextMenu({
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  useLayoutEffect(() => {
+    const panel = ref.current;
+    if (!panel) return;
+    const { width, height } = panel.getBoundingClientRect();
+    panel.style.left = `${Math.max(0, Math.min(x, window.innerWidth - width))}px`;
+    panel.style.top = `${Math.max(0, Math.min(up ? y - height : y, window.innerHeight - height))}px`;
+    panel.style.bottom = "";
+  }, [x, y, up, items.length]);
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) close.current();

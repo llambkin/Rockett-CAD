@@ -18,7 +18,6 @@ import {
   type ExportRequest,
   type Feature,
   type Method,
-  type ProjectMember,
   type Route,
   type SizedFeature,
   type User,
@@ -51,8 +50,8 @@ import {
   safeFileName,
   uploadProjectFile,
 } from "./projectFile.js";
-import { folderRoutes } from "./folderRoutes.js";
-import { updateProjectMembers } from "./projectMembers.js";
+import { folderRoutes, requireFolderDestination } from "./folderRoutes.js";
+import { projectMemberHandlers } from "./projectMembers.js";
 import {
   discarding,
   IMPORT_LIMITS,
@@ -76,6 +75,7 @@ import { omitHeldMeshes } from "./heldMeshes.js";
 import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
 import { createJobRoutes } from "./jobRoutes.js";
 import type { UserStore } from "../auth/userStore.js";
+import type { FriendStore } from "../auth/friendStore.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -192,6 +192,7 @@ export function createApiRouter(
   kernel: KernelClient = new InProcessKernel(store),
   users?: UserStore,
   notices?: NoticeStore,
+  friends?: FriendStore,
 ): Router {
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
@@ -199,7 +200,7 @@ export function createApiRouter(
   const meshCache = new MeshCache();
   const jobs = createJobRoutes(store, kernel, fail);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
-  router.param("id", projectAccessGuard(store));
+  router.param("id", projectAccessGuard(store, folders));
   const on = (route: Route, ...handlers: RequestHandler[]) =>
     router[route.method.toLowerCase() as Lowercase<Method>](
       route.path,
@@ -356,7 +357,7 @@ export function createApiRouter(
       const named = new Map(
         (await users?.list())?.map((user) => [user.id, user.displayName]) ?? [],
       );
-      const listed = await visibleProjects(store, ctx.user);
+      const listed = await visibleProjects(store, folders, ctx.user);
       res.json(
         await Promise.all(
           listed.map(async (project) => {
@@ -382,54 +383,17 @@ export function createApiRouter(
     }),
   );
 
-  on(
-    ROUTES.projectMembers,
-    wrap(async (req, res, ctx) => {
-      const current = await store.projectAccess(req.params.id);
-      if (ctx.user.role !== "admin" && current.owner !== ctx.user.id)
-        return void res.status(403).json({ error: "forbidden" });
-      if (!users) throw new Error("user store missing");
-      const { owner, members } = req.body as {
-        owner: string | null;
-        members: ProjectMember[];
-      };
-      await updateProjectMembers(
-        store,
-        users,
-        notices,
-        req.params.id,
-        current,
-        { owner, members },
-      );
-      res.json({ owner, members });
-    }),
-  );
-
-  on(
-    ROUTES.getProjectMembers,
-    wrap(async (req, res, ctx) => {
-      const access = await store.projectAccess(req.params.id);
-      if (ctx.user.role !== "admin" && access.owner !== ctx.user.id)
-        return void res.status(403).json({ error: "forbidden" });
-      if (!users) throw new Error("user store missing");
-      res.json({
-        ...access,
-        users: (await users.list())
-          .filter((user) => user.status === "active")
-          .map(({ id, displayName, username }) => ({
-            id,
-            displayName,
-            username,
-          })),
-      });
-    }),
-  );
+  const members = projectMemberHandlers(store, users, notices, friends);
+  on(ROUTES.projectMembers, wrap(members.put));
+  on(ROUTES.getProjectMembers, wrap(members.get));
 
   on(
     ROUTES.createProject,
     wrap(async (req, res, ctx) => {
       const name = (req.body.name ?? "Untitled").slice(0, 200);
       const { folderId } = req.body;
+      if (folderId !== undefined)
+        await requireFolderDestination(folders, ctx.user, folderId);
       const doc =
         folderId === undefined
           ? await store.create(name, ctx.user.id)
@@ -487,7 +451,13 @@ export function createApiRouter(
     }),
   );
 
-  for (const [route, handler] of folderRoutes(folders, store))
+  for (const [route, handler] of folderRoutes(
+    folders,
+    store,
+    users,
+    notices,
+    friends,
+  ))
     on(route, wrap(handler));
 
   on(ROUTES.mesh, wrap(meshRoute(store, meshCache, evaluate)));

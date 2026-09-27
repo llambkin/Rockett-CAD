@@ -8,6 +8,7 @@ import {
 } from "@rockett/shared";
 import { StoreError } from "../store/jsonStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
+import type { FolderStore } from "../store/folderStore.js";
 import type { FriendStore } from "./friendStore.js";
 import type { NoticeStore } from "./noticeStore.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
@@ -16,12 +17,13 @@ export function createFriendRouter(
   users: UserStore,
   friends: FriendStore,
   projects: ProjectStore,
+  folders: FolderStore,
   notices: NoticeStore,
 ): Router {
   const router = Router();
   registerFriendList(router, users, friends);
-  registerFriendActions(router, users, friends, projects);
-  registerNotices(router, users, friends, projects, notices);
+  registerFriendActions(router, users, friends, projects, folders);
+  registerNotices(router, users, friends, projects, folders, notices);
   return router;
 }
 
@@ -30,6 +32,7 @@ function registerNotices(
   users: UserStore,
   friends: FriendStore,
   projects: ProjectStore,
+  folders: FolderStore,
   notices: NoticeStore,
 ): void {
   router.get(
@@ -72,7 +75,8 @@ function registerNotices(
             name: project.name,
           });
       }
-      res.json({ items: [...incoming, ...projectsForUser] });
+      const folderNotices = await sharedFolderNotices(folders, user.id, opened);
+      res.json({ items: [...incoming, ...projectsForUser, ...folderNotices] });
     }),
   );
   router.post(
@@ -87,6 +91,32 @@ function registerNotices(
       res.json({ ok: true });
     }),
   );
+  router.post(
+    NOTICE_ROUTES.openFolder.path,
+    run(async (req, res) => {
+      const folder = await folders.get(req.params.id);
+      if (
+        !folder.members.some((member) => member.userId === res.locals.user.id)
+      )
+        return void res.status(404).json({ error: "not found" });
+      await notices.open(res.locals.user.id, `folder:${folder.id}`);
+      res.json({ ok: true });
+    }),
+  );
+}
+
+async function sharedFolderNotices(
+  folders: FolderStore,
+  userId: string,
+  opened: Set<string>,
+): Promise<Notice[]> {
+  return (await folders.tree()).folders
+    .filter(
+      (folder) =>
+        folder.members.some((member) => member.userId === userId) &&
+        !opened.has(`folder:${folder.id}`),
+    )
+    .map((folder) => ({ kind: "folder", id: folder.id, name: folder.name }));
 }
 
 const run =
@@ -159,6 +189,7 @@ function registerFriendActions(
   users: UserStore,
   friends: FriendStore,
   projects: ProjectStore,
+  folders: FolderStore,
 ): void {
   router.post(
     FRIEND_ROUTES.request.path,
@@ -218,9 +249,10 @@ function registerFriendActions(
     FRIEND_ROUTES.remove.path,
     run(async (req, res) => {
       const userId = res.locals.user.id;
-      await friends.remove(userId, req.params.id, () =>
-        projects.revokeFriendShares(userId, req.params.id),
-      );
+      await friends.remove(userId, req.params.id, async () => {
+        await projects.revokeFriendShares(userId, req.params.id);
+        await folders.revokeFriendShares(userId, req.params.id);
+      });
       res.json({ ok: true });
     }),
   );

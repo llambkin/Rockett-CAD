@@ -73,6 +73,18 @@ export class FriendStore {
     }
   }
 
+  async friendIds(userId: string): Promise<Set<string>> {
+    return new Set(
+      (await this.list()).friends.flatMap((friend) =>
+        friend.a === userId
+          ? [friend.b]
+          : friend.b === userId
+            ? [friend.a]
+            : [],
+      ),
+    );
+  }
+
   request(from: string, email: string, targetId?: string): Promise<void> {
     return this.change((file) => {
       if (

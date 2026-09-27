@@ -47,14 +47,15 @@ CAD `ApiErrorBody` codes above. Project access errors can use those codes.
 | `POST /api/me/friends/requests/:id/accept` | Recipient session                                                                   | `{ "ok": true }`; accepts an incoming request                                                                                        |
 | `POST /api/me/friends/requests/:id/reject` | Recipient session                                                                   | `{ "ok": true }`; rejects an incoming request                                                                                        |
 | `DELETE /api/me/friends/requests/:id`      | Sender session                                                                      | `{ "ok": true }`; cancels an outgoing request                                                                                        |
-| `DELETE /api/me/friends/:id`               | Friend session                                                                      | `{ "ok": true }`; removes the friendship and project shares between both people                                                      |
-| `GET /api/me/notices`                      | Session                                                                             | `{ items }`; pending incoming friend requests and unopened project shares for this user                                              |
+| `DELETE /api/me/friends/:id`               | Friend session                                                                      | `{ "ok": true }`; removes the friendship and project or folder shares between both people                                            |
+| `GET /api/me/notices`                      | Session                                                                             | `{ items }`; pending incoming friend requests and unopened project or folder shares for this user                                    |
 | `POST /api/me/notices/projects/:id/open`   | Project member session                                                              | `{ "ok": true }`; clears that user's share notice after opening                                                                      |
+| `POST /api/me/notices/folders/:id/open`    | Folder member session                                                               | `{ "ok": true }`; clears that user's folder share notice after opening                                                               |
 | `GET /api/users`                           | Admin session                                                                       | Public `User[]`                                                                                                                      |
 | `POST /api/users`                          | Admin session and `{ username, displayName, role, password, email? }`               | 201 public `User`; 409 for a duplicate username or email                                                                             |
 | `PATCH /api/users/:id`                     | Admin session and any of `displayName`, `role`, `status`, `password`, `email`       | Public `User`; `email: null` clears it; disabling an account or changing its password revokes its sessions; duplicate email gets 409 |
-| `GET /api/projects/:id/members`            | Owner or admin session                                                              | `{ owner, members, users }`, where `users` lists active users for sharing                                                            |
-| `PUT /api/projects/:id/members`            | Owner or admin session and `{ owner, members: [{ userId, role }] }`                 | `{ owner, members }`; each role is `view` or `edit`                                                                                  |
+| `GET /api/projects/:id/members`            | Owner or admin session                                                              | `{ owner, members, users }`; owners see active friends and current members, admins see active users                                  |
+| `PUT /api/projects/:id/members`            | Owner or admin session and `{ owner, members: [{ userId, role }] }`                 | `{ owner, members }`; each role is `view` or `edit`; owners can add only friends, admins can add any active user                     |
 
 `User` includes id, username, display name, role, status, optional lowercased
 email and timestamps, never a password hash. When both `ROCKETT_CF_ACCESS_TEAM`
@@ -316,20 +317,22 @@ deletes temporary projects untouched for 24 hours; a request after that gets 404
 
 ## Folders
 
-One folder tree is shared by every user. `GET /folders` returns
-`{ folders: Folder[], placement }`: each folder is `{ id, name, parentId }`
+One folder tree stores each user's folders and folders shared with them. `GET /folders` returns
+`{ folders: Folder[], placement }`: each folder is `{ id, name, parentId, owner, members }`
 with `parentId` `null` at the root, and `placement` maps a project id to its
-folder id. A project missing from `placement` sits at the root. Folders live
+folder id. A project missing from `placement` sits at the root. Folder members inherit access to projects in that folder and nested folders at their view or edit role; moving a project out ends that access. Folders live
 in `folders.json`, apart from the documents, so a move never changes a
-document or its `modifiedAt`.
+document or its `modifiedAt`. Version 1 folders migrate with a backup; their owner becomes null and signed-in users retain edit access until an admin claims them.
 
-| Method & path              | Body                   | Returns      |
-| -------------------------- | ---------------------- | ------------ |
-| `GET /folders`             | none                   | `FolderTree` |
-| `POST /folders`            | `{ name, parentId? }`  | `{ folder }` |
-| `PATCH /folders/:id`       | `{ name?, parentId? }` | `{ folder }` |
-| `DELETE /folders/:id`      | none                   | `{ ok }`     |
-| `PUT /projects/:id/folder` | `{ folderId }`         | `{ ok }`     |
+| Method & path              | Body                   | Returns                     |
+| -------------------------- | ---------------------- | --------------------------- |
+| `GET /folders`             | none                   | `FolderTree`                |
+| `POST /folders`            | `{ name, parentId? }`  | `{ folder }`                |
+| `PATCH /folders/:id`       | `{ name?, parentId? }` | `{ folder }`                |
+| `DELETE /folders/:id`      | none                   | `{ ok }`                    |
+| `GET /folders/:id/members` | none                   | `{ owner, members, users }` |
+| `PUT /folders/:id/members` | `{ owner, members }`   | `{ owner, members }`        |
+| `PUT /projects/:id/folder` | `{ folderId }`         | `{ ok }`                    |
 
 A `null` `parentId` or `folderId` means the root. A name is 1 to 200
 characters. A `parentId` or `folderId` naming a missing folder is 400, and so
@@ -340,6 +343,7 @@ folder or a project is 409 and deletes nothing.
 `POST /projects` with a `folderId` creates the project in that folder in one
 call. A missing folder is 400 and creates nothing. Deleting a project drops
 its placement.
+Only an owner or admin changes a folder share. Members must be active users and friends of the owner, unless the actor is an admin. An admin can claim a folder with no owner.
 
 ## Model
 

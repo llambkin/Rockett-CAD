@@ -304,7 +304,7 @@ export function ProjectItems({
 }) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Moving>(null);
-  const [sharing, setSharing] = useState<ProjectSummary | null>(null);
+  const [sharing, setSharing] = useState<Item | null>(null);
   const session = useSession();
   const actor = session.kind === "signed-in" ? session.user : null;
   const move = (item: Item, target: string | null) =>
@@ -368,6 +368,9 @@ export function ProjectItems({
         const n = itemCount(tree, projects, f.id);
         return row(item, count(n, "item"), [
           { label: "Rename", glyph: "✎", run: () => setRenaming(item) },
+          ...(actor && (actor.role === "admin" || f.owner === actor.id)
+            ? [{ label: "Share", glyph: "♧", run: () => setSharing(item) }]
+            : []),
           moveTo(item, setMoving),
           {
             label: "Delete",
@@ -411,7 +414,7 @@ export function ProjectItems({
             },
             [
               ...(actor && (actor.role === "admin" || p.owner === actor.id)
-                ? [{ label: "Share", glyph: "♧", run: () => setSharing(p) }]
+                ? [{ label: "Share", glyph: "♧", run: () => setSharing(item) }]
                 : []),
               moveTo(item, setMoving),
             ],
@@ -440,7 +443,7 @@ export function ProjectItems({
       )}
       {sharing && actor && (
         <ShareDialog
-          project={sharing}
+          target={sharing}
           actor={actor}
           onSaved={() => {
             setSharing(null);

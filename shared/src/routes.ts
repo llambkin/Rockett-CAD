@@ -36,6 +36,7 @@ import { LABEL_LIMIT, snapshotHash } from "./schema/history.js";
 import {
   createFolderBody,
   folderId,
+  folderMembers,
   placeProjectBody,
   updateFolderBody,
 } from "./schema/folders.js";
@@ -488,6 +489,15 @@ export const ROUTES = {
     { folder: Folder }
   >()("PATCH", "/folders/:id", updateFolderBody),
   deleteFolder: route<never, { ok: true }>()("DELETE", "/folders/:id"),
+  getFolderMembers: route<never, ProjectMembersRoster>()(
+    "GET",
+    "/folders/:id/members",
+  ),
+  folderMembers: route<ProjectMembersResponse, ProjectMembersResponse>()(
+    "PUT",
+    "/folders/:id/members",
+    folderMembers,
+  ),
 };
 
 export const DOCUMENT_EDITS: ReadonlySet<Route> = new Set<Route>([

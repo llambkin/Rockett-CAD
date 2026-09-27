@@ -18,6 +18,7 @@ import type { ProjectStore } from "../store/projectStore.js";
 import { documentMigrations, migrate, splitView } from "../store/migrations.js";
 import { HASH_RE, PendingBlobs } from "../store/blobStore.js";
 import { validateDocument } from "./validate.js";
+import { requireFolderDestination } from "./folderRoutes.js";
 
 const ATTR_CHAR = /[A-Za-z0-9!#$&+.^_`|~-]/;
 
@@ -87,6 +88,8 @@ export const uploadProjectFile =
   (store: ProjectStore, folders: FolderStore) =>
   async (req: Request, res: Response, ctx: { user: User }) => {
     const { folderId, temporary = false } = placement(req.body);
+    if (folderId !== undefined)
+      await requireFolderDestination(folders, ctx.user, folderId);
     if (!req.file) throw new ValidationError("Choose a .rockett project file");
     const file = parse(projectFileEnvelope, readJson(req.file.buffer));
     if (file.version > PROJECT_FILE_VERSION)

@@ -9,37 +9,14 @@ import {
   isBrowserPath,
   showPath,
 } from "../paths";
-import { EMPTY_TREE, folderOf } from "../projectTree";
+import { EMPTY_TREE } from "../projectTree";
 import { useStore } from "../store";
-import { leaveBrowserProject } from "../browserSession";
 import { BrowserItems, ProjectItems, type Renaming } from "./ProjectItems";
 import { StepImportButton } from "./StepImportButton";
 import { VersionLabel } from "./VersionLabel";
 import { UserMenu } from "./UserMenu";
 
-export async function backToProjects(): Promise<void> {
-  const { projectId, closeProject, notSaved, recovery } = useStore.getState();
-  if (
-    (notSaved || recovery) &&
-    !window.confirm(
-      notSaved
-        ? "Changes not saved in this browser will be lost."
-        : "Your unsaved change will be lost.",
-    )
-  )
-    return;
-  if (leaveBrowserProject()) showPath(BROWSER_PATH);
-  else
-    showPath(
-      folderPath(
-        await api.listFolders().then(
-          (tree) => (projectId === null ? null : folderOf(tree, projectId)),
-          () => null,
-        ),
-      ),
-    );
-  closeProject();
-}
+export { backToProjects } from "../projectNavigation";
 
 type Load = "loading" | "ready" | { failed: string };
 

@@ -89,7 +89,7 @@ everything downstream against persistent topology references.
 - **Tree selection**: Ctrl or Cmd+click adds bodies or sketches, Shift+click selects a range; right-click acts on all.
 - **Live preview**: feature dialogs keep the model before the feature pickable and ghost only that feature's result, green added, red removed.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions, sketch selections their relations; right-drag still orbits.
-- **Projects**: sort into folders; create, rename, move, share or delete by button, right-click or drag; owners are shown.
+- **Projects**: organise, create, move, share with friends or delete projects and folders; owners are shown.
 - **Project files**: download a project as one `.rockett` file, or open one as a new project, keeping what it hides.
 - **This browser**: keep a project in this browser instead of on the server; move it either way by Move to or drag.
 - **Reload**: refreshing the page reopens the project you had open; Back returns to the list.

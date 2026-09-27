@@ -1,16 +1,36 @@
 import { useEffect, useState } from "react";
-import type { ProjectMember } from "@rockett/shared";
-import { api } from "../api";
+import { ROUTES, type ProjectMember } from "@rockett/shared";
+import { api, send } from "../api";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 
+type Target = { kind: "project" | "folder"; id: string; name: string };
+
+const getMembers = (target: Target) =>
+  target.kind === "project"
+    ? api.getProjectMembers(target.id)
+    : send(ROUTES.getFolderMembers, { id: target.id });
+
+const saveMembers = (
+  target: Target,
+  owner: string | null,
+  members: ProjectMember[],
+) =>
+  target.kind === "project"
+    ? api.projectMembers(target.id, owner, members)
+    : send(
+        ROUTES.folderMembers,
+        { id: target.id },
+        { body: { owner, members } },
+      );
+
 export function ShareDialog({
-  project,
+  target,
   actor,
   onSaved,
   onClose,
 }: {
-  project: { id: string; name: string };
+  target: Target;
   actor: { id: string; role: "admin" | "member" };
   onSaved: () => void;
   onClose: () => void;
@@ -23,7 +43,7 @@ export function ShareDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   useEffect(() => {
-    void api.getProjectMembers(project.id).then(
+    void getMembers(target).then(
       (access) => {
         setRoster(access);
         setOwner(access.owner);
@@ -34,7 +54,7 @@ export function ShareDialog({
       },
       (e) => setError(e.message),
     );
-  }, [project.id]);
+  }, [target.id, target.kind]);
   const choose = (userId: string, role: "view" | "edit" | "none") =>
     setMembers((current) =>
       role === "none"
@@ -48,7 +68,7 @@ export function ShareDialog({
     setPending(true);
     setError(null);
     try {
-      await api.projectMembers(project.id, owner, members);
+      await saveMembers(target, owner, members);
       onSaved();
     } catch (e) {
       setError((e as Error).message);
@@ -57,7 +77,7 @@ export function ShareDialog({
     }
   };
   return (
-    <DraggablePanel title={`Share "${project.name}"`}>
+    <DraggablePanel title={`Share "${target.name}"`}>
       <div className="dialog-body">
         {error && <div className="error-banner">{error}</div>}
         {!roster && !error && <div className="tree-empty">Loading people…</div>}
@@ -81,7 +101,7 @@ export function ShareDialog({
                     );
                   }}
                 >
-                  Claim project
+                  Claim {target.kind}
                 </button>
               )}
             {roster.users.filter((user) => user.id !== owner).length === 0 && (
