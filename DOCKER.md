@@ -7,17 +7,26 @@ dependencies). All persistent state lives under **one volume: `/data`**.
 ## Compose
 
 ```bash
-ROCKETT_ALLOWED_ORIGINS=https://cad.example.com \
+ROCKETT_ALLOWED_ORIGINS=http://127.0.0.1:8788 \
+ROCKETT_COOKIE_SECURE=false \
 ROCKETT_COMMIT=$(git rev-parse HEAD) \
 ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) \
   docker compose up -d --build
 # → http://127.0.0.1:8788
 ```
 
+Generate and supply `ROCKETT_SETUP_TOKEN` in the shell before this first run;
+the setup steps are under Security below.
+
 `docker-compose.yml` builds the image locally and keeps `/data` in a named
 volume. It publishes on `127.0.0.1` unless `ROCKETT_BIND` says otherwise;
 the header of the file lists every variable. The server will not start
 without `ROCKETT_ALLOWED_ORIGINS`; set it to the origin you browse to.
+Behind a TLS reverse proxy, use the browser-facing origin, for example
+`ROCKETT_ALLOWED_ORIGINS=https://cad.example.com`, even if the proxy connects
+to the container over HTTP. Add the external port if the browser URL uses one.
+For a plain-HTTP instance, set `ROCKETT_COOKIE_SECURE=false` or the browser
+will not send the secure session cookie.
 
 ### Several instances on one host
 
@@ -64,6 +73,8 @@ when set, else the version and short commit, else `dev`.
 
 Back up an instance's data with
 `docker compose -p rockett-cad-prod exec -T rockett-cad tar czf - -C /data . > rockett-prod.tgz`
+`/data/users` holds password hashes. Treat every `/data` backup as credential
+material and restrict its access and copies accordingly.
 
 ## Manual
 
@@ -72,12 +83,18 @@ docker build -t rockett-cad:latest \
   --build-arg ROCKETT_COMMIT=$(git rev-parse HEAD) \
   --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty) .
 docker run -d --name rockett-cad \
-  -p 8788:8788 \
-  -e ROCKETT_ALLOWED_ORIGINS=https://cad.example.com \
+  -p 127.0.0.1:8788:8788 \
+  -e ROCKETT_ALLOWED_ORIGINS=http://127.0.0.1:8788 \
+  -e ROCKETT_COOKIE_SECURE=false \
+  -e ROCKETT_SETUP_TOKEN \
   -v /path/to/appdata/rockett-cad:/data \
   --restart unless-stopped \
   rockett-cad:latest
 ```
+
+Export the generated setup token in the host shell before this first run.
+After creating the admin, recreate the container without the token and check
+its environment as described under Security.
 
 ## Unraid
 
@@ -86,8 +103,9 @@ docker run -d --name rockett-cad \
 2. Copy `docker/unraid-rockett-cad.xml` to
    `/boot/config/plugins/dockerMan/templates-user/` on the Unraid box.
 3. Add the container from the template. Defaults: WebUI port `8788`, data path
-   `/mnt/user/appdata/rockett-cad`. Add the `ROCKETT_ALLOWED_ORIGINS`
-   variable; the template does not carry it yet.
+   `/mnt/user/appdata/rockett-cad`. Set Allowed Origins to the browser-facing
+   origin. Set Setup Token for first-admin setup, then clear it and restart.
+   Set Secure Cookie to `false` only for plain HTTP.
 
 ## Persistent layout (`/data`)
 
@@ -194,6 +212,8 @@ exits 0 when every project is on version 2, and 1 otherwise.
 | Variable                  | Default  | Purpose                                                                                                         |
 | ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
 | `ROCKETT_ALLOWED_ORIGINS` | required | Comma-separated bare origins, such as `https://cad.example.com`; writes to `/api` from any other origin get 403 |
+| `ROCKETT_SETUP_TOKEN`     | empty    | One-time token for creating the first admin; remove it after setup                                              |
+| `ROCKETT_COOKIE_SECURE`   | `true`   | Secure session cookie for HTTPS; set `false` for plain HTTP                                                     |
 | `ROCKETT_PORT`            | `8788`   | HTTP port inside the container                                                                                  |
 | `DATA_DIR`                | `/data`  | Persistent root                                                                                                 |
 | `ROCKETT_COMMIT`          | empty    | Git revision reported by `/api/health` (build arg)                                                              |
@@ -207,10 +227,19 @@ exits 0 when every project is on version 2, and 1 otherwise.
   ephemeral writable path, and `--read-only` with the `/data` volume serves.
   The base image's `/tmp` stays world-writable unless the root is read-only.
 - No outbound network use; no cloud services; fully offline-capable.
-- Single-user by design for v1. Put it behind your reverse proxy
-  (basic auth, Authelia, Cloudflare Access, …) if it is reachable beyond your
-  LAN. The auth layer is intentionally separable from the CAD logic
-  (see ARCHITECTURE.md).
+- The app has accounts and session cookies. Generate a one-time setup token
+  with `openssl rand -hex 32`, supply it as `ROCKETT_SETUP_TOKEN` outside this
+  repository, and start the container. Open the app and create the first admin
+  using that token. `GET /api/auth/status` returns `{"setup":"done"}` after
+  setup. Remove the token from the deployment environment, restart the
+  container, then confirm its environment has no token value. For Compose,
+  `docker compose -p <instance> exec rockett-cad sh -c 'test -z "$ROCKETT_SETUP_TOKEN"'`
+  checks that without printing it. Remove any saved token value from the
+  Unraid template too. A proxy can still provide network access controls.
+- For a forgotten password, stop the instance and run the offline command
+  `docker compose -p <instance> run --rm --no-deps -T rockett-cad node server.mjs reset-password <username>`.
+  Send the new password on standard input, ending with a newline; keep it out
+  of arguments, shell history and logs. Restart the instance afterward.
 - Healthcheck hits `/api/health` (30 s start period, one probe interval,
   ten times the 3 s planning figure for the kernel worker's boot). The
   kernel runs in a worker thread, so health answers 200 during a long

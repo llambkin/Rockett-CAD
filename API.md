@@ -25,6 +25,37 @@ status:
 | `kernel`                | 503    | The geometry kernel cannot serve the request.             |
 | `internal`              | 500    | Server fault. The message is generic; the log has detail. |
 
+## Identity
+
+`ROCKETT_ALLOWED_ORIGINS` lists the browser-facing origins. `GET`, `HEAD` and
+`OPTIONS` may omit `Origin`. Every other `/api` request needs an `Origin`
+header that exactly matches the allowed list; a missing or different value
+returns 403 `{ "error": "Origin not allowed" }`, before session checking.
+Auth and user routes return `{ "error": string }` on failure rather than the
+CAD `ApiErrorBody` codes above. Project access errors can use those codes.
+
+| Route                           | Request                                                                             | Response                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `GET /api/auth/status`          | None; public                                                                        | `{ "setup": value }`, where value is `needs-token`, `ready` or `done`                             |
+| `POST /api/auth/setup`          | `{ token, username, displayName, password }`; public until the first account exists | 201 public `User`; 403 for an invalid token, 409 after setup                                      |
+| `POST /api/auth/login`          | `{ username, password }`; public                                                    | Public `User` and a session cookie; 401 for invalid credentials or a disabled account             |
+| `POST /api/auth/logout`         | Session cookie                                                                      | `{ "ok": true }`; revokes the session and clears its cookie                                       |
+| `GET /api/me`                   | Session cookie                                                                      | Current public `User`                                                                             |
+| `POST /api/me/password`         | `{ current, next }`                                                                 | `{ "ok": true }`; replaces the password and rotates the session; 403 for a wrong current password |
+| `GET /api/users`                | Admin session                                                                       | Public `User[]`                                                                                   |
+| `POST /api/users`               | Admin session and `{ username, displayName, role, password }`                       | 201 public `User`; 409 for a duplicate username                                                   |
+| `PATCH /api/users/:id`          | Admin session and any of `displayName`, `role`, `status`, `password`                | Public `User`; disabling an account or changing its password revokes its sessions                 |
+| `GET /api/projects/:id/members` | Owner or admin session                                                              | `{ owner, members, users }`, where `users` lists active users for sharing                         |
+| `PUT /api/projects/:id/members` | Owner or admin session and `{ owner, members: [{ userId, role }] }`                 | `{ owner, members }`; each role is `view` or `edit`                                               |
+
+`User` includes id, username, display name, role, status and timestamps, never
+a password hash. A session is required except for health, status, setup and
+login; missing, expired or disabled sessions get 401 `unauthenticated`. A
+signed-in non-admin gets 403 `forbidden` on user routes. A member who is not
+the owner gets 403 on either members route; a user with no access to the
+project gets 404. Login, setup and password change can return 429 `rate limited`
+with `Retry-After` in seconds. Passwords must be 12 to 256 characters.
+
 Mutating endpoints return `{ document, evaluation, history }`: the updated
 document, a fresh incremental evaluation (bodies with tagged tessellation,
 feature statuses, solved sketches with profiles, construction-plane frames)

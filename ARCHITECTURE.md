@@ -117,6 +117,15 @@ Cancel footer. Inside its panel, Enter in an input triggers OK and Escape
 triggers Cancel; feature dialogs take Escape from anywhere. A field marked `autoFocus` takes focus with its value
 selected when the dialog opens, so typing replaces it.
 
+## Identity
+
+The API middleware order in `server/src/app.ts` is origin check, session,
+router. The origin check rejects a state-changing request without an allowed
+`Origin` before authentication or route handling. The session middleware
+allows health, setup, status and login through; other routes need an active
+user. The auth router handles accounts and sessions, then the CAD router
+checks project access before operating on a project.
+
 ## Security posture
 
 - The API exposes _controlled modelling operations only_, with no arbitrary
@@ -128,10 +137,8 @@ selected when the dialog opens, so typing replaces it.
 - Uploaded images are validated by magic bytes (PNG/JPEG/WebP only) and size
   capped.
 - The container runs as a non-root user; the only writable path is `/data`.
-- Authentication is intentionally separable: the app is single-user behind
-  your reverse proxy today. All state flows through `ProjectStore`, so adding
-  per-user scoping or an auth middleware (basic auth, OIDC, Cloudflare
-  Access header checks) requires no changes to the CAD layers.
+- Accounts use scrypt password hashes under `/data/users` and HttpOnly session
+  cookies. Project owners and members determine access to saved projects.
 
 ## Performance notes
 

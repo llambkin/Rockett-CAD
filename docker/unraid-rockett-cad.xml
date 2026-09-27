@@ -37,4 +37,13 @@
     Mode="rw"
     Description="Persistent storage: project documents, uploaded reference images, exports"
     Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/rockett-cad</Config>
+  <Config Name="Allowed Origins" Target="ROCKETT_ALLOWED_ORIGINS" Default=""
+    Mode="" Description="Comma-separated browser origins, including scheme and external port if any"
+    Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Setup Token" Target="ROCKETT_SETUP_TOKEN" Default=""
+    Mode="" Description="One-time first-admin setup token; remove after setup"
+    Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Secure Cookie" Target="ROCKETT_COOKIE_SECURE" Default=""
+    Mode="" Description="Leave empty for HTTPS; set false for plain HTTP"
+    Type="Variable" Display="always" Required="false" Mask="false"></Config>
 </Container>
