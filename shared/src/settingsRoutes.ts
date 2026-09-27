@@ -12,6 +12,20 @@ export const settingsPatchBody = Type.Object(
 
 export function settingsRoutes(route: typeof defineRoute) {
   return {
+    userSettings: route<never, LayerValues>()("GET", "/me/settings"),
+    patchUserSettings: route<SettingsPatch, LayerValues>()(
+      "PATCH",
+      "/me/settings",
+      settingsPatchBody,
+    ),
+    importUserSettings: route<
+      LayerValues,
+      { applied: string[]; rejected: { key: string; reason: string }[] }
+    >()(
+      "POST",
+      "/me/settings/import",
+      Type.Record(Type.String(), Type.Unknown()),
+    ),
     appSettings: route<never, LayerValues>()("GET", "/settings"),
     patchAppSettings: route<SettingsPatch, LayerValues>()(
       "PATCH",

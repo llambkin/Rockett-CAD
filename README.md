@@ -78,7 +78,7 @@ everything downstream against persistent topology references.
 ### Workspace
 
 - **Accounts**: admin setup, sign in, password changes, sign out, user email management and optional Cloudflare Access sign-in.
-- **Settings**: the top-bar panel edits available app and project preferences, shows each value's source and resets a layer's override.
+- **Settings**: the panel edits app and project preferences; the API stores personal settings and imports unknown plugin values.
 - **Display units**: sketch dimensions, measurements and feature lengths follow the selected unit; typed lengths accept unit suffixes while models remain in millimetres.
 - **Friend requests and notices**: request by email, accept or reject in the user menu, and open newly shared projects.
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, adjustable camera preferences and pick tolerance.

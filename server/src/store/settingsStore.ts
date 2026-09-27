@@ -1,6 +1,8 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import {
+  SETTINGS,
+  SETTING_KEY,
   SettingsError,
   validateSettingValue,
   ValidationError,
@@ -16,6 +18,30 @@ import type { Storage } from "./storage.js";
 
 const SETTINGS_VERSION = 1;
 const APP_KEY = "settings";
+const IMPORT_MAX_BYTES = 1024 * 1024;
+const IMPORT_MAX_NODES = 10_000;
+const IMPORT_MAX_DEPTH = 64;
+
+function checkImportBounds(entries: LayerValues): void {
+  const stack: { value: unknown; depth: number }[] = [
+    { value: entries, depth: 0 },
+  ];
+  let nodes = 0;
+  while (stack.length) {
+    const { value, depth } = stack.pop()!;
+    if (++nodes > IMPORT_MAX_NODES || depth > IMPORT_MAX_DEPTH)
+      throw new ValidationError("settings import is too deep or complex");
+    if (value && typeof value === "object") {
+      const children = Object.values(value);
+      if (nodes + stack.length + children.length > IMPORT_MAX_NODES)
+        throw new ValidationError("settings import is too deep or complex");
+      for (const child of children)
+        stack.push({ value: child, depth: depth + 1 });
+    }
+  }
+  if (Buffer.byteLength(JSON.stringify(entries)) > IMPORT_MAX_BYTES)
+    throw new ValidationError("settings import is too large");
+}
 
 export type SettingsLayer =
   { scope: "app" } | { scope: "user" | "project"; id: string };
@@ -108,6 +134,39 @@ export class SettingsStore {
       },
     );
     if (errors.length) return Promise.reject(new SettingsError(errors));
+    return this.write(layer, set, reset, expected);
+  }
+
+  async importUser(id: string, entries: LayerValues) {
+    checkImportBounds(entries);
+    const set: LayerValues = {};
+    const applied: string[] = [];
+    const rejected: { key: string; reason: string }[] = [];
+    for (const [key, value] of Object.entries(entries)) {
+      const reason = !SETTING_KEY.test(key)
+        ? `${JSON.stringify(key)} is not a setting key.`
+        : SETTINGS.has(key)
+          ? validateSettingValue(key, "user", value)?.message
+          : undefined;
+      if (reason) rejected.push({ key, reason });
+      else {
+        set[key] = value;
+        applied.push(key);
+      }
+    }
+    const layer: SettingsLayer = { scope: "user", id };
+    const values = applied.length
+      ? await this.write(layer, set, [])
+      : await this.read(layer);
+    return { values, applied, rejected };
+  }
+
+  private write(
+    layer: SettingsLayer,
+    set: LayerValues,
+    reset: string[],
+    expected?: string,
+  ) {
     const { store, key, path: file } = this.locate(layer);
     return this.queue.run(file, async () => {
       const current = await this.read(layer);

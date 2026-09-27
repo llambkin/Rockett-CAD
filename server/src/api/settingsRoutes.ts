@@ -11,11 +11,48 @@ import {
   type SettingsStore,
 } from "../store/settingsStore.js";
 
+type SettingsOn = (route: Route, ...handlers: RequestHandler[]) => void;
+type SettingsWrap = (
+  handler: (req: Request, res: Response) => Promise<void>,
+) => RequestHandler;
+
+function registerUserSettingsRoutes(
+  on: SettingsOn,
+  wrap: SettingsWrap,
+  store: SettingsStore,
+  update: (req: Request, res: Response, layer: SettingsLayer) => Promise<void>,
+): void {
+  on(
+    ROUTES.userSettings,
+    wrap(async (_req, res) => {
+      const { values, version } = await store.readVersioned({
+        scope: "user",
+        id: res.locals.user.id,
+      });
+      res.set("ETag", version).json(values);
+    }),
+  );
+  on(
+    ROUTES.patchUserSettings,
+    wrap(async (req, res) => {
+      await update(req, res, { scope: "user", id: res.locals.user.id });
+    }),
+  );
+  on(
+    ROUTES.importUserSettings,
+    wrap(async (req, res) => {
+      const { values, applied, rejected } = await store.importUser(
+        res.locals.user.id,
+        req.body as Record<string, unknown>,
+      );
+      res.set("ETag", store.version(values)).json({ applied, rejected });
+    }),
+  );
+}
+
 export function registerSettingsRoutes(
-  on: (route: Route, ...handlers: RequestHandler[]) => void,
-  wrap: (
-    handler: (req: Request, res: Response) => Promise<void>,
-  ) => RequestHandler,
+  on: SettingsOn,
+  wrap: SettingsWrap,
   store: SettingsStore,
 ): void {
   const update = async (req: Request, res: Response, layer: SettingsLayer) => {
@@ -50,6 +87,7 @@ export function registerSettingsRoutes(
     }
   };
 
+  registerUserSettingsRoutes(on, wrap, store, update);
   on(
     ROUTES.appSettings,
     wrap(async (_req, res) => {

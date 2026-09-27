@@ -409,11 +409,12 @@ view unchanged.
 
 ### Settings layers
 
-`GET /settings` and `GET /projects/:id/settings` return the sparse app and
-project layers as key-value objects. Missing files return `{}`; clients resolve
-registered defaults and precedence with `resolveSettings`. `PATCH` on either
-path takes `{ set?, reset? }` and returns the resulting layer. GET and successful
-PATCH return a quoted layer `ETag`; PATCH requires that value in `If-Match`.
+`GET /settings`, `GET /me/settings` and `GET /projects/:id/settings` return the
+sparse app, signed-in user and project layers as key-value objects. Missing
+files return `{}`; clients resolve registered defaults and precedence with
+`resolveSettings`. `PATCH` on any of these paths takes `{ set?, reset? }` and
+returns the resulting layer. GET and successful PATCH return a quoted layer
+`ETag`; PATCH requires that value in `If-Match`.
 Missing `If-Match` returns 428, and a stale value returns 409 without writing.
 The compare and write run in the layer's serial queue. A bad patch
 writes nothing and returns 400 `validation` with `errors` containing each bad
@@ -421,6 +422,13 @@ key and `/set/<key>` path. Every call needs a session. App PATCH requires an
 administrator; project GET and PATCH use project access, with inaccessible or
 missing projects returning 404 and read-only project access returning 403 on
 PATCH.
+
+`POST /me/settings/import` takes a plain key-value object and merges its valid
+entries into the signed-in user's layer. It returns `{ applied: string[],
+rejected: [{ key, reason }] }` and the new layer `ETag`. Registered keys must
+pass user-scope validation. Unknown keys that match the settings key grammar
+are stored unchanged, so removed plugin values survive. Omitted keys remain.
+An import is limited to 1 MiB of JSON, 10,000 JSON nodes and 64 levels of nesting.
 
 ### Naming upgrade
 
