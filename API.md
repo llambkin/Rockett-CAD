@@ -412,7 +412,10 @@ view unchanged.
 `GET /settings` and `GET /projects/:id/settings` return the sparse app and
 project layers as key-value objects. Missing files return `{}`; clients resolve
 registered defaults and precedence with `resolveSettings`. `PATCH` on either
-path takes `{ set?, reset? }` and returns the resulting layer. A bad patch
+path takes `{ set?, reset? }` and returns the resulting layer. GET and successful
+PATCH return a quoted layer `ETag`; PATCH requires that value in `If-Match`.
+Missing `If-Match` returns 428, and a stale value returns 409 without writing.
+The compare and write run in the layer's serial queue. A bad patch
 writes nothing and returns 400 `validation` with `errors` containing each bad
 key and `/set/<key>` path. Every call needs a session. App PATCH requires an
 administrator; project GET and PATCH use project access, with inaccessible or

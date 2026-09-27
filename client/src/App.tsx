@@ -19,6 +19,12 @@ import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
 import { viewportHandle } from "./viewportRef";
 import { idleActionFor, sketchToolFor } from "./shortcuts";
+import { browserKeyFromPath } from "./paths";
+import {
+  closeProjectSettings,
+  loadAppSettings,
+  openProjectSettings,
+} from "./settings";
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
@@ -37,14 +43,40 @@ export function App() {
   }, []);
   useEffect(() => {
     if (session.kind !== "signed-in") return;
-    void followPath();
+    let active = true;
+    void loadAppSettings()
+      .catch((error: Error) => {
+        if (active) useStore.getState().setError(error.message);
+      })
+      .then(() => {
+        if (active) return followPath();
+      });
     window.addEventListener("popstate", followPath);
     window.addEventListener("pagehide", dropBrowserCopy);
     return () => {
+      active = false;
       window.removeEventListener("popstate", followPath);
       window.removeEventListener("pagehide", dropBrowserCopy);
     };
   }, [session.kind]);
+  useEffect(() => {
+    if (
+      session.kind !== "signed-in" ||
+      projectId === null ||
+      browserKeyFromPath(window.location.pathname) !== null
+    ) {
+      closeProjectSettings();
+      return;
+    }
+    let active = true;
+    void openProjectSettings(projectId).catch((error: Error) => {
+      if (active) useStore.getState().setError(error.message);
+    });
+    return () => {
+      active = false;
+      closeProjectSettings();
+    };
+  }, [session.kind, projectId]);
   if (session.kind !== "signed-in")
     return (
       <LoginScreen

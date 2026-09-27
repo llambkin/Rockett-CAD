@@ -1,5 +1,4 @@
 /** Typed client for the Rockett CAD REST API. */
-
 import {
   DOCUMENT_EDITS,
   AUTH_ROUTES,
@@ -31,11 +30,9 @@ import {
 import { TIMING_MS } from "./tunables";
 
 export type { Health, MutationResponse } from "@rockett/shared";
-
 const API = "/api";
 
 let health: Promise<Health> | undefined;
-
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -105,6 +102,7 @@ interface RequestOptions {
   signal?: AbortSignal | undefined;
   keepalive?: boolean;
   jobId?: string;
+  onEtag?: (etag: string | null) => void;
 }
 
 export type JobEvent =
@@ -256,6 +254,7 @@ export async function request(
     keepalive,
     jobId,
     response,
+    onEtag,
   }: RequestOptions & { response?: "blob" } = {},
 ): Promise<unknown> {
   const form = body instanceof FormData;
@@ -288,6 +287,7 @@ export async function request(
     throw error;
   }
   if (jobId) settleJob(jobId);
+  onEtag?.(res.headers.get("ETag"));
   if (response !== "blob") {
     const json = await res.json();
     received(json?.document);

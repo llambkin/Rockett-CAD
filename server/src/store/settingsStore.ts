@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 import {
   SettingsError,
   validateSettingValue,
@@ -18,6 +19,8 @@ const APP_KEY = "settings";
 
 export type SettingsLayer =
   { scope: "app" } | { scope: "user" | "project"; id: string };
+
+export class SettingsConflict extends Error {}
 
 interface SettingsFile {
   version: number;
@@ -84,7 +87,20 @@ export class SettingsStore {
     }
   }
 
-  patch(layer: SettingsLayer, { set = {}, reset = [] }: SettingsPatch) {
+  async readVersioned(layer: SettingsLayer) {
+    const values = await this.read(layer);
+    return { values, version: this.version(values) };
+  }
+
+  version(values: LayerValues): string {
+    return `"${createHash("sha256").update(JSON.stringify(values)).digest("hex")}"`;
+  }
+
+  patch(
+    layer: SettingsLayer,
+    { set = {}, reset = [] }: SettingsPatch,
+    expected?: string,
+  ) {
     const errors = Object.entries(set).flatMap(
       ([key, value]): SettingError[] => {
         const error = validateSettingValue(key, layer.scope, value);
@@ -94,7 +110,10 @@ export class SettingsStore {
     if (errors.length) return Promise.reject(new SettingsError(errors));
     const { store, key, path: file } = this.locate(layer);
     return this.queue.run(file, async () => {
-      const values = { ...(await this.read(layer)), ...set };
+      const current = await this.read(layer);
+      if (expected !== undefined && expected !== this.version(current))
+        throw new SettingsConflict("Settings changed in another session.");
+      const values = { ...current, ...set };
       for (const name of reset) delete values[name];
       await store.write(key, { version: SETTINGS_VERSION, values });
       return values;

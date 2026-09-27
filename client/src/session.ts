@@ -4,6 +4,7 @@ import { api, UnauthorizedError, watchUnauthorized } from "./api";
 import { projectIdFromPath, showPath } from "./paths";
 import { leaveBrowserProject } from "./browserSession";
 import { useStore } from "./store";
+import { clearSettings } from "./settings";
 
 type Setup = Awaited<ReturnType<typeof api.authStatus>>["setup"];
 
@@ -23,6 +24,7 @@ function returnProjectId(): string | null {
 }
 
 watchUnauthorized(() => {
+  clearSettings();
   useSession.setState(
     {
       kind: "signed-out",
@@ -84,6 +86,7 @@ export function endSession(): void {
   leaveBrowserProject();
   useStore.getState().closeProject();
   useStore.setState(useStore.getInitialState(), true);
+  clearSettings();
   showPath("/");
   useSession.setState(
     { kind: "signed-out", setup: "done", returnProjectId: null },

@@ -5,7 +5,11 @@ import {
   type Route,
   type SettingsPatch,
 } from "@rockett/shared";
-import type { SettingsLayer, SettingsStore } from "../store/settingsStore.js";
+import {
+  SettingsConflict,
+  type SettingsLayer,
+  type SettingsStore,
+} from "../store/settingsStore.js";
 
 export function registerSettingsRoutes(
   on: (route: Route, ...handlers: RequestHandler[]) => void,
@@ -15,9 +19,24 @@ export function registerSettingsRoutes(
   store: SettingsStore,
 ): void {
   const update = async (req: Request, res: Response, layer: SettingsLayer) => {
+    const expected = req.get("If-Match");
+    if (!expected)
+      return void res.status(428).json({
+        error: "Send If-Match with the settings ETag.",
+        code: "precondition_required",
+      });
     try {
-      res.json(await store.patch(layer, req.body as SettingsPatch));
+      const values = await store.patch(
+        layer,
+        req.body as SettingsPatch,
+        expected,
+      );
+      res.set("ETag", store.version(values)).json(values);
     } catch (err) {
+      if (err instanceof SettingsConflict)
+        return void res
+          .status(409)
+          .json({ error: err.message, code: "conflict" });
       if (!(err instanceof SettingsError)) throw err;
       res.status(400).json({
         error: "invalid settings",
@@ -34,7 +53,8 @@ export function registerSettingsRoutes(
   on(
     ROUTES.appSettings,
     wrap(async (_req, res) => {
-      res.json(await store.read({ scope: "app" }));
+      const { values, version } = await store.readVersioned({ scope: "app" });
+      res.set("ETag", version).json(values);
     }),
   );
   on(
@@ -48,9 +68,11 @@ export function registerSettingsRoutes(
   on(
     ROUTES.projectSettings,
     wrap(async (req, res) => {
-      res.json(
-        await store.read({ scope: "project", id: req.params.id as string }),
-      );
+      const { values, version } = await store.readVersioned({
+        scope: "project",
+        id: req.params.id as string,
+      });
+      res.set("ETag", version).json(values);
     }),
   );
   on(
