@@ -9,7 +9,7 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export type NamingVersion = 1 | 2;
 
@@ -478,6 +478,7 @@ export interface CadDocument {
   name: string;
   createdAt: string;
   modifiedAt: string;
+  modifiedBy: string | null;
   features: Feature[];
   /**
    * Timeline marker: number of features currently "active" (rolled back when
@@ -556,6 +557,7 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
     name,
     createdAt: now,
     modifiedAt: now,
+    modifiedBy: null,
     features: [],
     timelinePosition: 0,
     bodyMeta: {},

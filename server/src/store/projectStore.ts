@@ -154,6 +154,7 @@ export class ProjectStore {
           name: doc.name,
           createdAt: doc.createdAt,
           modifiedAt: doc.modifiedAt,
+          modifiedBy: doc.modifiedBy,
           featureCount: doc.features.length,
           revision: doc.revision,
           status: "ok",
@@ -171,6 +172,8 @@ export class ProjectStore {
           name: text(raw.name, id),
           createdAt: text(raw.createdAt, ""),
           modifiedAt: text(raw.modifiedAt, ""),
+          modifiedBy:
+            typeof raw.modifiedBy === "string" ? raw.modifiedBy : null,
           featureCount: Array.isArray(raw.features) ? raw.features.length : 0,
           status: tooNew ? "tooNew" : "invalid",
           error: (err as Error).message,
@@ -182,15 +185,18 @@ export class ProjectStore {
     return out;
   }
 
-  async create(name: string): Promise<CadDocument> {
+  async create(
+    name: string,
+    actor: string | null = null,
+  ): Promise<CadDocument> {
     const id = newId();
     const doc = createEmptyDocument(id, name || "Untitled");
-    await this.add(doc);
+    await this.add(doc, actor);
     return doc;
   }
 
-  private async add(doc: CadDocument): Promise<void> {
-    await this.save(doc);
+  private async add(doc: CadDocument, actor: string | null): Promise<void> {
+    await this.save(doc, actor);
     await this.storage.writeAtomic(...this.manifests.created(doc.id));
   }
 
@@ -231,10 +237,15 @@ export class ProjectStore {
     }
   }
 
-  async save(doc: CadDocument, write?: Write<CadDocument>): Promise<void> {
+  async save(
+    doc: CadDocument,
+    actor: string | null,
+    write?: Write<CadDocument>,
+  ): Promise<void> {
     const snapshot = {
       ...doc,
       modifiedAt: new Date().toISOString(),
+      modifiedBy: actor,
       savedWith: build(),
     };
     const next = (previous?: Partial<CadDocument>) => {
@@ -243,6 +254,7 @@ export class ProjectStore {
     };
     await this.documents.update(doc.id, next, write);
     doc.modifiedAt = snapshot.modifiedAt;
+    doc.modifiedBy = snapshot.modifiedBy;
     doc.revision = snapshot.revision;
     doc.savedWith = snapshot.savedWith;
   }
@@ -275,11 +287,19 @@ export class ProjectStore {
     return this.documents.exclusive(id, operation);
   }
 
-  duplicate(id: string, newName?: string): Promise<CadDocument> {
-    return this.exclusive(id, () => this.copy(id, newName));
+  duplicate(
+    id: string,
+    newName?: string,
+    actor: string | null = null,
+  ): Promise<CadDocument> {
+    return this.exclusive(id, () => this.copy(id, newName, actor));
   }
 
-  private async copy(id: string, newName?: string): Promise<CadDocument> {
+  private async copy(
+    id: string,
+    newName: string | undefined,
+    actor: string | null,
+  ): Promise<CadDocument> {
     const src = await this.load(id);
     const copy: CadDocument = JSON.parse(JSON.stringify(src));
     copy.id = newId();
@@ -296,7 +316,7 @@ export class ProjectStore {
       if (bytes) await this.blobs(copy.id).put(bytes);
     }
     await this.settings.duplicateProject(id, copy.id);
-    await this.add(copy);
+    await this.add(copy, actor);
     return copy;
   }
 
@@ -373,6 +393,7 @@ export class ProjectStore {
     assets: ReadonlyMap<string, Buffer>,
     view: ProjectView,
     temporary = false,
+    actor: string | null = null,
   ): Promise<CadDocument> {
     const id = newId();
     const images = new Set(imageBlobs(doc));
@@ -388,7 +409,7 @@ export class ProjectStore {
         await this.blobs(id).put(data);
       }
       const imported = { ...doc, id };
-      await this.add(imported);
+      await this.add(imported, actor);
       await this.views.write(id, view);
       return imported;
     } catch (error) {

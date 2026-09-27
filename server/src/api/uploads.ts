@@ -77,10 +77,13 @@ export const receiveImport = (uploads: Uploads, bytes: number) =>
   );
 
 export const discarding =
-  (uploads: Uploads, handle: (req: any, res: any) => Promise<void>) =>
-  async (req: any, res: any) => {
+  <Context>(
+    uploads: Uploads,
+    handle: (req: any, res: any, ctx: Context) => Promise<void>,
+  ) =>
+  async (req: any, res: any, ctx: Context) => {
     try {
-      await handle(req, res);
+      await handle(req, res, ctx);
     } finally {
       if (req.file) await uploads.discard(req.file);
     }

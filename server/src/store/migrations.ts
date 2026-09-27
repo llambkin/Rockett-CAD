@@ -101,7 +101,14 @@ function sortedJoinTargets(feature: Value): Value {
       ? feature.mode === "emboss"
       : feature.operation === "join";
   return joins && Array.isArray(feature.targets)
-    ? { ...feature, targets: [...feature.targets].sort(compareNames) }
+    ? {
+        ...feature,
+        targets: (
+          feature.targets as unknown as {
+            toSorted(compare: typeof compareNames): string[];
+          }
+        ).toSorted(compareNames),
+      }
     : feature;
 }
 
@@ -177,6 +184,7 @@ export const documentMigrations: Migrations<CadDocument> = {
             features: (doc.features as Value[]).map(sortedJoinTargets),
           }
         : doc,
+    20: (doc) => ({ ...doc, modifiedBy: null }),
   },
 };
 

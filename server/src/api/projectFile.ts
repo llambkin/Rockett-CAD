@@ -10,6 +10,7 @@ import {
   ValidationError,
   withShown,
   type ProjectFile,
+  type User,
 } from "@rockett/shared";
 import type { Request, Response } from "express";
 import type { FolderStore } from "../store/folderStore.js";
@@ -84,7 +85,7 @@ function placement(fields: Record<string, unknown> = {}) {
 
 export const uploadProjectFile =
   (store: ProjectStore, folders: FolderStore) =>
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response, ctx: { user: User }) => {
     const { folderId, temporary = false } = placement(req.body);
     if (!req.file) throw new ValidationError("Choose a .rockett project file");
     const file = parse(projectFileEnvelope, readJson(req.file.buffer));
@@ -120,7 +121,7 @@ export const uploadProjectFile =
       ]),
     );
     const imported = () =>
-      store.importProject(document, assets, view, temporary);
+      store.importProject(document, assets, view, temporary, ctx.user.id);
     res.json({
       document:
         folderId === undefined

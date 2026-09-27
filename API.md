@@ -79,6 +79,8 @@ The ETag of a project names its part document,
 one. `GET /projects/:id` and every document edit answer with
 `ETag: "<revision>"`, the same value as `document.revision`. `GET /projects`
 gives each readable project's `revision`.
+The document and project summary carry `modifiedBy`, the ID of the user who
+last saved it, or `null` for a project last saved before attribution existed.
 
 The document edits, listed in `DOCUMENT_EDITS` in `shared/src/routes.ts`, are
 rename, `PUT /document`, import into a project, the feature, timeline,

@@ -610,6 +610,10 @@ caller sent, so a new project saves as 1 and a read never changes it.
 build that wrote the file. The 6 to 7 migration adds `revision: 0` and
 `savedWith: null`.
 
+Schema version 21 adds `modifiedBy` beside `modifiedAt`. A save records the
+signed-in actor's user ID; the 20 to 21 migration sets it to `null` for older
+projects, after backing up the complete project generation.
+
 ## Extensions (schema 10)
 
 `extensions` holds data that modules keep in the document, keyed by a dotted

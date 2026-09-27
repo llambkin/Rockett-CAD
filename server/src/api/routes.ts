@@ -20,6 +20,7 @@ import {
   type Method,
   type Route,
   type SizedFeature,
+  type User,
   unsignedRefs,
 } from "@rockett/shared";
 import { build } from "../build.js";
@@ -197,11 +198,15 @@ export function createApiRouter(
   // Serialize the whole load/edit/save/evaluate operation for each project.
   // Locking only save() would still allow two requests to edit stale copies.
   const wrap =
-    (fn: (req: any, res: any) => Promise<void>) => (req: any, res: any) => {
+    (fn: (req: any, res: any, ctx: { user: User }) => Promise<void>) =>
+    (req: any, res: any) => {
+      const user: User | undefined = res.locals.user;
+      if (!user) return fail(req, res, new Error("auth middleware missing"));
+      const ctx = { user };
       const { id } = req.params;
       const result = id
-        ? projects.run(id, () => store.touch(id).then(() => fn(req, res)))
-        : fn(req, res);
+        ? projects.run(id, () => store.touch(id).then(() => fn(req, res, ctx)))
+        : fn(req, res, ctx);
       result.catch((err) => fail(req, res, err));
     };
 
@@ -278,7 +283,7 @@ export function createApiRouter(
 
   const mutateProject = (edit: Edit) =>
     wrap(
-      discarding(store.uploads, async (req, res) => {
+      discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
         const tx = transactionId(req.get(TX_HEADER));
         const loaded = await editable(req, res);
         const {
@@ -290,8 +295,8 @@ export function createApiRouter(
         } = await edit(loaded, req);
         const evaluation = await evaluateAndSync(document, position);
         await (label === undefined
-          ? history.move(document, cursor)
-          : history.save(document, label, tx));
+          ? history.move(document, cursor, ctx.user.id)
+          : history.save(document, label, tx, ctx.user.id));
         await send(res, document, evaluation, extra);
       }),
     );
@@ -323,13 +328,15 @@ export function createApiRouter(
 
   on(
     ROUTES.createProject,
-    wrap(async (req, res) => {
+    wrap(async (req, res, ctx) => {
       const name = (req.body.name ?? "Untitled").slice(0, 200);
       const { folderId } = req.body;
       const doc =
         folderId === undefined
-          ? await store.create(name)
-          : await folders.createIn(folderId, () => store.create(name));
+          ? await store.create(name, ctx.user.id)
+          : await folders.createIn(folderId, () =>
+              store.create(name, ctx.user.id),
+            );
       res.json({ document: doc });
     }),
   );
@@ -360,10 +367,11 @@ export function createApiRouter(
 
   on(
     ROUTES.duplicateProject,
-    wrap(async (req, res) => {
+    wrap(async (req, res, ctx) => {
       const copy = await store.duplicate(
         req.params.id,
         req.body.name ? req.body.name.slice(0, 200) : undefined,
+        ctx.user.id,
       );
       res.json({ document: copy });
     }),
@@ -371,10 +379,10 @@ export function createApiRouter(
 
   on(
     ROUTES.renameProject,
-    wrap(async (req, res) => {
+    wrap(async (req, res, ctx) => {
       const doc = await editable(req, res);
       doc.name = (req.body.name ?? doc.name).slice(0, 200);
-      await history.save(doc);
+      await history.save(doc, undefined, undefined, ctx.user.id);
       await send(res, doc);
     }),
   );
@@ -450,13 +458,16 @@ export function createApiRouter(
     ROUTES.importStep,
     receiveStep,
     wrap(
-      discarding(store.uploads, async (req, res) => {
+      discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
         const upload = await received(req);
-        const doc = await store.create(upload.filename.replace(/\.[^.]*$/, ""));
+        const doc = await store.create(
+          upload.filename.replace(/\.[^.]*$/, ""),
+          ctx.user.id,
+        );
         try {
           await insert(doc, upload);
           const evaluation = await evaluateAndSync(doc);
-          await store.save(doc);
+          await store.save(doc, ctx.user.id);
           await send(res, doc, evaluation);
         } catch (error) {
           kernel.drop(doc.id);

@@ -426,6 +426,7 @@ export const documentSchema = Type.Refine(
     name: text,
     createdAt: text,
     modifiedAt: text,
+    modifiedBy: Type.Union([text, Type.Null()]),
     features: Type.Array(Type.Unknown()),
     timelinePosition: Type.Integer({ minimum: 0 }),
     bodyMeta: Type.Record(Type.String(), Type.Object({ name: Type.String() })),

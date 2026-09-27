@@ -183,9 +183,14 @@ export class HistoryStore {
     private readonly store: ProjectStore,
   ) {}
 
-  save(doc: CadDocument, label?: string, tx?: string): Promise<void> {
-    if (label === undefined) return this.commit(doc);
-    return this.commit(doc, async (opened, revision, file, text) => {
+  save(
+    doc: CadDocument,
+    label?: string,
+    tx?: string,
+    actor: string | null = null,
+  ): Promise<void> {
+    if (label === undefined) return this.commit(doc, actor);
+    return this.commit(doc, actor, async (opened, revision, file, text) => {
       const added: Buffer[] = [];
       if (!opened) {
         const stored = await gzip(await this.storage.read(file), FAST);
@@ -255,8 +260,12 @@ export class HistoryStore {
     return { ...document, name: current.name };
   }
 
-  move(doc: CadDocument, cursor: number): Promise<void> {
-    return this.commit(doc, async (opened, revision) => {
+  move(
+    doc: CadDocument,
+    cursor: number,
+    actor: string | null = null,
+  ): Promise<void> {
+    return this.commit(doc, actor, async (opened, revision) => {
       if (!opened)
         throw new StoreError(`project ${doc.id} has no history to move`);
       return [frame({ kind: "cursor", position: cursor, revision })];
@@ -273,12 +282,16 @@ export class HistoryStore {
     };
   }
 
-  private async commit(doc: CadDocument, records?: Records): Promise<void> {
+  private async commit(
+    doc: CadDocument,
+    actor: string | null,
+    makeRecords?: Records,
+  ): Promise<void> {
     const { id } = doc;
-    await this.store.save(doc, async (file, text, saved) => {
+    await this.store.save(doc, actor, async (file, text, saved) => {
       const opened = await this.open(id, async () => saved.revision - 1);
-      if (!records) return this.storage.writeAtomic(file, text);
-      const added = await records(opened, saved.revision, file, text);
+      if (!makeRecords) return this.storage.writeAtomic(file, text);
+      const added = await makeRecords(opened, saved.revision, file, text);
       await this.append(id, opened, added, () =>
         this.storage.writeAtomic(file, text),
       );
