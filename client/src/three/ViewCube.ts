@@ -137,6 +137,7 @@ export class ViewCube {
       if (!wasDrag) this.click(e);
     });
     el.addEventListener("pointercancel", endDrag);
+    el.addEventListener("webglcontextrestored", viewport.requestRender);
 
     this.stopRendering = viewport.onRender(() => this.render());
     viewport.requestRender();

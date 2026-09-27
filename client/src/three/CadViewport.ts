@@ -176,6 +176,10 @@ export class CadViewport {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setClearColor(themeColor("viewport-bg"));
+    this.renderer.domElement.addEventListener(
+      "webglcontextrestored",
+      this.requestRender,
+    );
     container.appendChild(this.renderer.domElement);
 
     const aspect = 1;
