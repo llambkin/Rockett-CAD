@@ -30,7 +30,7 @@ import { renderSketches, type SketchRenderInput } from "../three/sketchRender";
 import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
 import { themeColor } from "../theme/tokens";
-import { SKETCH_APPEARANCE } from "../tunables";
+import { SKETCH_APPEARANCE, TIMING_MS } from "../tunables";
 import { buildRevolveGhost } from "../three/revolveGhost";
 import { RevolveGizmo, ringThrough } from "../three/RevolveGizmo";
 import {
@@ -3001,6 +3001,21 @@ function ViewportHud() {
   const mode = useStore((s) => s.mode);
   const evaluation = useStore((s) => s.evaluation);
   const draftSketch = useStore((s) => s.draftSketch);
+  const job = useStore((s) => s.job);
+  const jobStartedAt = useStore((s) => s.jobStartedAt);
+  const cancelJob = useStore((s) => s.cancelJob);
+  const [showJob, setShowJob] = useState(false);
+
+  useEffect(() => {
+    setShowJob(false);
+    if (jobStartedAt === null) return;
+    const remaining = Math.max(
+      0,
+      jobStartedAt + TIMING_MS.jobHintDelay - Date.now(),
+    );
+    const timer = window.setTimeout(() => setShowJob(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [jobStartedAt]);
 
   let hint = "";
   if (mode.name === "pickPlane")
@@ -3051,7 +3066,24 @@ function ViewportHud() {
 
   return (
     <>
-      {hint && <div className="viewport-hint">{hint}</div>}
+      {(showJob && jobStartedAt !== null) || hint ? (
+        <div className="viewport-hint">
+          {showJob && jobStartedAt !== null ? (
+            <>
+              {job ? `${job.label} · ${job.done} of ${job.total}` : "Working…"}{" "}
+              <button
+                className="btn"
+                style={{ pointerEvents: "auto" }}
+                onClick={() => void cancelJob()}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            hint
+          )}
+        </div>
+      ) : null}
       {sketchBadge && (
         <div className={`sketch-status ${sketchBadge.cls}`}>
           {sketchBadge.label}

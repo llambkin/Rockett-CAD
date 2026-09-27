@@ -1,4 +1,5 @@
 client/src/App.tsx Workspace 137
+client/src/api.ts 566
 client/src/components/ControlsHelp.tsx ControlsHelp 121
 client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/FeatureDialog.tsx 888
@@ -16,7 +17,8 @@ client/src/components/Timeline.tsx openFeatureEditor 94
 client/src/components/Toolbar.tsx SketchToolbar 117
 client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3107
+client/src/components/ViewportView.tsx 3139
+client/src/components/ViewportView.tsx ViewportHud 95
 client/src/components/ViewportView.tsx ViewportView 2904
 client/src/components/ViewportView.tsx handleHover 138
 client/src/components/ViewportView.tsx handlePrimaryUp 178
@@ -30,9 +32,9 @@ client/src/components/form/fields.tsx 503
 client/src/features/constructionPlane.tsx PlaneForm 109
 client/src/features/referenceImage.tsx ReferenceImagePanel 188
 client/src/sketchTools.ts 975
-client/src/store.ts 1285
+client/src/store.ts 1322
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 792
+client/src/store.ts useStore 805
 client/src/three/CadViewport.ts 1079
 client/src/three/CadViewport.ts addHighlight 107
 client/src/three/CadViewport.ts buildBody 87

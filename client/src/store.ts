@@ -177,6 +177,8 @@ interface State {
   evaluation: EvaluateResult | null;
   view: ProjectView;
   busy: boolean;
+  job: { label: string; done: number; total: number } | null;
+  jobStartedAt: number | null;
   error: string | null;
   notSaved: string | null;
   saveState: "saved" | "saving" | "unsaved";
@@ -211,6 +213,7 @@ interface State {
   undo: () => Promise<void>;
   redo: () => Promise<void>;
   setError: (e: string | null) => void;
+  cancelJob: () => Promise<void>;
 
   setSelection: (s: Selection[]) => void;
   toggleSelection: (s: Selection, additive: boolean) => void;
@@ -497,6 +500,8 @@ export const useStore = create<State>((set, get) => ({
   evaluation: null,
   view: emptyView(),
   busy: false,
+  job: null,
+  jobStartedAt: null,
   error: null,
   notSaved: null,
   saveState: "saved",
@@ -514,7 +519,8 @@ export const useStore = create<State>((set, get) => ({
 
   async openProject(id, path = projectPath(id)) {
     void get().cancelPreview();
-    set({ busy: true, error: null });
+    api.forgetJob?.();
+    set({ busy: true, error: null, job: null, jobStartedAt: null });
     try {
       const [{ document }, view] = await Promise.all([
         api.getProject(id),
@@ -548,6 +554,7 @@ export const useStore = create<State>((set, get) => ({
   },
   closeProject() {
     void get().cancelPreview();
+    api.forgetJob?.();
     unsent = [];
     api.forgetMeshes();
     set({
@@ -566,6 +573,8 @@ export const useStore = create<State>((set, get) => ({
       dialogParams: {},
       previewBaseline: null,
       busy: false,
+      job: null,
+      jobStartedAt: null,
     });
   },
 
@@ -746,6 +755,13 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setError: (e) => set({ error: e }),
+  async cancelJob() {
+    try {
+      await api.cancelJob();
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  },
 
   setSelection: (s) => set({ selection: s, measureResult: null }),
   toggleSelection(s, additive) {
@@ -1283,3 +1299,24 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 }));
+
+api.watchJob?.((event) => {
+  if (event.type === "start") {
+    useStore.setState({ job: null, jobStartedAt: Date.now() });
+    return;
+  }
+  if (event.type === "progress") {
+    useStore.setState({
+      job: { label: event.label, done: event.done, total: event.total },
+    });
+    return;
+  }
+  useStore.setState((state) => ({
+    job: null,
+    jobStartedAt: null,
+    ...(event.type === "cancelled" && {
+      error: state.error ?? "Job cancelled.",
+    }),
+    ...(event.type === "failed" && { error: state.error ?? "Job failed." }),
+  }));
+});

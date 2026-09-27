@@ -27,6 +27,7 @@ import {
   type WireEvaluateResult,
   type WireMutationResponse,
 } from "@rockett/shared";
+import { TIMING_MS } from "./tunables";
 
 export type { Health, MutationResponse } from "@rockett/shared";
 
@@ -102,6 +103,102 @@ interface RequestOptions {
   headers?: Record<string, string>;
   signal?: AbortSignal | undefined;
   keepalive?: boolean;
+  jobId?: string;
+}
+
+export type JobEvent =
+  | { type: "start"; id: string }
+  | { type: "progress"; id: string; label: string; done: number; total: number }
+  | { type: "done" | "failed" | "cancelled"; id: string };
+
+let onJob: ((event: JobEvent) => void) | null = null;
+let activeJob: {
+  id: string;
+  source: EventSource | null;
+  timer: ReturnType<typeof setTimeout>;
+  settleTimer?: ReturnType<typeof setTimeout>;
+} | null = null;
+
+export function watchJob(handler: ((event: JobEvent) => void) | null): void {
+  onJob = handler;
+}
+
+function startJob(id: string): void {
+  forgetJob();
+  if (typeof EventSource === "undefined") return;
+  onJob?.({ type: "start", id });
+  const timer = setTimeout(() => subscribeJob(id), TIMING_MS.jobHintDelay);
+  activeJob = { id, source: null, timer };
+}
+
+function subscribeJob(id: string): void {
+  if (activeJob?.id !== id) return;
+  const source = new EventSource(
+    API + pathFor(ROUTES.jobEvents, { jobId: id }),
+  );
+  activeJob.source = source;
+  source.addEventListener("progress", (event) => {
+    if (activeJob?.id !== id) return;
+    let data: unknown;
+    try {
+      data = JSON.parse((event as MessageEvent).data);
+    } catch {
+      return;
+    }
+    if (!data || typeof data !== "object") return;
+    const { label, done, total } = data as Record<string, unknown>;
+    if (
+      typeof label === "string" &&
+      typeof done === "number" &&
+      typeof total === "number" &&
+      Number.isFinite(done) &&
+      Number.isFinite(total)
+    )
+      onJob?.({ type: "progress", id, label, done, total });
+  });
+  for (const type of ["done", "failed", "cancelled"] as const)
+    source.addEventListener(type, () => {
+      if (activeJob?.id !== id) return;
+      forgetJob();
+      onJob?.({ type, id });
+    });
+}
+
+function settleJob(id: string): void {
+  if (activeJob?.id !== id) return;
+  if (activeJob.source) {
+    activeJob.settleTimer = setTimeout(
+      () => finishJob(id),
+      TIMING_MS.jobTerminalWait,
+    );
+    return;
+  }
+  finishJob(id);
+}
+
+function finishJob(id: string): void {
+  if (activeJob?.id !== id) return;
+  forgetJob();
+  onJob?.({ type: "done", id });
+}
+
+export function cancelJob(): Promise<{ ok: true }> {
+  const id = activeJob?.id;
+  return id
+    ? request<{ ok: true }>(
+        ROUTES.cancelJob.method,
+        pathFor(ROUTES.cancelJob, { jobId: id }),
+      )
+    : Promise.resolve({ ok: true });
+}
+
+export function forgetJob(): void {
+  if (activeJob) {
+    clearTimeout(activeJob.timer);
+    clearTimeout(activeJob.settleTimer);
+    activeJob.source?.close();
+  }
+  activeJob = null;
 }
 
 export interface ProjectWatch {
@@ -156,6 +253,7 @@ export async function request(
     headers,
     signal,
     keepalive,
+    jobId,
     response,
   }: RequestOptions & { response?: "blob" } = {},
 ): Promise<unknown> {
@@ -164,8 +262,9 @@ export async function request(
   const sent = {
     ...(body !== undefined && !form && { "Content-Type": "application/json" }),
     ...headers,
+    ...(jobId && { "Rockett-Job": jobId }),
   };
-  const res = await fetch(API + path, {
+  const pending = fetch(API + path, {
     method,
     ...(Object.keys(sent).length > 0 && { headers: sent }),
     ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
@@ -175,12 +274,19 @@ export async function request(
     if (e instanceof Error && e.name === "AbortError") throw e;
     throw new ApiError("Could not reach the server.", 0, "internal");
   });
+  if (jobId) startJob(jobId);
+  const res = await pending.catch((error: unknown) => {
+    if (jobId) finishJob(jobId);
+    throw error;
+  });
   if (!res.ok) {
+    if (jobId) finishJob(jobId);
     const error = await toApiError(res);
     if (error instanceof UnauthorizedError) onUnauthorized?.();
     if (res.status === 404) watch?.onMissing();
     throw error;
   }
+  if (jobId) settleJob(jobId);
   if (response !== "blob") {
     const json = await res.json();
     received(json?.document);
@@ -228,6 +334,9 @@ function send<P extends string, Req, Res>(
   return request<Res>(route.method, pathFor(route, params) + query, {
     body,
     signal,
+    ...((DOCUMENT_EDITS.has(route) || route === ROUTES.importStep) && {
+      jobId: crypto.randomUUID(),
+    }),
     ...(revision !== undefined && {
       headers: { "If-Match": `"${revision}"` },
     }),
@@ -287,6 +396,9 @@ function fileForm(name: string, file: File): FormData {
 }
 
 export const api = {
+  watchJob,
+  cancelJob,
+  forgetJob,
   authStatus: () => send(AUTH_ROUTES.status, {}),
   me: () => send(AUTH_ROUTES.me, {}),
   login: (username: string, password: string) =>
