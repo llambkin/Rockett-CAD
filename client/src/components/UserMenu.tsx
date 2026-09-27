@@ -2,16 +2,20 @@ import { useState } from "react";
 import { signOut, useSession } from "../session";
 import { useStore } from "../store";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { PasswordDialog } from "./PasswordDialog";
 
 export function UserMenu() {
   const session = useSession();
   const [position, setPosition] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const setError = useStore((state) => state.setError);
   if (session.kind !== "signed-in") return null;
 
-  const items: MenuItem[] = [{ label: "Change password", disabled: true }];
+  const items: MenuItem[] = [
+    { label: "Change password", action: () => setPasswordOpen(true) },
+  ];
   if (session.user.role === "admin")
     items.push({ label: "Users", disabled: true });
   items.push({
@@ -38,6 +42,9 @@ export function UserMenu() {
           items={items}
           onClose={() => setPosition(null)}
         />
+      )}
+      {passwordOpen && (
+        <PasswordDialog onClose={() => setPasswordOpen(false)} />
       )}
     </>
   );

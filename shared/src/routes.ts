@@ -147,6 +147,14 @@ export const setupBody = Type.Object(
   { additionalProperties: false },
 );
 
+export const passwordChangeBody = Type.Object(
+  {
+    current: Type.String({ minLength: 1, maxLength: 256 }),
+    next: Type.String({ minLength: 1, maxLength: 1024 }),
+  },
+  { additionalProperties: false },
+);
+
 export const AUTH_ROUTES = {
   status: route<never, { setup: "needs-token" | "ready" | "done" }>()(
     "GET",
@@ -163,6 +171,11 @@ export const AUTH_ROUTES = {
   ),
   logout: route<never, { ok: true }>()("POST", "/auth/logout"),
   me: route<never, User>()("GET", "/me"),
+  passwordChange: route<{ current: string; next: string }, { ok: true }>()(
+    "POST",
+    "/me/password",
+    passwordChangeBody,
+  ),
 };
 
 const name = Type.Object({ name: Type.Optional(Type.String()) });

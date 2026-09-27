@@ -121,6 +121,26 @@ export class UserStore {
     });
   }
 
+  changePassword(
+    id: string,
+    expectedHash: string,
+    passwordHash: string,
+  ): Promise<boolean> {
+    return this.queue.run(KEY, async () => {
+      const file = await this.read();
+      const index = file.users.findIndex((record) => record.id === id);
+      const current = file.users[index];
+      if (!current || current.passwordHash !== expectedHash) return false;
+      file.users[index] = check({
+        ...current,
+        passwordHash,
+        modifiedAt: new Date(this.now()).toISOString(),
+      });
+      await this.file.write(KEY, file);
+      return true;
+    });
+  }
+
   private async read(): Promise<UsersFile> {
     let file: UsersFile;
     try {

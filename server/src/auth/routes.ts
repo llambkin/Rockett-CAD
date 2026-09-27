@@ -1,5 +1,10 @@
 import { Router, json, type Response } from "express";
-import { AUTH_ROUTES, loginBody, parse } from "@rockett/shared";
+import {
+  AUTH_ROUTES,
+  loginBody,
+  parse,
+  passwordChangeBody,
+} from "@rockett/shared";
 import { registerBootstrapRoutes } from "./bootstrap.js";
 import {
   cookieConfig,
@@ -7,7 +12,12 @@ import {
   sessionCookie,
   type CookieConfig,
 } from "./cookie.js";
-import { DUMMY_HASH, verifyPassword } from "./password.js";
+import {
+  checkPasswordPolicy,
+  DUMMY_HASH,
+  hashPassword,
+  verifyPassword,
+} from "./password.js";
 import { AuthRateLimiter, HashCapacityError } from "./rateLimit.js";
 import type { SessionStore } from "./sessions.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
@@ -38,6 +48,58 @@ function registerSetupGuard(router: Router, limiter: AuthRateLimiter): void {
         else if (res.statusCode === 403) limiter.failure(username, ip);
       });
       next();
+    },
+  );
+}
+
+function registerPasswordChange(
+  router: Router,
+  users: UserStore,
+  sessions: SessionStore,
+  cookie: CookieConfig,
+  limiter: AuthRateLimiter,
+  verify: typeof verifyPassword,
+): void {
+  router.post(
+    AUTH_ROUTES.passwordChange.path,
+    json({ limit: "2kb" }),
+    async (req, res, next) => {
+      try {
+        const { current, next: nextPassword } = parse(
+          passwordChangeBody,
+          req.body ?? {},
+        );
+        const { id, username } = res.locals.user;
+        const ip = req.ip ?? "";
+        const wait = limiter.check(username, ip);
+        if (wait !== null) return refused(res, wait);
+        const record = await users.get(id);
+        if (
+          !record ||
+          !(await limiter.hash(() => verify(current, record.passwordHash)))
+        ) {
+          limiter.failure(username, ip);
+          return res.status(403).json({ error: "Incorrect current password." });
+        }
+        if (!checkPasswordPolicy(nextPassword))
+          return res
+            .status(400)
+            .json({ error: "Password must be 12 to 256 characters." });
+        const passwordHash = await limiter.hash(() =>
+          hashPassword(nextPassword),
+        );
+        if (
+          !(await users.changePassword(id, record.passwordHash, passwordHash))
+        )
+          return res.status(403).json({ error: "Incorrect current password." });
+        limiter.success(username);
+        sessions.revokeUser(id);
+        const token = sessions.create(id);
+        res.set("Set-Cookie", sessionCookie(cookie, token));
+        res.json({ ok: true });
+      } catch (err) {
+        next(err);
+      }
     },
   );
 }
@@ -92,6 +154,7 @@ export function createAuthRouter(
     res.json({ ok: true });
   });
   router.get(AUTH_ROUTES.me.path, (_req, res) => res.json(res.locals.user));
+  registerPasswordChange(router, users, sessions, cookie, limiter, verify);
   router.use(
     (
       err: unknown,

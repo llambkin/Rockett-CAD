@@ -299,6 +299,8 @@ export const api = {
       { body: { token, username, displayName, password } },
     ),
   logout: () => send(AUTH_ROUTES.logout, {}),
+  changePassword: (current: string, next: string) =>
+    send(AUTH_ROUTES.passwordChange, {}, { body: { current, next } }),
   health: () => (health ??= send(ROUTES.health, {})),
   formats: () => send(ROUTES.formats, {}),
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
