@@ -1,9 +1,41 @@
 import { useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import type { EvaluateResult } from "@rockett/shared";
 import { api } from "./api";
 import { createLivePreview } from "./livePreview";
-import { useStore } from "./store";
+import { useStore, type Selection } from "./store";
 import { TIMING_MS } from "./tunables";
+
+const peeked = create<{ featureId: string | null }>(() => ({
+  featureId: null,
+}));
+
+export const usePeekedFeature = () => peeked((s) => s.featureId);
+
+const NAMER = /^(?:f|m|p\d+):/;
+
+export function peekHighlight(
+  evaluation: EvaluateResult,
+  featureId: string,
+): Selection[] {
+  if (evaluation.planes.some((p) => p.featureId === featureId))
+    return [
+      { kind: "plane", ref: { kind: "construction", featureId }, label: "" },
+    ];
+  const made = (name: string) => {
+    const head = NAMER.exec(name)?.[0];
+    return !!head && name.startsWith(`${featureId}:`, head.length);
+  };
+  return evaluation.bodies.flatMap((b) =>
+    b.faces
+      .filter((f) => made(f.name))
+      .map((f) => ({
+        kind: "face" as const,
+        bodyId: b.bodyId,
+        faceName: f.name,
+      })),
+  );
+}
 
 function createTimelinePeek(blocked: () => boolean) {
   let shown: { saved: EvaluateResult; peek: EvaluateResult } | null = null;
@@ -27,11 +59,13 @@ function createTimelinePeek(blocked: () => boolean) {
         return;
       shown = { saved: evaluation, peek };
       useStore.setState({ evaluation: peek });
+      peeked.setState({ featureId: fid });
     },
   });
   const leave = () => {
     live.cancel();
     seq++;
+    peeked.setState({ featureId: null });
     if (shown && useStore.getState().evaluation === shown.peek)
       useStore.setState({ evaluation: shown.saved });
     shown = null;

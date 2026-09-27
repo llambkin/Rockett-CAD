@@ -29,6 +29,7 @@ export interface SketchRenderInput {
   dim?: boolean;
   /** false: curves render but can't be picked (used sketches in idle) */
   curvesPickable?: boolean;
+  lit?: boolean;
 }
 
 export function renderSketches(
@@ -81,6 +82,7 @@ function renderKey(
     [...(sk.usedProfileIds ?? [])],
     sk.dim ?? false,
     sk.curvesPickable ?? true,
+    sk.lit ?? false,
     selection.filter(mine).map(selectionKey),
     hover && mine(hover) ? selectionKey(hover) : null,
     hover?.kind === "sketchEntity" && mine(hover)
@@ -187,7 +189,7 @@ function buildSketch(
     if (positions.length < 2) continue;
     const key = `se:${sk.sketchId}:${e.id}`;
     const isSel = selKeys.has(key);
-    const isHover = hoverKey === key && !piece;
+    const isHover = (hoverKey === key && !piece) || !!sk.lit;
     if (hoverKey === key && piece) group.add(hoverPiece(sk.frame, piece));
     const token = isSel
       ? "selection"

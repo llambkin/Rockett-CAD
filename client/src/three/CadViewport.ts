@@ -1010,50 +1010,70 @@ export class CadViewport {
     this.requestRender();
   }
 
+  addHighlights(sels: Selection[], kind: "select" | "hover") {
+    this.requestRender();
+    const faces = new Map<string, Set<string>>();
+    for (const s of sels) {
+      if (s.kind !== "face") this.addHighlight(s, kind);
+      else
+        faces.set(s.bodyId, (faces.get(s.bodyId) ?? new Set()).add(s.faceName));
+    }
+    for (const [bodyId, names] of faces)
+      this.addFaceHighlight(bodyId, names, kind);
+  }
+
+  private addFaceHighlight(
+    bodyId: string,
+    names: ReadonlySet<string> | null,
+    kind: "select" | "hover",
+  ) {
+    const src = this.bodies.get(bodyId)?.payload;
+    if (!src) return;
+    const index = names
+      ? src.faces
+          .filter((f) => names.has(f.name))
+          .flatMap((f) => src.indices.slice(f.start, f.start + f.count))
+      : src.indices;
+    if (index.length === 0) return;
+    const token = kind === "select" ? "selection" : "hover";
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(src.positions, 3),
+    );
+    geom.setAttribute(
+      "normal",
+      new THREE.Float32BufferAttribute(src.normals, 3),
+    );
+    geom.setIndex(index);
+    const mesh = new THREE.Mesh(
+      geom,
+      new THREE.MeshBasicMaterial({
+        color: themeColor(token),
+        transparent: true,
+        opacity: HIGHLIGHT_APPEARANCE.faceOpacity[kind],
+        depthTest: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      }),
+    );
+    mesh.renderOrder = 5;
+    mesh.userData.themeToken = token;
+    this.overlayRoot.add(mesh);
+    this.highlightObjects.push(mesh);
+  }
+
   addHighlight(sel: Selection, kind: "select" | "hover") {
     this.requestRender();
     const token = kind === "select" ? "selection" : "hover";
     const color = themeColor(token);
     if (sel.kind === "face" || sel.kind === "body") {
-      const b = this.bodies.get(sel.bodyId);
-      if (!b) return;
-      const src = b.payload;
-      let ranges: { start: number; count: number }[];
-      if (sel.kind === "face") {
-        const f = src.faces.find((x) => x.name === sel.faceName);
-        if (!f) return;
-        ranges = [f];
-      } else {
-        ranges = [{ start: 0, count: src.indices.length }];
-      }
-      for (const r of ranges) {
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(src.positions, 3),
-        );
-        geom.setAttribute(
-          "normal",
-          new THREE.Float32BufferAttribute(src.normals, 3),
-        );
-        geom.setIndex(src.indices.slice(r.start, r.start + r.count));
-        const mesh = new THREE.Mesh(
-          geom,
-          new THREE.MeshBasicMaterial({
-            color,
-            transparent: true,
-            opacity: HIGHLIGHT_APPEARANCE.faceOpacity[kind],
-            depthTest: true,
-            polygonOffset: true,
-            polygonOffsetFactor: -2,
-            polygonOffsetUnits: -2,
-          }),
-        );
-        mesh.renderOrder = 5;
-        mesh.userData.themeToken = token;
-        this.overlayRoot.add(mesh);
-        this.highlightObjects.push(mesh);
-      }
+      this.addFaceHighlight(
+        sel.bodyId,
+        sel.kind === "face" ? new Set([sel.faceName]) : null,
+        kind,
+      );
     } else if (sel.kind === "edge" || sel.kind === "axis") {
       const points =
         sel.kind === "axis"
@@ -1099,11 +1119,18 @@ export class CadViewport {
       pt.userData.themeToken = token;
       this.overlayRoot.add(pt);
       this.highlightObjects.push(pt);
-    } else if (sel.kind === "plane" && sel.ref.kind === "origin") {
-      const mesh = this.originPlaneMeshes.find(
-        (m) => m.userData.originPlane === (sel.ref as any).plane,
-      );
+    } else if (sel.kind === "plane" && sel.ref.kind !== "face") {
+      const ref = sel.ref;
+      const mesh =
+        ref.kind === "origin"
+          ? this.originPlaneMeshes.find(
+              (m) => m.userData.originPlane === ref.plane,
+            )
+          : (this.planes.group.children.find(
+              (m) => m.userData.constructionPlane === ref.featureId,
+            ) as THREE.Mesh | undefined);
       if (mesh) {
+        mesh.updateWorldMatrix(true, false);
         const clone = new THREE.Mesh(
           (mesh.geometry as THREE.BufferGeometry).clone(),
           new THREE.MeshBasicMaterial({

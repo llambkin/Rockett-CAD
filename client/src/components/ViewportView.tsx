@@ -77,6 +77,7 @@ import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { repick } from "./RefRepair";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
+import { peekHighlight, usePeekedFeature } from "../timelinePeek";
 
 interface DimEditField {
   constraintId: string;
@@ -120,6 +121,7 @@ export function ViewportView() {
   const mode = useStore((s) => s.mode);
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
+  const peeked = usePeekedFeature();
   const draftSketch = useStore((s) => s.draftSketch);
   const dialogParams = useStore((s) => s.dialogParams);
   const previewBaseline = useStore((s) => s.previewBaseline);
@@ -422,6 +424,7 @@ export function ViewportView() {
         // used sketches draw dimmer; hide the sketch (eye) to get at body
         // edges underneath its curves
         dim: used,
+        lit: sk.featureId === peeked,
       });
     }
     renderSketches(vp, inputs, selection, hover);
@@ -472,6 +475,7 @@ export function ViewportView() {
     vp.clearHighlights();
     for (const s of selection) vp.addHighlight(s, "select");
     if (hover) vp.addHighlight(hover, "hover");
+    if (peeked) vp.addHighlights(peekHighlight(evaluation, peeked), "hover");
   }, [
     evaluation,
     document_,
@@ -479,6 +483,7 @@ export function ViewportView() {
     mode,
     selection,
     hover,
+    peeked,
     draftSketch,
     baseLoads,
     units,

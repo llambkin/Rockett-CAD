@@ -58,7 +58,7 @@ everything downstream against persistent topology references.
 - **Origin axes**: pick X, Y or Z in the model tree or at the origin as a revolve or pattern axis.
 - **Drag handles**: every feature with a main value, from extrude distance to pattern spacing, has an arrow or arc to drag.
 - **Reference images**: place PNG, JPEG or WebP images on planes and calibrate them to real size.
-- **Feature timeline**: click to select bodies, rename, edit, quick edit, hover preview, suppress, delete, roll back, insert; broken references flagged, never guessed.
+- **Feature timeline**: click selects bodies; rename, edit, quick edit, hover preview and highlight, suppress, delete, rollback, insert; broken references flagged, never guessed.
 - **Job progress**: long model changes show Working, feature counts when available, and Cancel in the viewport.
 - **Crash recovery**: a crashed kernel flags the running feature and blocks dependent geometry and exports until that feature is edited.
 - **Reference repair**: in the feature's dialog, accept or choose a proposed face or edge for a broken reference, or re-pick it.
