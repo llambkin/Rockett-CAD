@@ -26,6 +26,8 @@ services:
       ROCKETT_ALLOWED_ORIGINS: ${ROCKETT_ALLOWED_ORIGINS:-}
       ROCKETT_SETUP_TOKEN: ${ROCKETT_SETUP_TOKEN:-}
       ROCKETT_COOKIE_SECURE: ${ROCKETT_COOKIE_SECURE:-}
+      ROCKETT_CF_ACCESS_TEAM: ${ROCKETT_CF_ACCESS_TEAM:-}
+      ROCKETT_CF_ACCESS_AUD: ${ROCKETT_CF_ACCESS_AUD:-}
     labels:
       com.centurylinklabs.watchtower.enable: "false"
     volumes:

@@ -34,23 +34,27 @@ returns 403 `{ "error": "Origin not allowed" }`, before session checking.
 Auth and user routes return `{ "error": string }` on failure rather than the
 CAD `ApiErrorBody` codes above. Project access errors can use those codes.
 
-| Route                           | Request                                                                             | Response                                                                                          |
-| ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `GET /api/auth/status`          | None; public                                                                        | `{ "setup": value }`, where value is `needs-token`, `ready` or `done`                             |
-| `POST /api/auth/setup`          | `{ token, username, displayName, password }`; public until the first account exists | 201 public `User`; 403 for an invalid token, 409 after setup                                      |
-| `POST /api/auth/login`          | `{ username, password }`; public                                                    | Public `User` and a session cookie; 401 for invalid credentials or a disabled account             |
-| `POST /api/auth/logout`         | Session cookie                                                                      | `{ "ok": true }`; revokes the session and clears its cookie                                       |
-| `GET /api/me`                   | Session cookie                                                                      | Current public `User`                                                                             |
-| `POST /api/me/password`         | `{ current, next }`                                                                 | `{ "ok": true }`; replaces the password and rotates the session; 403 for a wrong current password |
-| `GET /api/users`                | Admin session                                                                       | Public `User[]`                                                                                   |
-| `POST /api/users`               | Admin session and `{ username, displayName, role, password }`                       | 201 public `User`; 409 for a duplicate username                                                   |
-| `PATCH /api/users/:id`          | Admin session and any of `displayName`, `role`, `status`, `password`                | Public `User`; disabling an account or changing its password revokes its sessions                 |
-| `GET /api/projects/:id/members` | Owner or admin session                                                              | `{ owner, members, users }`, where `users` lists active users for sharing                         |
-| `PUT /api/projects/:id/members` | Owner or admin session and `{ owner, members: [{ userId, role }] }`                 | `{ owner, members }`; each role is `view` or `edit`                                               |
+| Route                           | Request                                                                             | Response                                                                                                                             |
+| ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/auth/status`          | None; public                                                                        | `{ "setup": value }`, where value is `needs-token`, `ready` or `done`                                                                |
+| `POST /api/auth/setup`          | `{ token, username, displayName, password }`; public until the first account exists | 201 public `User`; 403 for an invalid token, 409 after setup                                                                         |
+| `POST /api/auth/login`          | `{ username, password }`; public                                                    | Public `User` and a session cookie; 401 for invalid credentials or a disabled account                                                |
+| `POST /api/auth/logout`         | Session cookie                                                                      | `{ "ok": true }`; revokes the session and clears its cookie                                                                          |
+| `GET /api/me`                   | Session cookie                                                                      | Current public `User`                                                                                                                |
+| `POST /api/me/password`         | `{ current, next }`                                                                 | `{ "ok": true }`; replaces the password and rotates the session; 403 for a wrong current password                                    |
+| `GET /api/users`                | Admin session                                                                       | Public `User[]`                                                                                                                      |
+| `POST /api/users`               | Admin session and `{ username, displayName, role, password, email? }`               | 201 public `User`; 409 for a duplicate username or email                                                                             |
+| `PATCH /api/users/:id`          | Admin session and any of `displayName`, `role`, `status`, `password`, `email`       | Public `User`; `email: null` clears it; disabling an account or changing its password revokes its sessions; duplicate email gets 409 |
+| `GET /api/projects/:id/members` | Owner or admin session                                                              | `{ owner, members, users }`, where `users` lists active users for sharing                                                            |
+| `PUT /api/projects/:id/members` | Owner or admin session and `{ owner, members: [{ userId, role }] }`                 | `{ owner, members }`; each role is `view` or `edit`                                                                                  |
 
-`User` includes id, username, display name, role, status and timestamps, never
-a password hash. A session is required except for health, status, setup and
-login; missing, expired or disabled sessions get 401 `unauthenticated`. A
+`User` includes id, username, display name, role, status, optional lowercased
+email and timestamps, never a password hash. When both `ROCKETT_CF_ACCESS_TEAM`
+and `ROCKETT_CF_ACCESS_AUD` are set, a verified `Cf-Access-Jwt-Assertion`
+can identify an existing active user by email. A plain email header is ignored;
+an unmatched, disabled or unverifiable identity gets 401. Cookie login remains
+available. A session or verified Access identity is required except for health,
+status, setup and login; missing, expired or disabled credentials get 401 `unauthenticated`. A
 signed-in non-admin gets 403 `forbidden` on user routes. A member who is not
 the owner gets 403 on either members route; a user with no access to the
 project gets 404. Login, setup and password change can return 429 `rate limited`

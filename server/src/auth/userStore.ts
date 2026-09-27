@@ -4,17 +4,17 @@ import { JsonStore, StoreError } from "../store/jsonStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import type { Storage } from "../store/storage.js";
 
-const USERS_VERSION = 1;
+const USERS_VERSION = 2;
 const KEY = "users";
 
 export type UserRecord = User & { passwordHash: string };
 export type NewUser = Pick<
   UserRecord,
-  "username" | "displayName" | "role" | "passwordHash"
+  "username" | "displayName" | "role" | "passwordHash" | "email"
 >;
 export type UserPatch = Partial<
   Pick<UserRecord, "displayName" | "role" | "status" | "passwordHash">
->;
+> & { email?: string | null };
 
 interface UsersFile {
   version: number;
@@ -28,6 +28,10 @@ export function toPublicUser(record: UserRecord): User {
 
 function normalise(username: string): string {
   return username.normalize("NFKC").toLowerCase();
+}
+
+function email(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function check(record: UserRecord): UserRecord {
@@ -44,6 +48,11 @@ function validate(file: UsersFile): void {
   if (!Array.isArray(file.users))
     throw new ValidationError("users must be an array", "/users");
   file.users.forEach(check);
+  const emails = file.users
+    .map((record) => record.email)
+    .filter((value) => value !== undefined);
+  if (new Set(emails).size !== emails.length)
+    throw new ValidationError("duplicate email", "/users");
 }
 
 export class UserStore {
@@ -64,7 +73,7 @@ export class UserStore {
         namespace: "users",
         current: USERS_VERSION,
         field: "version",
-        steps: {},
+        steps: { 1: (file) => file },
       },
       validate,
     });
@@ -81,6 +90,11 @@ export class UserStore {
   async findByUsername(username: string): Promise<UserRecord | undefined> {
     const wanted = normalise(username);
     return (await this.list()).find((record) => record.username === wanted);
+  }
+
+  async findByEmail(address: string): Promise<UserRecord | undefined> {
+    const wanted = email(address);
+    return (await this.list()).find((record) => record.email === wanted);
   }
 
   withActiveHash<R>(
@@ -117,9 +131,12 @@ export class UserStore {
       createdAt: at,
       modifiedAt: at,
       passwordHash: input.passwordHash,
+      ...(input.email !== undefined && { email: email(input.email) }),
     });
     if (users.some((other) => other.username === record.username))
       throw new StoreError(`username ${record.username} is taken`, "conflict");
+    if (record.email && users.some((other) => other.email === record.email))
+      throw new StoreError("email is taken", "conflict");
     users.push(record);
     return record;
   }
@@ -128,7 +145,21 @@ export class UserStore {
     return this.change((users, at) => {
       const index = users.findIndex((record) => record.id === id);
       if (index < 0) throw new StoreError("user not found", "not_found");
-      const record = check({ ...users[index]!, ...patch, modifiedAt: at });
+      const { email: address, ...rest } = patch;
+      const { email: _oldEmail, ...current } = users[index]!;
+      const record = check({
+        ...current,
+        ...rest,
+        ...(address === undefined &&
+          _oldEmail !== undefined && { email: _oldEmail }),
+        ...(typeof address === "string" && { email: email(address) }),
+        modifiedAt: at,
+      });
+      if (
+        record.email &&
+        users.some((other) => other.id !== id && other.email === record.email)
+      )
+        throw new StoreError("email is taken", "conflict");
       if (
         users[index]!.role === "admin" &&
         users[index]!.status === "active" &&

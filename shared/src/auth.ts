@@ -7,6 +7,12 @@ export const user = Type.Object(
     displayName: Type.String({ minLength: 1, maxLength: 100 }),
     role: Type.Union([Type.Literal("admin"), Type.Literal("member")]),
     status: Type.Union([Type.Literal("active"), Type.Literal("disabled")]),
+    email: Type.Optional(
+      Type.String({
+        maxLength: 254,
+        pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+      }),
+    ),
     createdAt: Type.String(),
     modifiedAt: Type.String(),
   },

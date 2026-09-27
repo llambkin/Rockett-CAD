@@ -420,6 +420,7 @@ export const api = {
     send(AUTH_ROUTES.passwordChange, {}, { body: { current, next } }),
   listUsers: () => send(AUTH_ROUTES.users, {}),
   createUser: (user: {
+    email?: string;
     username: string;
     displayName: string;
     role: User["role"];
@@ -427,7 +428,12 @@ export const api = {
   }) => send(AUTH_ROUTES.userCreate, {}, { body: user }),
   patchUser: (
     id: string,
-    patch: { role?: User["role"]; status?: User["status"]; password?: string },
+    patch: {
+      role?: User["role"];
+      status?: User["status"];
+      password?: string;
+      email?: string | null;
+    },
   ) => send(AUTH_ROUTES.userPatch, { id }, { body: patch }),
   health: () => (health ??= send(ROUTES.health, {})),
   formats: () => send(ROUTES.formats, {}),

@@ -37,7 +37,7 @@ export function registerUserRoutes(
     json({ limit: "2kb" }),
     async (req, res, next) => {
       try {
-        const { username, displayName, role, password } = parse(
+        const { username, displayName, role, password, email } = parse(
           userCreateBody,
           req.body ?? {},
         );
@@ -51,6 +51,7 @@ export function registerUserRoutes(
           displayName,
           role,
           passwordHash,
+          ...(email !== undefined && { email }),
         });
         res.status(201).json(toPublicUser(record));
       } catch (err) {

@@ -10,6 +10,8 @@ import { ValidationError } from "@rockett/shared";
 import { gzipJson } from "./api/gzipJson.js";
 import { requireAllowedOrigin } from "./auth/origin.js";
 import { requireSession } from "./auth/middleware.js";
+import { AccessKeyStore } from "./auth/cfAccess.js";
+import type { AccessIdentity } from "./auth/middleware.js";
 import { cookieConfig, type CookieConfig } from "./auth/cookie.js";
 import { createAuthRouter } from "./auth/routes.js";
 import type { SessionStore } from "./auth/sessions.js";
@@ -92,6 +94,7 @@ export interface AppDeps {
   sessions: SessionStore;
   cookie?: CookieConfig;
   setupToken?: string;
+  access?: AccessIdentity;
 }
 
 export function createApp({
@@ -104,13 +107,21 @@ export function createApp({
   sessions,
   cookie = cookieConfig(process.env.ROCKETT_COOKIE_SECURE),
   setupToken = process.env.ROCKETT_SETUP_TOKEN,
+  access,
 }: AppDeps): { app: Express; sweep: () => Promise<void> } {
   const app = express();
   const projects = new ProjectQueue();
   app.disable("x-powered-by");
   app.use("/api", requireAllowedOrigin(allowedOrigins));
   app.use("/api", gzipJson);
-  app.use("/api", requireSession(sessions, users, cookie.name));
+  const team = process.env.ROCKETT_CF_ACCESS_TEAM;
+  const aud = process.env.ROCKETT_CF_ACCESS_AUD;
+  const identity =
+    access ??
+    (team && aud
+      ? { team, aud, keys: new AccessKeyStore(team), now: Date.now }
+      : undefined);
+  app.use("/api", requireSession(sessions, users, cookie.name, identity));
   app.use("/api", createAuthRouter(users, sessions, cookie, setupToken));
   app.use("/api", createApiRouter(store, folders, projects, {}, kernel, users));
   app.use("/api", (_req, res) => {

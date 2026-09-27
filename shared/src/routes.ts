@@ -159,6 +159,7 @@ export const passwordChangeBody = Type.Object(
 export const userCreateBody = Type.Object(
   {
     username: Type.String({ minLength: 1, maxLength: 32 }),
+    email: Type.Optional(Type.String({ maxLength: 254 })),
     displayName: Type.String({ minLength: 1, maxLength: 100 }),
     role: Type.Union([Type.Literal("admin"), Type.Literal("member")]),
     password: Type.String({ minLength: 1, maxLength: 1024 }),
@@ -168,6 +169,9 @@ export const userCreateBody = Type.Object(
 
 export const userPatchBody = Type.Object(
   {
+    email: Type.Optional(
+      Type.Union([Type.String({ maxLength: 254 }), Type.Null()]),
+    ),
     displayName: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     role: Type.Optional(
       Type.Union([Type.Literal("admin"), Type.Literal("member")]),
@@ -205,6 +209,7 @@ export const AUTH_ROUTES = {
   userCreate: route<
     {
       username: string;
+      email?: string;
       displayName: string;
       role: User["role"];
       password: string;
@@ -214,6 +219,7 @@ export const AUTH_ROUTES = {
   userPatch: route<
     {
       displayName?: string;
+      email?: string | null;
       role?: User["role"];
       status?: User["status"];
       password?: string;

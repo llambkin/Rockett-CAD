@@ -88,12 +88,23 @@ function AddUserForm({
 }) {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<User["role"]>("member");
   const add = async () => {
-    if (!(await create({ username, displayName, role, password }))) return;
+    if (
+      !(await create({
+        username,
+        displayName,
+        role,
+        password,
+        ...(email && { email }),
+      }))
+    )
+      return;
     setUsername("");
     setDisplayName("");
+    setEmail("");
     setPassword("");
     setRole("member");
   };
@@ -115,6 +126,16 @@ function AddUserForm({
           autoComplete="off"
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
+        />
+      </label>
+      <label>
+        Email
+        <input
+          aria-label="Email"
+          type="email"
+          autoComplete="off"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
         />
       </label>
       <label>
@@ -202,6 +223,8 @@ function UserRow({
   patch: (id: string, change: UserPatch) => Promise<boolean>;
 }) {
   const [resetOpen, setResetOpen] = useState(false);
+  const [email, setEmail] = useState(user.email ?? "");
+  useEffect(() => setEmail(user.email ?? ""), [user.email]);
   const toggleStatus = () => {
     if (
       user.status === "active" &&
@@ -221,6 +244,23 @@ function UserRow({
         <span>
           {user.username} · {user.status}
         </span>
+        <label>
+          Email for {user.displayName}
+          <input
+            aria-label={`Email for ${user.displayName}`}
+            type="email"
+            value={email}
+            disabled={busy}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <button
+          className="btn"
+          disabled={busy || email === (user.email ?? "")}
+          onClick={() => void patch(user.id, { email: email || null })}
+        >
+          Save email for {user.displayName}
+        </button>
         <div className="new-project" style={{ flexWrap: "wrap" }}>
           <select
             aria-label={`Role for ${user.displayName}`}

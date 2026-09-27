@@ -1,5 +1,5 @@
 client/src/App.tsx Workspace 137
-client/src/api.ts 573
+client/src/api.ts 579
 client/src/components/ControlsHelp.tsx ControlsHelp 121
 client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/FeatureDialog.tsx 888
@@ -17,6 +17,8 @@ client/src/components/Timeline.tsx Timeline 180
 client/src/components/Timeline.tsx openFeatureEditor 94
 client/src/components/Toolbar.tsx SketchToolbar 117
 client/src/components/Toolbar.tsx Toolbar 92
+client/src/components/UsersPage.tsx AddUserForm 90
+client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
 client/src/components/ViewportView.tsx 3139
 client/src/components/ViewportView.tsx ViewportHud 95
@@ -58,7 +60,7 @@ server/src/store/historyStore.ts 511
 server/src/store/projectStore.ts 525
 shared/src/model.ts 601
 shared/src/profiles.ts 589
-shared/src/routes.ts 513
+shared/src/routes.ts 519
 shared/src/sketchModify.ts 741
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts offsetRoundedChain 124

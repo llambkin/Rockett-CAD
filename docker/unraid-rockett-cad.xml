@@ -46,4 +46,10 @@
   <Config Name="Secure Cookie" Target="ROCKETT_COOKIE_SECURE" Default=""
     Mode="" Description="Leave empty for HTTPS; set false for plain HTTP"
     Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Cloudflare Access Team" Target="ROCKETT_CF_ACCESS_TEAM" Default=""
+    Mode="" Description="Optional team name; set with the Access audience"
+    Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Cloudflare Access Audience" Target="ROCKETT_CF_ACCESS_AUD" Default=""
+    Mode="" Description="Optional application audience; set with the Access team"
+    Type="Variable" Display="always" Required="false" Mask="false"></Config>
 </Container>

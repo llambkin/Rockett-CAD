@@ -214,6 +214,8 @@ exits 0 when every project is on version 2, and 1 otherwise.
 | `ROCKETT_ALLOWED_ORIGINS` | required | Comma-separated bare origins, such as `https://cad.example.com`; writes to `/api` from any other origin get 403 |
 | `ROCKETT_SETUP_TOKEN`     | empty    | One-time token for creating the first admin; remove it after setup                                              |
 | `ROCKETT_COOKIE_SECURE`   | `true`   | Secure session cookie for HTTPS; set `false` for plain HTTP                                                     |
+| `ROCKETT_CF_ACCESS_TEAM`  | unset    | Cloudflare Access team name; with `ROCKETT_CF_ACCESS_AUD`, enables verified Access JWT sign-in                  |
+| `ROCKETT_CF_ACCESS_AUD`   | unset    | Cloudflare Access application audience; requires the team variable                                              |
 | `ROCKETT_PORT`            | `8788`   | HTTP port inside the container                                                                                  |
 | `DATA_DIR`                | `/data`  | Persistent root                                                                                                 |
 | `ROCKETT_COMMIT`          | empty    | Git revision reported by `/api/health` (build arg)                                                              |
@@ -226,7 +228,8 @@ exits 0 when every project is on version 2, and 1 otherwise.
   cannot change its own code. `/data` is the only path it writes; it needs no
   ephemeral writable path, and `--read-only` with the `/data` volume serves.
   The base image's `/tmp` stays world-writable unless the root is read-only.
-- No outbound network use; no cloud services; fully offline-capable.
+- Without Cloudflare Access identity, the app needs no outbound network and
+  remains fully offline-capable. Access identity needs its public-key endpoint.
 - The app has accounts and session cookies. Generate a one-time setup token
   with `openssl rand -hex 32`, supply it as `ROCKETT_SETUP_TOKEN` outside this
   repository, and start the container. Open the app and create the first admin
@@ -236,6 +239,14 @@ exits 0 when every project is on version 2, and 1 otherwise.
   `docker compose -p <instance> exec rockett-cad sh -c 'test -z "$ROCKETT_SETUP_TOKEN"'`
   checks that without printing it. Remove any saved token value from the
   Unraid template too. A proxy can still provide network access controls.
+- To use Cloudflare Access identity, set both `ROCKETT_CF_ACCESS_TEAM` and
+  `ROCKETT_CF_ACCESS_AUD`. The app verifies the signed Access assertion against
+  Cloudflare's public keys and maps its email to an existing active account.
+  Set that account's email on the Users page first. Unmatched or disabled
+  accounts receive 401; the Rockett login form remains available. Access key
+  lookup needs outbound HTTPS to the configured team endpoint. A users-store
+  v1 migration writes a byte-identical backup under `/data/backups/users`
+  before saving v2. Restore only with the app stopped.
 - For a forgotten password, stop the instance and run the offline command
   `docker compose -p <instance> run --rm --no-deps -T rockett-cad node server.mjs reset-password <username>`.
   Send the new password on standard input, ending with a newline; keep it out

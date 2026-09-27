@@ -72,6 +72,7 @@ export function verifyAccessJwt(
 
 export class AccessKeyStore {
   private cached?: { keys: ReadonlyMap<string, KeyObject>; until: number };
+  private inFlight: Promise<ReadonlyMap<string, KeyObject>> | undefined;
 
   constructor(
     private readonly team: string,
@@ -84,6 +85,18 @@ export class AccessKeyStore {
   async keys(): Promise<ReadonlyMap<string, KeyObject>> {
     const now = this.now();
     if (this.cached && now < this.cached.until) return this.cached.keys;
+    if (this.inFlight) return this.inFlight;
+    const load = this.fetchKeys();
+    this.inFlight = load;
+    try {
+      return await load;
+    } finally {
+      if (this.inFlight === load) this.inFlight = undefined;
+    }
+  }
+
+  private async fetchKeys(): Promise<ReadonlyMap<string, KeyObject>> {
+    const now = this.now();
     const url = `https://${this.team}.cloudflareaccess.com/cdn-cgi/access/certs`;
     let failure: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
