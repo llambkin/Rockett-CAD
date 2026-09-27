@@ -1,4 +1,5 @@
 import {
+  newId,
   projectEdge,
   type PlaneFrame,
   type SketchEntity,
@@ -199,7 +200,7 @@ export function faceDrawing(
           ...projectEdge(
             curve,
             frame,
-            edgeName,
+            newId("proj"),
             { kind: "edge", bodyId: body.bodyId, edgeName },
             false,
           ),
