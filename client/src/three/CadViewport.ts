@@ -30,6 +30,7 @@ import {
 import { applyThemeToScene } from "../theme/applyThemeToScene";
 import { cameraTween, orbitAbout, type CameraPose } from "./camera";
 import { frameScheduler } from "./frameScheduler";
+import { getSetting, subscribe } from "../settings";
 import {
   BODY_APPEARANCE,
   HIGHLIGHT_APPEARANCE,
@@ -44,6 +45,11 @@ export interface PickResult {
   point: THREE.Vector3;
   /** sketch-region area — the tie-break when coplanar regions overlap */
   area?: number | undefined;
+}
+
+export function pickThresholds(worldPerPixel: number, px: number) {
+  const line = worldPerPixel * px;
+  return { line, point: line * 1.4 };
 }
 
 export const ORIGIN_PLANE_DEFS: {
@@ -141,6 +147,8 @@ export class CadViewport {
     this.rect = null;
   };
   private stopTheme = () => {};
+  private pickTolerancePx = getSetting("viewport.pickTolerancePx");
+  private stopPickTolerance = () => {};
   private animating: null | {
     start: number;
     poseAt: (t: number) => CameraPose;
@@ -196,12 +204,16 @@ export class CadViewport {
     this.buildOriginDisplay();
     this.setTheme(activeTheme());
     this.stopTheme = subscribeTheme((tokens) => this.setTheme(tokens));
+    this.stopPickTolerance = subscribe("viewport.pickTolerancePx", (px) => {
+      this.pickTolerancePx = px;
+    });
     this.resize();
     window.addEventListener("scroll", this.forgetRect, true);
   }
 
   dispose() {
     this.stopTheme();
+    this.stopPickTolerance();
     this.frames.dispose();
     window.removeEventListener("scroll", this.forgetRect, true);
     this.layers.dispose();
@@ -754,9 +766,12 @@ export class CadViewport {
     },
   ): PickResult | null {
     this.rayFromClient(clientX, clientY);
-    const pxTol = this.worldPerPixel() * 7;
+    const { line: pxTol, point } = pickThresholds(
+      this.worldPerPixel(),
+      this.pickTolerancePx,
+    );
     this.raycaster.params.Line = { threshold: pxTol };
-    this.raycaster.params.Points = { threshold: pxTol * 1.4 };
+    this.raycaster.params.Points = { threshold: point };
 
     const results: PickResult[] = [];
 

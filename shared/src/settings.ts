@@ -27,6 +27,7 @@ export interface SettingDefinition<
 
 export interface SettingTypes {
   "units.length": Units;
+  "viewport.pickTolerancePx": number;
 }
 
 export type SettingOf<D extends SettingDefinition> = Static<D["schema"]>;
@@ -185,4 +186,13 @@ export const UNITS_LENGTH = defineSetting({
   schema: Type.Enum(Object.keys(UNIT_TO_MM) as Units[]),
 });
 
-registerSettings([UNITS_LENGTH]);
+export const VIEWPORT_PICK_TOLERANCE = defineSetting({
+  key: "viewport.pickTolerancePx",
+  label: "Pick tolerance (px)",
+  scopes: ["app", "user"],
+  section: "user",
+  default: 7,
+  schema: Type.Integer({ minimum: 2, maximum: 20 }),
+});
+
+registerSettings([UNITS_LENGTH, VIEWPORT_PICK_TOLERANCE]);
