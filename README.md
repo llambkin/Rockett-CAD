@@ -59,6 +59,7 @@ everything downstream against persistent topology references.
 - **Drag handles**: every feature with a main value, from extrude distance to pattern spacing, has an arrow or arc to drag.
 - **Reference images**: place PNG, JPEG or WebP images on planes and calibrate them to real size.
 - **Feature timeline**: click to select bodies, rename, edit, quick edit, hover preview, suppress, delete, roll back, insert; broken references flagged, never guessed.
+- **Crash recovery**: a crashed kernel flags the running feature and blocks dependent geometry and exports until that feature is edited.
 - **Reference repair**: in the feature's dialog, accept or choose a proposed face or edge for a broken reference, or re-pick it.
 - **Naming upgrade**: from a version 1 project's timeline menu or feature dialog, review every reference mapping, choose uncertain ones, apply, and undo.
 

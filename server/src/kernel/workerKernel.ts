@@ -9,6 +9,7 @@ import { StoreError } from "../store/projectStore.js";
 import { TIMING_MS } from "../tunables.js";
 import type { Sources } from "../geometry/importers.js";
 import type { EvaluateHooks } from "../geometry/engine.js";
+import type { CrashFeature } from "../geometry/resolve.js";
 import { jobContext, type Job } from "./jobs.js";
 import type {
   ExportJob,
@@ -36,6 +37,8 @@ interface Pending {
   payload: (held: string[]) => Promise<Payload>;
   report?: ((message: Report) => void) | undefined;
   job?: Job | undefined;
+  projectId?: string | undefined;
+  activeFeature?: CrashFeature | undefined;
   cancelTimer?: NodeJS.Timeout | undefined;
   onCancel?: (() => void) | undefined;
 }
@@ -52,6 +55,9 @@ export class WorkerKernel implements KernelClient {
   private restarting = false;
   private retiring: Worker | undefined;
   private restartTask: Promise<void> | undefined;
+  private readonly quarantined = new Map<string, CrashFeature[]>();
+  private restartTimes: number[] = [];
+  private closed = false;
 
   constructor(
     private readonly store: Pick<ProjectStore, "sources">,
@@ -68,11 +74,12 @@ export class WorkerKernel implements KernelClient {
         this.receive(message);
     });
     worker.on("error", (error) => {
-      if (this.worker === worker && this.retiring !== worker) this.fail(error);
+      if (this.worker === worker && this.retiring !== worker)
+        this.restart(error);
     });
     worker.on("exit", (code) => {
-      if (this.worker === worker && this.retiring !== worker)
-        this.fail(new Error(`The kernel worker exited with code ${code}`));
+      if (this.worker === worker && this.retiring !== worker && !this.closed)
+        this.restart(new Error(`The kernel worker exited with code ${code}`));
     });
     return worker;
   }
@@ -98,26 +105,61 @@ export class WorkerKernel implements KernelClient {
     }, TIMING_MS.jobHardCancel);
   }
 
-  private restart() {
+  private restart(cause?: Error) {
+    if (this.restarting || this.failure || this.closed) return;
+    if (cause)
+      for (const pending of this.pending.values()) {
+        if (pending.projectId && pending.activeFeature) {
+          const features = this.quarantined.get(pending.projectId) ?? [];
+          this.quarantined.set(pending.projectId, [
+            ...features.filter(
+              (feature) =>
+                feature.featureId !== pending.activeFeature!.featureId,
+            ),
+            pending.activeFeature,
+          ]);
+        }
+      }
+    const now = Date.now();
+    this.restartTimes = this.restartTimes.filter(
+      (time) => now - time < TIMING_MS.kernelRestartWindow,
+    );
     const old = this.worker;
     this.retiring = old;
-    this.restarting = true;
     this.kernelVersion = null;
+    if (this.restartTimes.length >= TIMING_MS.kernelRestartBackoff.length) {
+      const error = new StoreError("kernel restart limit reached", "kernel");
+      error.cause = cause;
+      this.fail(error);
+      this.restartTask = old.terminate().then(
+        () => undefined,
+        (terminationError: unknown) => {
+          error.cause = terminationError;
+        },
+      );
+      return;
+    }
+    const delay = TIMING_MS.kernelRestartBackoff[this.restartTimes.length]!;
+    this.restartTimes.push(now);
+    this.restarting = true;
     const error = new StoreError("kernel restarted", "kernel");
+    if (cause) error.cause = cause;
     for (const pending of this.pending.values()) {
       this.clear(pending);
       pending.reject(error);
     }
     this.pending.clear();
-    this.restartTask = old
-      .terminate()
+    this.restartTask = Promise.all([
+      new Promise<void>((resolve) => setTimeout(resolve, delay)),
+      old.terminate(),
+    ])
       .then(() => {
-        this.worker = this.spawn();
+        if (!this.closed) this.worker = this.spawn();
       })
-      .catch((cause: unknown) => {
-        const failure = new StoreError("kernel restart failed", "kernel");
-        failure.cause = cause;
-        this.fail(failure);
+      .catch((failure: unknown) => {
+        const restartError = new StoreError("kernel restart failed", "kernel");
+        restartError.cause = failure;
+        this.fail(restartError);
       })
       .finally(() => {
         this.retiring = undefined;
@@ -148,6 +190,13 @@ export class WorkerKernel implements KernelClient {
       case "progress":
         {
           const pending = this.pending.get(message.id);
+          if (pending && message.type === "featureStart")
+            pending.activeFeature = {
+              featureId: message.args[1],
+              featureKey: message.args[2],
+            };
+          if (pending && message.type === "progress")
+            pending.activeFeature = undefined;
           pending?.report?.(message);
           if (message.type === "progress" && pending?.cancelTimer)
             this.armCancel(message.id, pending);
@@ -213,6 +262,7 @@ export class WorkerKernel implements KernelClient {
     payload: Pending["payload"] = noPayload,
     report?: Pending["report"],
     job: Job | undefined = jobContext.getStore(),
+    projectId?: string,
   ): Promise<Calls[M]["result"]> {
     return new Promise((resolve, reject) => {
       if (this.failure) return reject(this.failure);
@@ -225,6 +275,7 @@ export class WorkerKernel implements KernelClient {
         payload,
         report,
         job,
+        projectId,
       };
       this.pending.set(id, pending);
       if (job) {
@@ -239,6 +290,12 @@ export class WorkerKernel implements KernelClient {
         if (job.cancelController.signal.aborted) pending.onCancel();
       }
       try {
+        if (projectId)
+          this.post({
+            type: "quarantine",
+            docId: projectId,
+            features: this.quarantined.get(projectId) ?? [],
+          });
         this.post({ type: "call", id, method, args } as ToWorker);
       } catch (error) {
         this.pending.delete(id);
@@ -285,7 +342,21 @@ export class WorkerKernel implements KernelClient {
         else hooks.onProgress?.(...message.args);
         check();
       },
-    );
+      jobContext.getStore(),
+      doc.id,
+    ).then((result) => {
+      const remaining = (this.quarantined.get(doc.id) ?? []).filter(
+        (crashed) =>
+          !result.featureStatuses.some(
+            (status) =>
+              status.featureId === crashed.featureId &&
+              (status.status === "ok" || status.status === "warning"),
+          ),
+      );
+      if (remaining.length) this.quarantined.set(doc.id, remaining);
+      else this.quarantined.delete(doc.id);
+      return result;
+    });
   }
 
   async stateQuery<K extends keyof StateAnswers>(
@@ -296,11 +367,21 @@ export class WorkerKernel implements KernelClient {
       "stateQuery",
       [doc, query as StateQuery],
       this.sources(doc),
+      undefined,
+      jobContext.getStore(),
+      doc.id,
     )) as StateAnswers[K];
   }
 
   visibleTargets(doc: CadDocument, index: number, hidden: readonly string[]) {
-    return this.call("visibleTargets", [doc, index, hidden], this.sources(doc));
+    return this.call(
+      "visibleTargets",
+      [doc, index, hidden],
+      this.sources(doc),
+      undefined,
+      jobContext.getStore(),
+      doc.id,
+    );
   }
 
   async export(doc: CadDocument, job: ExportJob) {
@@ -308,6 +389,9 @@ export class WorkerKernel implements KernelClient {
       "export",
       [doc, job],
       this.sources(doc),
+      undefined,
+      jobContext.getStore(),
+      doc.id,
     );
     return { data: Buffer.from(data), ...file };
   }
@@ -325,10 +409,18 @@ export class WorkerKernel implements KernelClient {
   }
 
   planNamingUpgrade(doc: CadDocument, accept?: NamingDecision[]) {
-    return this.call("planNamingUpgrade", [doc, accept], this.sources(doc));
+    return this.call(
+      "planNamingUpgrade",
+      [doc, accept],
+      this.sources(doc),
+      undefined,
+      jobContext.getStore(),
+      doc.id,
+    );
   }
 
   drop(docId: string) {
+    this.quarantined.delete(docId);
     if (!this.failure && !this.restarting) this.post({ type: "drop", docId });
   }
 
@@ -337,15 +429,19 @@ export class WorkerKernel implements KernelClient {
   }
 
   status() {
-    return this.restarting
-      ? ("restarting" as const)
-      : this.kernelVersion
-        ? ("ready" as const)
-        : ("starting" as const);
+    return this.failure
+      ? ("failed" as const)
+      : this.restarting
+        ? ("restarting" as const)
+        : this.kernelVersion
+          ? ("ready" as const)
+          : ("starting" as const);
   }
 
   async close() {
+    this.closed = true;
     await this.restartTask;
     await this.worker.terminate();
+    this.fail(new Error("The kernel worker exited"));
   }
 }

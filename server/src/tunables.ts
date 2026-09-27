@@ -11,6 +11,8 @@ export const TIMING_MS = {
   jobRetention: 10 * MINUTE,
   jobRuntime: 10 * MINUTE,
   jobHardCancel: 2000,
+  kernelRestartWindow: 5 * MINUTE,
+  kernelRestartBackoff: [1000, 2000, 4000],
   jobSubscriberIdle: 2 * MINUTE,
 } as const;
 

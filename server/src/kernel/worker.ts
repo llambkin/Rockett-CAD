@@ -1,6 +1,6 @@
 import { parentPort, type Transferable } from "node:worker_threads";
 import { initKernel, kernelVersion } from "../geometry/kernel.js";
-import { dropEngine } from "../geometry/engine.js";
+import { dropEngine, engineFor } from "../geometry/engine.js";
 import { InProcessKernel } from "./client.js";
 import {
   fromWire,
@@ -119,6 +119,9 @@ port.on("message", (message: ToWorker) => {
       return;
     case "drop":
       dropEngine(message.docId);
+      return;
+    case "quarantine":
+      engineFor(message.docId).setQuarantine(message.features);
       return;
   }
 });

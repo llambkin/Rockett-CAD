@@ -93,7 +93,7 @@ export interface Health {
   commit: string | null;
   describe: string | null;
   kernelVersion: { occt: string; commit: string } | null;
-  kernel: "starting" | "ready" | "restarting";
+  kernel: "starting" | "ready" | "restarting" | "failed";
 }
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

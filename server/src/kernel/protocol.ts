@@ -9,6 +9,7 @@ import {
 import { StoreError } from "../store/projectStore.js";
 import type { Sources } from "../geometry/importers.js";
 import type { EvaluateHooks } from "../geometry/engine.js";
+import type { CrashFeature } from "../geometry/resolve.js";
 import type {
   ExportJob,
   Imported,
@@ -74,6 +75,7 @@ export type Call = {
 export type ToWorker =
   | Call
   | { type: "drop"; docId: string }
+  | { type: "quarantine"; docId: string; features: CrashFeature[] }
   | { type: "payload"; id: number; settled: Settled<Payload> };
 
 type HookArgs<K extends keyof EvaluateHooks> = Parameters<

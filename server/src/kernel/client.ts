@@ -186,6 +186,14 @@ const ANSWERS: {
 };
 
 function exportBodies(state: EvalState, { bodyIds, hidden }: ExportJob) {
+  const blocked = [...state.blocked].filter((id) =>
+    bodyIds.length > 0 ? bodyIds.includes(id) : !hidden.includes(id),
+  );
+  if (blocked.length)
+    throw new StoreError(
+      `export bodies depend on unresolved references: ${blocked.join(", ")}`,
+      "unprocessable",
+    );
   const missing = bodyIds.filter((id) => !state.bodies.has(id));
   if (missing.length)
     throw new ValidationError(
@@ -197,12 +205,6 @@ function exportBodies(state: EvalState, { bodyIds, hidden }: ExportJob) {
       : !hidden.includes(b.bodyId),
   );
   if (chosen.length === 0) throw new ValidationError("no bodies to export");
-  const blocked = chosen.filter((b) => state.blocked.has(b.bodyId));
-  if (blocked.length)
-    throw new StoreError(
-      `export bodies depend on unresolved references: ${blocked.map((b) => b.bodyId).join(", ")}`,
-      "unprocessable",
-    );
   return { bodies: chosen, sketch: [], polylines: [] };
 }
 
@@ -225,6 +227,11 @@ function exportFace(
 ) {
   if (!face)
     throw new ValidationError(`${format} export needs a face`, "/face");
+  if (state.blocked.has(face.bodyId))
+    throw new StoreError(
+      `export face depends on unresolved references: ${face.bodyId}`,
+      "unprocessable",
+    );
   const drawing = asValidation(() => {
     const frame = resolvePlaneFrame(state, { kind: "face", face });
     return faceDrawing(

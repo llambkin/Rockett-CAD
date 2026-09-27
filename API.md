@@ -97,6 +97,12 @@ worker does not roll back a prior saved generation. If the operation finishes
 without stopping, the terminal event is `done`. A finished job remains
 available for at most 10 minutes;
 the registry keeps at most 100 finished jobs.
+An unexpected worker error or exit rejects in-flight kernel requests with 503
+`kernel`. The server restarts the worker after 1, 2 and 4 seconds, at most
+three times in five minutes. The fourth crash leaves health `failed` until
+the server is restarted. The feature running at a crash is reported as an
+error on the next evaluation of that project, and dependent geometry and its
+exports remain unavailable until the feature is edited.
 
 The job belongs to the submitting user and, for a project route, that project.
 An import that creates a project binds its job to the new project on creation.
@@ -204,7 +210,8 @@ other edit. The project keeps its current name, and any other snapshot is
 `versionId()`: the OCCT release and the fork commit it was built from. It is
 `null` until the kernel has loaded; health never waits for it. `kernel` is
 `starting` until the kernel has loaded and `ready` after; `restarting` is
-reserved for a respawned worker. Health answers 200 in every state.
+reserved for a respawned worker; `failed` means restart attempts are exhausted
+or restart failed. Health answers 200 in every state.
 
 Every stored project is listed. `status` is `ok`, `invalid` or `tooNew`, and
 the last two carry `error`. A `tooNew` project also carries the

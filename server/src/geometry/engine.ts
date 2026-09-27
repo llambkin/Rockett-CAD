@@ -35,7 +35,38 @@ import { movePayload, tessellateBody } from "./tessellate.js";
 import { withNamingVersion, type NamedBody } from "./naming.js";
 import { cancellable, shapeHash, type Shape } from "./kernel.js";
 import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
-import { BlockedFeature, evaluateResolved, unresolvedRefs } from "./resolve.js";
+import {
+  BlockedFeature,
+  CRASH_BLOCKED_MESSAGE,
+  blockedBodies,
+  crashStatus,
+  evaluateResolved,
+  unresolvedRefs,
+  type CrashFeature,
+} from "./resolve.js";
+
+function blockedFeatureIds(
+  doc: CadDocument,
+  statuses: FeatureStatus[],
+  quarantine: CrashFeature[],
+) {
+  const ids = new Set(
+    statuses
+      .filter((status) => status.error === CRASH_BLOCKED_MESSAGE)
+      .map((status) => status.featureId),
+  );
+  for (const entry of quarantine)
+    if (
+      doc.features.some(
+        (feature) =>
+          !feature.suppressed &&
+          feature.id === entry.featureId &&
+          featureKey(feature) === entry.featureKey,
+      )
+    )
+      ids.add(entry.featureId);
+  return ids;
+}
 
 interface Snapshot {
   featureKeys: string[];
@@ -43,16 +74,17 @@ interface Snapshot {
   statuses: FeatureStatus[];
 }
 
+const snapshotBodies = (snapshots: Pick<Snapshot, "state">[]) =>
+  snapshots.flatMap((snapshot) => [...snapshot.state.bodies.values()]);
+
 function releaseSnapshots(
   discarded: Pick<Snapshot, "state">[],
   retained: Pick<Snapshot, "state">[],
 ): void {
-  const bodies = (snapshots: Pick<Snapshot, "state">[]) =>
-    snapshots.flatMap((s) => [...s.state.bodies.values()]);
-  const kept = bodies(retained);
+  const kept = snapshotBodies(retained);
   const keptShapes = new Set(kept.map((b) => b.shape));
   const keptNames = new Set(kept.map((b) => b.names));
-  const dropped = bodies(discarded);
+  const dropped = snapshotBodies(discarded);
   const freed = dropped.filter((b) => !keptShapes.has(b.shape));
   for (const body of freed) {
     const key = cacheKey(body);
@@ -128,6 +160,42 @@ function failedStatus(
     error: err?.message ?? String(err),
     ...(refs.length > 0 && { refs }),
   };
+}
+
+function evaluateStep(
+  next: EvalState,
+  state: EvalState,
+  feature: CadDocument["features"][number],
+  earlier: CadDocument["features"],
+  sources: Sources,
+  namingVersion: NamingVersion,
+  snapshots: Snapshot[],
+  shouldStop?: () => boolean,
+): FeatureStatus | undefined {
+  try {
+    const outcome = evaluateTracked(
+      next,
+      feature,
+      earlier,
+      sources,
+      namingVersion,
+      shouldStop,
+    );
+    return {
+      featureId: feature.id,
+      status: outcome?.warning ? "warning" : "ok",
+      ...outcome,
+    };
+  } catch (err: any) {
+    releaseSnapshots([{ state: next }], snapshots);
+    if (shouldStop?.()) return;
+    next.bodies = new Map(state.bodies);
+    next.sketches = new Map(state.sketches);
+    next.planes = new Map(state.planes);
+    if (err instanceof BlockedFeature)
+      next.blocked = new Set([...state.blocked, ...err.bodies]);
+    return failedStatus(err, state, feature);
+  }
 }
 
 export function featureKey(feature: object): string {
@@ -226,6 +294,13 @@ class DocumentEngine {
   private snapshots: Snapshot[] = [];
   private namingVersion?: NamingVersion;
   private held: Sources = new Map();
+  private quarantine: CrashFeature[] = [];
+
+  setQuarantine(features: CrashFeature[]) {
+    if (JSON.stringify(this.quarantine) === JSON.stringify(features)) return;
+    this.invalidate();
+    this.quarantine = features;
+  }
 
   get sources(): Sources {
     return this.held;
@@ -305,6 +380,7 @@ class DocumentEngine {
       start === 0 ? emptyState() : this.snapshots[start - 1]!.state;
     let statuses: FeatureStatus[] =
       start === 0 ? [] : [...this.snapshots[start - 1]!.statuses];
+    const blockedFeatures = blockedFeatureIds(doc, statuses, this.quarantine);
 
     let i = start;
     for (; i < upTo && !hooks?.shouldStop?.(); i++) {
@@ -312,35 +388,32 @@ class DocumentEngine {
       hooks?.onFeatureStart?.(i, feature.id, keyAt(i));
       const next = cloneState(state);
       let status: FeatureStatus;
+      const crash = crashStatus(
+        feature,
+        keyAt(i),
+        this.quarantine,
+        blockedFeatures,
+      );
       if (feature.suppressed) {
         status = { featureId: feature.id, status: "suppressed" };
+      } else if (crash) {
+        status = crash;
+        next.blocked = blockedBodies(state, feature);
       } else {
-        try {
-          const outcome = evaluateTracked(
-            next,
-            feature,
-            doc.features.slice(0, i),
-            this.held,
-            doc.namingVersion,
-            hooks?.shouldStop,
-          );
-          status = {
-            featureId: feature.id,
-            status: outcome?.warning ? "warning" : "ok",
-            ...outcome,
-          };
-        } catch (err: any) {
-          releaseSnapshots([{ state: next }], this.snapshots);
-          if (hooks?.shouldStop?.()) break;
-          status = failedStatus(err, state, feature);
-          next.bodies = new Map(state.bodies);
-          next.sketches = new Map(state.sketches);
-          next.planes = new Map(state.planes);
-          if (err instanceof BlockedFeature)
-            next.blocked = new Set([...state.blocked, ...err.bodies]);
-        }
+        const evaluated = evaluateStep(
+          next,
+          state,
+          feature,
+          doc.features.slice(0, i),
+          this.held,
+          doc.namingVersion,
+          this.snapshots,
+          hooks?.shouldStop,
+        );
+        if (!evaluated) break;
+        status = evaluated;
       }
-      statuses = [...statuses, status];
+      statuses = statuses.concat(status);
       this.snapshots.push({
         featureKeys: featureKeys(feature, keyAt(i), status),
         state: next,

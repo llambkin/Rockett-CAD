@@ -44,6 +44,12 @@ answer requests and `/api/health`. `ROCKETT_KERNEL=inprocess` selects
 `InProcessKernel`, which runs the same engine on the main thread. Typical
 feature evaluation is a few ms; full first-load regeneration of a moderate
 model tens of ms.
+The main thread keeps the last feature start without a matching progress event
+for each in-flight evaluation. After a worker crash it quarantines that feature
+by project, feature ID and feature key; regeneration skips that exact version,
+blocks its dependents and refuses exports using affected geometry. An edited
+feature is retried. Worker restarts use three attempts in five minutes with
+1, 2 and 4 second backoff, then stop until the server is restarted.
 
 **Server owns the document.** Clients send feature-level operations
 (`add/edit/delete feature`, `set timeline position`, …); the server validates,
