@@ -123,6 +123,7 @@ function DialogBody({
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
   const setMode = useStore((s) => s.setMode);
+  const setSelection = useStore((s) => s.setSelection);
   const addFeature = useStore((s) => s.addFeature);
   const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
@@ -235,6 +236,10 @@ function DialogBody({
   };
 
   const close = () => setMode({ name: "idle" });
+  const cancel = () => {
+    close();
+    setSelection([]);
+  };
 
   const targets = (operation: string) =>
     toolTargets(operation, params.targets, document_?.namingVersion);
@@ -792,7 +797,7 @@ function DialogBody({
       </div>
       <DialogFooter
         onOk={() => void ok()}
-        onCancel={close}
+        onCancel={cancel}
         pending={pending}
         okDisabled={axisMissing}
         escapeAnywhere
