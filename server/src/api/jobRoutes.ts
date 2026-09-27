@@ -1,13 +1,29 @@
 import type { Request, RequestHandler, Response } from "express";
 import type { CadDocument, User } from "@rockett/shared";
 import type { KernelClient } from "../kernel/client.js";
-import { JobRegistry, jobContext } from "../kernel/jobs.js";
+import { JobRegistry, jobContext, type Job } from "../kernel/jobs.js";
 import { StoreError, type ProjectStore } from "../store/projectStore.js";
 import { isProjectRoute, projectRole } from "./projectAccess.js";
 
 const JOB_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MISSING = { error: "job not found", code: "not_found" } as const;
+
+function jobOutcome(job: Job, status: number) {
+  if (job.hardCancelled) return "cancelled";
+  if (status >= 400) return "failed";
+  return job.cancelled ? "cancelled" : "done";
+}
+
+function committed() {
+  const job = jobContext.getStore();
+  if (job) job.generation = "committed";
+}
+
+function bindProject(projectId: string | null) {
+  const job = jobContext.getStore();
+  if (job) job.projectId = projectId;
+}
 
 export function createJobRoutes(
   store: ProjectStore,
@@ -44,14 +60,11 @@ export function createJobRoutes(
     }
     res.on("finish", () => {
       jobs.release(job);
-      jobs.finish(
-        job,
-        res.statusCode >= 400 ? "failed" : job.cancelled ? "cancelled" : "done",
-      );
+      jobs.finish(job, jobOutcome(job, res.statusCode));
     });
     res.on("close", () => {
       if (!res.writableFinished) {
-        job.cancelRequested = true;
+        jobs.cancel(job);
         jobs.finish(job, "failed");
       }
     });
@@ -129,10 +142,5 @@ export function createJobRoutes(
     if (job) jobs.release(job);
   };
 
-  const bindProject = (projectId: string | null) => {
-    const job = jobContext.getStore();
-    if (job) job.projectId = projectId;
-  };
-
-  return { start, events, cancel, evaluate, settled, bindProject };
+  return { start, events, cancel, evaluate, settled, committed, bindProject };
 }

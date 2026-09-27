@@ -10,6 +10,7 @@ export const TIMING_MS = {
   sizeLimitSearch: 1000,
   jobRetention: 10 * MINUTE,
   jobRuntime: 10 * MINUTE,
+  jobHardCancel: 2000,
   jobSubscriberIdle: 2 * MINUTE,
 } as const;
 

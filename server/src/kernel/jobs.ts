@@ -4,7 +4,8 @@ import { JOB_LIMITS, TIMING_MS } from "../tunables.js";
 
 export type JobEvent =
   | { type: "progress"; done: number; total: number; label: string }
-  | { type: "done" | "failed" | "cancelled" };
+  | { type: "done" | "failed" }
+  | { type: "cancelled"; generation: "committed" | "preview_discarded" };
 
 type Subscriber = { response: Response; idle?: NodeJS.Timeout };
 
@@ -14,6 +15,9 @@ export interface Job {
   projectId: string | null;
   cancelRequested: boolean;
   cancelled: boolean;
+  hardCancelled: boolean;
+  generation: "committed" | "preview_discarded";
+  cancelController: AbortController;
   state: "running" | "done" | "failed" | "cancelled";
   finishedAt?: number;
   events: JobEvent[];
@@ -43,17 +47,21 @@ export class JobRegistry {
       throw new Error("duplicate job id");
     if (this.active.size >= JOB_LIMITS.active)
       throw new RangeError("too many active jobs");
+    const cancelController = new AbortController();
     const job: Job = {
       id,
       userId,
       projectId,
       cancelRequested: false,
       cancelled: false,
+      hardCancelled: false,
+      generation: "preview_discarded",
+      cancelController,
       state: "running",
       events: [],
       subscribers: new Set(),
       runtime: setTimeout(() => {
-        job.cancelRequested = true;
+        this.cancel(job);
         this.finish(job, "failed");
       }, TIMING_MS.jobRuntime),
     };
@@ -77,12 +85,17 @@ export class JobRegistry {
       this.jobs.delete(job.id);
       this.jobs.set(job.id, job);
     }
-    this.emit(job, { type });
+    this.emit(
+      job,
+      type === "cancelled" ? { type, generation: job.generation } : { type },
+    );
     this.prune();
   }
 
   cancel(job: Job): void {
-    if (job.state === "running") job.cancelRequested = true;
+    if (job.state !== "running") return;
+    job.cancelRequested = true;
+    job.cancelController.abort();
   }
 
   release(job: Job): void {

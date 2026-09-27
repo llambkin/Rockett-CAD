@@ -85,10 +85,17 @@ registry returns 503 `kernel`.
 Progress data carries `done`, `total` and `label`. A late subscriber receives
 the last 64 events, then live events; the stream closes after a terminal event.
 `DELETE /jobs/:jobId` returns `{ ok: true }` and requests a soft cancel at the
-next kernel boundary. The original request still completes with its normal
-response, which may contain a partial evaluation. Cancelling does not roll back
-a saved document. If the operation finishes without stopping, the terminal
-event is `done`. A finished job remains available for at most 10 minutes;
+next kernel boundary. Each completed feature boundary restarts a 2-second
+watchdog; if none arrives before it expires, the server terminates and
+restarts the worker. The cancelled request and other in-flight
+kernel requests receive 503 `kernel` with `kernel restarted`. Health reports
+`restarting` until the replacement is ready. Otherwise the original request
+completes with its normal response, which may contain a partial evaluation.
+A `cancelled` event reports `generation` as `committed` after a mutation saves
+its document or `preview_discarded` when evaluation was not saved. Stopping a
+worker does not roll back a prior saved generation. If the operation finishes
+without stopping, the terminal event is `done`. A finished job remains
+available for at most 10 minutes;
 the registry keeps at most 100 finished jobs.
 
 The job belongs to the submitting user and, for a project route, that project.
@@ -100,10 +107,10 @@ Unknown, foreign and no longer accessible IDs all return
 `{ "error": "job not found", "code": "not_found" }` with status 404. At most
 32 requests with job IDs may be active, each job has at most 8 subscribers,
 subscribers close after 2 minutes without an event, and a job that has not
-finished after 10 minutes emits `failed` and requests a soft stop. A worker
-stuck within one kernel operation still needs the hard cancellation mechanism.
-A disconnected request requests a soft stop and keeps its active slot until
-its route operation settles.
+finished after 10 minutes emits `failed` and requests cancellation. A
+disconnected request also emits `failed` and requests cancellation. Both keep
+their active slots until the route operation settles; a worker still stuck
+after the 2-second watchdog is terminated before its replacement starts.
 
 ### Document revisions
 

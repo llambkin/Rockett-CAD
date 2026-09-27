@@ -5,8 +5,11 @@ import {
 } from "node:worker_threads";
 import type { CadDocument, Health, NamingDecision } from "@rockett/shared";
 import type { ProjectStore } from "../store/projectStore.js";
+import { StoreError } from "../store/projectStore.js";
+import { TIMING_MS } from "../tunables.js";
 import type { Sources } from "../geometry/importers.js";
 import type { EvaluateHooks } from "../geometry/engine.js";
+import { jobContext, type Job } from "./jobs.js";
 import type {
   ExportJob,
   ImportUpload,
@@ -23,6 +26,7 @@ import {
   type Method,
   type Payload,
   type Report,
+  type Settled,
   type ToWorker,
 } from "./protocol.js";
 
@@ -31,29 +35,93 @@ interface Pending {
   reject: (error: Error) => void;
   payload: (held: string[]) => Promise<Payload>;
   report?: ((message: Report) => void) | undefined;
+  job?: Job | undefined;
+  cancelTimer?: NodeJS.Timeout | undefined;
+  onCancel?: (() => void) | undefined;
 }
 
 const noPayload = () =>
   Promise.reject(new Error("this kernel call carries no payload"));
 
 export class WorkerKernel implements KernelClient {
-  private readonly worker: Worker;
+  private worker: Worker;
   private readonly pending = new Map<number, Pending>();
   private lastId = 0;
   private kernelVersion: Health["kernelVersion"] = null;
   private failure: Error | undefined;
+  private restarting = false;
+  private retiring: Worker | undefined;
+  private restartTask: Promise<void> | undefined;
 
   constructor(
     private readonly store: Pick<ProjectStore, "sources">,
-    entry: URL,
-    options?: WorkerOptions,
+    private readonly entry: URL,
+    private readonly options?: WorkerOptions,
   ) {
-    this.worker = new Worker(entry, options);
-    this.worker.on("message", (message: FromWorker) => this.receive(message));
-    this.worker.on("error", (error) => this.fail(error));
-    this.worker.on("exit", (code) =>
-      this.fail(new Error(`The kernel worker exited with code ${code}`)),
-    );
+    this.worker = this.spawn();
+  }
+
+  private spawn() {
+    const worker = new Worker(this.entry, this.options);
+    worker.on("message", (message: FromWorker) => {
+      if (this.worker === worker && this.retiring !== worker)
+        this.receive(message);
+    });
+    worker.on("error", (error) => {
+      if (this.worker === worker && this.retiring !== worker) this.fail(error);
+    });
+    worker.on("exit", (code) => {
+      if (this.worker === worker && this.retiring !== worker)
+        this.fail(new Error(`The kernel worker exited with code ${code}`));
+    });
+    return worker;
+  }
+
+  private clear(pending: Pending) {
+    clearTimeout(pending.cancelTimer);
+    if (pending.onCancel)
+      pending.job?.cancelController.signal.removeEventListener(
+        "abort",
+        pending.onCancel,
+      );
+  }
+
+  private armCancel(id: number, pending: Pending) {
+    clearTimeout(pending.cancelTimer);
+    pending.cancelTimer = setTimeout(() => {
+      if (this.pending.get(id) !== pending) return;
+      if (pending.job) {
+        pending.job.cancelled = true;
+        pending.job.hardCancelled = true;
+      }
+      this.restart();
+    }, TIMING_MS.jobHardCancel);
+  }
+
+  private restart() {
+    const old = this.worker;
+    this.retiring = old;
+    this.restarting = true;
+    this.kernelVersion = null;
+    const error = new StoreError("kernel restarted", "kernel");
+    for (const pending of this.pending.values()) {
+      this.clear(pending);
+      pending.reject(error);
+    }
+    this.pending.clear();
+    this.restartTask = old
+      .terminate()
+      .then(() => {
+        this.worker = this.spawn();
+      })
+      .catch((cause: unknown) => {
+        const failure = new StoreError("kernel restart failed", "kernel");
+        failure.cause = cause;
+        this.fail(failure);
+      })
+      .finally(() => {
+        this.retiring = undefined;
+      });
   }
 
   private post(message: ToWorker, transfer: Transferable[] = []) {
@@ -64,17 +132,31 @@ export class WorkerKernel implements KernelClient {
     switch (message.type) {
       case "ready":
         this.kernelVersion = message.version;
+        this.restarting = false;
         return;
       case "ask":
-        void this.answer(message.id, message.held);
+        void this.answer(message.id, message.held).catch((error: unknown) => {
+          if (this.pending.has(message.id))
+            this.fail(
+              error instanceof Error
+                ? error
+                : new Error("kernel payload delivery failed"),
+            );
+        });
         return;
       case "featureStart":
       case "progress":
-        this.pending.get(message.id)?.report?.(message);
+        {
+          const pending = this.pending.get(message.id);
+          pending?.report?.(message);
+          if (message.type === "progress" && pending?.cancelTimer)
+            this.armCancel(message.id, pending);
+        }
         return;
       case "reply": {
         const pending = this.pending.get(message.id);
         this.pending.delete(message.id);
+        if (pending) this.clear(pending);
         const { settled } = message;
         if (settled.ok) pending?.resolve(settled.value);
         else pending?.reject(fromWire(settled.error));
@@ -86,24 +168,42 @@ export class WorkerKernel implements KernelClient {
   private async answer(id: number, held: string[]) {
     const pending = this.pending.get(id);
     if (!pending) return;
+    const worker = this.worker;
+    let settled: Settled<Payload>;
     try {
       const value = await pending.payload(held);
-      this.post(
-        { type: "payload", id, settled: { ok: true, value } },
-        value instanceof ArrayBuffer ? [value] : [],
+      settled = { ok: true, value };
+    } catch (error) {
+      settled = { ok: false, error: toWire(error) };
+    }
+    if (
+      this.pending.get(id) !== pending ||
+      this.worker !== worker ||
+      this.retiring === worker
+    )
+      return;
+    try {
+      worker.postMessage(
+        { type: "payload", id, settled },
+        settled.ok && settled.value instanceof ArrayBuffer
+          ? [settled.value]
+          : [],
       );
     } catch (error) {
-      this.post({
-        type: "payload",
-        id,
-        settled: { ok: false, error: toWire(error) },
-      });
+      this.fail(
+        error instanceof Error
+          ? error
+          : new Error("kernel payload delivery failed"),
+      );
     }
   }
 
   private fail(error: Error) {
     this.failure ??= error;
-    for (const { reject } of this.pending.values()) reject(this.failure);
+    for (const pending of this.pending.values()) {
+      this.clear(pending);
+      pending.reject(this.failure);
+    }
     this.pending.clear();
   }
 
@@ -112,17 +212,39 @@ export class WorkerKernel implements KernelClient {
     args: Calls[M]["args"],
     payload: Pending["payload"] = noPayload,
     report?: Pending["report"],
+    job: Job | undefined = jobContext.getStore(),
   ): Promise<Calls[M]["result"]> {
     return new Promise((resolve, reject) => {
       if (this.failure) return reject(this.failure);
+      if (this.restarting)
+        return reject(new StoreError("kernel restarted", "kernel"));
       const id = ++this.lastId;
-      this.post({ type: "call", id, method, args } as ToWorker);
-      this.pending.set(id, {
+      const pending: Pending = {
         resolve: resolve as Pending["resolve"],
         reject,
         payload,
         report,
-      });
+        job,
+      };
+      this.pending.set(id, pending);
+      if (job) {
+        pending.onCancel = () => this.armCancel(id, pending);
+        job.cancelController.signal.addEventListener(
+          "abort",
+          pending.onCancel,
+          {
+            once: true,
+          },
+        );
+        if (job.cancelController.signal.aborted) pending.onCancel();
+      }
+      try {
+        this.post({ type: "call", id, method, args } as ToWorker);
+      } catch (error) {
+        this.pending.delete(id);
+        this.clear(pending);
+        reject(error);
+      }
     });
   }
 
@@ -207,14 +329,23 @@ export class WorkerKernel implements KernelClient {
   }
 
   drop(docId: string) {
-    if (!this.failure) this.post({ type: "drop", docId });
+    if (!this.failure && !this.restarting) this.post({ type: "drop", docId });
   }
 
   version() {
     return this.kernelVersion;
   }
 
+  status() {
+    return this.restarting
+      ? ("restarting" as const)
+      : this.kernelVersion
+        ? ("ready" as const)
+        : ("starting" as const);
+  }
+
   async close() {
+    await this.restartTask;
     await this.worker.terminate();
   }
 }

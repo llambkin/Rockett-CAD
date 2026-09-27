@@ -309,6 +309,7 @@ export function createApiRouter(
         await (label === undefined
           ? history.move(document, cursor, ctx.user.id)
           : history.save(document, label, tx, ctx.user.id));
+        jobs.committed();
         await send(res, document, evaluation, extra);
       }),
     );
@@ -320,7 +321,7 @@ export function createApiRouter(
       schemaVersion: SCHEMA_VERSION,
       describe: process.env.ROCKETT_DESCRIBE || null,
       kernelVersion: kernel.version(),
-      kernel: kernel.version() ? "ready" : "starting",
+      kernel: kernel.status(),
     });
   });
 

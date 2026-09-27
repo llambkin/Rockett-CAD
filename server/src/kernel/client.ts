@@ -120,6 +120,7 @@ export interface KernelClient {
   ): Promise<NamingPlan>;
   drop(docId: string): void;
   version(): Health["kernelVersion"];
+  status(): Health["kernel"];
 }
 
 function asValidation<T>(run: () => T, detail?: string): T {
@@ -361,5 +362,9 @@ export class InProcessKernel implements KernelClient {
 
   version() {
     return kernelVersion();
+  }
+
+  status() {
+    return this.version() ? "ready" : "starting";
   }
 }
