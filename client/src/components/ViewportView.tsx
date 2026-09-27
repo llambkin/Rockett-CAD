@@ -16,8 +16,8 @@ import {
   findProfile,
   formatAngle,
   formatLength,
+  parseLength,
   roundedLength,
-  toMm,
   newId,
   extendSketch,
   trimPiece,
@@ -83,6 +83,15 @@ interface DimEditField {
   value: string;
   label?: string;
   unit?: Units | "°" | "";
+}
+
+function parsedDimEditValue(field: DimEditField, units: Units): number | null {
+  if (field.unit === "°") {
+    const angle = Number(field.value);
+    return field.value.trim() && Number.isFinite(angle) ? angle : null;
+  }
+  const mm = parseLength(field.value, field.unit || units);
+  return mm !== null && mm > 0 ? mm : null;
 }
 
 interface DimLabel {
@@ -170,14 +179,8 @@ export function ViewportView() {
    * snapshot.
    */
   type DimField = tools.DimField;
-  const {
-    fmt2,
-    dimFieldsFor,
-    liveDimValues,
-    lockedValue,
-    resolveDimCursor,
-    pinTypedDims,
-  } = tools;
+  const { fmt2, dimFieldsFor, liveDimValues, resolveDimCursor, pinTypedDims } =
+    tools;
   const dimRef = useRef<{
     tool: string;
     fields: DimField[];
@@ -1844,6 +1847,14 @@ export function ViewportView() {
     const ts = toolState.current;
     const d = dimRef.current;
     if (ts.clicks.length !== 1 || !d) return;
+    if (
+      d.fields.some(
+        (f) => f.locked && tools.lockedValue(d.fields, f.key) === null,
+      )
+    ) {
+      refreshDim();
+      return;
+    }
     const first = ts.clicks[0]!;
     const second = resolveDimCursor(tool, first, cursor, d.fields);
     const result = buildFromClicks(
@@ -2288,11 +2299,7 @@ export function ViewportView() {
     if (DRAW_TOOLS.includes(tool)) {
       // a typed (locked) size wins over where the second click landed
       const d = dimRef.current;
-      if (
-        ts.clicks.length === 1 &&
-        d &&
-        d.fields.some((f) => lockedValue(d.fields, f.key) !== null)
-      ) {
+      if (ts.clicks.length === 1 && d && d.fields.some((f) => f.locked)) {
         await placeWithDims(uv);
         return;
       }
@@ -2362,11 +2369,18 @@ export function ViewportView() {
             constraint,
           );
           if (existing) {
+            const angle =
+              existing.type === "angle" || existing.type === "lineAngle";
             setDimEdit({
               fields: [
                 {
                   constraintId: existing.id,
-                  value: String((existing as any).value),
+                  value: String(
+                    angle
+                      ? (existing as any).value
+                      : roundedLength((existing as any).value, units),
+                  ),
+                  unit: angle ? "°" : units,
                 },
               ],
               x: e.clientX,
@@ -2588,7 +2602,10 @@ export function ViewportView() {
         }
         refreshDim();
         refreshGhost();
-      } else if (/^[0-9.-]$/.test(e.key)) {
+      } else if (
+        (f.unit === "°" && /^[0-9.+\-eE]$/.test(e.key)) ||
+        (f.unit !== "°" && /^[0-9.+\-mMcCiInNeE]$/.test(e.key))
+      ) {
         swallow();
         if (!f.locked) {
           f.text = "";
@@ -2710,14 +2727,16 @@ export function ViewportView() {
       setDimEdit(null);
       return;
     }
+    const parsed = dimEdit.fields.map((field) =>
+      parsedDimEditValue(field, units),
+    );
+    if (parsed.some((value) => value === null)) return;
     let constraints = draft.constraints;
-    for (const f of dimEdit.fields) {
+    for (const [index, f] of dimEdit.fields.entries()) {
       const edited = constraints.find((c) => c.id === f.constraintId);
-      const text =
-        f.unit && f.unit !== "°" && Number.isFinite(Number(f.value))
-          ? String(toMm(Number(f.value), f.unit))
-          : f.value;
-      const v = edited ? tools.dimensionValue(edited, text) : null;
+      const v = edited
+        ? tools.dimensionValue(edited, String(parsed[index]!))
+        : null;
       if (v === null) continue;
       // the edited value wins; any other dimension on the same target is a
       // stale duplicate (older sketches could stack them) and goes away
@@ -2910,6 +2929,7 @@ export function ViewportView() {
                   f.label ? `Dimension ${f.label}` : "Dimension value"
                 }
                 value={f.value}
+                aria-invalid={parsedDimEditValue(f, units) === null}
                 onChange={(e) =>
                   setDimEdit({
                     ...dimEdit,
@@ -2932,7 +2952,9 @@ export function ViewportView() {
                   }
                 }}
               />
-              {f.unit && <span className="dim-unit">{f.unit}</span>}
+              {f.unit && !/[a-z]$/i.test(f.value.trim()) && (
+                <span className="dim-unit">{f.unit}</span>
+              )}
             </Fragment>
           ))}
           <button
@@ -2985,10 +3007,15 @@ export function ViewportView() {
             <span
               key={f.key}
               className={`dim-field${i === dimEntry.active ? " active" : ""}${f.locked ? " locked" : ""}`}
+              aria-invalid={
+                f.locked && tools.lockedValue(dimEntry.fields, f.key) === null
+              }
             >
               <span className="dim-key">{f.label}</span>
               <span className="dim-val">{f.text}</span>
-              <span className="dim-unit">{f.unit}</span>
+              <span className="dim-unit">
+                {f.locked && /[a-z]$/i.test(f.text.trim()) ? "" : f.unit}
+              </span>
             </span>
           ))}
           <span className="dim-hint">Tab ↹ · Enter ↵</span>

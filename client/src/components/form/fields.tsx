@@ -1,8 +1,7 @@
 import {
-  fromMm,
   ORIGIN_AXES,
+  parseLength,
   roundedLength,
-  toMm,
   type BodyPayload,
   type CadDocument,
   type EvaluateResult,
@@ -118,19 +117,59 @@ export function LengthField({
   ariaLabel?: string;
   autoFocus?: boolean;
 }) {
-  const shown = (mm: number | undefined) =>
-    mm === undefined ? undefined : fromMm(mm, units);
+  const [text, setText] = useState(String(roundedLength(value, units)));
+  const [focused, setFocused] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const parsed = parseLength(text, units);
+  const invalid =
+    parsed === null ||
+    (min !== undefined && parsed < min) ||
+    (max !== undefined && parsed > max);
+  useEffect(() => {
+    if (!focused && !invalid) setText(String(roundedLength(value, units)));
+  }, [value, units, focused, invalid]);
+  useEffect(() => {
+    if (!autoFocus) return;
+    const t = window.setTimeout(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
+    return () => window.clearTimeout(t);
+  }, [autoFocus]);
   return (
-    <NumField
-      label={`${label} (${units})`}
-      value={roundedLength(value, units)}
-      onChange={(v) => onChange(toMm(v, units))}
-      min={shown(min)}
-      max={shown(max)}
-      step={shown(step)}
-      ariaLabel={ariaLabel}
-      autoFocus={autoFocus}
-    />
+    <label className="field">
+      <span>{`${label} (${units})`}</span>
+      <input
+        ref={ref}
+        type="text"
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        aria-invalid={invalid}
+        value={text}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(e) => {
+          if (step === undefined || !["ArrowUp", "ArrowDown"].includes(e.key))
+            return;
+          e.preventDefault();
+          const mm = (parsed ?? value) + step * (e.key === "ArrowUp" ? 1 : -1);
+          if (mm < (min ?? -Infinity) || mm > (max ?? Infinity)) return;
+          setText(String(roundedLength(mm, units)));
+          onChange(mm);
+        }}
+        onChange={(e) => {
+          const next = e.target.value;
+          setText(next);
+          const mm = parseLength(next, units);
+          if (
+            mm !== null &&
+            (min === undefined || mm >= min) &&
+            (max === undefined || mm <= max)
+          )
+            onChange(mm);
+        }}
+      />
+    </label>
   );
 }
 

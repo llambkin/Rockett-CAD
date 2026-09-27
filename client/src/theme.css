@@ -550,6 +550,12 @@ button.doc-name:hover .doc-name-pen {
   font-weight: 600;
 }
 
+.dim-field[aria-invalid="true"],
+.dim-edit input[aria-invalid="true"],
+.field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
 .dim-key,
 .dim-unit {
   color: var(--text-dim);
@@ -864,6 +870,7 @@ kbd {
 }
 
 .field input[type="number"],
+.field input[type="text"],
 .field select {
   width: 110px;
 }

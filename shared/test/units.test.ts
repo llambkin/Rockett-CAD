@@ -4,6 +4,7 @@ import {
   formatAngle,
   formatLength,
   fromMm,
+  parseLength,
   toMm,
   type Units,
 } from "../src/units.js";
@@ -32,5 +33,27 @@ describe("units", () => {
   it("formats angles in degrees", () => {
     expect(formatAngle(45, 3)).toBe("45°");
     expect(formatAngle(12.34567, 4)).toBe("12.3457°");
+  });
+
+  it("parses signed decimals and explicit length suffixes", () => {
+    expect(parseLength("25.4mm", "in")).toBe(25.4);
+    expect(parseLength("1in", "mm")).toBe(25.4);
+    expect(parseLength("-.5 cm", "mm")).toBe(-5);
+    expect(parseLength("+1. m", "in")).toBe(1000);
+    expect(parseLength("2", "cm")).toBe(20);
+  });
+
+  it("rejects incomplete, unknown and overflowing input", () => {
+    for (const text of [
+      "",
+      "-",
+      ".",
+      "1mm extra",
+      "2ft",
+      "1,2",
+      "1e999",
+      "Infinity",
+    ])
+      expect(parseLength(text, "mm")).toBeNull();
   });
 });

@@ -21,22 +21,22 @@ client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3173
+client/src/components/ViewportView.tsx 3200
 client/src/components/ViewportView.tsx ViewportHud 95
-client/src/components/ViewportView.tsx ViewportView 2934
+client/src/components/ViewportView.tsx ViewportView 2952
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 81
 client/src/components/ViewportView.tsx handleHover 138
 client/src/components/ViewportView.tsx handlePrimaryUp 178
-client/src/components/ViewportView.tsx handleSketchClick 230
+client/src/components/ViewportView.tsx handleSketchClick 233
 client/src/components/ViewportView.tsx onPointerMove 119
 client/src/components/ViewportView.tsx onPointerUp 86
 client/src/components/ViewportView.tsx pointerToSketchUV 221
 client/src/components/ViewportView.tsx useEffect() 99
 client/src/components/ViewportView.tsx useEffect()#2 296
-client/src/components/form/fields.tsx 504
+client/src/components/form/fields.tsx 543
 client/src/features/constructionPlane.tsx PlaneForm 112
-client/src/features/referenceImage.tsx ReferenceImagePanel 196
-client/src/sketchTools.ts 982
+client/src/features/referenceImage.tsx ReferenceImagePanel 194
+client/src/sketchTools.ts 986
 client/src/store.ts 1322
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 805

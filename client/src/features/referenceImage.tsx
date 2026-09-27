@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
   newId,
+  parseLength,
   roundedLength,
-  toMm,
   type ReferenceImageFeature,
 } from "@rockett/shared";
 import { api } from "../api";
@@ -165,17 +165,15 @@ function ReferenceImagePanel({
         const a = clicks[0]!;
         const b = clicks[1]!;
         const d = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-        const desired = toMm(
-          Number(
-            window.prompt(
-              `Real distance between the two points (${units}):`,
-              String(roundedLength(100, units)),
-            ),
-          ),
-          units,
+        const entry = window.prompt(
+          `Real distance between the two points (${units}):`,
+          String(roundedLength(100, units)),
         );
+        const desired = entry === null ? null : parseLength(entry, units);
         setCalibrating(false);
-        if (Number.isFinite(desired) && desired > 0 && d > 1e-9) {
+        if (entry !== null && (desired === null || desired <= 0))
+          useStore.getState().setError("Enter a valid distance");
+        if (desired !== null && desired > 0 && d > 1e-9) {
           const now = useStore.getState().dialogParams.scale ?? scale;
           setParams({ scale: now * (desired / d) });
         }

@@ -4,7 +4,12 @@
  */
 
 import type { SketchConstraint, SketchEntity, Units } from "@rockett/shared";
-import { newId, normalizeDegrees, toMm, UNIT_DOT_TOL } from "@rockett/shared";
+import {
+  newId,
+  normalizeDegrees,
+  parseLength,
+  UNIT_DOT_TOL,
+} from "@rockett/shared";
 
 export interface Created {
   entities: SketchEntity[];
@@ -761,13 +766,12 @@ export function liveDimValues(
 export function lockedValue(fields: DimField[], key: DimKey): number | null {
   const f = fields.find((x) => x.key === key);
   if (!f?.locked) return null;
-  const v = parseFloat(f.text);
-  if (!Number.isFinite(v)) return null;
-  return key === "angle" || v > 0
-    ? f.unit === "°"
-      ? v
-      : toMm(v, f.unit || "mm")
-    : null;
+  if (key === "angle") {
+    const v = Number(f.text);
+    return f.text.trim() && Number.isFinite(v) ? v : null;
+  }
+  const mm = parseLength(f.text, f.unit === "°" ? "mm" : f.unit || "mm");
+  return mm !== null && mm > 0 ? mm : null;
 }
 
 /**

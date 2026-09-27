@@ -17,6 +17,20 @@ export function fromMm(mm: number, units: Units): number {
   return mm / UNIT_TO_MM[units];
 }
 
+export function parseLength(text: string, units: Units): number | null {
+  if (text.length > 64) return null;
+  const match = text
+    .trim()
+    .match(
+      /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(mm|cm|m|in)?$/i,
+    );
+  if (!match) return null;
+  const value = Number(match[1]);
+  const suffix = (match[2]?.toLowerCase() ?? units) as Units;
+  const mm = toMm(value, suffix);
+  return Number.isFinite(mm) ? mm : null;
+}
+
 export function roundedLength(mm: number, units: Units): number {
   const digits = Math.ceil(Math.log10(UNIT_TO_MM[units] / LINEAR_TOL));
   return Math.round(fromMm(mm, units) * 10 ** digits) / 10 ** digits + 0;
