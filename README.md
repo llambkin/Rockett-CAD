@@ -91,7 +91,7 @@ everything downstream against persistent topology references.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions, sketch selections their relations; right-drag still orbits.
 - **Projects**: organise, create, move, share with friends or delete projects and folders; owners are shown.
 - **Project files**: download a project as one `.rockett` file, or open one as a new project, keeping what it hides.
-- **This browser**: keep a project in this browser instead of on the server; move it either way by Move to or drag.
+- **This browser**: keep projects locally; Move to transfers either way, while Share moves to the server first.
 - **Reload**: refreshing the page reopens the project you had open; Back returns to the list.
 - **Errors**: stay visible until dismissed, and their text can be copied.
 - **Version label**: the bottom-right corner shows the running build; hover for commit, version and schema.

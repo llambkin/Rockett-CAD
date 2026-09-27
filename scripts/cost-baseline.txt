@@ -7,7 +7,8 @@ client/src/components/FeatureDialog.tsx DialogBody 681
 client/src/components/FeatureDialog.tsx ExportPanel 91
 client/src/components/ModelTree.tsx 629
 client/src/components/ModelTree.tsx ModelTree 494
-client/src/components/ProjectItems.tsx 550
+client/src/components/ProjectItems.tsx 580
+client/src/components/ProjectItems.tsx BrowserItems 110
 client/src/components/ProjectItems.tsx ItemRow 92
 client/src/components/ProjectItems.tsx ProjectItems 176
 client/src/components/ProjectList.tsx ProjectList 110

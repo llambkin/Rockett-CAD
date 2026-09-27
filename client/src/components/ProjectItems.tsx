@@ -27,7 +27,7 @@ import {
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { MoveDialog } from "./MoveDialog";
 import { RenameInput } from "./RenameInput";
-import { ShareDialog } from "./ShareDialog";
+import { BrowserShareDialog, ShareDialog } from "./ShareDialog";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
 
@@ -487,6 +487,11 @@ export function BrowserItems({
 }) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Moving>(null);
+  const [sharing, setSharing] = useState<
+    BrowserProject | { id: string; name: string } | null
+  >(null);
+  const session = useSession();
+  const actor = session.kind === "signed-in" ? session.user : null;
   return (
     <>
       <Breadcrumb
@@ -517,7 +522,10 @@ export function BrowserItems({
                 download: () => downloadBrowserProject(r),
                 remove: () => deleteBrowserProject(r.key),
               },
-              [moveTo(item, setMoving)],
+              [
+                { label: "Share", glyph: "♧", run: () => setSharing(r) },
+                moveTo(item, setMoving),
+              ],
             )}
             onOpen={() => void openBrowserProject(r.key)}
             onRename={(name) => {
@@ -545,6 +553,28 @@ export function BrowserItems({
           onClose={() => setMoving(null)}
         />
       )}
+      {sharing &&
+        actor &&
+        ("key" in sharing ? (
+          <BrowserShareDialog
+            project={sharing}
+            onMoved={(id) => {
+              setSharing({ id, name: sharing.name });
+              run(Promise.resolve());
+            }}
+            onClose={() => setSharing(null)}
+          />
+        ) : (
+          <ShareDialog
+            target={{ kind: "project", ...sharing }}
+            actor={actor}
+            onSaved={() => {
+              setSharing(null);
+              run(Promise.resolve());
+            }}
+            onClose={() => setSharing(null)}
+          />
+        ))}
     </>
   );
 }

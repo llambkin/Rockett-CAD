@@ -1,10 +1,51 @@
 import { useEffect, useState } from "react";
 import { ROUTES, type ProjectMember } from "@rockett/shared";
 import { api, send } from "../api";
+import { moveToServer, type BrowserProject } from "../browserProjects";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 
 type Target = { kind: "project" | "folder"; id: string; name: string };
+
+export function BrowserShareDialog({
+  project,
+  onMoved,
+  onClose,
+}: {
+  project: BrowserProject;
+  onMoved: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const move = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      onMoved(await moveToServer(project, null));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <DraggablePanel title={`Share "${project.name}"`}>
+      <div className="dialog-body">
+        {error && <div className="error-banner">{error}</div>}
+        <div className="measure-row">
+          Move this project to the server before sharing it.
+        </div>
+      </div>
+      <DialogFooter
+        onOk={() => void move()}
+        onCancel={onClose}
+        okLabel="Move to server"
+        pending={pending}
+      />
+    </DraggablePanel>
+  );
+}
 
 const getMembers = (target: Target) =>
   target.kind === "project"

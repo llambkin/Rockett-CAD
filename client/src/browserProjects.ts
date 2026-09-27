@@ -308,14 +308,17 @@ export async function moveToBrowser(id: string, name: string): Promise<void> {
 export async function moveToServer(
   r: BrowserProject,
   folderId: string | null,
-): Promise<void> {
-  await api.uploadProjectFile(
+): Promise<string> {
+  const { document } = await api.uploadProjectFile(
     await browserProjectFile(r),
     folderId === null ? {} : { folderId },
   );
+  await Promise.all([api.getProject(document.id), api.getView(document.id)]);
+  await api.evaluate(document.id);
   await deleteBrowserProject(r.key).catch(() => {
     throw new Error(
       `"${r.name}" is on the server, but the copy in this browser was not removed.`,
     );
   });
+  return document.id;
 }
