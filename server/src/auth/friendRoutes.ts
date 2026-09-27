@@ -1,19 +1,92 @@
 import { Router, json, type Response } from "express";
-import { FRIEND_ROUTES, friendRequestBody, parse } from "@rockett/shared";
+import {
+  FRIEND_ROUTES,
+  NOTICE_ROUTES,
+  friendRequestBody,
+  parse,
+  type Notice,
+} from "@rockett/shared";
 import { StoreError } from "../store/jsonStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import type { FriendStore } from "./friendStore.js";
+import type { NoticeStore } from "./noticeStore.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
 
 export function createFriendRouter(
   users: UserStore,
   friends: FriendStore,
   projects: ProjectStore,
+  notices: NoticeStore,
 ): Router {
   const router = Router();
   registerFriendList(router, users, friends);
   registerFriendActions(router, users, friends, projects);
+  registerNotices(router, users, friends, projects, notices);
   return router;
+}
+
+function registerNotices(
+  router: Router,
+  users: UserStore,
+  friends: FriendStore,
+  projects: ProjectStore,
+  notices: NoticeStore,
+): void {
+  router.get(
+    NOTICE_ROUTES.list.path,
+    run(async (_req, res) => {
+      const user = res.locals.user;
+      const requests = (await friends.list()).requests.filter(
+        (request) => request.email === user.email,
+      );
+      const senders = new Map(
+        (await users.list())
+          .filter((record) => record.status === "active")
+          .map((record) => [record.id, toPublicUser(record)]),
+      );
+      const incoming: Notice[] = requests.flatMap((request) => {
+        const sender = senders.get(request.from);
+        return sender
+          ? [
+              {
+                kind: "friend",
+                id: request.id,
+                from: {
+                  id: sender.id,
+                  username: sender.username,
+                  displayName: sender.displayName,
+                },
+              },
+            ]
+          : [];
+      });
+      const opened = await notices.opened(user.id);
+      const projectsForUser: Notice[] = [];
+      for (const project of await projects.list()) {
+        if (project.status !== "ok" || opened.has(project.id)) continue;
+        const access = await projects.projectAccess(project.id);
+        if (access.members.some((member) => member.userId === user.id))
+          projectsForUser.push({
+            kind: "project",
+            id: project.id,
+            name: project.name,
+          });
+      }
+      res.json({ items: [...incoming, ...projectsForUser] });
+    }),
+  );
+  router.post(
+    NOTICE_ROUTES.openProject.path,
+    run(async (req, res) => {
+      const access = await projects.projectAccess(req.params.id);
+      if (
+        !access.members.some((member) => member.userId === res.locals.user.id)
+      )
+        return void res.status(404).json({ error: "not found" });
+      await notices.open(res.locals.user.id, req.params.id);
+      res.json({ ok: true });
+    }),
+  );
 }
 
 const run =

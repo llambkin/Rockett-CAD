@@ -313,7 +313,7 @@ export function saveDownload({ blob, fileName }: Download): void {
   URL.revokeObjectURL(a.href);
 }
 
-function send<P extends string, Req, Res>(
+export function send<P extends string, Req, Res>(
   route: Route<P, Req, Res>,
   params: PathParams<P>,
   {

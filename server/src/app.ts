@@ -16,6 +16,7 @@ import { cookieConfig, type CookieConfig } from "./auth/cookie.js";
 import { createAuthRouter } from "./auth/routes.js";
 import { createFriendRouter } from "./auth/friendRoutes.js";
 import { FriendStore } from "./auth/friendStore.js";
+import { NoticeStore } from "./auth/noticeStore.js";
 import type { SessionStore } from "./auth/sessions.js";
 import type { UserStore } from "./auth/userStore.js";
 import type { ProjectStore } from "./store/projectStore.js";
@@ -113,6 +114,7 @@ export function createApp({
 }: AppDeps): { app: Express; sweep: () => Promise<void> } {
   const app = express();
   const projects = new ProjectQueue();
+  const notices = new NoticeStore(store.documents.options.storage);
   app.disable("x-powered-by");
   app.use("/api", requireAllowedOrigin(allowedOrigins));
   app.use("/api", gzipJson);
@@ -131,9 +133,13 @@ export function createApp({
       users,
       new FriendStore(store.documents.options.storage),
       store,
+      notices,
     ),
   );
-  app.use("/api", createApiRouter(store, folders, projects, {}, kernel, users));
+  app.use(
+    "/api",
+    createApiRouter(store, folders, projects, {}, kernel, users, notices),
+  );
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "Not found" });
   });

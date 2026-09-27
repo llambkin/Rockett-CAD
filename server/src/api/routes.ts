@@ -25,6 +25,7 @@ import {
   unsignedRefs,
 } from "@rockett/shared";
 import { build } from "../build.js";
+import type { NoticeStore } from "../auth/noticeStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import { splitView } from "../store/migrations.js";
 import type { FolderStore } from "../store/folderStore.js";
@@ -51,6 +52,7 @@ import {
   uploadProjectFile,
 } from "./projectFile.js";
 import { folderRoutes } from "./folderRoutes.js";
+import { updateProjectMembers } from "./projectMembers.js";
 import {
   discarding,
   IMPORT_LIMITS,
@@ -189,6 +191,7 @@ export function createApiRouter(
   limits: Partial<ImportLimits> = {},
   kernel: KernelClient = new InProcessKernel(store),
   users?: UserStore,
+  notices?: NoticeStore,
 ): Router {
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
@@ -386,27 +389,18 @@ export function createApiRouter(
       if (ctx.user.role !== "admin" && current.owner !== ctx.user.id)
         return void res.status(403).json({ error: "forbidden" });
       if (!users) throw new Error("user store missing");
-      const active = (await users.list()).filter(
-        (user) => user.status === "active",
-      );
-      const ids = new Set(active.map((user) => user.id));
       const { owner, members } = req.body as {
         owner: string | null;
         members: ProjectMember[];
       };
-      if (current.owner !== null && owner === null)
-        throw new ValidationError("owned project cannot become unclaimed");
-      if (
-        (owner !== null && !ids.has(owner)) ||
-        members.some(
-          (member) => !ids.has(member.userId) || member.userId === owner,
-        ) ||
-        new Set(members.map((member) => member.userId)).size !== members.length
-      )
-        throw new ValidationError(
-          "owner and members must be distinct active users",
-        );
-      await store.setProjectAccess(req.params.id, { owner, members });
+      await updateProjectMembers(
+        store,
+        users,
+        notices,
+        req.params.id,
+        current,
+        { owner, members },
+      );
       res.json({ owner, members });
     }),
   );

@@ -1,22 +1,42 @@
 import { useState } from "react";
+import type { User } from "@rockett/shared";
 import { signOut, useSession } from "../session";
 import { useStore } from "../store";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { useNoticeItems } from "./NoticeItems";
 import { PasswordDialog } from "./PasswordDialog";
 
 export function UserMenu({ onUsers }: { onUsers?: () => void }) {
   const session = useSession();
+  if (session.kind !== "signed-in") return null;
+  return (
+    <SignedInUserMenu
+      key={session.user.id}
+      user={session.user}
+      onUsers={onUsers}
+    />
+  );
+}
+
+function SignedInUserMenu({
+  user,
+  onUsers,
+}: {
+  user: User;
+  onUsers: (() => void) | undefined;
+}) {
   const [position, setPosition] = useState<{ x: number; y: number } | null>(
     null,
   );
   const [passwordOpen, setPasswordOpen] = useState(false);
   const setError = useStore((state) => state.setError);
-  if (session.kind !== "signed-in") return null;
+  const { count, items: noticeItems } = useNoticeItems(user.id, setError);
 
   const items: MenuItem[] = [
+    ...noticeItems,
     { label: "Change password", action: () => setPasswordOpen(true) },
   ];
-  if (session.user.role === "admin")
+  if (user.role === "admin")
     items.push(
       onUsers
         ? { label: "Users", action: onUsers }
@@ -37,7 +57,8 @@ export function UserMenu({ onUsers }: { onUsers?: () => void }) {
           setPosition({ x: Math.max(0, bounds.right - 150), y: bounds.bottom });
         }}
       >
-        {session.user.displayName}
+        {user.displayName}
+        {count ? ` (${count})` : ""}
       </button>
       {position && (
         <ContextMenu
