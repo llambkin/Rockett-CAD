@@ -5,6 +5,7 @@ import { useStore } from "../store";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { useNoticeItems } from "./NoticeItems";
 import { PasswordDialog } from "./PasswordDialog";
+import { SettingsButton } from "./SettingsPanel";
 
 export function UserMenu({ onUsers }: { onUsers?: () => void }) {
   const session = useSession();
@@ -60,6 +61,7 @@ function SignedInUserMenu({
         {user.displayName}
         {count ? ` (${count})` : ""}
       </button>
+      <SettingsButton />
       {position && (
         <ContextMenu
           x={position.x}

@@ -738,6 +738,89 @@ button:focus-visible,
   overflow: hidden;
   resize: both;
 }
+
+.dialog-panel.settings-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: min(720px, calc(100vw - 24px));
+  height: min(540px, calc(100vh - 24px));
+  max-height: calc(100vh - 24px);
+  transform: translate(-50%, -50%);
+}
+
+.settings-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.settings-layout nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+  padding: 10px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.settings-layout nav button {
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 3px;
+}
+.settings-layout nav button.active {
+  color: var(--accent);
+  background: var(--bg2);
+}
+.settings-content {
+  flex: 1;
+}
+.settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.settings-heading h2 {
+  font-size: 15px;
+  margin: 4px 0 10px;
+}
+.settings-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-field-row fieldset {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.settings-source {
+  border: 1px solid var(--border);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.settings-source.active {
+  border-color: var(--accent);
+}
+.settings-error {
+  color: var(--err);
+}
+.settings-entry.invalid input,
+.settings-entry.invalid select {
+  border-color: var(--err);
+}
+.settings-warning {
+  color: var(--warn);
+}
 .controls-help .dialog-body {
   flex: 1;
 }
