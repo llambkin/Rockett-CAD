@@ -143,6 +143,8 @@ selected when the dialog opens, so typing replaces it.
 - Tessellations are cached per body id and shape hash, bounded at 256 MB
   across engines; only changed bodies re-mesh. A rename or visibility change
   does not.
+- Encoded body meshes have a separate 256 MB main-thread LRU. Its project
+  index is bounded and rebuilt from the current evaluation on a miss.
 - Viewport work (orbit/pan/zoom, hover, drag previews) never invokes the
   kernel.
 - Sketch drag solving runs locally in the browser at pointer-move rate; the

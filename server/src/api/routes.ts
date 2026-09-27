@@ -36,6 +36,8 @@ import {
   stageNamingUpgrade,
 } from "../store/namingUpgrade.js";
 import { InProcessKernel, type KernelClient } from "../kernel/client.js";
+import { MeshCache } from "../kernel/meshCache.js";
+import { meshRoute } from "./meshRoute.js";
 import {
   knownKeys,
   record,
@@ -188,6 +190,7 @@ export function createApiRouter(
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
   const history = new HistoryStore(store.documents.options.storage, store);
+  const meshCache = new MeshCache();
   const jobs = createJobRoutes(store, kernel, fail);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
   router.param("id", projectAccessGuard(store));
@@ -233,12 +236,21 @@ export function createApiRouter(
     doc: CadDocument,
     evaluation?: EvaluateResult,
     extra?: object,
-  ) =>
-    reply(res, {
+    position?: number,
+  ) => {
+    if (evaluation)
+      meshCache.publish(
+        doc.id,
+        doc.revision,
+        evaluation.bodies,
+        position === undefined || position === doc.timelinePosition,
+      );
+    return reply(res, {
       ...extra,
       document: doc,
       ...(evaluation && { evaluation, history: await history.status(doc.id) }),
     });
+  };
 
   async function pinned(
     doc: CadDocument,
@@ -310,7 +322,7 @@ export function createApiRouter(
           ? history.move(document, cursor, ctx.user.id)
           : history.save(document, label, tx, ctx.user.id));
         jobs.committed();
-        await send(res, document, evaluation, extra);
+        await send(res, document, evaluation, extra, position);
       }),
     );
 
@@ -373,6 +385,7 @@ export function createApiRouter(
     wrap(async (req, res) => {
       await store.remove(req.params.id);
       kernel.drop(req.params.id);
+      meshCache.drop(req.params.id);
       await folders.place(req.params.id, null);
       res.json({ ok: true });
     }),
@@ -403,11 +416,21 @@ export function createApiRouter(
   for (const [route, handler] of folderRoutes(folders, store))
     on(route, wrap(handler));
 
+  on(ROUTES.mesh, wrap(meshRoute(store, meshCache, evaluate)));
+
   on(
     ROUTES.evaluate,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      res.json(await evaluate(doc, evaluationPosition(req, doc)));
+      const position = evaluationPosition(req, doc);
+      const result = await evaluate(doc, position);
+      meshCache.publish(
+        doc.id,
+        doc.revision,
+        result.bodies,
+        position === undefined || position === doc.timelinePosition,
+      );
+      res.json(result);
     }),
   );
 

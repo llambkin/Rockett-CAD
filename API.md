@@ -38,10 +38,18 @@ with `status` `candidate`, `ambiguous` or `missing` and each candidate
 never writes a candidate into the document; see
 [CAD_MODEL.md](CAD_MODEL.md), Resolution.
 
-Each body carries `meshKey`, a SHA-256 of its mesh, faces, edges, vertices
-and bbox, without its name. The client keeps a body's viewport
+Each body carries `meshKey`, a tessellation key independent of its name and
+visibility. The client keeps a body's viewport
 objects while its key is unchanged. A JSON response of 64 KiB or more is
 gzipped when the request accepts gzip.
+
+Full bodies also carry `mesh: { hash, bytes }`. The hash is SHA-256 of a
+UTF-8 JSON byte sequence containing `positions`, `normals`, `indices`,
+`faces`, `edges`, `vertices` and `bbox`, in that order. `bytes` is its byte
+length. `GET /projects/:id/meshes/:hash` returns those bytes as
+`application/octet-stream` with private immutable caching. A request needs
+current project access and a hash in that project's current evaluation;
+otherwise it returns 404. Signing out clears the browser's HTTP cache.
 
 A mutating request with a JSON body, `POST /projects/:id/evaluate` and
 `DELETE /projects/:id/features/:fid` may carry `held`, the `meshKey`s the

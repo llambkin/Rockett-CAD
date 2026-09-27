@@ -302,6 +302,7 @@ export const ROUTES = {
     placeProjectBody,
   ),
   downloadProjectFile: route<never, Blob>()("GET", "/projects/:id/file"),
+  mesh: route<never, Blob>()("GET", "/projects/:id/meshes/:hash"),
   evaluate: route<HeldMeshes, WireEvaluateResult>()(
     "POST",
     "/projects/:id/evaluate",

@@ -44,8 +44,8 @@ client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/jobRoutes.ts createJobRoutes 119
-server/src/api/routes.ts 776
-server/src/api/routes.ts createApiRouter 596
+server/src/api/routes.ts 799
+server/src/api/routes.ts createApiRouter 617
 server/src/geometry/features.ts 2380
 server/src/geometry/features.ts buildPrism 86
 server/src/geometry/features.ts chamferByEnvelope 266

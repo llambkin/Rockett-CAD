@@ -164,6 +164,7 @@ export function createAuthRouter(
     const token = readSessionCookie(req.headers.cookie, cookie.name);
     if (token) sessions.revoke(token);
     res.set("Set-Cookie", sessionCookie(cookie, "", 0));
+    res.set("Clear-Site-Data", '"cache"');
     res.json({ ok: true });
   });
   router.get(AUTH_ROUTES.me.path, (_req, res) => res.json(res.locals.user));
