@@ -11,13 +11,17 @@ import {
   type CadDocument,
   type ProjectSummary,
   type ProjectView,
-  type ProjectManifest,
 } from "@rockett/shared";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
 import { JsonStore, sha256, StoreError } from "./jsonStore.js";
 import type { Inventory, Write } from "./jsonStore.js";
-import { checkManifest, ID_RE, ManifestStore } from "./manifestStore.js";
+import {
+  checkManifest,
+  ID_RE,
+  ManifestStore,
+  type ProjectAccess,
+} from "./manifestStore.js";
 import { documentMigrations, TooNewError } from "./migrations.js";
 import { SettingsStore } from "./settingsStore.js";
 import type { Storage } from "./storage.js";
@@ -186,25 +190,21 @@ export class ProjectStore {
     return out;
   }
 
-  async projectAccess(
-    id: string,
-  ): Promise<Pick<ProjectManifest, "owner" | "members">> {
+  async projectAccess(id: string): Promise<ProjectAccess> {
     const files = await this.storage.list(this.documents.dir(id));
     if (!files.includes(LEGACY) && !files.includes(DOCUMENTS))
       throw new StoreError(`project ${id} not found`, "not_found");
-    const manifest = await this.manifests.read(id);
-    this.valid(id, () => checkManifest(id, manifest));
-    const { owner, members } = manifest;
-    return { owner, members };
+    return this.manifests.access(id);
   }
 
-  async setProjectAccess(
-    id: string,
-    access: Pick<ProjectManifest, "owner" | "members">,
-  ): Promise<void> {
+  async setProjectAccess(id: string, access: ProjectAccess): Promise<void> {
     await this.projectAccess(id);
-    const manifest = await this.manifests.read(id);
-    await this.manifests.write(id, { ...manifest, ...access });
+    await this.manifests.update(id, (manifest) => ({ ...manifest, ...access }));
+  }
+  revokeFriendShares(first: string, second: string): Promise<void> {
+    return this.documents
+      .keys()
+      .then((ids) => this.manifests.revokeFriendShares(ids, first, second));
   }
 
   migrateManifest(id: string): Promise<void> {

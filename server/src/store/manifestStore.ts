@@ -6,6 +6,9 @@ import {
 import { JsonStore, StoreError } from "./jsonStore.js";
 import { manifestMigrations } from "./migrations.js";
 import type { Storage } from "./storage.js";
+import { ProjectQueue } from "./projectQueue.js";
+
+export type ProjectAccess = Pick<ProjectManifest, "owner" | "members">;
 
 export const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MANIFEST = "project.json";
@@ -46,6 +49,7 @@ export function checkManifest(id: string, manifest: ProjectManifest): void {
 
 export class ManifestStore {
   private readonly manifests: JsonStore<ProjectManifest>;
+  private readonly queue = new ProjectQueue();
 
   constructor(private readonly storage: Storage) {
     this.manifests = new JsonStore({
@@ -67,8 +71,53 @@ export class ManifestStore {
     });
   }
 
+  async access(id: string): Promise<ProjectAccess> {
+    const manifest = await this.read(id);
+    try {
+      checkManifest(id, manifest);
+    } catch (err) {
+      throw new StoreError(
+        `project ${id} is invalid: ${(err as Error).message}`,
+        "unprocessable",
+      );
+    }
+    return { owner: manifest.owner, members: manifest.members };
+  }
+
   write(id: string, manifest: ProjectManifest): Promise<void> {
     return this.manifests.write(id, manifest);
+  }
+
+  update(
+    id: string,
+    edit: (manifest: ProjectManifest) => ProjectManifest | undefined,
+  ): Promise<void> {
+    return this.queue.run(id, async () => {
+      const manifest = await this.read(id);
+      const next = edit(manifest);
+      if (next) await this.write(id, next);
+    });
+  }
+
+  async revokeFriendShares(
+    ids: string[],
+    first: string,
+    second: string,
+  ): Promise<void> {
+    for (const id of ids) {
+      await this.access(id);
+      await this.update(id, (manifest) => {
+        if (manifest.owner !== first && manifest.owner !== second) return;
+        const members = manifest.members.filter(
+          (member) =>
+            !(manifest.owner === first && member.userId === second) &&
+            !(manifest.owner === second && member.userId === first),
+        );
+        return members.length === manifest.members.length
+          ? undefined
+          : { ...manifest, members };
+      });
+    }
   }
 
   created(id: string, owner: string | null = null): [string, string] {

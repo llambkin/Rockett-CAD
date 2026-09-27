@@ -121,7 +121,7 @@ type ParamNames<P extends string> =
 
 export type PathParams<P extends string> = Record<ParamNames<P>, string>;
 
-const route =
+export const route =
   <Req, Res>() =>
   <const P extends string, S extends TSchema>(
     method: Method,

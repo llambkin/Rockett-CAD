@@ -3,6 +3,7 @@ export * from "./solver.js";
 export * from "./profiles.js";
 export * from "./api.js";
 export * from "./auth.js";
+export * from "./friends.js";
 export * from "./routes.js";
 export * from "./schema/index.js";
 export * from "./schema/features.js";

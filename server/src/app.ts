@@ -14,6 +14,8 @@ import { AccessKeyStore } from "./auth/cfAccess.js";
 import type { AccessIdentity } from "./auth/middleware.js";
 import { cookieConfig, type CookieConfig } from "./auth/cookie.js";
 import { createAuthRouter } from "./auth/routes.js";
+import { createFriendRouter } from "./auth/friendRoutes.js";
+import { FriendStore } from "./auth/friendStore.js";
 import type { SessionStore } from "./auth/sessions.js";
 import type { UserStore } from "./auth/userStore.js";
 import type { ProjectStore } from "./store/projectStore.js";
@@ -123,6 +125,14 @@ export function createApp({
       : undefined);
   app.use("/api", requireSession(sessions, users, cookie.name, identity));
   app.use("/api", createAuthRouter(users, sessions, cookie, setupToken));
+  app.use(
+    "/api",
+    createFriendRouter(
+      users,
+      new FriendStore(store.documents.options.storage),
+      store,
+    ),
+  );
   app.use("/api", createApiRouter(store, folders, projects, {}, kernel, users));
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "Not found" });
