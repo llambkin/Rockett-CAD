@@ -306,6 +306,8 @@ export const ROUTES = {
     "POST",
     "/projects/:id/evaluate",
   ),
+  jobEvents: route<never, never>()("GET", "/jobs/:jobId/events"),
+  cancelJob: route<never, { ok: true }>()("DELETE", "/jobs/:jobId"),
   replaceDocument: route<
     { document: CadDocument } & HeldMeshes,
     WireMutationResponse

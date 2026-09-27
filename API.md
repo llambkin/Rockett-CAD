@@ -72,6 +72,39 @@ including evaluation. Separate projects have independent queues. Run only one
 server process against a data directory; the queues do not lock across
 processes.
 
+### Kernel jobs
+
+A request may include `Rockett-Job: <UUID v4>`. The server registers that
+client-chosen ID before executing the route and still returns the route's normal
+synchronous response. An invalid ID returns 400 `validation`; a registered ID,
+including one owned by another user, returns 409 `conflict`. An overloaded job
+registry returns 503 `kernel`.
+
+`GET /jobs/:jobId/events` returns `text/event-stream`. Each message has an
+`event` of `progress`, `done`, `failed` or `cancelled` and a JSON `data` object.
+Progress data carries `done`, `total` and `label`. A late subscriber receives
+the last 64 events, then live events; the stream closes after a terminal event.
+`DELETE /jobs/:jobId` returns `{ ok: true }` and requests a soft cancel at the
+next kernel boundary. The original request still completes with its normal
+response, which may contain a partial evaluation. Cancelling does not roll back
+a saved document. If the operation finishes without stopping, the terminal
+event is `done`. A finished job remains available for at most 10 minutes;
+the registry keeps at most 100 finished jobs.
+
+The job belongs to the submitting user and, for a project route, that project.
+An import that creates a project binds its job to the new project on creation.
+If import fails and removes that project, the submitting user can still read
+the job's `failed` event.
+Event and cancel requests check the same user and current project membership.
+Unknown, foreign and no longer accessible IDs all return
+`{ "error": "job not found", "code": "not_found" }` with status 404. At most
+32 requests with job IDs may be active, each job has at most 8 subscribers,
+subscribers close after 2 minutes without an event, and a job that has not
+finished after 10 minutes emits `failed` and requests a soft stop. A worker
+stuck within one kernel operation still needs the hard cancellation mechanism.
+A disconnected request requests a soft stop and keeps its active slot until
+its route operation settles.
+
 ### Document revisions
 
 The ETag of a project names its part document,

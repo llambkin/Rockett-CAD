@@ -69,6 +69,7 @@ import {
 } from "./revision.js";
 import { omitHeldMeshes } from "./heldMeshes.js";
 import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
+import { createJobRoutes } from "./jobRoutes.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -187,6 +188,7 @@ export function createApiRouter(
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
   const history = new HistoryStore(store.documents.options.storage, store);
+  const jobs = createJobRoutes(store, kernel, fail);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
   router.param("id", projectAccessGuard(store));
   const on = (route: Route, ...handlers: RequestHandler[]) =>
@@ -194,8 +196,15 @@ export function createApiRouter(
       route.path,
       ...(route.body ? [parseBody(route.body)] : []),
       ...(DOCUMENT_EDITS.has(route) ? [requireRevision] : []),
+      ...(route === ROUTES.jobEvents || route === ROUTES.cancelJob
+        ? []
+        : [jobs.start]),
       ...handlers,
     );
+
+  on(ROUTES.jobEvents, jobs.events);
+  on(ROUTES.cancelJob, jobs.cancel);
+  const evaluate = jobs.evaluate;
 
   // Serialize the whole load/edit/save/evaluate operation for each project.
   // Locking only save() would still allow two requests to edit stale copies.
@@ -209,6 +218,7 @@ export function createApiRouter(
       const result = id
         ? projects.run(id, () => store.touch(id).then(() => fn(req, res, ctx)))
         : fn(req, res, ctx);
+      void result.then(jobs.settled, jobs.settled);
       result.catch((err) => fail(req, res, err));
     };
 
@@ -265,7 +275,7 @@ export function createApiRouter(
   }
 
   async function evaluateAndSync(doc: CadDocument, position?: number) {
-    const evaluation = await kernel.evaluate(doc, position);
+    const evaluation = await evaluate(doc, position);
     let metaChanged = pruneGroups(doc, evaluation, position);
     for (const body of evaluation.bodies) {
       if (!doc.bodyMeta[body.bodyId]) {
@@ -396,7 +406,7 @@ export function createApiRouter(
     ROUTES.evaluate,
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
-      res.json(await kernel.evaluate(doc, evaluationPosition(req, doc)));
+      res.json(await evaluate(doc, evaluationPosition(req, doc)));
     }),
   );
 
@@ -438,7 +448,7 @@ export function createApiRouter(
         throw new ValidationError(
           `This import would exceed the 40 MB project limit. Start a separate project for this ${label} file.`,
         );
-      const evaluation = await kernel.evaluate(doc, undefined, sources);
+      const evaluation = await evaluate(doc, undefined, sources);
       for (const feature of features) {
         const status = evaluation.featureStatuses.find(
           (s) => s.featureId === feature.id,
@@ -466,6 +476,7 @@ export function createApiRouter(
           upload.filename.replace(/\.[^.]*$/, ""),
           ctx.user.id,
         );
+        jobs.bindProject(doc.id);
         try {
           await insert(doc, upload);
           const evaluation = await evaluateAndSync(doc);
@@ -474,6 +485,7 @@ export function createApiRouter(
         } catch (error) {
           kernel.drop(doc.id);
           await store.remove(doc.id);
+          jobs.bindProject(null);
           throw error;
         }
       }),

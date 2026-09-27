@@ -17,11 +17,18 @@ const READ_POSTS = new Set([
   ROUTES.exportModel.path,
 ]);
 
-function role(user: User, owner: string | null, members: ProjectMember[]) {
+export function projectRole(
+  user: User,
+  owner: string | null,
+  members: ProjectMember[],
+) {
   return user.role === "admin" || owner === null || owner === user.id
     ? "edit"
     : members.find((member) => member.userId === user.id)?.role;
 }
+
+export const isProjectRoute = (req: Request): boolean =>
+  req.route?.path.startsWith("/projects/:id") ?? false;
 
 export async function visibleProjects(
   store: ProjectStore,
@@ -32,7 +39,7 @@ export async function visibleProjects(
   const visible = await Promise.all(
     listed.map(async (project) => {
       const { owner, members } = await store.projectAccess(project.id);
-      return role(user, owner, members) ? project : undefined;
+      return projectRole(user, owner, members) ? project : undefined;
     }),
   );
   return visible.filter((project) => project !== undefined);
@@ -40,13 +47,13 @@ export async function visibleProjects(
 
 export function projectAccessGuard(store: ProjectStore) {
   return (req: Request, res: Response, next: NextFunction, id: string) => {
-    if (!req.route?.path.startsWith("/projects/:id")) return next();
+    if (!isProjectRoute(req)) return next();
     const user: User | undefined = res.locals.user;
     if (!user) return next(new Error("auth middleware missing"));
     store
       .projectAccess(id)
       .then(({ owner, members }) => {
-        const access = role(user, owner, members);
+        const access = projectRole(user, owner, members);
         if (!access)
           return res
             .status(404)
