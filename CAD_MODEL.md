@@ -265,9 +265,12 @@ A blend also must not change the number of shells: a fillet into the cavity of
 a closed shell can return the box with the cavity filled in. The pinned kernel
 binds neither `BOPAlgo_ArgumentAnalyzer` nor `BRepAlgoAPI_Check`. On the
 many-body fillet drag benchmark the check adds about 3 ms to a 19 ms median.
-Chamfer's envelope fallback is a boolean and gets the validity check only. Size
-hints build each trial through the feature, so they never offer a size that
-cuts through.
+Chamfer's envelope fallback is a boolean, so its faces cannot cross, but it can
+open a cavity: it gets the shell count check only. Shell gets no cut-through
+check: on the pinned kernel its offset fails rather than build a wall that
+crosses another face, and a closed shell's hollow is a boolean cut. Size hints
+build each trial through the feature, so they never offer a size that cuts
+through.
 
 A shell must also leave a hollow. When the wall reaches half the body, or a
 fillet radius, the kernel can return the solid unshelled and report success.

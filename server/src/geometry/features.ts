@@ -1415,6 +1415,7 @@ function cutsThrough(
   before: Shape,
 ): boolean | null {
   if (shellCount(result) !== shellCount(before)) return true;
+  if (!op) return false;
   const k = getKernel();
   const made = new Set<number>();
   for (const { edge } of sourceEdges) {
@@ -1799,7 +1800,15 @@ function chamferBody(
           );
         }
         result = viaEnvelope.shape;
-        rejectInvalid(result, body.shape, "chamfer", size, advice);
+        rejectBadBlend(
+          null,
+          sourceEdges,
+          result,
+          body.shape,
+          "chamfer",
+          size,
+          advice,
+        );
         registerBodySolids(state, bodyId, result, viaEnvelope.names);
         return;
       }
