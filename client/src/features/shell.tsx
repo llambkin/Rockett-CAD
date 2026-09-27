@@ -1,5 +1,6 @@
 import { newId, type ShellFeature } from "@rockett/shared";
-import { NumField, SelInfo } from "../components/form/fields";
+import { LengthField, SelInfo } from "../components/form/fields";
+import { useSetting } from "../settings";
 import { HANDLE_VALUES } from "../three/featureHandles";
 import {
   registerFeatureUI,
@@ -14,6 +15,7 @@ const thickness = (params: DialogParams) => {
 };
 
 function ShellForm({ params, setParams }: FeatureFormProps) {
+  const units = useSetting("units.length");
   return (
     <>
       <SelInfo
@@ -21,8 +23,9 @@ function ShellForm({ params, setParams }: FeatureFormProps) {
         input="faces"
         hint="click faces to open"
       />
-      <NumField
-        label="Thickness (mm)"
+      <LengthField
+        label="Thickness"
+        units={units}
         autoFocus
         value={params.thickness ?? thickness(params)}
         onChange={(v) => setParams({ thickness: v })}

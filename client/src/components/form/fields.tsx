@@ -1,6 +1,7 @@
 import {
   fromMm,
   ORIGIN_AXES,
+  roundedLength,
   toMm,
   type BodyPayload,
   type CadDocument,
@@ -122,7 +123,7 @@ export function LengthField({
   return (
     <NumField
       label={`${label} (${units})`}
-      value={fromMm(value, units)}
+      value={roundedLength(value, units)}
       onChange={(v) => onChange(toMm(v, units))}
       min={shown(min)}
       max={shown(max)}

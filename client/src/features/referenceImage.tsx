@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { newId, type ReferenceImageFeature } from "@rockett/shared";
+import {
+  newId,
+  roundedLength,
+  toMm,
+  type ReferenceImageFeature,
+} from "@rockett/shared";
 import { api } from "../api";
 import { DraggablePanel } from "../components/DraggablePanel";
 import { DialogFooter } from "../components/form/DialogFooter";
-import {
-  AngleField,
-  LengthField,
-  NumField,
-  SelInfo,
-} from "../components/form/fields";
+import { AngleField, LengthField, SelInfo } from "../components/form/fields";
 import { planar } from "../dialogPicks";
 import { useStore, type Selection } from "../store";
+import { useSetting } from "../settings";
 import { viewportHandle } from "../viewportRef";
 import { selectedPlane } from "./inputs";
 import {
@@ -78,6 +79,7 @@ function ReferenceImagePanel({
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
+  const units = useSetting("units.length");
 
   const existing = editId
     ? doc?.features.find((f) => f.id === editId)
@@ -163,8 +165,14 @@ function ReferenceImagePanel({
         const a = clicks[0]!;
         const b = clicks[1]!;
         const d = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-        const desired = Number(
-          window.prompt("Real distance between the two points (mm):", "100"),
+        const desired = toMm(
+          Number(
+            window.prompt(
+              `Real distance between the two points (${units}):`,
+              String(roundedLength(100, units)),
+            ),
+          ),
+          units,
         );
         setCalibrating(false);
         if (Number.isFinite(desired) && desired > 0 && d > 1e-9) {
@@ -197,8 +205,9 @@ function ReferenceImagePanel({
             </label>
           </>
         )}
-        <NumField
-          label="Scale (mm / pixel)"
+        <LengthField
+          label="Scale per pixel"
+          units={units}
           autoFocus
           value={scale}
           onChange={(x) => setParams({ scale: x })}
@@ -210,13 +219,13 @@ function ReferenceImagePanel({
         />
         <LengthField
           label="Position U"
-          units="mm"
+          units={units}
           value={u}
           onChange={(x) => setParams({ u: x })}
         />
         <LengthField
           label="Position V"
-          units="mm"
+          units={units}
           value={v}
           onChange={(x) => setParams({ v: x })}
         />

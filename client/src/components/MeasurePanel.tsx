@@ -1,18 +1,18 @@
 /** Measure results panel (shown in measure mode). */
 
-import { formatAngle, formatLength } from "@rockett/shared";
+import { formatAngle, formatLength, UNIT_TO_MM } from "@rockett/shared";
+import { useSetting } from "../settings";
 import { useStore } from "../store";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 
-function fmt(v: number | undefined): string {
-  return v === undefined ? "-" : formatLength(v, "mm", 4);
-}
-
 export function MeasurePanel() {
+  const units = useSetting("units.length");
   const mode = useStore((s) => s.mode);
   const result = useStore((s) => s.measureResult);
   const selection = useStore((s) => s.selection);
+  const fmt = (v: number | undefined) =>
+    v === undefined ? "-" : formatLength(v, units);
 
   if (mode.name !== "measure") return null;
 
@@ -34,7 +34,10 @@ export function MeasurePanel() {
               <Row k="Length" v={fmt(item.length)} />
             )}
             {item.area !== undefined && (
-              <Row k="Area" v={`${formatLength(item.area, "mm", 4)}²`} />
+              <Row
+                k="Area"
+                v={`${formatLength(item.area / UNIT_TO_MM[units], units)}²`}
+              />
             )}
             {item.radius !== undefined && (
               <Row k="Radius" v={fmt(item.radius)} />
@@ -45,9 +48,7 @@ export function MeasurePanel() {
             {item.position && (
               <Row
                 k="Position"
-                v={item.position
-                  .map((x) => Math.round(x * 1000) / 1000)
-                  .join(", ")}
+                v={item.position.map((x) => fmt(x)).join(", ")}
               />
             )}
           </div>

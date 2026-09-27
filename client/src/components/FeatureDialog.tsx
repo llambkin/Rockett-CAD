@@ -14,7 +14,7 @@ import type {
   PlaneRef,
   ProfileRef,
 } from "@rockett/shared";
-import { newId } from "@rockett/shared";
+import { formatLength, newId } from "@rockett/shared";
 import {
   featurePatch,
   useStore,
@@ -33,6 +33,7 @@ import {
   AxisField,
   axisOptions,
   CheckField,
+  LengthField,
   NumField,
   SelInfo,
   SelectField,
@@ -50,6 +51,7 @@ import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI } from "../features/registry";
 import { selectedPlane } from "../features/inputs";
 import "../features/shell";
+import { useSetting } from "../settings";
 
 function need(cond: unknown, message: string): asserts cond {
   if (!cond) throw new Error(message);
@@ -117,6 +119,7 @@ function DialogBody({
   editId?: string | undefined;
 }) {
   const selection = useStore((s) => s.selection);
+  const units = useSetting("units.length");
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
   const setMode = useStore((s) => s.setMode);
@@ -294,8 +297,9 @@ function DialogBody({
             input="profiles"
             hint="click sketch regions or planar faces"
           />
-          <NumField
-            label="Start offset (mm)"
+          <LengthField
+            label="Start offset"
+            units={units}
             value={p("startOffset", 0)}
             onChange={(v) => setParams({ startOffset: v })}
           />
@@ -303,8 +307,9 @@ function DialogBody({
             0 = start on the sketch / face; ± moves the start plane along its
             normal
           </div>
-          <NumField
-            label="Distance (mm)"
+          <LengthField
+            label="Distance"
+            units={units}
             autoFocus
             value={p("distance", 10)}
             onChange={(v) => setParams({ distance: v })}
@@ -324,8 +329,9 @@ function DialogBody({
             onChange={(v) => setParams({ direction: v })}
           />
           {p("direction", "normal") === "twoSided" && (
-            <NumField
-              label="Distance 2 (mm)"
+            <LengthField
+              label="Distance 2"
+              units={units}
               value={p("distance2", 5)}
               onChange={(v) => setParams({ distance2: v })}
             />
@@ -419,8 +425,9 @@ function DialogBody({
           <small>
             Smooth curves chain together; sharp corners stop the selection.
           </small>
-          <NumField
-            label="Radius (mm)"
+          <LengthField
+            label="Radius"
+            units={units}
             autoFocus
             value={p("radius", main("fillet"))}
             onChange={(v) => setParams({ radius: v })}
@@ -457,8 +464,9 @@ function DialogBody({
           <small>
             Smooth curves chain together; sharp corners stop the selection.
           </small>
-          <NumField
-            label="Distance (mm)"
+          <LengthField
+            label="Distance"
+            units={units}
             autoFocus
             value={p("distance", main("chamfer"))}
             onChange={(v) => setParams({ distance: v })}
@@ -552,8 +560,9 @@ function DialogBody({
       body = (
         <>
           <SelInfo label="Faces" input="faces" hint="click planar faces" />
-          <NumField
-            label="Distance (mm, − = inward)"
+          <LengthField
+            label="Distance, − = inward"
+            units={units}
             autoFocus
             value={p("distance", main("offsetFace"))}
             onChange={(v) => setParams({ distance: v })}
@@ -642,8 +651,9 @@ function DialogBody({
             onChange={(v) => setParams({ count: v })}
             int
           />
-          <NumField
-            label="Spacing (mm)"
+          <LengthField
+            label="Spacing"
+            units={units}
             autoFocus
             value={p("spacing", main("linearPattern"))}
             onChange={(v) => setParams({ spacing: v })}
@@ -796,6 +806,7 @@ function DialogBody({
 // ---------------------------------------------------------------------------
 
 function ExportPanel({ onClose }: { onClose: () => void }) {
+  const units = useSetting("units.length");
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const hiddenBodies = useStore((s) => s.view.hidden.bodies);
@@ -864,14 +875,14 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
           </select>
         </label>
         <label className="field">
-          <span>Quality (mm deviation)</span>
+          <span>Quality ({units} deviation)</span>
           <select
             value={quality}
             onChange={(e) => setQuality(Number(e.target.value))}
           >
-            <option value={0.1}>Draft (0.1)</option>
-            <option value={0.05}>Standard (0.05)</option>
-            <option value={0.01}>Fine (0.01)</option>
+            <option value={0.1}>Draft ({formatLength(0.1, units)})</option>
+            <option value={0.05}>Standard ({formatLength(0.05, units)})</option>
+            <option value={0.01}>Fine ({formatLength(0.01, units)})</option>
           </select>
         </label>
       </div>

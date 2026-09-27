@@ -9,6 +9,7 @@ import type { Feature } from "@rockett/shared";
 import { createLivePreview } from "../livePreview";
 import { panelPlacement } from "../panelPlacement";
 import { useStore } from "../store";
+import { useSetting } from "../settings";
 import { storedTargets } from "../toolTargets";
 import { LengthField, NumField } from "./form/fields";
 
@@ -134,11 +135,12 @@ function QuickField({
   autoFocus: boolean;
   onChange: (v: number) => void;
 }) {
+  const units = useSetting("units.length");
   if (value.kind === "length")
     return (
       <LengthField
         label={value.label}
-        units="mm"
+        units={units}
         value={value.read(draft)}
         autoFocus={autoFocus}
         onChange={onChange}

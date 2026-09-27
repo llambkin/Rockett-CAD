@@ -1,12 +1,13 @@
 import { newId, type EmbossFeature } from "@rockett/shared";
 import {
-  NumField,
+  LengthField,
   SelInfo,
   SelectField,
   TargetField,
 } from "../components/form/fields";
 import { profiles, targets } from "../dialogPicks";
 import { targetOperation } from "../toolTargets";
+import { useSetting } from "../settings";
 import { bodyTargets, handleValue, profilePicks, profileRefs } from "./inputs";
 import {
   registerFeatureUI,
@@ -15,6 +16,7 @@ import {
 } from "./registry";
 
 function EmbossForm({ params, setParams }: FeatureFormProps) {
+  const units = useSetting("units.length");
   return (
     <>
       <SelInfo
@@ -22,8 +24,9 @@ function EmbossForm({ params, setParams }: FeatureFormProps) {
         input="profiles"
         hint="sketch on a face, then pick regions"
       />
-      <NumField
-        label="Depth (mm)"
+      <LengthField
+        label="Depth"
+        units={units}
         autoFocus
         value={params.depth ?? handleValue(params, "emboss")}
         onChange={(v) => setParams({ depth: v })}

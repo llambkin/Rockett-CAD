@@ -16,11 +16,15 @@ import {
   findProfile,
   formatAngle,
   formatLength,
+  roundedLength,
+  toMm,
   newId,
   extendSketch,
   trimPiece,
   ORIGIN_AXES,
+  type Units,
 } from "@rockett/shared";
+import { useSetting } from "../settings";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
 import type { LayerHandle } from "../three/sceneLayers";
@@ -78,7 +82,7 @@ interface DimEditField {
   constraintId: string;
   value: string;
   label?: string;
-  unit?: string;
+  unit?: Units | "°" | "";
 }
 
 interface DimLabel {
@@ -93,6 +97,7 @@ interface DimLabel {
 const NUDGE_EVENTS = ["pointerdown", "pointerup", "wheel"];
 
 export function ViewportView() {
+  const units = useSetting("units.length");
   const containerRef = useRef<HTMLDivElement>(null);
   const cubeRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<CadViewport | null>(null);
@@ -433,7 +438,7 @@ export function ViewportView() {
             const off = c.labelOffset;
             labels.push({
               id: c.id,
-              text: dimensionText(c),
+              text: dimensionText(c, units),
               world: uv3(
                 sk.frame,
                 anchor.x + (off?.[0] ?? 0),
@@ -473,6 +478,7 @@ export function ViewportView() {
     hover,
     draftSketch,
     baseLoads,
+    units,
   ]);
 
   const [, setLabelTick] = useState(0);
@@ -826,7 +832,7 @@ export function ViewportView() {
     g.update(value);
     useStore.getState().setDialogParams({ [handle.param]: value });
     const at = arc ? g.handleScreenPosition() : g.tipScreenPosition();
-    const text = arc ? formatAngle(value, 3) : formatLength(value, "mm", 3);
+    const text = arc ? formatAngle(value, 3) : formatLength(value, units);
     setGizmoLabel({ ...at, text });
   }
 
@@ -954,7 +960,7 @@ export function ViewportView() {
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
-            text: `${axisName}: ${formatLength(v, "mm", 3)}`,
+            text: `${axisName}: ${formatLength(v, units)}`,
           });
         }
         // editing an existing move: live-update the real geometry
@@ -991,7 +997,7 @@ export function ViewportView() {
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
-            text: formatLength(zeroed ? 0 : Math.abs(v), "mm", 3),
+            text: formatLength(zeroed ? 0 : Math.abs(v), units),
           });
           // editing an existing extrude: live-update the real geometry.
           // At zero the feature is previewed as suppressed (a real zero
@@ -1727,7 +1733,7 @@ export function ViewportView() {
     clicks: tools.UV[],
     cursor: tools.UV,
   ): string | null {
-    const r1 = (v: number) => Math.round(v * 100) / 100;
+    const f = (v: number) => formatLength(v, units);
     const first = clicks[0];
     if (!first) return null;
     const last = clicks[clicks.length - 1]!;
@@ -1735,21 +1741,21 @@ export function ViewportView() {
     const dy = cursor.y - last.y;
     switch (tool) {
       case "line":
-        return `${r1(Math.hypot(dx, dy))} mm`;
+        return f(Math.hypot(dx, dy));
       case "rect":
-        return `${r1(Math.abs(cursor.x - first.x))} × ${r1(Math.abs(cursor.y - first.y))} mm`;
+        return `${f(Math.abs(cursor.x - first.x))} × ${f(Math.abs(cursor.y - first.y))}`;
       case "centerRect":
-        return `${r1(Math.abs(cursor.x - first.x) * 2)} × ${r1(Math.abs(cursor.y - first.y) * 2)} mm`;
+        return `${f(Math.abs(cursor.x - first.x) * 2)} × ${f(Math.abs(cursor.y - first.y) * 2)}`;
       case "circle":
-        return `⌀${r1(Math.hypot(cursor.x - first.x, cursor.y - first.y) * 2)} mm`;
+        return `⌀${f(Math.hypot(cursor.x - first.x, cursor.y - first.y) * 2)}`;
       case "polygon":
-        return `R${r1(Math.hypot(cursor.x - first.x, cursor.y - first.y))} mm`;
+        return `R${f(Math.hypot(cursor.x - first.x, cursor.y - first.y))}`;
       case "arc3":
-        return clicks.length === 1 ? `${r1(Math.hypot(dx, dy))} mm` : null;
+        return clicks.length === 1 ? f(Math.hypot(dx, dy)) : null;
       case "slot":
         return clicks.length === 1
-          ? `${r1(Math.hypot(dx, dy))} mm`
-          : `R${r1(Math.hypot(dx, dy))} mm`;
+          ? f(Math.hypot(dx, dy))
+          : `R${f(Math.hypot(dx, dy))}`;
       default:
         return null;
     }
@@ -1762,7 +1768,7 @@ export function ViewportView() {
     cursor: tools.UV,
   ) {
     // tools with typed sizes get the editable entry instead of the readout
-    const fields = dimFieldsFor(tool);
+    const fields = dimFieldsFor(tool, units);
     if (fields && clicks.length === 1) {
       let d = dimRef.current;
       if (!d || d.tool !== tool) {
@@ -1772,7 +1778,12 @@ export function ViewportView() {
       d.x = e.clientX;
       d.y = e.clientY;
       const live = liveDimValues(tool, clicks[0]!, cursor);
-      for (const f of d.fields) if (!f.locked) f.text = fmt2(live[f.key] ?? 0);
+      for (const f of d.fields)
+        if (!f.locked)
+          f.text =
+            f.unit === "°"
+              ? fmt2(live[f.key] ?? 0)
+              : String(roundedLength(live[f.key] ?? 0, units));
       refreshDim();
       setToolLabel(null);
       return;
@@ -2435,14 +2446,20 @@ export function ViewportView() {
       );
       s.updateDraftSketch(draft.entities, dims.constraints);
       await s.commitDraftSketch();
-      const labels = dimFieldsFor("line") ?? [];
+      const labels = dimFieldsFor("line", units) ?? [];
       const fields: DimEditField[] = [];
       for (const [i, id] of [dims.lengthId, dims.angleId].entries()) {
         const c = dims.constraints.find((x) => x.id === id) as any;
         const stored = draft.constraints.some((x) => x.id === id);
         fields.push({
           constraintId: id,
-          value: String(stored ? c.value : round3(c.value)),
+          value: String(
+            i === 1
+              ? stored
+                ? c.value
+                : round3(c.value)
+              : roundedLength(c.value, units),
+          ),
           label: labels[i]?.label ?? "",
           unit: labels[i]?.unit ?? "",
         });
@@ -2459,7 +2476,8 @@ export function ViewportView() {
         fields: [
           {
             constraintId: existing.id,
-            value: String((existing as any).value),
+            value: String(roundedLength((existing as any).value, units)),
+            unit: units,
           },
         ],
         x: e.clientX,
@@ -2563,7 +2581,10 @@ export function ViewportView() {
             ts.clicks[0]!,
             ts.lastCursor ?? ts.clicks[0]!,
           );
-          f.text = fmt2(live[f.key] ?? 0);
+          f.text =
+            f.unit === "°"
+              ? fmt2(live[f.key] ?? 0)
+              : String(roundedLength(live[f.key] ?? 0, units));
         }
         refreshDim();
         refreshGhost();
@@ -2580,7 +2601,7 @@ export function ViewportView() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  }, [units]);
 
   // ----- editing an extrude/revolve: live selection preview + Ctrl/⌘ peek -----
 
@@ -2692,7 +2713,11 @@ export function ViewportView() {
     let constraints = draft.constraints;
     for (const f of dimEdit.fields) {
       const edited = constraints.find((c) => c.id === f.constraintId);
-      const v = edited ? tools.dimensionValue(edited, f.value) : null;
+      const text =
+        f.unit && f.unit !== "°" && Number.isFinite(Number(f.value))
+          ? String(toMm(Number(f.value), f.unit))
+          : f.value;
+      const v = edited ? tools.dimensionValue(edited, text) : null;
       if (v === null) continue;
       // the edited value wins; any other dimension on the same target is a
       // stale duplicate (older sketches could stack them) and goes away
@@ -2745,9 +2770,17 @@ export function ViewportView() {
     if (!draft) return;
     s.updateDraftSketch(draft.entities, edit(draft.constraints));
     await s.commitDraftSketch();
-    const value = round3(tools.measureDimension(placed, draft.entities));
+    const angle = placed.type === "angle" || placed.type === "lineAngle";
+    const measured = tools.measureDimension(placed, draft.entities);
+    const value = angle ? round3(measured) : roundedLength(measured, units);
     setDimEdit({
-      fields: [{ constraintId: placed.id, value: String(value) }],
+      fields: [
+        {
+          constraintId: placed.id,
+          value: String(value),
+          unit: angle ? "°" : units,
+        },
+      ],
       ...at,
     });
   }
@@ -2844,7 +2877,8 @@ export function ViewportView() {
                   fields: [
                     {
                       constraintId: l.id,
-                      value: l.text.replace(/[^\d.-]/g, ""),
+                      value: l.text.replace(/[^\d.e-]/g, ""),
+                      unit: l.text.endsWith("°") ? "°" : units,
                     },
                   ],
                   x: e.clientX,
@@ -3104,17 +3138,17 @@ function dimAnchorFor(
   return dimensionLayout(c, points, lines, circles)?.label ?? null;
 }
 
-function dimensionText(c: SketchConstraint): string {
+export function dimensionText(c: SketchConstraint, units: Units): string {
   switch (c.type) {
     case "length":
     case "distance":
     case "pointLineDistance":
     case "lineDistance":
-      return `${round3((c as any).value)}`;
+      return formatLength((c as any).value, units);
     case "radius":
-      return `R${round3((c as any).value)}`;
+      return `R${formatLength((c as any).value, units)}`;
     case "diameter":
-      return `⌀${round3((c as any).value)}`;
+      return `⌀${formatLength((c as any).value, units)}`;
     case "angle":
     case "lineAngle":
       return `${round3((c as any).value)}°`;

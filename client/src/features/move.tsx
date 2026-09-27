@@ -1,5 +1,6 @@
 import { newId, type MoveFeature } from "@rockett/shared";
-import { NumField, SelInfo } from "../components/form/fields";
+import { LengthField, SelInfo } from "../components/form/fields";
+import { useSetting } from "../settings";
 import { bodies } from "../dialogPicks";
 import { num } from "./inputs";
 import {
@@ -9,22 +10,26 @@ import {
 } from "./registry";
 
 function MoveForm({ params, setParams }: FeatureFormProps) {
+  const units = useSetting("units.length");
   return (
     <>
       <SelInfo label="Bodies" input="bodies" hint="click bodies" />
-      <NumField
-        label="X (mm)"
+      <LengthField
+        label="X"
+        units={units}
         autoFocus
         value={params.tx ?? 0}
         onChange={(v) => setParams({ tx: v })}
       />
-      <NumField
-        label="Y (mm)"
+      <LengthField
+        label="Y"
+        units={units}
         value={params.ty ?? 0}
         onChange={(v) => setParams({ ty: v })}
       />
-      <NumField
-        label="Z (mm)"
+      <LengthField
+        label="Z"
+        units={units}
         value={params.tz ?? 0}
         onChange={(v) => setParams({ tz: v })}
       />

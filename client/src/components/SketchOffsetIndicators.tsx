@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { sketchOffsetAnchor } from "@rockett/shared";
+import { formatLength, sketchOffsetAnchor } from "@rockett/shared";
+import { useSetting } from "../settings";
 import { useStore } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
@@ -7,6 +8,7 @@ import { worldToClient } from "../three/screen";
 
 /** Screen-space badges remain attached to the sketch while panning and zooming. */
 export function SketchOffsetIndicators() {
+  const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
   const mode = useStore((s) => s.mode);
   const evaluation = useStore((s) => s.evaluation);
@@ -51,7 +53,7 @@ export function SketchOffsetIndicators() {
           data-offset={offset.id}
           className="dim-label offset-label"
           title={`Edit Offset ${i + 1}`}
-          aria-label={`Edit Offset ${i + 1}, ${offset.distance} mm`}
+          aria-label={`Edit Offset ${i + 1}, ${formatLength(offset.distance, units)}`}
           disabled={busy}
           onPointerDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
@@ -64,7 +66,7 @@ export function SketchOffsetIndicators() {
             });
           }}
         >
-          ↔ Offset {i + 1}: {offset.distance} mm
+          ↔ Offset {i + 1}: {formatLength(offset.distance, units)}
         </button>
       ))}
     </div>

@@ -9,12 +9,13 @@ import {
   AngleField,
   AxisField,
   CheckField,
-  NumField,
+  LengthField,
   SelInfo,
   SelectField,
 } from "../components/form/fields";
 import { axis, clearInput, planar, type PickInput } from "../dialogPicks";
 import { useStore, type Selection } from "../store";
+import { useSetting } from "../settings";
 import {
   axisMissing,
   axisParams,
@@ -64,6 +65,7 @@ const refsOf = (selection: Selection[]) =>
   );
 
 function PlaneForm({ params, setParams }: FeatureFormProps) {
+  const units = useSetting("units.length");
   const selection = useStore((s) => s.selection);
   const doc = useStore((s) => s.document);
   const method = methodOf(params);
@@ -99,8 +101,9 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
           {refs.length > 1 && (
             <div className="field-hint">{OFFSET_TAKES_ONE}</div>
           )}
-          <NumField
-            label="Offset (mm)"
+          <LengthField
+            label="Offset"
+            units={units}
             autoFocus
             value={params.distance ?? handleValue(params, "constructionPlane")}
             onChange={(v) => setParams({ distance: v })}
@@ -115,8 +118,9 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
             input="plane"
             hint="click two planes or planar faces"
           />
-          <NumField
-            label="Offset (mm)"
+          <LengthField
+            label="Offset"
+            units={units}
             value={params.offset ?? 0}
             onChange={(v) => setParams({ offset: v })}
           />

@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
-import type { Feature, SizedFeature, SizeLimit } from "@rockett/shared";
+import {
+  formatLength,
+  type Feature,
+  type SizedFeature,
+  type SizeLimit,
+  type Units,
+} from "@rockett/shared";
 import { api } from "../../api";
 import { PREVIEW_DEBOUNCE_MS } from "../../livePreview";
 import { useStore } from "../../store";
+import { useSetting } from "../../settings";
 
 const SIZE_SCOPE = {
   fillet: "on these edges",
@@ -10,16 +17,18 @@ const SIZE_SCOPE = {
   shell: "for this body",
 };
 
-const mm = (size: number) => Number(size.toPrecision(2));
-
-function sizeText(limit: SizeLimit, feature: SizedFeature): string {
+function sizeText(
+  limit: SizeLimit,
+  feature: SizedFeature,
+  units: Units,
+): string {
   switch (limit.kind) {
     case "upTo":
-      return `Works up to about ${mm(limit.size)} mm ${SIZE_SCOPE[feature.type]}`;
+      return `Works up to about ${formatLength(limit.size, units)} ${SIZE_SCOPE[feature.type]}`;
     case "smooth":
       return "No corner: the faces meet flat or smoothly";
     case "none":
-      return `Fails at every size tried, down to ${mm(limit.below)} mm`;
+      return `Fails at every size tried, down to ${formatLength(limit.below, units)}`;
     case "slow":
       return "Too slow to find the usable size";
   }
@@ -43,18 +52,23 @@ function sizePosition(id: string): number {
 }
 
 export function SizeLimitHint({ draft }: { draft: Feature | null }) {
+  const units = useSetting("units.length");
   const projectId = useStore((s) => s.projectId);
   const key = sizePicks(draft);
-  const [hint, setHint] = useState<{ key: string; text: string } | null>(null);
+  const [hint, setHint] = useState<{
+    key: string;
+    result: SizeLimit | string;
+  } | null>(null);
   useEffect(() => {
     if (!key || !projectId) return;
     let current = true;
     const ask = window.setTimeout(() => {
       const feature = draft as SizedFeature;
       api.sizeLimit(projectId, feature, sizePosition(feature.id)).then(
-        (limit) => current && setHint({ key, text: sizeText(limit, feature) }),
+        (limit) => current && setHint({ key, result: limit }),
         () =>
-          current && setHint({ key, text: "Could not check the usable size" }),
+          current &&
+          setHint({ key, result: "Could not check the usable size" }),
       );
     }, PREVIEW_DEBOUNCE_MS);
     return () => {
@@ -65,7 +79,11 @@ export function SizeLimitHint({ draft }: { draft: Feature | null }) {
   if (!key) return null;
   return (
     <div className="field-hint">
-      {hint?.key === key ? hint.text : "Checking the usable size"}
+      {hint?.key === key
+        ? typeof hint.result === "string"
+          ? hint.result
+          : sizeText(hint.result, draft as SizedFeature, units)
+        : "Checking the usable size"}
     </div>
   );
 }

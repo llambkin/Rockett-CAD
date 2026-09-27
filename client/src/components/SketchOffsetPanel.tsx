@@ -2,11 +2,13 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import {
   findOffsetConnector,
+  formatLength,
   offsetSketchSelection,
   sampleArc,
   editSketchOffset,
 } from "@rockett/shared";
 import { useStore } from "../store";
+import { useSetting } from "../settings";
 import { viewportHandle } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
 import { themeColor } from "../theme/tokens";
@@ -23,6 +25,7 @@ export function SketchOffsetPanel() {
 }
 
 function OffsetBody() {
+  const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
   const selection = useStore((s) => s.selection);
   const evaluation = useStore((s) => s.evaluation);
@@ -178,7 +181,7 @@ function OffsetBody() {
         </p>
         <LengthField
           label="Distance"
-          units="mm"
+          units={units}
           step={0.5}
           ariaLabel="Offset distance"
           autoFocus
@@ -210,7 +213,7 @@ function OffsetBody() {
         {!editing && manual && (
           <LengthField
             label="Join gaps up to"
-            units="mm"
+            units={units}
             min={0}
             max={1}
             step={0.001}
@@ -222,15 +225,15 @@ function OffsetBody() {
         {preview.result?.joinedGaps && (
           <p className="field-hint">
             Joined {preview.result.joinedGaps.count} small gap(s), up to{" "}
-            {Number(preview.result.joinedGaps.maxDistance.toFixed(6))} mm, in
-            the offset copy. Original sketch unchanged.
+            {formatLength(preview.result.joinedGaps.maxDistance, units)}, in the
+            offset copy. Original sketch unchanged.
           </p>
         )}
         {preview.result?.offsetChain && (
           <p className="field-hint">
             {preview.result.offsetChain.closed
               ? "Closed outline, ready to offset."
-              : `Open chain: orange crosses mark ends ${Number(preview.result.offsetChain.endGap.toFixed(6))} mm apart. Select the missing side to make a closed outline.`}
+              : `Open chain: orange crosses mark ends ${formatLength(preview.result.offsetChain.endGap, units)} apart. Select the missing side to make a closed outline.`}
           </p>
         )}
         {connector && (

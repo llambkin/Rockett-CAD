@@ -3,8 +3,8 @@
  * entities + constraints. Interaction state lives in the viewport component.
  */
 
-import type { SketchConstraint, SketchEntity } from "@rockett/shared";
-import { newId, normalizeDegrees, UNIT_DOT_TOL } from "@rockett/shared";
+import type { SketchConstraint, SketchEntity, Units } from "@rockett/shared";
+import { newId, normalizeDegrees, toMm, UNIT_DOT_TOL } from "@rockett/shared";
 
 export interface Created {
   entities: SketchEntity[];
@@ -698,7 +698,7 @@ export type DimKey = "length" | "angle" | "width" | "height" | "diameter";
 export interface DimField {
   key: DimKey;
   label: string;
-  unit: string;
+  unit: Units | "°" | "";
   /** shown text: live cursor value until typed, then what the user typed */
   text: string;
   locked: boolean;
@@ -709,8 +709,11 @@ export function fmt2(v: number): string {
 }
 
 /** Which sizes a tool exposes for typing; null = readout only. */
-export function dimFieldsFor(tool: string): DimField[] | null {
-  const f = (key: DimKey, label: string, unit: string): DimField => ({
+export function dimFieldsFor(
+  tool: string,
+  units: Units = "mm",
+): DimField[] | null {
+  const f = (key: DimKey, label: string, unit: Units | "°"): DimField => ({
     key,
     label,
     unit,
@@ -719,12 +722,12 @@ export function dimFieldsFor(tool: string): DimField[] | null {
   });
   switch (tool) {
     case "line":
-      return [f("length", "L", "mm"), f("angle", "∠", "°")];
+      return [f("length", "L", units), f("angle", "∠", "°")];
     case "rect":
     case "centerRect":
-      return [f("width", "W", "mm"), f("height", "H", "mm")];
+      return [f("width", "W", units), f("height", "H", units)];
     case "circle":
-      return [f("diameter", "⌀", "mm")];
+      return [f("diameter", "⌀", units)];
     default:
       return null;
   }
@@ -760,7 +763,11 @@ export function lockedValue(fields: DimField[], key: DimKey): number | null {
   if (!f?.locked) return null;
   const v = parseFloat(f.text);
   if (!Number.isFinite(v)) return null;
-  return key === "angle" || v > 0 ? v : null;
+  return key === "angle" || v > 0
+    ? f.unit === "°"
+      ? v
+      : toMm(v, f.unit || "mm")
+    : null;
 }
 
 /**

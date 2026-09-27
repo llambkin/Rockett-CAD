@@ -79,6 +79,7 @@ everything downstream against persistent topology references.
 
 - **Accounts**: admin setup, sign in, password changes, sign out, user email management and optional Cloudflare Access sign-in.
 - **Settings**: the top-bar panel edits available app and project preferences, shows each value's source and resets a layer's override.
+- **Display units**: sketch dimensions, measurements and feature lengths follow the selected unit while models remain in millimetres.
 - **Friend requests and notices**: request by email, accept or reject in the user menu, and open newly shared projects.
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, orthographic or perspective.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
