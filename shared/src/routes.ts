@@ -155,6 +155,30 @@ export const passwordChangeBody = Type.Object(
   { additionalProperties: false },
 );
 
+export const userCreateBody = Type.Object(
+  {
+    username: Type.String({ minLength: 1, maxLength: 32 }),
+    displayName: Type.String({ minLength: 1, maxLength: 100 }),
+    role: Type.Union([Type.Literal("admin"), Type.Literal("member")]),
+    password: Type.String({ minLength: 1, maxLength: 1024 }),
+  },
+  { additionalProperties: false },
+);
+
+export const userPatchBody = Type.Object(
+  {
+    displayName: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    role: Type.Optional(
+      Type.Union([Type.Literal("admin"), Type.Literal("member")]),
+    ),
+    status: Type.Optional(
+      Type.Union([Type.Literal("active"), Type.Literal("disabled")]),
+    ),
+    password: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
+  },
+  { additionalProperties: false },
+);
+
 export const AUTH_ROUTES = {
   status: route<never, { setup: "needs-token" | "ready" | "done" }>()(
     "GET",
@@ -176,6 +200,25 @@ export const AUTH_ROUTES = {
     "/me/password",
     passwordChangeBody,
   ),
+  users: route<never, User[]>()("GET", "/users"),
+  userCreate: route<
+    {
+      username: string;
+      displayName: string;
+      role: User["role"];
+      password: string;
+    },
+    User
+  >()("POST", "/users", userCreateBody),
+  userPatch: route<
+    {
+      displayName?: string;
+      role?: User["role"];
+      status?: User["status"];
+      password?: string;
+    },
+    User
+  >()("PATCH", "/users/:id", userPatchBody),
 };
 
 const name = Type.Object({ name: Type.Optional(Type.String()) });

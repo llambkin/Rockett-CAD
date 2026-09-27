@@ -21,6 +21,7 @@ import {
 import { AuthRateLimiter, HashCapacityError } from "./rateLimit.js";
 import type { SessionStore } from "./sessions.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
+import { registerUserRoutes } from "./users.js";
 
 function refused(res: Response, seconds: number) {
   return res
@@ -132,16 +133,28 @@ export function createAuthRouter(
           );
           return { record, matches };
         });
-        if (!record || record.status !== "active" || !matches) {
+        const login =
+          record && matches
+            ? await users.withActiveHash(
+                record.id,
+                record.passwordHash,
+                (current) => {
+                  const oldToken = readSessionCookie(
+                    req.headers.cookie,
+                    cookie.name,
+                  );
+                  if (oldToken) sessions.revoke(oldToken);
+                  return { current, token: sessions.create(current.id) };
+                },
+              )
+            : undefined;
+        if (!login) {
           limiter.failure(username, ip);
           return res.status(401).json({ error: "unauthenticated" });
         }
         limiter.success(username);
-        const oldToken = readSessionCookie(req.headers.cookie, cookie.name);
-        if (oldToken) sessions.revoke(oldToken);
-        const token = sessions.create(record.id);
-        res.set("Set-Cookie", sessionCookie(cookie, token));
-        res.json(toPublicUser(record));
+        res.set("Set-Cookie", sessionCookie(cookie, login.token));
+        res.json(toPublicUser(login.current));
       } catch (err) {
         next(err);
       }
@@ -155,6 +168,7 @@ export function createAuthRouter(
   });
   router.get(AUTH_ROUTES.me.path, (_req, res) => res.json(res.locals.user));
   registerPasswordChange(router, users, sessions, cookie, limiter, verify);
+  registerUserRoutes(router, users, sessions, limiter);
   router.use(
     (
       err: unknown,

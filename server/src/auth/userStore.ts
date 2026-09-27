@@ -83,6 +83,19 @@ export class UserStore {
     return (await this.list()).find((record) => record.username === wanted);
   }
 
+  withActiveHash<R>(
+    id: string,
+    expectedHash: string,
+    use: (record: UserRecord) => R,
+  ): Promise<R | undefined> {
+    return this.queue.run(KEY, async () => {
+      const record = (await this.read()).users.find((user) => user.id === id);
+      if (record?.status !== "active" || record.passwordHash !== expectedHash)
+        return undefined;
+      return use(record);
+    });
+  }
+
   create(input: NewUser): Promise<UserRecord> {
     return this.change((users, at) => this.insert(users, input, at));
   }
@@ -116,6 +129,18 @@ export class UserStore {
       const index = users.findIndex((record) => record.id === id);
       if (index < 0) throw new StoreError("user not found", "not_found");
       const record = check({ ...users[index]!, ...patch, modifiedAt: at });
+      if (
+        users[index]!.role === "admin" &&
+        users[index]!.status === "active" &&
+        (record.role !== "admin" || record.status !== "active") &&
+        !users.some(
+          (other) =>
+            other.id !== id &&
+            other.role === "admin" &&
+            other.status === "active",
+        )
+      )
+        throw new StoreError("last active admin cannot be changed", "conflict");
       users[index] = record;
       return record;
     });
