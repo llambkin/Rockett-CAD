@@ -54,6 +54,7 @@ import {
   dir,
   edgeCentroid,
   edges as edgesOf,
+  explore,
   faceCentroid,
   faces as facesOf,
   getKernel,
@@ -1321,7 +1322,9 @@ function filletBody(
       result = op.Shape();
       // IsDone only confirms that the algorithm completed. Some edge junctions
       // produce an invalid solid even when it reports success; never publish it.
-      rejectInvalid(
+      rejectBadBlend(
+        op,
+        sourceEdges,
         result,
         body.shape,
         "fillet",
@@ -1378,6 +1381,83 @@ function rejectInvalid(
       ? `${kind} of ${size} cannot be published: the body was already invalid before this ${kind} (the kernel check rejects a ${earlier}), so the fault comes from an earlier feature; the previous body has been kept`
       : `${kind} of ${size} left an invalid shape (the kernel check rejects a ${broken}): ${advice}; the previous body has been kept`,
   );
+}
+
+function rejectBadBlend(
+  op: any,
+  sourceEdges: { edge: Shape }[],
+  result: Shape,
+  before: Shape,
+  kind: string,
+  size: string,
+  advice: string,
+): void {
+  rejectInvalid(result, before, kind, size, advice);
+  const cut = cutsThrough(op, sourceEdges, result, before);
+  if (cut === false) return;
+  throw new Error(
+    cut
+      ? `${kind} of ${size} cuts through the body: ${advice}; the previous body has been kept`
+      : `${kind} of ${size} could not be checked for cutting through the body: ${advice}; the previous body has been kept`,
+  );
+}
+
+function shellCount(shape: Shape): number {
+  const shells = [...explore(shape, "shell")];
+  release(shells);
+  return shells.length;
+}
+
+function cutsThrough(
+  op: any,
+  sourceEdges: { edge: Shape }[],
+  result: Shape,
+  before: Shape,
+): boolean | null {
+  if (shellCount(result) !== shellCount(before)) return true;
+  const k = getKernel();
+  const made = new Set<number>();
+  for (const { edge } of sourceEdges) {
+    const ends = verticesOf(edge);
+    for (const from of [edge, ...ends]) {
+      const generated = listToArray(op.Generated(from));
+      for (const shape of generated) made.add(shapeHash(shape));
+      release(generated);
+    }
+    release(ends);
+  }
+  const now = facesOf(result);
+  const bounds = now.map((face) => {
+    const around = edgesOf(face);
+    const hashes = around.map(shapeHash);
+    release(around);
+    return hashes;
+  });
+  const madeEdges = new Set(
+    bounds.filter((_, i) => made.has(shapeHash(now[i]!))).flat(),
+  );
+  try {
+    return scoped((own) => {
+      const args = own(new k.TopTools_ListOfShape_1());
+      const builder = own(new k.BRep_Builder());
+      const rest = own(new k.TopoDS_Compound());
+      builder.MakeCompound(rest);
+      now.forEach((face, i) => {
+        if (made.has(shapeHash(face))) args.Append_1(face);
+        else if (!bounds[i]!.some((edge) => madeEdges.has(edge)))
+          builder.Add(rest, face);
+      });
+      args.Append_1(rest);
+      const fuse = own(new k.BRepAlgoAPI_BuilderAlgo_1());
+      fuse.SetArguments(args);
+      fuse.SetNonDestructive(true);
+      fuse.Build(progress());
+      if (fuse.HasErrors()) return null;
+      return !own(fuse.SectionEdges()).IsEmpty();
+    });
+  } finally {
+    release(now);
+  }
 }
 
 export function invalidPart(shape: Shape): string | null {
@@ -1704,9 +1784,9 @@ function chamferBody(
         if (!op.Contour(edge)) op.Add_2(f.distance, edge);
       }
       op.Build(progress());
+      const size = `distance ${f.distance}`;
+      const advice = "try fewer edges or a different distance";
       if (!op.IsDone()) {
-        // ChFi3d can't consume a face (e.g. chamfers from both caps meeting
-        // mid-wall); a boolean envelope can, for complete planar outlines
         const viaEnvelope = chamferByEnvelope(
           body,
           sourceEdges,
@@ -1718,10 +1798,21 @@ function chamferBody(
             `could not build a ${f.distance} mm chamfer: check for missing connecting edges or try a smaller distance`,
           );
         }
-        registerBodySolids(state, bodyId, viaEnvelope.shape, viaEnvelope.names);
+        result = viaEnvelope.shape;
+        rejectInvalid(result, body.shape, "chamfer", size, advice);
+        registerBodySolids(state, bodyId, result, viaEnvelope.names);
         return;
       }
       result = op.Shape();
+      rejectBadBlend(
+        op,
+        sourceEdges,
+        result,
+        body.shape,
+        "chamfer",
+        size,
+        advice,
+      );
       const names = blendNames(op, body, sourceEdges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     } finally {

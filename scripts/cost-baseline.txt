@@ -51,7 +51,7 @@ client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/jobRoutes.ts createJobRoutes 119
 server/src/api/routes.ts 846
 server/src/api/routes.ts createApiRouter 659
-server/src/geometry/features.ts 2380
+server/src/geometry/features.ts 2471
 server/src/geometry/features.ts buildPrism 86
 server/src/geometry/features.ts chamferByEnvelope 266
 server/src/geometry/sketchGeom.ts buildWire 84

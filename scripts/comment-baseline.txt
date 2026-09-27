@@ -27,7 +27,7 @@ client/vite.config.ts 1
 server/src/api/routes.ts 4
 server/src/geometry/engine.ts 17
 server/src/geometry/exporters.ts 12
-server/src/geometry/features.ts 85
+server/src/geometry/features.ts 83
 server/src/geometry/frames.ts 21
 server/src/geometry/kernel.ts 19
 server/src/geometry/measure.ts 4

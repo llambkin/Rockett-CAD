@@ -245,13 +245,29 @@ own, in the order of its first picked edge, and keeps each body's id. The tangen
 chain runs within each body, `n` counts that body's source edges, and an error
 names the body when there is more than one.
 
-Fillet and Shell run the kernel validity check, `BRepCheck_Analyzer`, on their
-result, since the kernel can report success and still leave an invalid shape.
+Fillet, Chamfer and Shell run the kernel validity check, `BRepCheck_Analyzer`,
+on their result, since the kernel can report success and still leave an invalid
+shape.
 A 0.8 mm shell of a 5 or 10 degree wedge with 1 mm top fillets leaves an
 invalid face near the rim. An invalid result is a feature error that names the
 kind of part the check rejects and keeps the previous body. When the body was
 already invalid before the feature, the error says the fault comes from an
 earlier feature.
+
+`BRepCheck_Analyzer` does not report faces crossing each other, so a fillet or
+chamfer that is too large can cut through the body and still pass it. Fillet
+and Chamfer also reject such a result with an error that it cuts through the
+body, and keep the previous body. The faces the blend generated go through a
+general fuse, `BRepAlgoAPI_BuilderAlgo`, against every face that shares no edge
+with them. Any section edge means a crossing. Neighbours are left out because a
+blend meets them along its own edges, and intersecting tangent faces is slow.
+A blend also must not change the number of shells: a fillet into the cavity of
+a closed shell can return the box with the cavity filled in. The pinned kernel
+binds neither `BOPAlgo_ArgumentAnalyzer` nor `BRepAlgoAPI_Check`. On the
+many-body fillet drag benchmark the check adds about 3 ms to a 19 ms median.
+Chamfer's envelope fallback is a boolean and gets the validity check only. Size
+hints build each trial through the feature, so they never offer a size that
+cuts through.
 
 A shell must also leave a hollow. When the wall reaches half the body, or a
 fillet radius, the kernel can return the solid unshelled and report success.
