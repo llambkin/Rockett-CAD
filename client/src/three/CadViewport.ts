@@ -28,7 +28,12 @@ import {
   type ThemeTokens,
 } from "../theme/tokens";
 import { applyThemeToScene } from "../theme/applyThemeToScene";
-import { cameraTween, orbitAbout, type CameraPose } from "./camera";
+import {
+  cameraTween,
+  orbitAbout,
+  turntableAbout,
+  type CameraPose,
+} from "./camera";
 import { frameScheduler } from "./frameScheduler";
 import { getSetting, subscribe } from "../settings";
 import {
@@ -122,7 +127,7 @@ export class CadViewport {
   scene = new THREE.Scene();
   orthoCam: THREE.OrthographicCamera;
   perspCam: THREE.PerspectiveCamera;
-  projection: "orthographic" | "perspective" = "orthographic";
+  projection: "orthographic" | "perspective" = getSetting("view.projection");
   target = new THREE.Vector3(0, 0, 0);
   /** ortho half-height in mm */
   zoom = 90;
@@ -293,6 +298,42 @@ export class CadViewport {
       c.lookAt(this.target);
     }
     this.requestRender();
+  }
+
+  orbitTurntable(dx: number, dy: number, pivot = this.target) {
+    const center = pivot.clone();
+    const cam = this.camera;
+    cam.updateMatrixWorld();
+    const screen = center.clone().project(cam);
+    const view = turntableAbout(
+      { position: cam.position, up: cam.up, target: this.target },
+      center,
+      dx,
+      dy,
+    );
+    this.target.copy(view.target);
+    for (const c of [this.orthoCam, this.perspCam]) {
+      c.up.copy(view.up);
+      c.position.copy(view.position);
+      c.lookAt(this.target);
+    }
+    cam.updateMatrixWorld();
+    const depth = center.clone().project(cam).z;
+    const shift = center
+      .clone()
+      .sub(new THREE.Vector3(screen.x, screen.y, depth).unproject(cam));
+    this.target.add(shift);
+    for (const c of [this.orthoCam, this.perspCam]) {
+      c.position.add(shift);
+      c.lookAt(this.target);
+    }
+    this.requestRender();
+  }
+
+  orbit(dx: number, dy: number, pivot = this.target) {
+    if (getSetting("view.orbit") === "turntable")
+      this.orbitTurntable(dx, dy, pivot);
+    else this.orbitTrackball(dx, dy, pivot);
   }
 
   pan(dx: number, dy: number) {

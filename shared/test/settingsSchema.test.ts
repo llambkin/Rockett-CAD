@@ -99,8 +99,8 @@ describe("registerSettings", () => {
   });
 
   it("accepts keys of two or more camelCase segments", () => {
-    registerSettings([plain("view.zoomStep"), plain("a.b2.cDe")]);
-    expect(SETTINGS.has("view.zoomStep")).toBe(true);
+    registerSettings([plain("view.zoomStepTest"), plain("a.b2.cDe")]);
+    expect(SETTINGS.has("view.zoomStepTest")).toBe(true);
     expect(SETTINGS.has("a.b2.cDe")).toBe(true);
   });
 

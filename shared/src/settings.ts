@@ -28,6 +28,10 @@ export interface SettingDefinition<
 export interface SettingTypes {
   "units.length": Units;
   "viewport.pickTolerancePx": number;
+  "view.projection": "orthographic" | "perspective";
+  "view.orbit": "trackball" | "turntable";
+  "view.zoomStep": number;
+  "view.invertZoom": boolean;
 }
 
 export type SettingOf<D extends SettingDefinition> = Static<D["schema"]>;
@@ -195,4 +199,47 @@ export const VIEWPORT_PICK_TOLERANCE = defineSetting({
   schema: Type.Integer({ minimum: 2, maximum: 20 }),
 });
 
-registerSettings([UNITS_LENGTH, VIEWPORT_PICK_TOLERANCE]);
+export const VIEW_PROJECTION = defineSetting({
+  key: "view.projection",
+  label: "Default projection",
+  scopes: ["app", "user"],
+  section: "user",
+  default: "orthographic",
+  schema: Type.Enum(["orthographic", "perspective"]),
+});
+
+export const VIEW_ORBIT = defineSetting({
+  key: "view.orbit",
+  label: "Orbit style",
+  scopes: ["app", "user"],
+  section: "user",
+  default: "trackball",
+  schema: Type.Enum(["trackball", "turntable"]),
+});
+
+export const VIEW_ZOOM_STEP = defineSetting({
+  key: "view.zoomStep",
+  label: "Mouse wheel zoom step",
+  scopes: ["app", "user"],
+  section: "user",
+  default: 1.12,
+  schema: Type.Number({ minimum: 1.02, maximum: 1.5 }),
+});
+
+export const VIEW_INVERT_ZOOM = defineSetting({
+  key: "view.invertZoom",
+  label: "Invert zoom direction",
+  scopes: ["app", "user"],
+  section: "user",
+  default: false,
+  schema: Type.Boolean(),
+});
+
+registerSettings([
+  UNITS_LENGTH,
+  VIEWPORT_PICK_TOLERANCE,
+  VIEW_PROJECTION,
+  VIEW_ORBIT,
+  VIEW_ZOOM_STEP,
+  VIEW_INVERT_ZOOM,
+]);

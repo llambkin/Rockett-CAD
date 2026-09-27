@@ -1026,7 +1026,7 @@ export function ViewportView() {
           }
         }
       } else if (orbiting) {
-        vp.orbitTrackball(dx, dy, pivot);
+        vp.orbit(dx, dy, pivot);
       } else if (panning) {
         vp.pan(dx, dy);
       } else if (button === 0) {

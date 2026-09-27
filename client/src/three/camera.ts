@@ -70,7 +70,7 @@ export function cameraTween(from: CameraPose, to: CameraPose) {
   };
 }
 
-const TRACKBALL_RAD_PER_PX = 0.014;
+export const ORBIT_RAD_PER_PX = 0.014;
 
 export function orbitAbout(
   view: { position: THREE.Vector3; up: THREE.Vector3; target: THREE.Vector3 },
@@ -82,9 +82,9 @@ export function orbitAbout(
   const right = forward.clone().cross(view.up).normalize();
   const screenUp = right.clone().cross(forward).normalize();
   const turn = new THREE.Quaternion()
-    .setFromAxisAngle(screenUp, dx * TRACKBALL_RAD_PER_PX)
+    .setFromAxisAngle(screenUp, dx * ORBIT_RAD_PER_PX)
     .multiply(
-      new THREE.Quaternion().setFromAxisAngle(right, dy * TRACKBALL_RAD_PER_PX),
+      new THREE.Quaternion().setFromAxisAngle(right, dy * ORBIT_RAD_PER_PX),
     )
     .invert();
   const depth = pivot.clone().sub(view.position).dot(forward);
@@ -98,5 +98,38 @@ export function orbitAbout(
     position: about(view.position),
     up: view.up.clone().applyQuaternion(turn).normalize(),
     target: about(target),
+  };
+}
+
+export function turntableAbout(
+  view: { position: THREE.Vector3; up: THREE.Vector3; target: THREE.Vector3 },
+  pivot: THREE.Vector3,
+  dx: number,
+  dy: number,
+) {
+  const offset = view.position.clone().sub(pivot);
+  const radius = offset.length();
+  if (radius === 0) return view;
+  const azimuth = Math.atan2(offset.y, offset.x) - dx * ORBIT_RAD_PER_PX;
+  const polar = Math.max(
+    0.01,
+    Math.min(
+      Math.PI - 0.01,
+      Math.acos(offset.z / radius) + dy * ORBIT_RAD_PER_PX,
+    ),
+  );
+  const next = new THREE.Vector3(
+    radius * Math.sin(polar) * Math.cos(azimuth),
+    radius * Math.sin(polar) * Math.sin(azimuth),
+    radius * Math.cos(polar),
+  );
+  const turn = new THREE.Quaternion().setFromUnitVectors(
+    offset.normalize(),
+    next.clone().normalize(),
+  );
+  return {
+    position: pivot.clone().add(next),
+    up: new THREE.Vector3(0, 0, 1),
+    target: view.target.clone().sub(pivot).applyQuaternion(turn).add(pivot),
   };
 }
