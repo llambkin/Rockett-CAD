@@ -67,6 +67,10 @@ export class ManifestStore {
     });
   }
 
+  write(id: string, manifest: ProjectManifest): Promise<void> {
+    return this.manifests.write(id, manifest);
+  }
+
   created(id: string, owner: string | null = null): [string, string] {
     return this.manifests.encode(id, createManifest(id, owner));
   }

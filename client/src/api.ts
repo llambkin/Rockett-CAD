@@ -20,6 +20,7 @@ import {
   type NamingDecision,
   type PathParams,
   type ProjectView,
+  type ProjectMember,
   type Route,
   type User,
   type SizedFeature,
@@ -448,6 +449,12 @@ export const api = {
       { body: folderId === null ? { name } : { name, folderId } },
     ),
   getProject: (id: string) => send(ROUTES.getProject, { id }),
+  getProjectMembers: (id: string) => send(ROUTES.getProjectMembers, { id }),
+  projectMembers: (
+    id: string,
+    owner: string | null,
+    members: ProjectMember[],
+  ) => send(ROUTES.projectMembers, { id }, { body: { owner, members } }),
   deleteProject: (id: string, keepalive = false) =>
     request<{ ok: true }>(
       ROUTES.deleteProject.method,

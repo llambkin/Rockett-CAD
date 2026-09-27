@@ -18,6 +18,7 @@ import {
   type ExportRequest,
   type Feature,
   type Method,
+  type ProjectMember,
   type Route,
   type SizedFeature,
   type User,
@@ -72,6 +73,7 @@ import {
 import { omitHeldMeshes } from "./heldMeshes.js";
 import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
 import { createJobRoutes } from "./jobRoutes.js";
+import type { UserStore } from "../auth/userStore.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -186,6 +188,7 @@ export function createApiRouter(
   projects = new ProjectQueue(),
   limits: Partial<ImportLimits> = {},
   kernel: KernelClient = new InProcessKernel(store),
+  users?: UserStore,
 ): Router {
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
@@ -346,9 +349,86 @@ export function createApiRouter(
 
   on(
     ROUTES.listProjects,
-    wrap(async (_req, res, ctx) =>
-      res.json(await visibleProjects(store, ctx.user)),
-    ),
+    wrap(async (_req, res, ctx) => {
+      const named = new Map(
+        (await users?.list())?.map((user) => [user.id, user.displayName]) ?? [],
+      );
+      const listed = await visibleProjects(store, ctx.user);
+      res.json(
+        await Promise.all(
+          listed.map(async (project) => {
+            const access = await store
+              .projectAccess(project.id)
+              .catch((error) => {
+                if (project.status !== "ok") return null;
+                throw error;
+              });
+            const owner = access?.owner ?? null;
+            return Object.assign(project, {
+              owner,
+              ownerName:
+                access === null
+                  ? "Unavailable"
+                  : owner
+                    ? (named.get(owner) ?? owner)
+                    : null,
+            });
+          }),
+        ),
+      );
+    }),
+  );
+
+  on(
+    ROUTES.projectMembers,
+    wrap(async (req, res, ctx) => {
+      const current = await store.projectAccess(req.params.id);
+      if (ctx.user.role !== "admin" && current.owner !== ctx.user.id)
+        return void res.status(403).json({ error: "forbidden" });
+      if (!users) throw new Error("user store missing");
+      const active = (await users.list()).filter(
+        (user) => user.status === "active",
+      );
+      const ids = new Set(active.map((user) => user.id));
+      const { owner, members } = req.body as {
+        owner: string | null;
+        members: ProjectMember[];
+      };
+      if (current.owner !== null && owner === null)
+        throw new ValidationError("owned project cannot become unclaimed");
+      if (
+        (owner !== null && !ids.has(owner)) ||
+        members.some(
+          (member) => !ids.has(member.userId) || member.userId === owner,
+        ) ||
+        new Set(members.map((member) => member.userId)).size !== members.length
+      )
+        throw new ValidationError(
+          "owner and members must be distinct active users",
+        );
+      await store.setProjectAccess(req.params.id, { owner, members });
+      res.json({ owner, members });
+    }),
+  );
+
+  on(
+    ROUTES.getProjectMembers,
+    wrap(async (req, res, ctx) => {
+      const access = await store.projectAccess(req.params.id);
+      if (ctx.user.role !== "admin" && access.owner !== ctx.user.id)
+        return void res.status(403).json({ error: "forbidden" });
+      if (!users) throw new Error("user store missing");
+      res.json({
+        ...access,
+        users: (await users.list())
+          .filter((user) => user.status === "active")
+          .map(({ id, displayName, username }) => ({
+            id,
+            displayName,
+            username,
+          })),
+      });
+    }),
   );
 
   on(

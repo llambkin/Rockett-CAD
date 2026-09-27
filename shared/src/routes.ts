@@ -29,6 +29,7 @@ import type {
   SizeLimitRequest,
   WireEvaluateResult,
 } from "./api.js";
+import type { ProjectMember } from "./model.js";
 import { VIEW_VERSION } from "./api.js";
 import { edgeRef, faceRef, groupsSchema } from "./schema/features.js";
 import { LABEL_LIMIT, snapshotHash } from "./schema/history.js";
@@ -264,6 +265,31 @@ export const projectView = Type.Object(
   { additionalProperties: false },
 );
 
+const projectMembersBody = Type.Object(
+  {
+    owner: Type.Union([Type.String(), Type.Null()]),
+    members: Type.Array(
+      Type.Object(
+        {
+          userId: Type.String(),
+          role: Type.Union([Type.Literal("view"), Type.Literal("edit")]),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export interface ProjectMembersResponse {
+  owner: string | null;
+  members: ProjectMember[];
+}
+
+export interface ProjectMembersRoster extends ProjectMembersResponse {
+  users: Array<{ id: string; displayName: string; username: string }>;
+}
+
 export const ROUTES = {
   health: route<never, Health>()("GET", "/health"),
   formats: route<never, Formats>()("GET", "/formats"),
@@ -285,6 +311,15 @@ export const ROUTES = {
     "/projects/file",
   ),
   getProject: route<never, ProjectResponse>()("GET", "/projects/:id"),
+  getProjectMembers: route<never, ProjectMembersRoster>()(
+    "GET",
+    "/projects/:id/members",
+  ),
+  projectMembers: route<ProjectMembersResponse, ProjectMembersResponse>()(
+    "PUT",
+    "/projects/:id/members",
+    projectMembersBody,
+  ),
   deleteProject: route<never, { ok: true }>()("DELETE", "/projects/:id"),
   duplicateProject: route<{ name?: string | undefined }, ProjectResponse>()(
     "POST",

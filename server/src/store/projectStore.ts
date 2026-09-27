@@ -198,6 +198,15 @@ export class ProjectStore {
     return { owner, members };
   }
 
+  async setProjectAccess(
+    id: string,
+    access: Pick<ProjectManifest, "owner" | "members">,
+  ): Promise<void> {
+    await this.projectAccess(id);
+    const manifest = await this.manifests.read(id);
+    await this.manifests.write(id, { ...manifest, ...access });
+  }
+
   migrateManifest(id: string): Promise<void> {
     return this.manifests.migrate(id);
   }

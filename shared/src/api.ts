@@ -176,6 +176,8 @@ export interface WireEvaluateResult extends Omit<EvaluateResult, "bodies"> {
 
 export interface ProjectSummary {
   id: string;
+  owner?: string | null;
+  ownerName?: string | null;
   name: string;
   modifiedAt: string;
   modifiedBy: string | null;

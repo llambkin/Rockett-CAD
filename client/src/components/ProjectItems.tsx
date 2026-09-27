@@ -14,6 +14,7 @@ import {
 } from "../browserProjects";
 import { openBrowserProject } from "../browserSession";
 import { ICONS } from "../icons";
+import { useSession } from "../session";
 import {
   canMoveTo,
   itemCount,
@@ -26,6 +27,7 @@ import {
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { MoveDialog } from "./MoveDialog";
 import { RenameInput } from "./RenameInput";
+import { ShareDialog } from "./ShareDialog";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
 
@@ -302,6 +304,9 @@ export function ProjectItems({
 }) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Moving>(null);
+  const [sharing, setSharing] = useState<ProjectSummary | null>(null);
+  const session = useSession();
+  const actor = session.kind === "signed-in" ? session.user : null;
   const move = (item: Item, target: string | null) =>
     target !== THIS_BROWSER
       ? run(
@@ -384,7 +389,7 @@ export function ProjectItems({
             <ItemRow
               key={`project:${p.id}`}
               item={item}
-              meta={reason}
+              meta={`${reason} · Owner: ${p.ownerName ?? "Unclaimed"}`}
               dimmed
               actions={[
                 deleteAction(p.name, run, () => api.deleteProject(p.id)),
@@ -394,7 +399,7 @@ export function ProjectItems({
           );
         return row(
           item,
-          features(p),
+          `${features(p)} · Owner: ${p.ownerName ?? "Unclaimed"}`,
           projectActions(
             p.name,
             run,
@@ -404,7 +409,12 @@ export function ProjectItems({
               download: () => api.downloadProjectFile(p.id),
               remove: () => api.deleteProject(p.id),
             },
-            [moveTo(item, setMoving)],
+            [
+              ...(actor && (actor.role === "admin" || p.owner === actor.id)
+                ? [{ label: "Share", glyph: "♧", run: () => setSharing(p) }]
+                : []),
+              moveTo(item, setMoving),
+            ],
           ),
         );
       })}
@@ -426,6 +436,17 @@ export function ProjectItems({
             move(moving.item, t);
           }}
           onClose={() => setMoving(null)}
+        />
+      )}
+      {sharing && actor && (
+        <ShareDialog
+          project={sharing}
+          actor={actor}
+          onSaved={() => {
+            setSharing(null);
+            run(Promise.resolve());
+          }}
+          onClose={() => setSharing(null)}
         />
       )}
     </>

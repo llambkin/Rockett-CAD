@@ -112,7 +112,7 @@ export function createApp({
   app.use("/api", gzipJson);
   app.use("/api", requireSession(sessions, users, cookie.name));
   app.use("/api", createAuthRouter(users, sessions, cookie, setupToken));
-  app.use("/api", createApiRouter(store, folders, projects, {}, kernel));
+  app.use("/api", createApiRouter(store, folders, projects, {}, kernel, users));
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "Not found" });
   });
