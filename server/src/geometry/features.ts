@@ -90,6 +90,7 @@ import {
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
+import { leavesToolOutside, TOOL_OUTSIDE } from "./cutCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -635,6 +636,10 @@ function applyToolOperation(
       if (!op.IsDone()) {
         op.delete();
         throw new Error("boolean cut failed");
+      }
+      if (leavesToolOutside(op, tool.shape, body.shape)) {
+        op.delete();
+        throw new Error(TOOL_OUTSIDE);
       }
       const result = op.Shape();
       const names = propagateNames(

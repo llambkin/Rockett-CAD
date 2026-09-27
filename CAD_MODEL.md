@@ -277,6 +277,16 @@ fillet radius, the kernel can return the solid unshelled and report success.
 Shell errors when the result keeps no volume, or removes no more than a
 skin of `LINEAR_TOL` times the body area, and keeps the previous body.
 
+A cut can also pass `BRepCheck_Analyzer` and be inside out. On a body with a
+fillet between a face and a curved wall, a face extrude cut whose straight
+side crosses the fillet came back removing the whole tool, air included. Faces
+of the tool were kept in the air, so the viewport culled them and showed what
+lay behind. Neither a fuzzy value nor a longer tool gave a sound result. Every
+face a cut takes from its tool bounds removed material, so it must lie inside
+the body before the cut. The cut classifies one interior point of each such
+face against that body, and a point outside it is a feature error that keeps
+the previous body.
+
 Sketch-curve attribution deserves a note: wire construction can rebuild edge
 shapes (vertex merging), so after building a profile face we re-derive the
 edge→sketch-entity map _geometrically_ (each face edge's midpoint is matched
