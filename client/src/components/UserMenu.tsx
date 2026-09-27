@@ -4,7 +4,7 @@ import { useStore } from "../store";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { PasswordDialog } from "./PasswordDialog";
 
-export function UserMenu() {
+export function UserMenu({ onUsers }: { onUsers?: () => void }) {
   const session = useSession();
   const [position, setPosition] = useState<{ x: number; y: number } | null>(
     null,
@@ -17,7 +17,11 @@ export function UserMenu() {
     { label: "Change password", action: () => setPasswordOpen(true) },
   ];
   if (session.user.role === "admin")
-    items.push({ label: "Users", disabled: true });
+    items.push(
+      onUsers
+        ? { label: "Users", action: onUsers }
+        : { label: "Users", disabled: true },
+    );
   items.push({
     label: "Sign out",
     action: () => void signOut().catch((error) => setError(error.message)),

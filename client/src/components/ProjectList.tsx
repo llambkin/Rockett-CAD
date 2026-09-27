@@ -133,7 +133,7 @@ function OpenProjectFile({ onError }: { onError: (e: string) => void }) {
   );
 }
 
-export function ProjectList() {
+export function ProjectList({ onUsers }: { onUsers: () => void }) {
   const server = useLoaded(readProjects, { projects: [], tree: EMPTY_TREE });
   const { projects, tree } = server.value;
   const kept = useBrowserProjects();
@@ -179,7 +179,7 @@ export function ProjectList() {
       <div className="project-list-card">
         <h1>
           <span className="logo">⬢</span> Rockett CAD
-          <UserMenu />
+          <UserMenu onUsers={onUsers} />
         </h1>
         <p className="tagline">Your CAD. Your server. Your plugins.</p>
         {error && <div className="error-banner">{error}</div>}

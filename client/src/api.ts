@@ -21,6 +21,7 @@ import {
   type PathParams,
   type ProjectView,
   type Route,
+  type User,
   type SizedFeature,
   type TreeGroup,
   type WireEvaluateResult,
@@ -74,11 +75,14 @@ async function toApiError(res: Response): Promise<ApiError> {
     return new UnauthorizedError(
       typeof body?.error === "string" ? body.error : "Unauthenticated",
     );
-  if (typeof body?.error === "string" && typeof body.code === "string")
+  if (
+    typeof body?.error === "string" &&
+    (typeof body.code === "string" || res.status === 400 || res.status === 409)
+  )
     return new ApiError(
       body.error,
       res.status,
-      body.code,
+      typeof body.code === "string" ? body.code : "internal",
       body.detail,
       body.revision,
       retryAfter,
@@ -301,6 +305,17 @@ export const api = {
   logout: () => send(AUTH_ROUTES.logout, {}),
   changePassword: (current: string, next: string) =>
     send(AUTH_ROUTES.passwordChange, {}, { body: { current, next } }),
+  listUsers: () => send(AUTH_ROUTES.users, {}),
+  createUser: (user: {
+    username: string;
+    displayName: string;
+    role: User["role"];
+    password: string;
+  }) => send(AUTH_ROUTES.userCreate, {}, { body: user }),
+  patchUser: (
+    id: string,
+    patch: { role?: User["role"]; status?: User["status"]; password?: string },
+  ) => send(AUTH_ROUTES.userPatch, { id }, { body: patch }),
   health: () => (health ??= send(ROUTES.health, {})),
   formats: () => send(ROUTES.formats, {}),
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {

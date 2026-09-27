@@ -72,18 +72,15 @@ export async function completeSetup(
   await signIn(username, password);
 }
 
-export async function signOut(): Promise<void> {
+export function confirmSignOut(): boolean {
   const { notSaved, recovery } = useStore.getState();
-  if (
-    (notSaved || recovery) &&
-    !window.confirm("Your unsaved change will be lost. Sign out?")
-  )
-    return;
-  try {
-    await api.logout();
-  } catch (error) {
-    if (!(error instanceof UnauthorizedError)) throw error;
-  }
+  return (
+    (!notSaved && !recovery) ||
+    window.confirm("Your unsaved change will be lost. Sign out?")
+  );
+}
+
+export function endSession(): void {
   leaveBrowserProject();
   useStore.getState().closeProject();
   useStore.setState(useStore.getInitialState(), true);
@@ -92,4 +89,14 @@ export async function signOut(): Promise<void> {
     { kind: "signed-out", setup: "done", returnProjectId: null },
     true,
   );
+}
+
+export async function signOut(): Promise<void> {
+  if (!confirmSignOut()) return;
+  try {
+    await api.logout();
+  } catch (error) {
+    if (!(error instanceof UnauthorizedError)) throw error;
+  }
+  endSession();
 }

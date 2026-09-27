@@ -13,6 +13,7 @@ import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { LoginScreen } from "./components/LoginScreen";
 import { UserMenu } from "./components/UserMenu";
+import { UsersPage } from "./components/UsersPage";
 import { bootSession, useSession } from "./session";
 import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
@@ -23,6 +24,7 @@ export function App() {
   const projectId = useStore((s) => s.projectId);
   const session = useSession();
   const [bootError, setBootError] = useState<string | null>(null);
+  const [usersOpen, setUsersOpen] = useState(false);
   const booted = useRef(false);
   const retryBoot = () => {
     setBootError(null);
@@ -51,7 +53,13 @@ export function App() {
         retryBoot={retryBoot}
       />
     );
-  return projectId ? <Workspace /> : <ProjectList />;
+  if (usersOpen && session.user.role === "admin")
+    return <UsersPage onClose={() => setUsersOpen(false)} />;
+  return projectId ? (
+    <Workspace onUsers={() => setUsersOpen(true)} />
+  ) : (
+    <ProjectList onUsers={() => setUsersOpen(true)} />
+  );
 }
 
 /** The open project's name in the top bar — click to rename. */
@@ -184,7 +192,7 @@ function SaveIndicator() {
   );
 }
 
-function Workspace() {
+function Workspace({ onUsers }: { onUsers: () => void }) {
   const [showHelp, setShowHelp] = useState(false);
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
@@ -278,7 +286,7 @@ function Workspace() {
         <UndoRedoButtons />
         {busy && <span className="busy-indicator">⟳ working…</span>}
         <SaveIndicator />
-        <UserMenu />
+        <UserMenu onUsers={onUsers} />
         <button
           className="icon-btn"
           title="Keyboard and mouse controls (?)"
