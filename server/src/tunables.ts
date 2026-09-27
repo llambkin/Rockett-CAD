@@ -14,6 +14,9 @@ export const TIMING_MS = {
   kernelRestartWindow: 5 * MINUTE,
   kernelRestartBackoff: [1000, 2000, 4000],
   jobSubscriberIdle: 2 * MINUTE,
+  accessKeyCache: HOUR,
+  accessJwtSkew: MINUTE,
+  accessKeyFetch: 10_000,
 } as const;
 
 export const TRIAL_BUDGET = {
