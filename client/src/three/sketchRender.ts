@@ -127,12 +127,11 @@ function buildSketch(
       const isSel = selKeys.has(key);
       const isHover = hoverKey === key;
       const used = sk.usedProfileIds?.has(p.id) ?? false;
+      const token = isSel ? "selection" : isHover ? "hover" : "profile-fill";
       const mesh = new THREE.Mesh(
         geom,
         new THREE.MeshBasicMaterial({
-          color: themeColor(
-            isSel ? "selection" : isHover ? "hover" : "profile-fill",
-          ),
+          color: themeColor(token),
           transparent: true,
           opacity: isSel
             ? SKETCH_APPEARANCE.profileSelectOpacity
@@ -149,6 +148,7 @@ function buildSketch(
       );
       mesh.applyMatrix4(frameMatrix(sk.frame));
       mesh.userData.profileId = p.id;
+      mesh.userData.themeToken = token;
       mesh.userData.sketchId = sk.sketchId;
       mesh.userData.area = p.area;
       mesh.renderOrder = 2;
@@ -189,21 +189,20 @@ function buildSketch(
     const isSel = selKeys.has(key);
     const isHover = hoverKey === key && !piece;
     if (hoverKey === key && piece) group.add(hoverPiece(sk.frame, piece));
-    const color = themeColor(
-      isSel
-        ? "selection"
-        : isHover
-          ? "hover"
-          : e.external
-            ? "sketch-external"
-            : e.construction
-              ? "sketch-construction"
-              : sk.active
-                ? "sketch-line"
-                : sk.dim
-                  ? "sketch-dimmed"
-                  : "sketch-inactive",
-    );
+    const token = isSel
+      ? "selection"
+      : isHover
+        ? "hover"
+        : e.external
+          ? "sketch-external"
+          : e.construction
+            ? "sketch-construction"
+            : sk.active
+              ? "sketch-line"
+              : sk.dim
+                ? "sketch-dimmed"
+                : "sketch-inactive";
+    const color = themeColor(token);
     const pickable = sk.curvesPickable !== false;
     const geom = new THREE.BufferGeometry().setFromPoints(positions);
     const line = new THREE.Line(
@@ -227,6 +226,7 @@ function buildSketch(
           }),
     );
     if (e.construction) line.computeLineDistances();
+    line.userData.themeToken = token;
     if (pickable) {
       line.userData.sketchEntityId = e.id;
       line.userData.sketchId = sk.sketchId;
@@ -242,13 +242,12 @@ function buildSketch(
       const key = `sp:${sk.sketchId}:${e.id}`;
       const isSel = selKeys.has(key);
       const isHover = hoverKey === key;
+      const token = isSel ? "selection" : isHover ? "hover" : "sketch-point";
       const geom = new THREE.BufferGeometry().setFromPoints([to3(e.x, e.y)]);
       const pt = new THREE.Points(
         geom,
         new THREE.PointsMaterial({
-          color: themeColor(
-            isSel ? "selection" : isHover ? "hover" : "sketch-point",
-          ),
+          color: themeColor(token),
           size:
             isSel || isHover
               ? SKETCH_APPEARANCE.pointHighlightSizePx
@@ -258,6 +257,7 @@ function buildSketch(
         }),
       );
       pt.userData.sketchEntityId = e.id;
+      pt.userData.themeToken = token;
       pt.userData.sketchId = sk.sketchId;
       pt.userData.isPoint = true;
       pt.renderOrder = 8;
@@ -279,6 +279,7 @@ function hoverPiece(frame: PlaneFrame, piece: number[]): THREE.Line {
     }),
   );
   line.renderOrder = 7;
+  line.userData.themeToken = "hover";
   return line;
 }
 

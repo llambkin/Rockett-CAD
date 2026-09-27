@@ -21,7 +21,13 @@ import type { PreviewGhost, PreviewTint } from "../livePreview";
 import { clientToNdc } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 import { type LayerHandle, sceneLayers } from "./sceneLayers";
-import { themeColor } from "../theme/tokens";
+import {
+  activeTheme,
+  themeColor,
+  subscribeTheme,
+  type ThemeTokens,
+} from "../theme/tokens";
+import { applyThemeToScene } from "../theme/applyThemeToScene";
 import { cameraTween, orbitAbout, type CameraPose } from "./camera";
 import { frameScheduler } from "./frameScheduler";
 import {
@@ -134,6 +140,7 @@ export class CadViewport {
   private forgetRect = () => {
     this.rect = null;
   };
+  private stopTheme = () => {};
   private animating: null | {
     start: number;
     poseAt: (t: number) => CameraPose;
@@ -187,11 +194,14 @@ export class CadViewport {
     this.scene.add(this.overlayRoot);
 
     this.buildOriginDisplay();
+    this.setTheme(activeTheme());
+    this.stopTheme = subscribeTheme((tokens) => this.setTheme(tokens));
     this.resize();
     window.addEventListener("scroll", this.forgetRect, true);
   }
 
   dispose() {
+    this.stopTheme();
     this.frames.dispose();
     window.removeEventListener("scroll", this.forgetRect, true);
     this.layers.dispose();
@@ -224,6 +234,11 @@ export class CadViewport {
 
   render() {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  setTheme(tokens: ThemeTokens): void {
+    applyThemeToScene(this.scene, tokens, this.requestRender);
+    this.renderer.setClearColor(tokens["viewport-bg"]);
   }
 
   /** World units per screen pixel at the target depth. */
@@ -473,6 +488,7 @@ export class CadViewport {
       const mesh = new THREE.Mesh(geom, mat);
       mesh.applyMatrix4(frameBasis(def.frame));
       mesh.userData.originPlane = def.name;
+      mesh.userData.themeToken = "origin-plane";
       mesh.renderOrder = -5;
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
@@ -482,6 +498,7 @@ export class CadViewport {
           opacity: PLANE_APPEARANCE.originBorderOpacity,
         }),
       );
+      border.userData.themeToken = "origin-plane-border";
       mesh.add(border);
       this.originRoot.add(mesh);
       this.originPlaneMeshes.push(mesh);
@@ -501,6 +518,7 @@ export class CadViewport {
         }),
       );
       this.originRoot.add(line);
+      line.material.userData.themeToken = colors[i]!;
       this.originAxisLines.set(axis, line);
     });
   }
@@ -644,6 +662,7 @@ export class CadViewport {
         continue;
       }
       b.tint ??= b.material.clone();
+      b.tint.userData.themeToken = tint.tint;
       b.tint.color.set(themeColor(tint.tint));
       let at = 0;
       for (const { start, count } of tint.ranges.toSorted(
@@ -676,6 +695,7 @@ export class CadViewport {
         ),
       );
       mesh.material.color.set(themeColor(tint));
+      mesh.material.userData.themeToken = tint;
       mesh.userData.ghostOf = body.bodyId;
     }
     this.requestRender();
@@ -936,7 +956,8 @@ export class CadViewport {
 
   addHighlight(sel: Selection, kind: "select" | "hover") {
     this.requestRender();
-    const color = themeColor(kind === "select" ? "selection" : "hover");
+    const token = kind === "select" ? "selection" : "hover";
+    const color = themeColor(token);
     if (sel.kind === "face" || sel.kind === "body") {
       const b = this.bodies.get(sel.bodyId);
       if (!b) return;
@@ -973,6 +994,7 @@ export class CadViewport {
           }),
         );
         mesh.renderOrder = 5;
+        mesh.userData.themeToken = token;
         this.overlayRoot.add(mesh);
         this.highlightObjects.push(mesh);
       }
@@ -998,6 +1020,7 @@ export class CadViewport {
         }),
       );
       line.renderOrder = 10;
+      line.userData.themeToken = token;
       this.overlayRoot.add(line);
       this.highlightObjects.push(line);
     } else if (sel.kind === "vertex") {
@@ -1017,6 +1040,7 @@ export class CadViewport {
         }),
       );
       pt.renderOrder = 11;
+      pt.userData.themeToken = token;
       this.overlayRoot.add(pt);
       this.highlightObjects.push(pt);
     } else if (sel.kind === "plane" && sel.ref.kind === "origin") {
@@ -1035,6 +1059,7 @@ export class CadViewport {
           }),
         );
         clone.applyMatrix4(mesh.matrixWorld);
+        clone.userData.themeToken = token;
         this.overlayRoot.add(clone);
         this.highlightObjects.push(clone);
       }

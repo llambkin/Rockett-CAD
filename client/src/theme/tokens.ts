@@ -97,8 +97,22 @@ export type ThemeTokens = { readonly [K in keyof typeof THEME_TOKENS]: string };
 
 export type ThemeColor = keyof ThemeTokens;
 
+let currentTokens: ThemeTokens = THEME_TOKENS;
+const listeners = new Set<(tokens: ThemeTokens) => void>();
+
 export function themeColor(name: ThemeColor): string {
-  return THEME_TOKENS[name];
+  return currentTokens[name];
+}
+
+export function activeTheme(): ThemeTokens {
+  return currentTokens;
+}
+
+export function subscribeTheme(
+  listener: (tokens: ThemeTokens) => void,
+): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 type ThemeRoot = {
@@ -111,4 +125,6 @@ export function applyTheme(
 ): void {
   for (const [name, value] of Object.entries(tokens))
     root.style.setProperty(`--${name}`, value);
+  currentTokens = tokens;
+  for (const listener of listeners) listener(tokens);
 }

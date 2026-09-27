@@ -77,6 +77,7 @@ export class RevolveGizmo extends Manipulator {
     );
     this.ring.position.copy(center);
     this.ring.renderOrder = 20;
+    this.ring.userData.themeToken = "gizmo";
 
     this.handle = new THREE.Mesh(
       new THREE.SphereGeometry(wpp * 5, 16, 12),
@@ -86,6 +87,7 @@ export class RevolveGizmo extends Manipulator {
       }),
     );
     this.handle.renderOrder = 21;
+    this.handle.userData.themeToken = "gizmo-handle";
 
     this.group.add(this.ring, this.handle);
     this.update(initialDeg);
@@ -106,7 +108,9 @@ export class RevolveGizmo extends Manipulator {
   }
 
   setHover(hover: boolean) {
-    this.paint(themeColor(hover ? "gizmo-hover" : "gizmo"), this.ring);
+    const token = hover ? "gizmo-hover" : "gizmo";
+    this.ring.userData.themeToken = token;
+    this.paint(themeColor(token), this.ring);
   }
 
   private ringPlaneHit(ray: THREE.Ray): THREE.Vector3 | null {

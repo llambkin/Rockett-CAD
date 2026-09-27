@@ -84,6 +84,8 @@ export class ExtrudeGizmo extends Manipulator {
     this.cone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 16), mat.clone());
     this.shaft.renderOrder = 20;
     this.cone.renderOrder = 20;
+    this.shaft.userData.themeToken = "gizmo";
+    this.cone.userData.themeToken = "gizmo";
     (this.shaft.userData as any).extrudeGizmo = true;
     (this.cone.userData as any).extrudeGizmo = true;
     this.group.add(this.shaft);
@@ -104,6 +106,7 @@ export class ExtrudeGizmo extends Manipulator {
     if (this.cut === cut) return;
     this.cut = cut;
     if (this.previewMesh) {
+      this.previewMesh.userData.themeToken = cut ? "gizmo-cut" : "gizmo";
       (this.previewMesh.material as THREE.MeshBasicMaterial).color.set(
         themeColor(cut ? "gizmo-cut" : "gizmo"),
       );
@@ -112,7 +115,7 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   private previewMaterial(): THREE.MeshBasicMaterial {
-    return new THREE.MeshBasicMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: themeColor(this.cut ? "gizmo-cut" : "gizmo"),
       transparent: true,
       opacity: this.cut
@@ -121,6 +124,8 @@ export class ExtrudeGizmo extends Manipulator {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
+    material.userData.themeToken = this.cut ? "gizmo-cut" : "gizmo";
+    return material;
   }
 
   private removePreview() {
@@ -280,11 +285,10 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   setHover(hover: boolean) {
-    this.paint(
-      themeColor(hover ? "gizmo-hover" : "gizmo"),
-      this.shaft,
-      this.cone,
-    );
+    const token = hover ? "gizmo-hover" : "gizmo";
+    this.shaft.userData.themeToken = token;
+    this.cone.userData.themeToken = token;
+    this.paint(themeColor(token), this.shaft, this.cone);
   }
 
   dragValue(clientX: number, clientY: number): number {

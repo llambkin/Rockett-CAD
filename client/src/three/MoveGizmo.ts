@@ -28,7 +28,7 @@ export class MoveGizmo extends Manipulator {
     shaft: THREE.Mesh;
     cone: THREE.Mesh;
     dir: THREE.Vector3;
-    color: string;
+    token: (typeof AXIS_COLORS)[number];
   }[] = [];
   private ghosts: THREE.Mesh[] = [];
 
@@ -50,7 +50,8 @@ export class MoveGizmo extends Manipulator {
     this.offset.set(...initial);
 
     for (let i = 0; i < 3; i++) {
-      const color = themeColor(AXIS_COLORS[i]!);
+      const token = AXIS_COLORS[i]!;
+      const color = themeColor(token);
       const mat = new THREE.MeshBasicMaterial({
         color,
         depthTest: false,
@@ -67,8 +68,10 @@ export class MoveGizmo extends Manipulator {
       );
       shaft.renderOrder = 20;
       cone.renderOrder = 20;
+      shaft.userData.themeToken = token;
+      cone.userData.themeToken = token;
       this.group.add(shaft, cone);
-      this.arrows.push({ shaft, cone, dir: AXES[i]!, color });
+      this.arrows.push({ shaft, cone, dir: AXES[i]!, token });
     }
 
     for (const src of ghostSources) {
@@ -89,6 +92,7 @@ export class MoveGizmo extends Manipulator {
         }),
       );
       mesh.renderOrder = 4;
+      mesh.userData.themeToken = "gizmo";
       this.ghosts.push(mesh);
       this.group.add(mesh);
     }
@@ -149,13 +153,12 @@ export class MoveGizmo extends Manipulator {
   }
 
   setHover(axis: number) {
-    this.arrows.forEach(({ shaft, cone, color }, i) =>
-      this.paint(
-        i === axis ? themeColor("move-axis-hover") : color,
-        shaft,
-        cone,
-      ),
-    );
+    this.arrows.forEach(({ shaft, cone, token }, i) => {
+      const active = i === axis ? "move-axis-hover" : token;
+      shaft.userData.themeToken = active;
+      cone.userData.themeToken = active;
+      this.paint(themeColor(active), shaft, cone);
+    });
   }
 
   /** Begin a drag on the given axis at the pointer position. */

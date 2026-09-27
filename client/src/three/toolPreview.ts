@@ -34,7 +34,7 @@ export function clearToolPreview(viewport: CadViewport | null): void {
 }
 
 function ghostLine(pts: THREE.Vector3[]): THREE.Line {
-  return new THREE.Line(
+  const line = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.LineBasicMaterial({
       color: themeColor("hover"),
@@ -43,6 +43,8 @@ function ghostLine(pts: THREE.Vector3[]): THREE.Line {
       depthTest: false,
     }),
   );
+  line.userData.themeToken = "hover";
+  return line;
 }
 
 /**
