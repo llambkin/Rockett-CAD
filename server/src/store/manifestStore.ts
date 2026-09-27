@@ -11,6 +11,25 @@ export const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MANIFEST = "project.json";
 
 export function checkManifest(id: string, manifest: ProjectManifest): void {
+  if (
+    manifest.owner !== null &&
+    (typeof manifest.owner !== "string" || !ID_RE.test(manifest.owner))
+  )
+    throw new Error("invalid owner");
+  if (!Array.isArray(manifest.members))
+    throw new Error("members is not a list");
+  const users = new Set<string>();
+  for (const member of manifest.members) {
+    if (
+      typeof member?.userId !== "string" ||
+      !ID_RE.test(member.userId) ||
+      (member.role !== "view" && member.role !== "edit") ||
+      member.userId === manifest.owner ||
+      users.has(member.userId)
+    )
+      throw new Error("invalid member");
+    users.add(member.userId);
+  }
   const types = new Set<unknown>(DOCUMENT_TYPES);
   if (!Array.isArray(manifest.documents))
     throw new Error("documents is not a list");
@@ -36,6 +55,8 @@ export class ManifestStore {
       key: ID_RE,
       file: () => MANIFEST,
       migrations: manifestMigrations,
+      validate: (manifest) =>
+        checkManifest(manifest.documents[0]?.id ?? "", manifest),
     });
   }
 
@@ -46,8 +67,12 @@ export class ManifestStore {
     });
   }
 
-  created(id: string): [string, string] {
-    return this.manifests.encode(id, createManifest(id));
+  created(id: string, owner: string | null = null): [string, string] {
+    return this.manifests.encode(id, createManifest(id, owner));
+  }
+
+  migrate(id: string): Promise<void> {
+    return this.manifests.settle(id);
   }
 
   async missing(id: string): Promise<boolean> {

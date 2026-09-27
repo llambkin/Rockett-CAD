@@ -11,6 +11,7 @@ import {
   type CadDocument,
   type ProjectSummary,
   type ProjectView,
+  type ProjectManifest,
 } from "@rockett/shared";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
@@ -185,6 +186,22 @@ export class ProjectStore {
     return out;
   }
 
+  async projectAccess(
+    id: string,
+  ): Promise<Pick<ProjectManifest, "owner" | "members">> {
+    const files = await this.storage.list(this.documents.dir(id));
+    if (!files.includes(LEGACY) && !files.includes(DOCUMENTS))
+      throw new StoreError(`project ${id} not found`, "not_found");
+    const manifest = await this.manifests.read(id);
+    this.valid(id, () => checkManifest(id, manifest));
+    const { owner, members } = manifest;
+    return { owner, members };
+  }
+
+  migrateManifest(id: string): Promise<void> {
+    return this.manifests.migrate(id);
+  }
+
   async create(
     name: string,
     actor: string | null = null,
@@ -197,7 +214,7 @@ export class ProjectStore {
 
   private async add(doc: CadDocument, actor: string | null): Promise<void> {
     await this.save(doc, actor);
-    await this.storage.writeAtomic(...this.manifests.created(doc.id));
+    await this.storage.writeAtomic(...this.manifests.created(doc.id, actor));
   }
 
   load(id: string): Promise<CadDocument> {

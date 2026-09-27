@@ -68,6 +68,7 @@ import {
   transactionId,
 } from "./revision.js";
 import { omitHeldMeshes } from "./heldMeshes.js";
+import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
@@ -187,6 +188,7 @@ export function createApiRouter(
   const router = Router();
   const history = new HistoryStore(store.documents.options.storage, store);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
+  router.param("id", projectAccessGuard(store));
   const on = (route: Route, ...handlers: RequestHandler[]) =>
     router[route.method.toLowerCase() as Lowercase<Method>](
       route.path,
@@ -321,9 +323,9 @@ export function createApiRouter(
 
   on(
     ROUTES.listProjects,
-    wrap(async (_req, res) => {
-      res.json(await store.list());
-    }),
+    wrap(async (_req, res, ctx) =>
+      res.json(await visibleProjects(store, ctx.user)),
+    ),
   );
 
   on(
@@ -717,6 +719,8 @@ export function createApiRouter(
   on(
     ROUTES.exportModel,
     wrap(async (req, res) => {
+      if (req.body.retain && res.locals.projectRole === "view")
+        return res.status(403).json({ error: "forbidden" });
       const { doc, view } = await store.open(req.params.id);
       const { retain, ...request }: ExportRequest = req.body;
       const { data, mime, ext } = await kernel.export(doc, {

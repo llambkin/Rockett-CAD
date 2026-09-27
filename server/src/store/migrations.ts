@@ -192,5 +192,7 @@ export const manifestMigrations: Migrations<ProjectManifest> = {
   namespace: "project",
   current: MANIFEST_VERSION,
   field: "version",
-  steps: {},
+  steps: {
+    1: (manifest) => ({ ...manifest, owner: null, members: [] }),
+  },
 };

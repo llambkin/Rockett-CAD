@@ -567,19 +567,27 @@ export function createEmptyDocument(id: string, name: string): CadDocument {
   };
 }
 
-export const MANIFEST_VERSION = 1;
+export const MANIFEST_VERSION = 2;
 export const DOCUMENT_TYPES = ["part"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+export type ProjectMember = { userId: string; role: "view" | "edit" };
 
 export interface ProjectManifest {
   version: typeof MANIFEST_VERSION;
   documents: Array<{ id: string; type: DocumentType }>;
+  owner: string | null;
+  members: ProjectMember[];
 }
 
-export function createManifest(partId: string): ProjectManifest {
+export function createManifest(
+  partId: string,
+  owner: string | null = null,
+): ProjectManifest {
   return {
     version: MANIFEST_VERSION,
     documents: [{ id: partId, type: "part" }],
+    owner,
+    members: [],
   };
 }
 
