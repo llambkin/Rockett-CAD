@@ -4,6 +4,11 @@ import { UNIT_TO_MM, type Units } from "./units.js";
 
 export type SettingScope = "app" | "user" | "project";
 export type SettingSection = SettingScope | `plugin:${string}`;
+export type LayerValues = Record<string, unknown>;
+export interface SettingsPatch {
+  set?: LayerValues;
+  reset?: string[];
+}
 
 export const SETTING_KEY = /^[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
 const PLUGIN_KEY = /^plugin\.([a-z][A-Za-z0-9]*)\.[a-z]/;

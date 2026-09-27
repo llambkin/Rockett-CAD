@@ -74,6 +74,7 @@ import {
 import { omitHeldMeshes } from "./heldMeshes.js";
 import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
 import { createJobRoutes } from "./jobRoutes.js";
+import { registerSettingsRoutes } from "./settingsRoutes.js";
 import type { UserStore } from "../auth/userStore.js";
 import type { FriendStore } from "../auth/friendStore.js";
 
@@ -231,6 +232,8 @@ export function createApiRouter(
       void result.then(jobs.settled, jobs.settled);
       result.catch((err) => fail(req, res, err));
     };
+
+  registerSettingsRoutes(on, wrap, store.settings);
 
   const editable = async (req: any, res: any) => {
     const doc = await store.load(req.params.id);

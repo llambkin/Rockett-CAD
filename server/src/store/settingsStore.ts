@@ -5,6 +5,8 @@ import {
   ValidationError,
   type SettingError,
   type SettingScope,
+  type LayerValues,
+  type SettingsPatch,
 } from "@rockett/shared";
 import { JsonStore, StoreError } from "./jsonStore.js";
 import { ID_RE } from "./manifestStore.js";
@@ -16,13 +18,6 @@ const APP_KEY = "settings";
 
 export type SettingsLayer =
   { scope: "app" } | { scope: "user" | "project"; id: string };
-
-export type LayerValues = Record<string, unknown>;
-
-export interface SettingsPatch {
-  set?: LayerValues;
-  reset?: string[];
-}
 
 interface SettingsFile {
   version: number;

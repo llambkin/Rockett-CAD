@@ -30,6 +30,7 @@ import type {
   WireEvaluateResult,
 } from "./api.js";
 import type { ProjectMember } from "./model.js";
+import { settingsRoutes } from "./settingsRoutes.js";
 import { VIEW_VERSION } from "./api.js";
 import { edgeRef, faceRef, groupsSchema } from "./schema/features.js";
 import { LABEL_LIMIT, snapshotHash } from "./schema/history.js";
@@ -299,6 +300,7 @@ export interface ProjectMembersRoster extends ProjectMembersResponse {
 
 export const ROUTES = {
   health: route<never, Health>()("GET", "/health"),
+  ...settingsRoutes(route),
   formats: route<never, Formats>()("GET", "/formats"),
   listProjects: route<never, ProjectSummary[]>()("GET", "/projects"),
   createProject: route<{ name?: string; folderId?: string }, ProjectResponse>()(
