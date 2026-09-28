@@ -9,6 +9,12 @@ How to use each feature in the [README](../../README.md) list.
 The sketcher draws lines, rectangles, centre rectangles, circles, 3-point arcs,
 polygons, slots, points and construction geometry.
 
+A polygon stays regular: it gets a centre point and a construction circle,
+with equal sides. Inscribed puts the vertices on the circle; Circumscribed puts
+the flats on it, so the circle's diameter is the size across flats. A typed
+Angle holds the first vertex at that angle from sketch X. With Angle empty the
+first vertex follows the cursor, and Shift snaps it to the angle step.
+
 Constraints: horizontal, vertical, parallel, perpendicular, tangent,
 coincident, concentric, equal, midpoint, collinear and fix. Dimensions:
 length, distance, radius, diameter and angle, all editable. The sketch shows

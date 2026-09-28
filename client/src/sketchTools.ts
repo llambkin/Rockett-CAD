@@ -338,42 +338,91 @@ export function createArc3(start: UV, end: UV, on: UV): Created | null {
   return { entities, constraints: arcConstraints };
 }
 
-export function createPolygon(center: UV, vertex: UV, sides: number): Created {
+export type PolygonType = "inscribed" | "circumscribed";
+
+export interface PolygonOptions {
+  sides: number;
+  type: PolygonType;
+  angle: number | null;
+}
+
+export function polygonVertices(
+  center: UV,
+  cursor: UV,
+  { sides, type, angle }: PolygonOptions,
+): { x: number; y: number }[] {
+  const r = Math.hypot(cursor.x - center.x, cursor.y - center.y);
+  const reach = type === "inscribed" ? r : r / Math.cos(Math.PI / sides);
+  const a0 =
+    angle === null
+      ? Math.atan2(cursor.y - center.y, cursor.x - center.x)
+      : (angle * Math.PI) / 180;
+  return Array.from({ length: sides }, (_, i) => {
+    const a = a0 + (i / sides) * Math.PI * 2;
+    return {
+      x: center.x + reach * Math.cos(a),
+      y: center.y + reach * Math.sin(a),
+    };
+  });
+}
+
+export function createPolygon(
+  center: UV,
+  cursor: UV,
+  options: PolygonOptions,
+): Created {
   const entities: SketchEntity[] = [];
   const constraints: SketchConstraint[] = [];
-  const r = Math.hypot(vertex.x - center.x, vertex.y - center.y);
-  const a0 = Math.atan2(vertex.y - center.y, vertex.x - center.x);
-  const pointIds: string[] = [];
-  for (let i = 0; i < sides; i++) {
-    const a = a0 + (i / sides) * Math.PI * 2;
+  const point = (v: { x: number; y: number }, construction = false) => {
     const id = newId("pt");
-    entities.push({
-      id,
-      kind: "point",
-      x: center.x + r * Math.cos(a),
-      y: center.y + r * Math.sin(a),
-    });
-    pointIds.push(id);
-  }
-  const lineIds: string[] = [];
-  for (let i = 0; i < sides; i++) {
+    entities.push({ id, kind: "point", x: v.x, y: v.y, construction });
+    return id;
+  };
+  const line = (p1: string, p2: string, construction = false) => {
     const id = newId("ln");
-    entities.push({
-      id,
-      kind: "line",
-      p1: pointIds[i]!,
-      p2: pointIds[(i + 1) % sides]!,
-    });
-    lineIds.push(id);
+    entities.push({ id, kind: "line", p1, p2, construction });
+    return id;
+  };
+  const c = pointOrExisting(center, undefined, entities, constraints);
+  const circle = newId("ci");
+  const radius = Math.hypot(cursor.x - center.x, cursor.y - center.y);
+  entities.push({
+    id: circle,
+    kind: "circle",
+    center: c,
+    radius,
+    construction: true,
+  });
+  const vertices = polygonVertices(center, cursor, options);
+  const pointIds = vertices.map((v) => point(v));
+  const lineIds = pointIds.map((p, i) =>
+    line(p, pointIds[(i + 1) % pointIds.length]!),
+  );
+  for (const [i, l] of lineIds.entries()) {
+    constraints.push(
+      options.type === "inscribed"
+        ? { id: newId("c"), type: "pointOnCircle", point: pointIds[i]!, circle }
+        : { id: newId("c"), type: "tangent", a: l, b: circle },
+    );
+    if (i > 0)
+      constraints.push({ id: newId("c"), type: "equal", a: lineIds[0]!, b: l });
   }
-  for (let i = 1; i < sides; i++) {
+  if (options.type === "circumscribed" && vertices.length % 2 === 0) {
+    const [a, b] = [vertices[0]!, vertices[1]!];
+    const touch = point({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, true);
+    const spoke = line(c, touch, true);
+    constraints.push(
+      { id: newId("c"), type: "midpoint", point: touch, line: lineIds[0]! },
+      { id: newId("c"), type: "perpendicular", a: spoke, b: lineIds[0]! },
+    );
+  }
+  if (options.angle !== null)
     constraints.push({
       id: newId("c"),
-      type: "equal",
-      a: lineIds[0]!,
-      b: lineIds[i]!,
+      type: "lineAngle",
+      line: line(c, pointIds[0]!, true),
+      value: normalizeDegrees(options.angle),
     });
-  }
   return { entities, constraints };
 }
 

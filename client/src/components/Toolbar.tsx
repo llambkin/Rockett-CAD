@@ -271,6 +271,44 @@ function ViewButtons() {
   );
 }
 
+function PolygonFields() {
+  const dialogParams = useStore((s) => s.dialogParams);
+  const setDialogParams = useStore((s) => s.setDialogParams);
+  return (
+    <>
+      <NumField
+        className="tb-input"
+        title="Polygon sides"
+        ariaLabel="Polygon sides"
+        int
+        min={3}
+        max={24}
+        value={Number(dialogParams.polygonSides ?? 6)}
+        onChange={(v) => setDialogParams({ polygonSides: v })}
+      />
+      <select
+        className="tb-select"
+        title="Polygon type: Inscribed puts the vertices on the circle, Circumscribed puts the flats on it"
+        aria-label="Polygon type"
+        value={dialogParams.polygonType ?? "inscribed"}
+        onChange={(e) => setDialogParams({ polygonType: e.target.value })}
+      >
+        <option value="inscribed">Inscribed</option>
+        <option value="circumscribed">Circumscribed</option>
+      </select>
+      <NumField
+        className="tb-input"
+        title="Polygon angle: the first vertex's angle from sketch X in degrees. Empty follows the cursor; Shift snaps"
+        ariaLabel="Polygon angle"
+        label="∠"
+        value={dialogParams.polygonAngle ?? Number.NaN}
+        onChange={(v) => setDialogParams({ polygonAngle: v })}
+        onClear={() => setDialogParams({ polygonAngle: undefined })}
+      />
+    </>
+  );
+}
+
 function SketchToolbar() {
   const mode = useStore((s) => s.mode);
   const busy = useStore((s) => s.busy);
@@ -280,8 +318,6 @@ function SketchToolbar() {
   const selection = useStore((s) => s.selection);
   const draft = useStore((s) => s.draftSketch);
   const setError = useStore((s) => s.setError);
-  const dialogParams = useStore((s) => s.dialogParams);
-  const setDialogParams = useStore((s) => s.setDialogParams);
 
   if (mode.name !== "sketch") return null;
   const tool = mode.tool;
@@ -322,18 +358,7 @@ function SketchToolbar() {
             onClick={() => setSketchTool(t.id)}
           />
         ))}
-        {tool === "polygon" && (
-          <NumField
-            className="tb-input"
-            title="Polygon sides"
-            ariaLabel="Polygon sides"
-            int
-            min={3}
-            max={24}
-            value={Number(dialogParams.polygonSides ?? 6)}
-            onChange={(v) => setDialogParams({ polygonSides: v })}
-          />
-        )}
+        {tool === "polygon" && <PolygonFields />}
         <ToolButton
           icon="construction"
           label="Construction"

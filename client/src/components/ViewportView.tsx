@@ -1612,7 +1612,7 @@ export function ViewportView() {
             tool as any,
             ts.clicks,
             ghostCursor,
-            Number(s.dialogParams.polygonSides ?? 6) || 6,
+            polygonOptions(),
           );
           showToolLabel(e, tool, ts.clicks, uv);
         } else {
@@ -1724,14 +1724,7 @@ export function ViewportView() {
         ),
       );
       if (vp && frame && uv) {
-        updateToolPreview(
-          vp,
-          frame,
-          tool as any,
-          [down],
-          uv,
-          Number(s.dialogParams.polygonSides ?? 6) || 6,
-        );
+        updateToolPreview(vp, frame, tool as any, [down], uv, polygonOptions());
         showToolLabel(e, tool, [down], uv);
         updateSnapMarker(uv);
       }
@@ -1866,7 +1859,7 @@ export function ViewportView() {
       d.tool as any,
       ts.clicks,
       resolveDimCursor(d.tool, ts.clicks[0]!, ts.lastCursor, d.fields),
-      Number(useStore.getState().dialogParams.polygonSides ?? 6) || 6,
+      polygonOptions(),
     );
   }
 
@@ -1918,7 +1911,6 @@ export function ViewportView() {
     clicks: tools.UV[],
     construction: boolean,
   ): { created: tools.Created | null; chain: boolean } | null {
-    const s = useStore.getState();
     switch (tool) {
       case "line":
         return clicks.length >= 2
@@ -1954,9 +1946,12 @@ export function ViewportView() {
           : null;
       case "polygon": {
         if (clicks.length < 2) return null;
-        const sides = Number(s.dialogParams.polygonSides ?? 6) || 6;
         return {
-          created: tools.createPolygon(clicks[0]!, clicks[1]!, sides),
+          created: tools.createPolygon(
+            clicks[0]!,
+            clicks[1]!,
+            polygonOptions(),
+          ),
           chain: false,
         };
       }
@@ -3182,7 +3177,9 @@ function angleSnapped(
   from: tools.UV | undefined,
   uv: tools.UV | null,
 ): tools.UV | null {
-  return uv && from && tool === "line" && e.shiftKey
+  const free =
+    tool === "line" || (tool === "polygon" && polygonOptions().angle === null);
+  return uv && from && free && e.shiftKey
     ? tools.snapLineEnd(
         from,
         uv,
@@ -3190,6 +3187,15 @@ function angleSnapped(
         getSetting("sketch.angles"),
       )
     : uv;
+}
+
+function polygonOptions(): tools.PolygonOptions {
+  const p = useStore.getState().dialogParams;
+  return {
+    sides: Number(p.polygonSides ?? 6) || 6,
+    type: p.polygonType === "circumscribed" ? "circumscribed" : "inscribed",
+    angle: Number.isFinite(p.polygonAngle) ? p.polygonAngle : null,
+  };
 }
 
 function round3(v: number): number {

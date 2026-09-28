@@ -10,7 +10,7 @@ import { themeColor } from "../theme/tokens";
 import { SKETCH_APPEARANCE } from "../tunables";
 import type { LayerHandle } from "./sceneLayers";
 import type { SketchTool } from "../store";
-import type { UV } from "../sketchTools";
+import { polygonVertices, type PolygonOptions, type UV } from "../sketchTools";
 
 const layers = new WeakMap<CadViewport, LayerHandle>();
 
@@ -57,7 +57,7 @@ export function updateToolPreview(
   tool: SketchTool,
   clicks: UV[],
   cursor: UV,
-  polygonSides = 6,
+  polygon: PolygonOptions = { sides: 6, type: "inscribed", angle: null },
 ): boolean {
   clearToolPreview(viewport);
   const g = ensureGroup(viewport);
@@ -160,15 +160,10 @@ export function updateToolPreview(
     }
     case "polygon": {
       if (clicks.length < 1) return false;
-      const c = clicks[0]!;
-      const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
-      const a0 = Math.atan2(cursor.y - c.y, cursor.x - c.x);
-      const pts: THREE.Vector3[] = [];
-      for (let i = 0; i <= polygonSides; i++) {
-        const t = a0 + (i / polygonSides) * Math.PI * 2;
-        pts.push(P(c.x + r * Math.cos(t), c.y + r * Math.sin(t)));
-      }
-      g.add(ghostLine(pts));
+      const pts = polygonVertices(clicks[0]!, cursor, polygon).map((v) =>
+        P(v.x, v.y),
+      );
+      g.add(ghostLine([...pts, pts[0]!]));
       return true;
     }
     case "slot": {

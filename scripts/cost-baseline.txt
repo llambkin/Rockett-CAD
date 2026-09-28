@@ -14,14 +14,14 @@ client/src/components/ProjectList.tsx ProjectList 110
 client/src/components/ShareDialog.tsx ShareDialog 122
 client/src/components/SketchOffsetPanel.tsx OffsetBody 248
 client/src/components/Timeline.tsx Timeline 180
-client/src/components/Toolbar.tsx SketchToolbar 117
+client/src/components/Toolbar.tsx SketchToolbar 104
 client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3197
+client/src/components/ViewportView.tsx 3203
 client/src/components/ViewportView.tsx ViewportHud 96
-client/src/components/ViewportView.tsx ViewportView 2938
+client/src/components/ViewportView.tsx ViewportView 2933
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 81
 client/src/components/ViewportView.tsx handleHover 138
 client/src/components/ViewportView.tsx handlePrimaryUp 138
@@ -31,10 +31,10 @@ client/src/components/ViewportView.tsx onPointerUp 86
 client/src/components/ViewportView.tsx pointerToSketchUV 221
 client/src/components/ViewportView.tsx useEffect() 101
 client/src/components/ViewportView.tsx useEffect()#2 296
-client/src/components/form/fields.tsx 555
+client/src/components/form/fields.tsx 557
 client/src/features/constructionPlane.tsx PlaneForm 108
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
-client/src/sketchTools.ts 999
+client/src/sketchTools.ts 1048
 client/src/store.ts 1379
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 780
@@ -45,7 +45,7 @@ client/src/three/CadViewport.ts pick 205
 client/src/three/ViewCube.ts constructor 83
 client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
-client/src/three/toolPreview.ts updateToolPreview 158
+client/src/three/toolPreview.ts updateToolPreview 153
 server/src/api/jobRoutes.ts createJobRoutes 119
 server/src/api/routes.ts 976
 server/src/api/routes.ts createApiRouter 776

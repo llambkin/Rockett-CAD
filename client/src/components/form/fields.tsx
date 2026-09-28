@@ -30,6 +30,7 @@ export function NumField({
   className,
   title,
   autoFocus,
+  onClear,
 }: {
   label?: string;
   value: number;
@@ -42,6 +43,7 @@ export function NumField({
   className?: string;
   title?: string;
   autoFocus?: boolean | undefined;
+  onClear?: () => void;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -76,8 +78,8 @@ export function NumField({
       onChange={(e) => {
         setText(e.target.value);
         const v = Number(e.target.value);
-        if (
-          e.target.value.trim() !== "" &&
+        if (e.target.value.trim() === "") onClear?.();
+        else if (
           Number.isFinite(v) &&
           (min === undefined || v >= min) &&
           (max === undefined || v <= max)
