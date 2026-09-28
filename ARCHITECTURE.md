@@ -107,10 +107,10 @@ tessellations so an edit to feature _k_ re-evaluates only features _k..end_
 
 **Units.** All geometry is internally millimetres. The `units.length`
 setting in `shared/src/settings.ts` is the only owner of the display unit.
-`shared/src/units.ts` owns the conversions (`toMm`, `fromMm`) and length and
-angle formatting; they never mutate stored geometry.
-`LengthField` shows a length in its `units` prop and reports millimetres.
-Every dialog passes `mm` today.
+`shared/src/units.ts` owns the conversions (`toMm`, `fromMm`), length parsing
+(`parseLength`) and length and angle formatting; they never mutate stored
+geometry. `LengthField` shows and parses a length in its `units` prop and
+reports millimetres. Every dialog passes the resolved `units.length`.
 
 **Dialog form kit.** `client/src/components/form/fields.tsx` holds the dialog
 inputs: `NumField`, `LengthField`, `AngleField`, `SelectField`, `AxisField`,
