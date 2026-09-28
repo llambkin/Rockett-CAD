@@ -12,14 +12,64 @@ import type { DialogType, Selection } from "../store";
 import { ORIGIN_PLANE_DEFS, uv3 } from "./CadViewport";
 
 export const HANDLE_VALUES = {
-  fillet: { param: "radius", fallback: 2, signed: false },
-  chamfer: { param: "distance", fallback: 1, signed: false },
-  shell: { param: "thickness", fallback: 2, signed: false },
-  offsetFace: { param: "distance", fallback: 5, signed: true },
-  emboss: { param: "depth", fallback: 1, signed: false },
-  constructionPlane: { param: "distance", fallback: 10, signed: true },
-  linearPattern: { param: "spacing", fallback: 20, signed: true },
-  circularPattern: { param: "totalAngle", fallback: 360, signed: true },
+  fillet: {
+    param: "radius",
+    fallback: 2,
+    signed: false,
+    place: (i: HandleInput) => arrow(edgeRay(i.bodies, first(i, "edge"))),
+  },
+  chamfer: {
+    param: "distance",
+    fallback: 1,
+    signed: false,
+    place: (i: HandleInput) => arrow(edgeRay(i.bodies, first(i, "edge"))),
+  },
+  shell: {
+    param: "thickness",
+    fallback: 2,
+    signed: false,
+    place: (i: HandleInput) => {
+      const ray = faceRay(i.bodies, first(i, "face"));
+      return arrow(ray && { origin: ray.origin, axis: ray.axis.negate() });
+    },
+  },
+  offsetFace: {
+    param: "distance",
+    fallback: 5,
+    signed: true,
+    place: (i: HandleInput) => arrow(faceRay(i.bodies, first(i, "face"))),
+  },
+  emboss: {
+    param: "depth",
+    fallback: 1,
+    signed: false,
+    place: (i: HandleInput) => arrow(embossRay(i)),
+  },
+  constructionPlane: {
+    param: "distance",
+    fallback: 10,
+    signed: true,
+    place: (i: HandleInput) => arrow(offsetPlaneRay(i)),
+  },
+  linearPattern: {
+    param: "spacing",
+    fallback: 20,
+    signed: true,
+    place: (i: HandleInput) => {
+      const origin = bodyCenter(i);
+      const axis = patternDirection(i);
+      return arrow(origin && axis && { origin, axis });
+    },
+  },
+  circularPattern: {
+    param: "totalAngle",
+    fallback: 360,
+    signed: true,
+    place: (i: HandleInput): Placement | null => {
+      const through = bodyCenter(i);
+      return through && { kind: "arc", through };
+    },
+  },
 } as const;
 
 export type HandleDialog = keyof typeof HANDLE_VALUES;
@@ -29,11 +79,20 @@ interface Ray {
   axis: THREE.Vector3;
 }
 
+type Placement =
+  ({ kind: "arrow" } & Ray) | { kind: "arc"; through: THREE.Vector3 };
+
+const arrow = (ray: Ray | null): Placement | null =>
+  ray && { kind: "arrow", ...ray };
+
+const first = (input: HandleInput, kind: Selection["kind"]) =>
+  input.selection.find((s) => s.kind === kind);
+
 export type FeatureHandle = {
   param: string;
   value: number;
   signed: boolean;
-} & (({ kind: "arrow" } & Ray) | { kind: "arc"; through: THREE.Vector3 });
+} & Placement;
 
 export interface HandleInput {
   dialog: DialogType;
@@ -233,57 +292,30 @@ function patternDirection(input: HandleInput): THREE.Vector3 | null {
   );
 }
 
-function handleRay(dialog: HandleDialog, input: HandleInput): Ray | null {
-  const first = (kind: Selection["kind"]) =>
-    input.selection.find((s) => s.kind === kind);
-  switch (dialog) {
-    case "fillet":
-    case "chamfer":
-      return edgeRay(input.bodies, first("edge"));
-    case "offsetFace":
-      return faceRay(input.bodies, first("face"));
-    case "shell": {
-      const ray = faceRay(input.bodies, first("face"));
-      return ray && { origin: ray.origin, axis: ray.axis.negate() };
-    }
-    case "emboss": {
-      const found = sketchOf(input.evaluation, first("profile"));
-      if (!found) return null;
-      const [u, v] = profileCentroid(found.profile);
-      const sign = input.params.embossMode === "deboss" ? -1 : 1;
-      return {
-        origin: uv3(found.sketch.frame, u, v),
-        axis: new THREE.Vector3(...found.sketch.frame.normal).multiplyScalar(
-          sign,
-        ),
-      };
-    }
-    case "constructionPlane": {
-      if ((input.params.method ?? "offset") !== "offset") return null;
-      const ray = planeRay(input);
-      if (ray && input.params.flip) ray.axis.negate();
-      return ray;
-    }
-    case "linearPattern": {
-      const origin = bodyCenter(input);
-      const axis = patternDirection(input);
-      return origin && axis ? { origin, axis } : null;
-    }
-    case "circularPattern":
-      return null;
-  }
+function embossRay(input: HandleInput): Ray | null {
+  const found = sketchOf(input.evaluation, first(input, "profile"));
+  if (!found) return null;
+  const [u, v] = profileCentroid(found.profile);
+  const sign = input.params.embossMode === "deboss" ? -1 : 1;
+  return {
+    origin: uv3(found.sketch.frame, u, v),
+    axis: new THREE.Vector3(...found.sketch.frame.normal).multiplyScalar(sign),
+  };
+}
+
+function offsetPlaneRay(input: HandleInput): Ray | null {
+  if ((input.params.method ?? "offset") !== "offset") return null;
+  const ray = planeRay(input);
+  if (ray && input.params.flip) ray.axis.negate();
+  return ray;
 }
 
 export function featureHandle(input: HandleInput): FeatureHandle | null {
   if (!(input.dialog in HANDLE_VALUES)) return null;
-  const dialog = input.dialog as HandleDialog;
-  const { param, fallback, signed } = HANDLE_VALUES[dialog];
+  const { param, fallback, signed, place } =
+    HANDLE_VALUES[input.dialog as HandleDialog];
   const raw = Number(input.params[param]);
   const value = Number.isFinite(raw) ? raw : fallback;
-  if (dialog === "circularPattern") {
-    const through = bodyCenter(input);
-    return through && { kind: "arc", param, value, signed, through };
-  }
-  const ray = handleRay(dialog, input);
-  return ray && { kind: "arrow", param, value, signed, ...ray };
+  const at = place(input);
+  return at && { param, value, signed, ...at };
 }

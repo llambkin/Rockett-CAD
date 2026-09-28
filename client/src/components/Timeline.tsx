@@ -3,10 +3,8 @@ import type {
   CadDocument,
   EvaluateResult,
   Feature,
-  FeatureRef,
   FeatureStatus,
 } from "@rockett/shared";
-import { featureRefs } from "@rockett/shared";
 import { pickInto } from "../dialogPicks";
 import { featureUI } from "../features/registry";
 import "../features/core";
@@ -14,23 +12,15 @@ import {
   useStore,
   selectionKey,
   sketchEditingPosition,
-  type DialogType,
   type Selection,
 } from "../store";
 import { useTimelinePeek } from "../timelinePeek";
 import { featureBodies } from "../treeSelection";
-import { alignCameraToActiveSketch } from "../viewportRef";
 import { ContextMenu } from "./ContextMenu";
 import { refNotes, useNamingUpgradePanel } from "./RefRepair";
 import { QuickEdit, quickValues } from "./QuickEdit";
 
-const TYPE_ICONS: Record<string, string> = {
-  importMesh: "⇩",
-  sketch: "✏",
-};
-
-const typeIcon = (type: string) =>
-  featureUI(type)?.icon ?? TYPE_ICONS[type] ?? "•";
+const typeIcon = (type: string) => featureUI(type)?.icon ?? "•";
 
 function chipTitle(
   f: Feature,
@@ -269,65 +259,7 @@ export function Timeline() {
   );
 }
 
-const refPick = (ref: FeatureRef): Selection[] => {
-  switch (ref.kind) {
-    case "profile":
-      return [
-        {
-          kind: "profile",
-          sketchId: ref.profile.sketchId,
-          profileId: ref.profile.profileId,
-        },
-      ];
-    case "edge":
-      return [
-        { kind: "edge", bodyId: ref.edge.bodyId, edgeName: ref.edge.edgeName },
-      ];
-    case "face":
-      return [
-        { kind: "face", bodyId: ref.face.bodyId, faceName: ref.face.faceName },
-      ];
-    case "body":
-      return [{ kind: "body", bodyId: ref.body }];
-    default:
-      return [];
-  }
-};
-
-/** Open the right editor for a feature: sketch mode, or a prefilled dialog. */
 export async function openFeatureEditor(f: Feature): Promise<void> {
   if (useStore.getState().busy) return;
-  if (f.type !== "sketch" && useStore.getState().mode.name === "sketch") {
-    await useStore.getState().finishSketch();
-    if (useStore.getState().mode.name === "sketch") return;
-  }
-  const s = useStore.getState();
-  if (f.type === "sketch") {
-    // rolling target: ensure the sketch is inside the active timeline range
-    void s.editSketch(f.id).then(alignCameraToActiveSketch);
-    return;
-  }
-  const ui = featureUI(f.type);
-  if (ui) return openDialog(f, ui.prefill(f));
-  const selection = featureRefs(f)
-    .filter((ref) => !ref.path.startsWith("/targets/"))
-    .flatMap(refPick);
-  openDialog(f, {
-    params: { name: f.name, targets: (f as any).targets },
-    selection,
-  });
-}
-
-function openDialog(
-  f: Feature,
-  open: { params: Record<string, any>; selection: Selection[] },
-) {
-  const s = useStore.getState();
-  s.setMode({
-    name: "dialog",
-    dialog: (f.type === "importMesh" ? "importStep" : f.type) as DialogType,
-    editFeatureId: f.id,
-  });
-  s.setDialogParams(open.params);
-  s.setSelection(open.selection);
+  await featureUI(f.type)?.open(f);
 }

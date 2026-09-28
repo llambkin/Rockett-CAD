@@ -1,3 +1,4 @@
+import "./sketch";
 import "./extrude";
 import "./revolve";
 import "./sweep";

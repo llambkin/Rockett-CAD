@@ -1,25 +1,15 @@
-/**
- * Contextual feature panel (right side): parameter forms for each operation.
- * Flow: select geometry → enter parameters → OK commits the parametric
- * feature through the API.
- */
-
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ExportFormat, Feature } from "@rockett/shared";
-import { formatLength } from "@rockett/shared";
-import { featurePatch, useStore, type DialogType } from "../store";
-import { api, saveDownload } from "../api";
-import { takes } from "../dialogPicks";
+import { useEffect, useRef, useState } from "react";
+import type { Feature } from "@rockett/shared";
+import { featurePatch, useStore } from "../store";
+import { takesAxis } from "../dialogPicks";
 import { createLivePreview } from "../livePreview";
 import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
-import { SelInfo } from "./form/fields";
 import { DialogFooter } from "./form/DialogFooter";
 import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
-import { featureUI } from "../features/registry";
+import { featureUI, type FeatureUI } from "../features/registry";
 import { axisMissing, axisPicks } from "../features/inputs";
-import { useSetting } from "../settings";
 
 function attempt(build: (() => Feature) | null): Feature | null {
   try {
@@ -66,22 +56,25 @@ function useLivePreview(editId: string | undefined, draft: Feature | null) {
 export function FeatureDialog() {
   const mode = useStore((s) => s.mode);
   if (mode.name !== "dialog") return null;
+  const ui = featureUI(mode.dialog);
+  if (!ui) return null;
   return (
     <DialogBody
       key={mode.dialog + (mode.editFeatureId ?? "")}
-      dialog={mode.dialog}
+      ui={ui}
       editId={mode.editFeatureId}
     />
   );
 }
 
 function DialogBody({
-  dialog,
+  ui,
   editId,
 }: {
-  dialog: DialogType;
+  ui: FeatureUI;
   editId?: string | undefined;
 }) {
+  const dialog = ui.type;
   const selection = useStore((s) => s.selection);
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
@@ -96,12 +89,7 @@ function DialogBody({
   );
   const [pending, setPending] = useState(false);
 
-  // Picking an edge or sketch line in an axis-based dialog switches the axis
-  // to it — the dropdown alone gave no hint the pick was registered.
-  const axisDialog =
-    dialog === "constructionPlane"
-      ? params.method === "angle"
-      : takes(dialog, "axis");
+  const axisDialog = takesAxis(dialog, params);
   const axisPicked = axisPicks(selection, document_).length > 0;
   useEffect(() => {
     if (axisDialog && axisPicked && params.axisSource !== "edge")
@@ -116,13 +104,12 @@ function DialogBody({
   const noAxis = axisDialog && axisMissing(params, selection, document_);
   const close = () => setMode({ name: "idle" });
 
-  const ui = featureUI(dialog);
   useEffect(() => {
-    const patch = ui?.onParamsChange?.(params);
+    const patch = ui.onParamsChange?.(params);
     if (patch) setParams(patch);
   }, [dialog, selection, params]);
 
-  const uiBuild = ui?.build;
+  const uiBuild = ui.build;
   const build = uiBuild
     ? (): Feature => {
         const built = uiBuild(params, selection);
@@ -139,11 +126,10 @@ function DialogBody({
     },
     [],
   );
-  if (ui?.Panel)
+  if (ui.Panel)
     return (
       <ui.Panel editId={editId} onClose={close} cancelPreview={live.cancel} />
     );
-  if (dialog === "export") return <ExportPanel onClose={close} />;
 
   const ok = async () => {
     let feature: Feature;
@@ -168,10 +154,10 @@ function DialogBody({
   };
 
   return (
-    <DraggablePanel title={ui?.title ?? ""}>
+    <DraggablePanel title={ui.title}>
       <div className="dialog-body">
         <RefRepair />
-        {ui?.Form && <ui.Form params={params} setParams={setParams} />}
+        {ui.Form && <ui.Form params={params} setParams={setParams} />}
         <SizeLimitHint draft={draft} />
       </div>
       <DialogFooter
@@ -179,104 +165,6 @@ function DialogBody({
         onCancel={cancel}
         pending={pending}
         okDisabled={noAxis}
-        escapeAnywhere
-      />
-    </DraggablePanel>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Export panel
-// ---------------------------------------------------------------------------
-
-function ExportPanel({ onClose }: { onClose: () => void }) {
-  const units = useSetting("units.length");
-  const document_ = useStore((s) => s.document);
-  const evaluation = useStore((s) => s.evaluation);
-  const hiddenBodies = useStore((s) => s.view.hidden.bodies);
-  const selection = useStore((s) => s.selection);
-  const setError = useStore((s) => s.setError);
-  const cancel = useStore((s) => s.cancelDialog);
-  const [exporters, setExporters] = useState<ExportFormat[]>([]);
-  const [picked, setFormat] = useState("");
-  const format = picked || exporters[0]?.format;
-  const [quality, setQuality] = useState(0.05);
-  const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    api.formats().then(
-      (formats) =>
-        setExporters(formats.exporters.filter((e) => e.source === "bodies")),
-      (e: Error) => setError(e.message),
-    );
-  }, [setError]);
-
-  const selectedBodies = useMemo(
-    () => selection.filter((s) => s.kind === "body").map((s: any) => s.bodyId),
-    [selection],
-  );
-  const shownBodies = useMemo(() => {
-    const hidden = new Set(hiddenBodies);
-    return (evaluation?.bodies ?? [])
-      .filter((b) => !hidden.has(b.bodyId))
-      .map((b) => b.bodyId);
-  }, [evaluation, hiddenBodies]);
-
-  const doExport = async () => {
-    if (!document_ || !format) return;
-    setPending(true);
-    try {
-      saveDownload(
-        await api.exportModel(document_.id, {
-          format,
-          bodyIds: selectedBodies.length > 0 ? selectedBodies : shownBodies,
-          quality,
-        }),
-      );
-      onClose();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <DraggablePanel title="Export for 3D printing">
-      <div className="dialog-body">
-        <SelInfo
-          label="Bodies"
-          input="bodies"
-          hint={`all visible (${shownBodies.length})`}
-        />
-        <label className="field">
-          <span>Format</span>
-          <select value={format} onChange={(e) => setFormat(e.target.value)}>
-            {exporters.map((e) => (
-              <option key={e.format} value={e.format}>
-                {e.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Quality ({units} deviation)</span>
-          <select
-            value={quality}
-            onChange={(e) => setQuality(Number(e.target.value))}
-          >
-            <option value={0.1}>Draft ({formatLength(0.1, units)})</option>
-            <option value={0.05}>Standard ({formatLength(0.05, units)})</option>
-            <option value={0.01}>Fine ({formatLength(0.01, units)})</option>
-          </select>
-        </label>
-      </div>
-      <DialogFooter
-        onOk={() => void doExport()}
-        onCancel={cancel}
-        pending={pending}
-        okDisabled={!format}
-        okLabel={pending ? "Exporting…" : "Download"}
         escapeAnywhere
       />
     </DraggablePanel>

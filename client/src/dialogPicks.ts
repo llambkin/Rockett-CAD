@@ -92,6 +92,15 @@ function inputsFor(
   return featureUI(dialog)?.picksFor?.(params) ?? picksOf(dialog);
 }
 
+export function takesAxis(
+  dialog: DialogType,
+  params: Record<string, any>,
+): boolean {
+  return inputsFor(dialog, params).some(
+    (i) => inSelection(i) && !!i.one && i.kinds.includes("axis"),
+  );
+}
+
 function dialogInputs(s: Store): PickInput[] {
   if (s.mode.name !== "dialog") return [];
   const operation = targetOperation(s.mode.dialog, s.dialogParams);

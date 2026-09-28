@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { createRegistry, type Feature } from "@rockett/shared";
 import type { PickInput } from "../dialogPicks";
-import type { Selection, useStore } from "../store";
+import { useStore, type Selection } from "../store";
 
 export type DialogParams = Record<string, any>;
 export type PickState = ReturnType<typeof useStore.getState>;
@@ -29,22 +29,56 @@ interface FeatureUIBase<F extends Feature> {
   group: string;
   picks: readonly PickInput[];
   picksFor?: (params: DialogParams) => readonly PickInput[];
-  prefill(f: F): { params: DialogParams; selection: Selection[] };
   onPick?(pick: Selection, s: PickState): Promise<void> | undefined;
   onParamsChange?(params: DialogParams): DialogParams | undefined;
 }
 
+interface DialogUI<F extends Feature> {
+  prefill(f: F): { params: DialogParams; selection: Selection[] };
+}
+
 export type FeatureUI<F extends Feature = Feature> = FeatureUIBase<F> &
   (
-    | { Form: ComponentType<FeatureFormProps>; build: Build<F>; Panel?: never }
-    | {
+    | (DialogUI<F> & {
+        Form: ComponentType<FeatureFormProps>;
+        build: Build<F>;
+        Panel?: never;
+      })
+    | (DialogUI<F> & {
         Panel: ComponentType<FeaturePanelProps>;
         build?: Build<F>;
         Form?: never;
+      })
+    | {
+        open(f: F): Promise<void>;
+        prefill?: never;
+        Form?: never;
+        Panel?: never;
+        build?: never;
       }
   );
 
-const featureUIs = createRegistry<FeatureUI>("feature UI", (ui) => ui.type);
+type DialogFeatureUI = Extract<FeatureUI, { prefill: unknown }>;
 
-export const registerFeatureUI = featureUIs.register;
+async function openInDialog(ui: DialogFeatureUI, f: Feature): Promise<void> {
+  if (useStore.getState().mode.name === "sketch") {
+    await useStore.getState().finishSketch();
+    if (useStore.getState().mode.name === "sketch") return;
+  }
+  const s = useStore.getState();
+  const { params, selection } = ui.prefill(f);
+  s.setMode({ name: "dialog", dialog: ui.type, editFeatureId: f.id });
+  s.setDialogParams(params);
+  s.setSelection(selection);
+}
+
+const featureUIs = createRegistry<
+  FeatureUI & { open(f: Feature): Promise<void> }
+>("feature UI", (ui) => ui.type);
+
+export function registerFeatureUI(ui: FeatureUI): () => void {
+  if (!ui.prefill) return featureUIs.register(ui);
+  return featureUIs.register({ ...ui, open: (f) => openInDialog(ui, f) });
+}
+
 export const featureUI = featureUIs.get;

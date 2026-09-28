@@ -12,6 +12,7 @@ import type {
   CadDocument,
   EvaluateResult,
   Feature,
+  FeatureType,
   HistoryStatus,
   MeasureResult,
   OpenedProject,
@@ -109,26 +110,7 @@ export type SketchTool =
   | "offset"
   | "dimension";
 
-export type DialogType =
-  | "importStep"
-  | "extrude"
-  | "revolve"
-  | "sweep"
-  | "loft"
-  | "fillet"
-  | "chamfer"
-  | "shell"
-  | "combine"
-  | "splitBody"
-  | "offsetFace"
-  | "mirror"
-  | "linearPattern"
-  | "circularPattern"
-  | "constructionPlane"
-  | "referenceImage"
-  | "emboss"
-  | "move"
-  | "export";
+export type DialogType = FeatureType | "export";
 
 export type Mode =
   | { name: "idle" }

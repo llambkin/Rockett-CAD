@@ -7,6 +7,7 @@ import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
 import { FeatureDialog } from "./components/FeatureDialog";
+import { ExportPanel } from "./components/ExportPanel";
 import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
@@ -363,6 +364,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
         <TreePane />
         <ViewportView />
         <FeatureDialog />
+        <ExportPanel />
         <SketchOffsetPanel />
         <MeasurePanel />
         <VersionLabel />
