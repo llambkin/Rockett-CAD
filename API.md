@@ -476,7 +476,8 @@ signed-in user's view with an `ETag`:
 numbers for each vector and `orthographic` or `perspective`. A stored camera
 that is missing or breaks those rules reads as null, and a version 1 view
 reads as version 2 with a null camera. A user with no saved view gets empty
-lists and a null camera.
+lists and a null camera. An orthographic camera's distance from its target
+sets its zoom: it shows what the 40 degree perspective camera shows there.
 
 `PUT /projects/:id/view` replaces the user's view with a body of the same
 shape, where a left-out `camera` means null, and returns the stored view and

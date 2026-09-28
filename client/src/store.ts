@@ -22,6 +22,7 @@ import type {
   SketchFeature,
   SketchImport,
   TopoRef,
+  ViewCamera,
   Visibility,
 } from "@rockett/shared";
 import {
@@ -42,6 +43,7 @@ import {
   type PreviewTint,
 } from "./livePreview";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
+import { TIMING_MS } from "./tunables";
 
 // ---------------------------------------------------------------------------
 
@@ -259,6 +261,7 @@ interface State {
   rollTimeline: (position: number) => Promise<void>;
   setBodyMeta: (bodyId: string, patch: { name: string }) => Promise<void>;
   setVisible: (shown: Visibility) => Promise<void>;
+  moveCamera: (camera: ViewCamera) => void;
 
   runMeasure: () => Promise<void>;
 }
@@ -499,6 +502,27 @@ const inTurn = writeQueue((count) => {
   useStore.setState(saveState);
 });
 
+let cameraSave: ReturnType<typeof setTimeout> | undefined;
+
+async function saveView(
+  projectId: string,
+  change: (view: ProjectView) => ProjectView,
+): Promise<void> {
+  const next = change(useStore.getState().view);
+  useStore.setState({ view: next });
+  try {
+    await inTurn(() => api.putView(projectId, next));
+  } catch (e: any) {
+    const conflict = e?.status === 409;
+    if (conflict) clearTimeout(cameraSave);
+    const view = conflict
+      ? await api.getView(projectId).catch(() => null)
+      : null;
+    if (useStore.getState().projectId === projectId)
+      useStore.setState(view ? { view } : { error: e.message });
+  }
+}
+
 function lost(e: unknown): Recovery | null {
   const recovery = recoveryFor(e);
   if (recovery) {
@@ -586,6 +610,7 @@ export const useStore = create<State>((set, get) => ({
   measureResult: null,
 
   async openProject(id, path = projectPath(id)) {
+    clearTimeout(cameraSave);
     void get().cancelPreview();
     api.forgetJob?.();
     set({ busy: true, error: null, job: null, jobStartedAt: null });
@@ -619,6 +644,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
   closeProject() {
+    clearTimeout(cameraSave);
     void get().cancelPreview();
     api.forgetJob?.();
     unsent = [];
@@ -1303,15 +1329,18 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async setVisible(shown) {
-    const { projectId, view } = get();
+    const { projectId } = get();
+    if (projectId) await saveView(projectId, (view) => withShown(view, shown));
+  },
+
+  moveCamera(camera) {
+    clearTimeout(cameraSave);
+    const { projectId } = get();
     if (!projectId) return;
-    const next = withShown(view, shown);
-    set({ view: next });
-    try {
-      await inTurn(() => api.putView(projectId, next));
-    } catch (e: any) {
-      if (get().projectId === projectId) set({ error: e.message });
-    }
+    cameraSave = setTimeout(
+      () => void saveView(projectId, (view) => ({ ...view, camera })),
+      TIMING_MS.viewSave,
+    );
   },
 
   async runMeasure() {

@@ -240,6 +240,9 @@ Every change saves automatically, and projects survive container recreation.
 | Zoom                               | Scroll wheel or trackpad pinch, to the cursor                                           |
 | Named views / fit / ortho or persp | Toolbar (right side) and ViewCube                                                       |
 
+Each project reopens at your own last camera, saved a second after it stops
+moving. A project you have not moved opens zoomed to fit.
+
 ### Shortcuts
 
 | Keys            | Action                                                    |

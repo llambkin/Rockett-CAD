@@ -15,6 +15,7 @@ import {
   type OriginAxis,
   type PlaneFrame,
   type Vec3,
+  type ViewCamera,
 } from "@rockett/shared";
 import type { Selection } from "../store";
 import type { PreviewGhost, PreviewTint } from "../livePreview";
@@ -30,7 +31,10 @@ import {
 import { applyThemeToScene } from "../theme/applyThemeToScene";
 import {
   cameraTween,
+  halfHeightPerDistance,
   orbitAbout,
+  restoredPose,
+  savedCamera,
   turntableAbout,
   type CameraPose,
 } from "./camera";
@@ -278,7 +282,7 @@ export class CadViewport {
       return (this.zoom * 2) / h;
     }
     const dist = this.perspCam.position.distanceTo(this.target);
-    return (2 * dist * Math.tan((this.perspCam.fov * Math.PI) / 360)) / h;
+    return (2 * dist * halfHeightPerDistance(this.perspCam.fov)) / h;
   }
 
   // -------------------------------------------------------------------------
@@ -526,6 +530,25 @@ export class CadViewport {
       c.position.copy(pose.position);
       c.lookAt(this.target);
     }
+  }
+
+  cameraState(): ViewCamera {
+    return savedCamera(
+      {
+        position: this.camera.position,
+        up: this.camera.up,
+        target: this.target,
+        zoom: this.zoom,
+      },
+      this.projection,
+      this.perspCam.fov,
+    );
+  }
+
+  setCamera(camera: ViewCamera) {
+    const pose = restoredPose(camera, this.perspCam.fov);
+    this.animateTo(pose.position, pose.up, pose.target, pose.zoom, false);
+    this.setProjection(camera.projection);
   }
 
   setProjection(p: "orthographic" | "perspective") {

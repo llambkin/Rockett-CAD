@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Vec3 } from "@rockett/shared";
+import type { Vec3, ViewCamera } from "@rockett/shared";
 
 export interface NamedView {
   label: string;
@@ -28,6 +28,37 @@ export interface CameraPose {
   up: THREE.Vector3;
   target: THREE.Vector3;
   zoom: number;
+}
+
+export function halfHeightPerDistance(fov: number): number {
+  return Math.tan((fov * Math.PI) / 360);
+}
+
+export function savedCamera(
+  pose: CameraPose,
+  projection: ViewCamera["projection"],
+  fov: number,
+): ViewCamera {
+  const offset = pose.position.clone().sub(pose.target);
+  if (projection === "orthographic")
+    offset.setLength(pose.zoom / halfHeightPerDistance(fov));
+  return {
+    position: pose.target.clone().add(offset).toArray(),
+    target: pose.target.toArray(),
+    up: pose.up.toArray(),
+    projection,
+  };
+}
+
+export function restoredPose(camera: ViewCamera, fov: number): CameraPose {
+  const position = new THREE.Vector3(...camera.position);
+  const target = new THREE.Vector3(...camera.target);
+  return {
+    position,
+    up: new THREE.Vector3(...camera.up),
+    target,
+    zoom: position.distanceTo(target) * halfHeightPerDistance(fov),
+  };
 }
 
 const ORIGIN = new THREE.Vector3();

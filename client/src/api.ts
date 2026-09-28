@@ -220,6 +220,14 @@ function received(document: { id?: unknown; revision?: unknown } | undefined) {
   if (document.revision > known) revisions.set(document.id, document.revision);
 }
 
+let viewTag: { id: string; etag: string } | null = null;
+
+function keepViewTag(id: string) {
+  return (etag: string | null) => {
+    viewTag = etag ? { id, etag } : null;
+  };
+}
+
 export function watchProject(watch: ProjectWatch | null): void {
   watched = watch;
 }
@@ -334,7 +342,14 @@ export function send<P extends string, Req, Res>(
     position,
     tx,
     seq,
-  }: { body?: Req; signal?: AbortSignal | undefined } & Stamp = {},
+    ifMatch,
+    onEtag,
+  }: {
+    body?: Req;
+    signal?: AbortSignal | undefined;
+    ifMatch?: string | undefined;
+    onEtag?: (etag: string | null) => void;
+  } & Stamp = {},
 ): Promise<Res> {
   const query = position === undefined ? "" : `?position=${position}`;
   const id: string | undefined = (params as Partial<Record<string, string>>).id;
@@ -342,14 +357,17 @@ export function send<P extends string, Req, Res>(
     DOCUMENT_EDITS.has(route) && id !== undefined
       ? revisions.get(id)
       : undefined;
+  const match =
+    ifMatch ?? (revision === undefined ? undefined : `"${revision}"`);
   return request<Res>(route.method, pathFor(route, params) + query, {
     body,
     signal,
+    ...(onEtag && { onEtag }),
     ...((DOCUMENT_EDITS.has(route) || route === ROUTES.importStep) && {
       jobId: crypto.randomUUID(),
     }),
     headers: {
-      ...(revision !== undefined && { "If-Match": `"${revision}"` }),
+      ...(match !== undefined && { "If-Match": match }),
       ...(tx !== undefined && { [TX_HEADER]: tx }),
       ...(seq !== undefined && { [PREVIEW_HEADER]: String(seq) }),
     },
@@ -577,9 +595,18 @@ export const api = {
     send(ROUTES.stageNamingUpgrade, { id }, { body: { accept } }),
   commitNamingUpgrade: (id: string, accept: NamingDecision[] = []) =>
     holding(ROUTES.commitNamingUpgrade, { id }, { accept }),
-  getView: (id: string) => send(ROUTES.getView, { id }),
+  getView: (id: string) =>
+    send(ROUTES.getView, { id }, { onEtag: keepViewTag(id) }),
   putView: (id: string, view: ProjectView) =>
-    send(ROUTES.putView, { id }, { body: view }),
+    send(
+      ROUTES.putView,
+      { id },
+      {
+        body: view,
+        ifMatch: viewTag?.id === id ? viewTag.etag : undefined,
+        onEtag: keepViewTag(id),
+      },
+    ),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
     send(ROUTES.measure, { id }, { body: { refs } }),

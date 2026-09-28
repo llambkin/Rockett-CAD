@@ -1,5 +1,5 @@
 client/src/App.tsx Workspace 137
-client/src/api.ts 617
+client/src/api.ts 644
 client/src/components/ControlsHelp.tsx ControlsHelp 121
 client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/FeatureDialog.tsx 900
@@ -21,9 +21,9 @@ client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3211
+client/src/components/ViewportView.tsx 3234
 client/src/components/ViewportView.tsx ViewportHud 96
-client/src/components/ViewportView.tsx ViewportView 2954
+client/src/components/ViewportView.tsx ViewportView 2976
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 81
 client/src/components/ViewportView.tsx handleHover 138
 client/src/components/ViewportView.tsx handlePrimaryUp 178
@@ -37,10 +37,10 @@ client/src/components/form/fields.tsx 543
 client/src/features/constructionPlane.tsx PlaneForm 112
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
 client/src/sketchTools.ts 999
-client/src/store.ts 1353
+client/src/store.ts 1382
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 766
-client/src/three/CadViewport.ts 1200
+client/src/store.ts useStore 771
+client/src/three/CadViewport.ts 1223
 client/src/three/CadViewport.ts addHighlight 85
 client/src/three/CadViewport.ts buildBody 88
 client/src/three/CadViewport.ts pick 205

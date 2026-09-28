@@ -57,8 +57,11 @@ persists (autosave on every mutation) and responds with the updated document
 plus a freshly evaluated model. Undo/redo is a client-side stack of document
 snapshots restored through a full-document endpoint, deliberately distinct
 from the CAD timeline (see FEATURE_TIMELINE.md). What is hidden is view state,
-not document: the client keeps it in a `view` slice and saves it with
-`PUT /view`, outside undo and evaluation. Every document edit names the
+not document: the client keeps it, with the camera, in a `view` slice and
+saves it with `PUT /view` and the view's last `ETag`, outside undo and
+evaluation. Visibility saves at once and the camera 1 s after it settles; a
+409 takes the server's view and drops the pending save. A null camera opens
+zoomed to fit. Every document edit names the
 revision it last read, and a stale one gets 409 with nothing written (see
 API.md, Document revisions). Every document edit except a project rename runs
 through `mutateProject` in `server/src/api/routes.ts`: it checks the revision,

@@ -11,6 +11,7 @@ import type {
   SketchConstraint,
   SketchEntity,
   SketchSolveStatus,
+  ViewCamera,
 } from "@rockett/shared";
 import {
   findProfile,
@@ -120,6 +121,9 @@ export function ViewportView() {
   const document_ = useStore((s) => s.document);
   const hiddenBodies = useStore((s) => s.view.hidden.bodies);
   const hiddenFeatures = useStore((s) => s.view.hidden.features);
+  const projectId = useStore((s) => s.projectId);
+  const savedCamera = useStore((s) => s.view.camera);
+  const shownCamera = useRef({ key: "", camera: null as ViewCamera | null });
   const mode = useStore((s) => s.mode);
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
@@ -319,7 +323,14 @@ export function ViewportView() {
       }
     });
 
-    vp.zoomToFit(false);
+    vp.onRender(() => {
+      const camera = vp.cameraState();
+      const key = JSON.stringify(camera);
+      if (key === shownCamera.current.key) return;
+      shownCamera.current = { key, camera };
+      useStore.getState().moveCamera(camera);
+    });
+
     return () => {
       window.removeEventListener("resize", onResize);
       observer.disconnect();
@@ -488,6 +499,18 @@ export function ViewportView() {
     baseLoads,
     units,
   ]);
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp || (savedCamera && savedCamera === shownCamera.current.camera))
+      return;
+    if (savedCamera) vp.setCamera(savedCamera);
+    else vp.zoomToFit(false);
+    shownCamera.current = {
+      key: JSON.stringify(vp.cameraState()),
+      camera: savedCamera,
+    };
+  }, [projectId, savedCamera]);
 
   const [, setLabelTick] = useState(0);
   useEffect(() => {

@@ -81,7 +81,7 @@ everything downstream against persistent topology references.
 - **Settings**: the panel edits app, personal and project preferences, such as sign-in length; imports keep unknown plugin values.
 - **Display units**: sketch dimensions, measurements and feature lengths follow the selected unit; typed lengths accept unit suffixes while models remain in millimetres.
 - **Friend requests and notices**: request by email, accept or reject in the user menu, and open newly shared projects.
-- **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, adjustable camera preferences and pick tolerance.
+- **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, camera preferences, pick tolerance; projects reopen at your last camera.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.
 - **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline; an unchanged OK adds nothing.
