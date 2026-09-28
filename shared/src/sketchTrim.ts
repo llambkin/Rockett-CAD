@@ -5,7 +5,6 @@ import {
   type SketchPoint,
 } from "./model.js";
 import { arcAngles, curveHits, sampleArc, type CurveHit } from "./profiles.js";
-import { solveSketch } from "./solver.js";
 import {
   constraintEntityRefs,
   type SketchModification,
@@ -203,10 +202,6 @@ function keptPieces(
   return pieces;
 }
 
-const named = (c: SketchConstraint): string =>
-  c.type.replace(/[A-Z]/g, (m) => ` ${m.toLowerCase()}`) +
-  ("value" in c ? ` ${c.value}` : "");
-
 function survivingConstraints(
   constraints: SketchConstraint[],
   curve: Curve,
@@ -234,14 +229,6 @@ export function trimSketch(
   if (curve.external)
     throw new Error(
       "Projected references cannot be trimmed. Draw a curve constrained to the reference instead.",
-    );
-  const { conflicts } = solveSketch({ entities, constraints });
-  if (conflicts.length)
-    throw new Error(
-      `Trim needs a sketch that solves. These constraints conflict: ${constraints
-        .filter((c) => conflicts.includes(c.id))
-        .map(named)
-        .join(", ")}.`,
     );
   const { from, to } = trimPiece(entities, entityId, at);
   const points: SketchEntity[] = [];
