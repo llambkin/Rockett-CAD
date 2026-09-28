@@ -648,6 +648,7 @@ export const useStore = create<State>((set, get) => ({
 
   async mutate(fn) {
     if (!get().document) return;
+    set({ busy: true });
     await endPreviews();
     const tx = crypto.randomUUID();
     return inTurn(async () => {
@@ -655,6 +656,7 @@ export const useStore = create<State>((set, get) => ({
       if (!document) return;
       if (recovery) {
         unsent.push(fn);
+        set({ busy: false });
         throw new Error(recovery.message);
       }
       set({ busy: true, error: null });
