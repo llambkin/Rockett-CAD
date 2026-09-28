@@ -17,6 +17,7 @@ import { useSession } from "../session";
 import { useStore } from "../store";
 import { AccentPicker } from "./AccentPicker";
 import { CheckField, NumField, SelectField } from "./form/fields";
+import { SettingsTransfer } from "./SettingsTransfer";
 
 const scopes: SettingScope[] = ["app", "user", "project"];
 
@@ -353,6 +354,9 @@ function PageContent({
               writable={available.includes(selected)}
             />
           ))}
+          {section === "user" && session.kind === "signed-in" && (
+            <SettingsTransfer />
+          )}
         </>
       )}
     </div>

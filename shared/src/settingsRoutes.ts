@@ -2,6 +2,8 @@ import { Type } from "typebox";
 import type { route as defineRoute } from "./routes.js";
 import type { LayerValues, SettingsPatch } from "./settings.js";
 
+export const SETTINGS_IMPORT_MAX_BYTES = 1024 * 1024;
+
 export const settingsPatchBody = Type.Object(
   {
     set: Type.Optional(Type.Record(Type.String(), Type.Unknown())),

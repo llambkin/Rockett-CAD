@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   SETTINGS,
   SETTING_KEY,
+  SETTINGS_IMPORT_MAX_BYTES,
   SettingsError,
   validateSettingValue,
   ValidationError,
@@ -17,7 +18,6 @@ import type { Storage } from "./storage.js";
 
 const SETTINGS_VERSION = 1;
 const APP_KEY = "settings";
-const IMPORT_MAX_BYTES = 1024 * 1024;
 const IMPORT_MAX_NODES = 10_000;
 const IMPORT_MAX_DEPTH = 64;
 
@@ -38,7 +38,7 @@ function checkImportBounds(entries: LayerValues): void {
         stack.push({ value: child, depth: depth + 1 });
     }
   }
-  if (Buffer.byteLength(JSON.stringify(entries)) > IMPORT_MAX_BYTES)
+  if (Buffer.byteLength(JSON.stringify(entries)) > SETTINGS_IMPORT_MAX_BYTES)
     throw new ValidationError("settings import is too large");
 }
 
