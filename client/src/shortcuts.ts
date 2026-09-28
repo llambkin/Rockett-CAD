@@ -51,15 +51,17 @@ export function sketchToolFor(key: string): SketchTool | undefined {
   return SKETCH_SHORTCUTS.find((s) => s.key === key.toUpperCase())?.tool;
 }
 
-/** Appends " (K)" when the dialog or sketch tool has a shortcut. */
-export function withKey(
-  title: string,
-  id: DialogType | SketchTool | "sketch" | "measure",
-): string {
+type ShortcutId = DialogType | SketchTool | "sketch" | "measure";
+
+export function idleKeys(id: ShortcutId): string[] {
+  return IDLE_SHORTCUTS.filter(
+    (s) =>
+      (s.action.kind === "dialog" ? s.action.dialog : s.action.kind) === id,
+  ).map((s) => s.key);
+}
+
+export function withKey(title: string, id: ShortcutId): string {
   const key =
-    IDLE_SHORTCUTS.find(
-      (s) =>
-        (s.action.kind === "dialog" ? s.action.dialog : s.action.kind) === id,
-    )?.key ?? SKETCH_SHORTCUTS.find((s) => s.tool === id)?.key;
+    idleKeys(id)[0] ?? SKETCH_SHORTCUTS.find((s) => s.tool === id)?.key;
   return key ? `${title} (${key})` : title;
 }

@@ -3,7 +3,8 @@ import { useStore, type Selection } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { NAMED_VIEWS } from "../three/camera";
-import { addSketchConstraints, toggleProjection } from "./Toolbar";
+import { addSketchConstraints } from "./Toolbar";
+import { toggleProjection } from "../commands/design";
 import { relationsFor, sketchSelectionIds } from "../sketchRelations";
 
 async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {

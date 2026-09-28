@@ -1,63 +1,25 @@
-/**
- * Main toolbar. Two states: modelling toolbar (Sketch/Create/Modify/…) and the
- * sketch toolbar (drawing tools, constraints, finish sketch).
- */
-
-import { useStore, type DialogType, type SketchTool } from "../store";
+import { useStore, type SketchTool } from "../store";
 import type { SketchConstraint } from "@rockett/shared";
-import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
-import { NAMED_VIEWS } from "../three/camera";
-import { filterSelectionFor } from "../dialogPicks";
-import { StepImportButton } from "./StepImportButton";
+import { openDialog } from "../commands/design";
+import {
+  runCommand,
+  toolbarFor,
+  tooltipOf,
+  useRegistrations,
+  type Command,
+  type CommandContext,
+  type ToolbarGroup,
+} from "../commands/registry";
 import { SketchInsertButtons } from "./SketchInsertButtons";
 import { withKey } from "../shortcuts";
 import { ToolButton } from "./ToolButton";
 import { NumField } from "./form/fields";
-import type { IconId } from "../icons";
 import {
   CONSTRAINTS,
   constraintFor,
   sketchSelectionIds,
   type RelationType,
 } from "../sketchRelations";
-
-type DialogButton = { id: DialogType & IconId; label: string; title: string };
-
-const CREATE: DialogButton[] = [
-  {
-    id: "extrude",
-    label: "Extrude",
-    title: withKey("Extrude profiles", "extrude"),
-  },
-  { id: "revolve", label: "Revolve", title: "Revolve profiles around an axis" },
-  { id: "sweep", label: "Sweep", title: "Sweep a profile along a path" },
-  { id: "loft", label: "Loft", title: "Loft between profiles" },
-  { id: "emboss", label: "Emboss", title: "Emboss/deboss sketch onto a face" },
-];
-
-const MODIFY: DialogButton[] = [
-  { id: "fillet", label: "Fillet", title: withKey("Fillet edges", "fillet") },
-  { id: "chamfer", label: "Chamfer", title: "Chamfer edges" },
-  { id: "shell", label: "Shell", title: "Shell: hollow the body" },
-  { id: "combine", label: "Combine", title: "Combine: join, cut or intersect" },
-  { id: "splitBody", label: "Split", title: "Split a body with a plane" },
-  { id: "offsetFace", label: "Press/Pull", title: "Press/Pull a planar face" },
-  { id: "move", label: "Move", title: withKey("Move bodies", "move") },
-];
-
-const PATTERN: DialogButton[] = [
-  { id: "mirror", label: "Mirror", title: "Mirror bodies across a plane" },
-  {
-    id: "linearPattern",
-    label: "Rect Pattern",
-    title: "Rect Pattern: repeat in rows and columns",
-  },
-  {
-    id: "circularPattern",
-    label: "Circ Pattern",
-    title: "Circ Pattern: repeat around an axis",
-  },
-];
 
 const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
   { id: "select", label: "Select" },
@@ -87,112 +49,55 @@ export async function addSketchConstraints(constraints: SketchConstraint[]) {
   useStore.getState().setSelection([]);
 }
 
-/** Opens a feature dialog, keeping any pre-selected geometry it can use (select-then-command). */
-export function openDialog(dialog: DialogType) {
-  const s = useStore.getState();
-  const kept = filterSelectionFor(dialog, s.selection);
-  s.setMode({ name: "dialog", dialog });
-  s.setSelection(kept);
-}
-
 export function Toolbar() {
   const mode = useStore((s) => s.mode);
-  const setMode = useStore((s) => s.setMode);
-  const busy = useStore((s) => s.busy);
+  useStore((s) => s.busy);
+  useRegistrations();
 
   if (mode.name === "sketch") return <SketchToolbar />;
 
-  // A pre-selected plane or planar face starts the sketch there directly;
-  // otherwise fall back to pick-a-plane mode.
-  const createSketch = async () => {
-    const s = useStore.getState();
-    const plane = s.selection.find((x) => x.kind === "plane") as any;
-    if (plane) {
-      await s.startSketchOnPlane(plane.ref);
-      alignCameraToActiveSketch();
-      return;
-    }
-    const face = s.selection.find((x) => x.kind === "face") as any;
-    if (face) {
-      const body = s.evaluation?.bodies.find((b) => b.bodyId === face.bodyId);
-      const surf = body?.faces.find((f) => f.name === face.faceName)?.surface;
-      if (surf?.type === "plane") {
-        await s.startSketchOnPlane({
-          kind: "face",
-          face: { kind: "face", bodyId: face.bodyId, faceName: face.faceName },
-        });
-        alignCameraToActiveSketch();
-        return;
-      }
-    }
-    setMode({ name: "pickPlane", purpose: "sketch" });
-  };
-
+  const ctx = useStore.getState();
+  const rows = toolbarFor("design", ctx);
+  const group = ({ group: g, commands }: (typeof rows)[number]) => (
+    <DesignGroup key={g.id} group={g} commands={commands} ctx={ctx} />
+  );
   return (
     <div className="toolbar">
-      <ToolGroup title="SKETCH">
-        <ToolButton
-          icon="sketch"
-          label="Create Sketch"
-          className="primary"
-          disabled={busy}
-          onClick={() => void createSketch()}
-          title={withKey("Create Sketch on a plane or planar face", "sketch")}
-        />
-      </ToolGroup>
-      <DialogGroup title="CREATE" buttons={CREATE} busy={busy} />
-      <DialogGroup title="MODIFY" buttons={MODIFY} busy={busy} />
-      <ToolGroup title="CONSTRUCT">
-        <ToolButton
-          icon="constructionPlane"
-          label="Plane"
-          title="Construction plane (offset / midplane)"
-          disabled={busy}
-          onClick={() => openDialog("constructionPlane")}
-        />
-      </ToolGroup>
-      <DialogGroup title="PATTERN" buttons={PATTERN} busy={busy} />
-      <ToolGroup title="INSPECT">
-        <ToolButton
-          icon="measure"
-          label="Measure"
-          className={mode.name === "measure" ? "active" : ""}
-          title={withKey("Measure", "measure")}
-          onClick={() =>
-            setMode({ name: mode.name === "measure" ? "idle" : "measure" })
-          }
-        />
-      </ToolGroup>
-      <ToolGroup title="INSERT">
-        <StepImportButton />
-        <ToolButton
-          icon="referenceImage"
-          label="Canvas"
-          title="Canvas: insert a reference image"
-          disabled={busy}
-          onClick={() => openDialog("referenceImage")}
-        />
-      </ToolGroup>
-      <ToolGroup title="EXPORT">
-        <ToolButton
-          icon="export"
-          label="STL / 3MF"
-          title="STL / 3MF export"
-          disabled={busy}
-          onClick={() => openDialog("export")}
-        />
-      </ToolGroup>
+      {rows.filter((r) => !r.group.end).map(group)}
       <div className="tb-spacer" />
-      <ViewButtons />
+      {rows.filter((r) => r.group.end).map(group)}
     </div>
   );
 }
 
-export function toggleProjection() {
-  const vp = viewportHandle.current;
-  if (!vp) return;
-  vp.setProjection(
-    vp.projection === "orthographic" ? "perspective" : "orthographic",
+function DesignGroup({
+  group,
+  commands,
+  ctx,
+}: {
+  group: ToolbarGroup;
+  commands: Command[];
+  ctx: CommandContext;
+}) {
+  return (
+    <ToolGroup title={group.label}>
+      {commands.map((c) =>
+        c.Control ? (
+          <c.Control key={c.id} />
+        ) : (
+          <ToolButton
+            key={c.id}
+            icon={c.icon}
+            label={c.label}
+            title={tooltipOf(c)}
+            {...(c.primary && { className: "primary" })}
+            {...(c.active && { className: c.active(ctx) ? "active" : "" })}
+            disabled={(c.enabled?.(ctx) ?? true) !== true}
+            onClick={() => void runCommand(c.id)}
+          />
+        ),
+      )}
+    </ToolGroup>
   );
 }
 
@@ -205,68 +110,8 @@ function ToolGroup({
 }) {
   return (
     <div className="tb-group">
-      <span className="tb-title">{title}</span>
+      {title && <span className="tb-title">{title}</span>}
       <div className="tb-row">{children}</div>
-    </div>
-  );
-}
-
-function DialogGroup({
-  title,
-  buttons,
-  busy,
-}: {
-  title: string;
-  buttons: DialogButton[];
-  busy: boolean;
-}) {
-  return (
-    <ToolGroup title={title}>
-      {buttons.map((b) => (
-        <ToolButton
-          key={b.id}
-          icon={b.id}
-          label={b.label}
-          title={b.title}
-          disabled={busy}
-          onClick={() => openDialog(b.id)}
-        />
-      ))}
-    </ToolGroup>
-  );
-}
-
-function ViewButtons() {
-  return (
-    <div className="tb-group views">
-      <select
-        className="tb-select"
-        title="Named views"
-        value=""
-        onChange={(e) => {
-          const v = NAMED_VIEWS.find((x) => x.label === e.target.value);
-          if (v) viewportHandle.current?.setView(v.dir, v.up);
-        }}
-      >
-        <option value="" disabled>
-          View
-        </option>
-        {NAMED_VIEWS.map((v) => (
-          <option key={v.label}>{v.label}</option>
-        ))}
-      </select>
-      <ToolButton
-        icon="fit"
-        label="Fit"
-        title="Zoom to fit (Shift+F)"
-        onClick={() => viewportHandle.current?.zoomToFit()}
-      />
-      <ToolButton
-        icon="projection"
-        label="Ortho/Persp"
-        title="Ortho/Persp: toggle orthographic or perspective"
-        onClick={toggleProjection}
-      />
     </div>
   );
 }

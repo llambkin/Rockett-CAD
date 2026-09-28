@@ -3,13 +3,11 @@ client/src/api.ts 1
 client/src/components/DraggablePanel.tsx 8
 client/src/components/FeatureDialog.tsx 1
 client/src/components/MeasurePanel.tsx 1
-client/src/components/ModelTree.tsx 4
 client/src/components/SketchOffsetIndicators.tsx 1
-client/src/components/Toolbar.tsx 7
 client/src/components/ViewportView.tsx 154
 client/src/dimensionLayout.ts 2
 client/src/panelPlacement.ts 1
-client/src/shortcuts.ts 5
+client/src/shortcuts.ts 4
 client/src/sketchTools.ts 81
 client/src/sketchUsage.ts 8
 client/src/store.ts 21

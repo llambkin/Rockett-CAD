@@ -1,8 +1,3 @@
-/**
- * Model browser tree (left panel): Origin, Construction, Canvases, Sketches,
- * Bodies — with visibility toggles, rename, isolate and selection sync.
- */
-
 import {
   Fragment,
   memo,
@@ -15,6 +10,8 @@ import {
 import type { Feature, PlaneRef, TreeGroup } from "@rockett/shared";
 import { ORIGIN_AXES, UNITS_LENGTH } from "@rockett/shared";
 import { pickInto } from "../dialogPicks";
+import "../commands/design";
+import { runCommand } from "../commands/registry";
 import { useStore, selectionKey, type Selection } from "../store";
 import {
   viewportHandle,
@@ -349,14 +346,14 @@ export const ModelTree = memo(function ModelTree() {
       {
         label: "Extrude regions…",
         action: () => {
-          useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
+          runCommand("design.extrude");
           selectSketchRegions(f.id);
         },
       },
       {
         label: "Revolve regions…",
         action: () => {
-          useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
+          runCommand("design.revolve");
           selectSketchRegions(f.id);
         },
       },
@@ -375,8 +372,8 @@ export const ModelTree = memo(function ModelTree() {
       {
         label: "Move…",
         action: () => {
+          runCommand("design.move");
           const s = useStore.getState();
-          s.setMode({ name: "dialog", dialog: "move" });
           s.setSelection(ids.map((bodyId) => ({ kind: "body", bodyId })));
           s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
         },
