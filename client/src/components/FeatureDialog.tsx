@@ -123,7 +123,7 @@ function DialogBody({
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
   const setMode = useStore((s) => s.setMode);
-  const setSelection = useStore((s) => s.setSelection);
+  const cancel = useStore((s) => s.cancelDialog);
   const addFeature = useStore((s) => s.addFeature);
   const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
@@ -239,10 +239,6 @@ function DialogBody({
   };
 
   const close = () => setMode({ name: "idle" });
-  const cancel = () => {
-    close();
-    setSelection([]);
-  };
 
   const targets = (operation: string) =>
     toolTargets(operation, params.targets, document_?.namingVersion);
@@ -816,6 +812,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
   const hiddenBodies = useStore((s) => s.view.hidden.bodies);
   const selection = useStore((s) => s.selection);
   const setError = useStore((s) => s.setError);
+  const cancel = useStore((s) => s.cancelDialog);
   const [exporters, setExporters] = useState<ExportFormat[]>([]);
   const [picked, setFormat] = useState("");
   const format = picked || exporters[0]?.format;
@@ -892,7 +889,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
       </div>
       <DialogFooter
         onOk={() => void doExport()}
-        onCancel={onClose}
+        onCancel={cancel}
         pending={pending}
         okDisabled={!format}
         okLabel={pending ? "Exporting…" : "Download"}

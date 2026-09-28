@@ -349,15 +349,15 @@ export const ModelTree = memo(function ModelTree() {
       {
         label: "Extrude regions…",
         action: () => {
-          selectSketchRegions(f.id);
           useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
+          selectSketchRegions(f.id);
         },
       },
       {
         label: "Revolve regions…",
         action: () => {
-          selectSketchRegions(f.id);
           useStore.getState().setMode({ name: "dialog", dialog: "revolve" });
+          selectSketchRegions(f.id);
         },
       },
       { label: "Rename", action: () => setRenaming(f.id) },

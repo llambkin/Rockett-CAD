@@ -212,6 +212,7 @@ interface State {
   setHover: (s: Selection | null) => void;
 
   setMode: (m: Mode) => void;
+  cancelDialog: () => void;
   setDialogParams: (p: Record<string, any>) => void;
   setPickInput: (key: string) => void;
 
@@ -483,6 +484,7 @@ async function sendPreviews(): Promise<void> {
   preview.inFlight = null;
 }
 
+let selectionBeforeDialog: Selection[] = [];
 let writing = 0;
 let unsent: Array<(tx: string) => Promise<MutationResponse>> = [];
 
@@ -798,15 +800,23 @@ export const useStore = create<State>((set, get) => ({
   },
   setHover: (s) => set({ hover: s }),
 
-  setMode: (m) =>
-    set((s) => ({
+  setMode(m) {
+    const { mode, selection } = get();
+    if (m.name === "dialog" && mode.name !== "dialog")
+      selectionBeforeDialog = selection;
+    set({
       mode: m,
       dialogParams: {},
       pickInput: null,
       measureResult: null,
       selection:
-        m.name === "measure" ? s.selection.filter(measurable) : s.selection,
-    })),
+        m.name === "measure" ? selection.filter(measurable) : selection,
+    });
+  },
+  cancelDialog() {
+    get().setMode({ name: "idle" });
+    set({ selection: selectionBeforeDialog });
+  },
   setDialogParams: (p) =>
     set((s) => ({ dialogParams: { ...s.dialogParams, ...p } })),
   setPickInput: (key) => set({ pickInput: key }),

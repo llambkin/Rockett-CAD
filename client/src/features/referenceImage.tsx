@@ -76,6 +76,7 @@ function ReferenceImagePanel({
   const addFeature = useStore((s) => s.addFeature);
   const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
+  const cancel = useStore((s) => s.cancelDialog);
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
@@ -252,7 +253,7 @@ function ReferenceImagePanel({
       </div>
       <DialogFooter
         onOk={() => void onOk()}
-        onCancel={onClose}
+        onCancel={cancel}
         pending={pending}
         escapeAnywhere
       />
