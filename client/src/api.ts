@@ -297,7 +297,7 @@ export async function request(
     throw error;
   }
   if (jobId) settleJob(jobId);
-  onEtag?.(res.headers.get("ETag"));
+  onEtag?.(res.headers.get("ETag")?.replace(/^W\//, "") ?? null);
   if (response !== "blob") {
     const json = await res.json();
     received(json?.document);
