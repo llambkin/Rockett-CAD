@@ -97,13 +97,17 @@ export function scoped<T>(
   }
 }
 
-function downcast(shape: Shape, type: "face" | "edge" | "vertex" | "solid") {
+function downcast(
+  shape: Shape,
+  type: "face" | "edge" | "vertex" | "solid" | "wire",
+) {
   const k = getKernel();
   const cast = {
     face: k.TopoDS.Face_1,
     edge: k.TopoDS.Edge_1,
     vertex: k.TopoDS.Vertex_1,
     solid: k.TopoDS.Solid_1,
+    wire: k.TopoDS.Wire_1,
   }[type];
   return [...explore(shape, type)].map((s) => {
     const typed = cast(s);
@@ -126,6 +130,16 @@ export function vertices(shape: Shape): Shape[] {
 
 export function solids(shape: Shape): Shape[] {
   return downcast(shape, "solid");
+}
+
+export function wires(shape: Shape): Shape[] {
+  return downcast(shape, "wire");
+}
+
+export function shapeList(shapes: Iterable<Shape>): any {
+  const list = new (getKernel().TopTools_ListOfShape_1)();
+  for (const shape of shapes) list.Append_1(shape).delete();
+  return list;
 }
 
 /** Convert a TopTools_ListOfShape to a JS array and delete the list. */

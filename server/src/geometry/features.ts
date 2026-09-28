@@ -68,11 +68,13 @@ import {
   release,
   scoped,
   shapeHash,
+  shapeList,
   solids,
   transformOp,
   vec,
   vertices as verticesOf,
   volumeOf,
+  wires as wiresOf,
   type Shape,
 } from "./kernel.js";
 import {
@@ -1084,55 +1086,46 @@ export function evalLoft(state: EvalState, f: LoftFeature) {
   const k = getKernel();
   if (f.sections.length < 2)
     throw new Error("loft requires at least two sections");
-  const tool = kernelCall("loft", () => {
-    const thru = new k.BRepOffsetAPI_ThruSections(true, false, LINEAR_TOL);
-    let first: { pf: ProfileFace; wire: Shape } | undefined;
-    for (const ref of f.sections) {
-      const sketch = state.sketches.get(ref.sketchId);
-      if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
-      const profile = findProfile(sketch, ref.profileId);
-      if (!profile) throw new Error(`profile ${ref.profileId} not found`);
-      const pf = buildProfileFace(profile, sketch.entities, sketch.frame);
-      // use the outer wire of the face
-      const wires = [...exploreWires(pf.face)];
-      if (wires.length === 0) throw new Error("loft section has no wire");
-      thru.AddWire(wires[0]);
-      first ??= { pf, wire: wires[0] };
-    }
-    thru.Build(progress());
-    if (!thru.IsDone()) {
-      thru.delete();
-      throw new Error("loft failed: sections may be incompatible");
-    }
-    const shape = thru.Shape();
-    const names =
-      namingVersion() === 1
-        ? finalizeNames(shape, new ShapeMap(), f.id)
-        : sweptNames(
-            shape,
-            f.id,
-            sideEdgeNames(f.id, first!.pf, edgesOf(first!.wire)),
-            (e) => thru.Generated(e),
-            [thru.FirstShape(), thru.LastShape()],
-          );
-    thru.delete();
-    return { shape, names };
-  });
-  return applyToolOperation(state, f.id, tool, f.operation, f.targets);
-}
-
-function* exploreWires(shape: Shape): Generator<Shape> {
-  const k = getKernel();
-  const ex = new k.TopExp_Explorer_2(
-    shape,
-    k.TopAbs_ShapeEnum.TopAbs_WIRE,
-    k.TopAbs_ShapeEnum.TopAbs_SHAPE,
+  const tool = kernelCall("loft", () =>
+    scoped((own) => {
+      const thru = own(
+        new k.BRepOffsetAPI_ThruSections(true, false, LINEAR_TOL),
+      );
+      let first: { pf: ProfileFace; wire: Shape } | undefined;
+      for (const ref of f.sections) {
+        const sketch = state.sketches.get(ref.sketchId);
+        if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
+        const profile = findProfile(sketch, ref.profileId);
+        if (!profile) throw new Error(`profile ${ref.profileId} not found`);
+        const pf = buildProfileFace(profile, sketch.entities, sketch.frame);
+        own(pf.face);
+        const outer = wiresOf(pf.face).map(own)[0];
+        if (!outer) throw new Error("loft section has no wire");
+        thru.AddWire(outer);
+        first ??= { pf, wire: outer };
+      }
+      thru.Build(progress());
+      if (!thru.IsDone())
+        throw new Error("loft failed: sections may be incompatible");
+      const shape = thru.Shape();
+      const names =
+        namingVersion() === 1
+          ? finalizeNames(shape, new ShapeMap(), f.id)
+          : sweptNames(
+              shape,
+              f.id,
+              sideEdgeNames(f.id, first!.pf, edgesOf(first!.wire)),
+              (e) => thru.Generated(e),
+              [thru.FirstShape(), thru.LastShape()],
+            );
+      return { shape, names };
+    }),
   );
-  while (ex.More()) {
-    yield k.TopoDS.Wire_1(ex.Current());
-    ex.Next();
+  try {
+    return applyToolOperation(state, f.id, tool, f.operation, f.targets);
+  } finally {
+    tool.shape.delete();
   }
-  ex.delete();
 }
 
 function orderOpenChain(
@@ -1680,18 +1673,17 @@ function cutsThrough(
   );
   try {
     return scoped((own) => {
-      const args = own(new k.TopTools_ListOfShape_1());
+      const picked: Shape[] = [];
       const builder = own(new k.BRep_Builder());
       const rest = own(new k.TopoDS_Compound());
       builder.MakeCompound(rest);
       now.forEach((face, i) => {
-        if (made.has(shapeHash(face))) args.Append_1(face);
+        if (made.has(shapeHash(face))) picked.push(face);
         else if (!bounds[i]!.some((edge) => madeEdges.has(edge)))
           builder.Add(rest, face);
       });
-      args.Append_1(rest);
       const fuse = own(new k.BRepAlgoAPI_BuilderAlgo_1());
-      fuse.SetArguments(args);
+      fuse.SetArguments(own(shapeList([...picked, rest])));
       fuse.SetNonDestructive(true);
       fuse.Build(progress());
       if (fuse.HasErrors()) return null;
@@ -2125,12 +2117,13 @@ export function evalShell(state: EvalState, f: ShellFeature): void {
   if (bodyId === undefined || !body) throw new Error("no body to shell");
   const k = getKernel();
   kernelCall("shell", () => {
-    const closing = new k.TopTools_ListOfShape_1();
-    for (const ref of f.openFaces) {
-      const face = findFace(body, ref.faceName);
-      if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
-      closing.Append_1(face);
-    }
+    const closing = shapeList(
+      f.openFaces.map((ref) => {
+        const face = findFace(body, ref.faceName);
+        if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
+        return face;
+      }),
+    );
     const op = new k.BRepOffsetAPI_MakeThickSolid();
     op.MakeThickSolidByJoin(
       body.shape,
@@ -2269,43 +2262,27 @@ export function evalSplitBody(state: EvalState, f: SplitBodyFeature): void {
         bbox.max[1] - bbox.min[1],
         bbox.max[2] - bbox.min[2],
       ) + 10;
-    const pln = new k.gp_Pln_3(
-      pnt(frame.origin[0], frame.origin[1], frame.origin[2]),
-      dir(frame.normal[0], frame.normal[1], frame.normal[2]),
-    );
-    const faceMk = new k.BRepBuilderAPI_MakeFace_9(
-      pln,
-      -diag,
-      diag,
-      -diag,
-      diag,
-    );
-    const toolFace = faceMk.Face();
-    faceMk.delete();
-    pln.delete();
-
-    const splitter = new k.BRepAlgoAPI_Splitter_1();
-    const args = new k.TopTools_ListOfShape_1();
-    args.Append_1(body.shape);
-    const toolsList = new k.TopTools_ListOfShape_1();
-    toolsList.Append_1(toolFace);
-    splitter.SetArguments(args);
-    splitter.SetTools(toolsList);
-    splitter.Build(progress());
-    if (!splitter.IsDone()) {
-      splitter.delete();
-      args.delete();
-      toolsList.delete();
-      throw new Error("split failed");
-    }
-    const result = splitter.Shape();
-    const names = propagateNames(splitter, [body], result, f.id);
-    splitter.delete();
-    args.delete();
-    toolsList.delete();
-
-    const sols = solids(result);
+    const { sols, names } = scoped((own) => {
+      const pln = own(
+        new k.gp_Pln_3(
+          own(pnt(frame.origin[0], frame.origin[1], frame.origin[2])),
+          own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
+        ),
+      );
+      const faceMk = own(
+        new k.BRepBuilderAPI_MakeFace_9(pln, -diag, diag, -diag, diag),
+      );
+      const splitter = own(new k.BRepAlgoAPI_Splitter_1());
+      splitter.SetArguments(own(shapeList([body.shape])));
+      splitter.SetTools(own(shapeList([own(faceMk.Face())])));
+      splitter.Build(progress());
+      if (!splitter.IsDone()) throw new Error("split failed");
+      const result = own(splitter.Shape());
+      const names = propagateNames(splitter, [body], result, f.id);
+      return { sols: solids(result), names };
+    });
     if (sols.length < 2) {
+      release(sols);
       throw new Error("split plane does not intersect the body");
     }
     // Deterministic ordering along the split normal.
