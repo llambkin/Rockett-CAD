@@ -263,7 +263,7 @@ const topoRef = Type.Union([
   }),
 ]);
 
-const viewIds = Type.Array(Type.String({ minLength: 1, maxLength: 200 }));
+const viewIds = Type.Array(Type.String({ minLength: 1 }));
 
 const namingUpgradeBody = Type.Object({
   accept: Type.Optional(

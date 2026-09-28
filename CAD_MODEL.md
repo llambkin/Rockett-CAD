@@ -109,7 +109,15 @@ Bodies get stable ids derived from the feature that created them:
   also bears `r:{profileId}`, so halves of a split circle, whose faces share
   every name, still differ. A piece with no name of its own is an identity
   conflict and fails the feature. `splitBody` orders along the
-  split-plane normal (`b:x`, `b:x:s2`).
+  split-plane normal: the first piece keeps its body's id and the rest become
+  `b:{featureId}:2`, `b:{featureId}:3`, ….
+- A mirror or pattern that does not combine names its copies
+  `b:{featureId}:{n}`. A mirror numbers them in `bodies` order. A pattern
+  numbers them by instance, then by source body in `bodies` order, so a higher
+  count keeps the existing ids. Ids stay the same length at any nesting
+  depth, and a body's source lives in the timeline, not its id. Editing the
+  `bodies` list can renumber the copies. A stored body id is bounded only by
+  the request size.
 
 A body's display name lives in `document.bodyMeta[bodyId]` and is assigned
 server-side the first time a body id appears (`Body1`, `Body2`, …). Which

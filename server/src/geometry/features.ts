@@ -9,6 +9,7 @@ import {
   solveSketch,
   projectEdge,
   bodyMadeBy,
+  derivedBodyId,
   featureRefs,
   compareNames,
   ANGULAR_TOL_DEG,
@@ -2190,7 +2191,7 @@ export function evalSplitBody(state: EvalState, f: SplitBodyFeature): void {
       .sort((a, b) => a.key - b.key);
     state.bodies.delete(f.body);
     sorted.forEach((item, i) => {
-      const id = i === 0 ? f.body : `${f.body}:s${i + 1}`;
+      const id = i === 0 ? f.body : derivedBodyId(f.id, i + 1);
       state.bodies.set(id, { bodyId: id, shape: item.s, names });
     });
   });
@@ -2213,7 +2214,7 @@ export function evalMirror(state: EvalState, f: MirrorFeature): void {
   const frame = resolvePlaneFrame(state, f.plane);
   kernelCall("mirror", () => {
     const trsf = mirrorTrsfFor(frame);
-    for (const bodyId of f.bodies) {
+    for (const [j, bodyId] of f.bodies.entries()) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       const tr = transformOp(body.shape, trsf);
@@ -2230,7 +2231,7 @@ export function evalMirror(state: EvalState, f: MirrorFeature): void {
         const joined = finishJoin(fused, f.id, [body, { shape: mirrored }]);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       } else {
-        const newId = `b:${f.id}:${bodyId}`;
+        const newId = derivedBodyId(f.id, j + 1);
         const finalNames = finalizeNames(mirrored, mirroredNames, f.id);
         registerBodySolids(state, newId, mirrored, finalNames);
       }
@@ -2294,6 +2295,9 @@ export function evalMove(
   }
 }
 
+const patternCopyId = (id: string, sources: number, i: number, j: number) =>
+  derivedBodyId(id, (i - 1) * sources + j + 1);
+
 export function evalLinearPattern(
   state: EvalState,
   f: LinearPatternFeature,
@@ -2312,7 +2316,7 @@ export function evalLinearPattern(
     direction = axis.direction;
   }
   kernelCall("linearPattern", () => {
-    for (const bodyId of f.bodies) {
+    for (const [j, bodyId] of f.bodies.entries()) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
@@ -2338,7 +2342,7 @@ export function evalLinearPattern(
             ),
           };
         } else {
-          const newId = `b:${f.id}:${bodyId}:${i}`;
+          const newId = patternCopyId(f.id, f.bodies.length, i, j);
           registerBodySolids(
             state,
             newId,
@@ -2368,7 +2372,7 @@ export function evalCircularPattern(
   const fullCircle = Math.abs((f.totalAngle || 360) - 360) < ANGULAR_TOL_DEG;
   const step = fullCircle ? total / f.count : total / (f.count - 1);
   kernelCall("circularPattern", () => {
-    for (const bodyId of f.bodies) {
+    for (const [j, bodyId] of f.bodies.entries()) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
@@ -2394,7 +2398,7 @@ export function evalCircularPattern(
             ),
           };
         } else {
-          const newId = `b:${f.id}:${bodyId}:${i}`;
+          const newId = patternCopyId(f.id, f.bodies.length, i, j);
           registerBodySolids(
             state,
             newId,

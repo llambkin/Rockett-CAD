@@ -77,3 +77,6 @@ export function compareNames(a: string, b: string): number {
 
 export const bodyMadeBy = (featureId: string, bodyId: string) =>
   bodyId === `b:${featureId}` || bodyId.startsWith(`b:${featureId}:`);
+
+export const derivedBodyId = (featureId: string, n: number) =>
+  `b:${featureId}:${n}`;

@@ -9,7 +9,7 @@ export const MAX_TARGETS = 10_000;
 export const NAME_LENGTH = 200;
 
 const id = Type.String({ minLength: 1, maxLength: 100 });
-const bodyId = Type.String({ minLength: 1, maxLength: 200 });
+const bodyId = Type.String({ minLength: 1 });
 const topoName = Type.String({ minLength: 1, maxLength: 2000 });
 const name = Type.String({ minLength: 1, maxLength: NAME_LENGTH });
 const coordinate = Type.Number({ minimum: -MAX_DIM, maximum: MAX_DIM });
@@ -394,7 +394,7 @@ export const groupsSchema = Type.Refine(
       id,
       name,
       kind: Type.Enum(["body", "sketch"]),
-      members: Type.Array(text),
+      members: Type.Array(bodyId),
     }),
   ),
   (groups) => {
