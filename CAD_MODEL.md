@@ -339,6 +339,17 @@ removes no more than that skin leaves the body as it was, with the same
 shape, names and mesh: a tool that only touches a sphere along its seam
 rebuilt the sphere face, which then meshed to a fraction of its area.
 
+Every join ends in `finishJoin`: extrude, revolve, sweep and loft joins,
+Combine join, Mirror and both patterns with combine, and an outward
+press/pull. After the fuse and unify, `joinCheck.ts` maps each solid's edges
+to their faces. An edge shared by more than two faces has zero thickness: two
+blocks of one body meet there along a line only. A join that makes such an
+edge errors naming its length and keeps the previous body, as SolidWorks
+refuses zero-thickness geometry. An edge already that way in a joined part,
+at the same length and centroid within `LINEAR_TOL`, is not the join's doing
+and passes. Blocks that meet only along an edge or at a point, with no face in
+common, still come out as separate bodies.
+
 Sketch-curve attribution deserves a note: wire construction can rebuild edge
 shapes (vertex merging), so after building a profile face we re-derive the
 edge→sketch-entity map _geometrically_ (each face edge's midpoint is matched

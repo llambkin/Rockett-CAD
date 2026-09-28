@@ -93,6 +93,7 @@ import {
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { checkedCut, cutsThrough, looseBlend } from "./cutCheck.js";
+import { zeroThicknessRefusal } from "./joinCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -478,8 +479,20 @@ function unifyTool(tool: ToolResult, featureId: string): ToolResult {
   }
 }
 
-function unifyJoin(tool: ToolResult, featureId: string): ToolResult {
-  return tool.names.version === 2 ? unifyTool(tool, featureId) : tool;
+function finishJoin(
+  fused: ToolResult,
+  featureId: string,
+  parts: { shape: Shape }[],
+  unify = fused.names.version === 2,
+): ToolResult {
+  const joined = unify ? unifyTool(fused, featureId) : fused;
+  const refusal = zeroThicknessRefusal(
+    joined.shape,
+    parts.map((p) => p.shape),
+  );
+  if (!refusal) return joined;
+  joined.shape.delete();
+  throw refusal;
 }
 
 function fuseNamed(
@@ -600,7 +613,7 @@ function joinEvery(
       first!,
     );
     for (const b of rest) state.bodies.delete(b.bodyId);
-    const joined = unifyTool(fused, featureId);
+    const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
     registerBodySolids(state, first!.bodyId, joined.shape, joined.names);
   }
   return used;
@@ -659,7 +672,7 @@ function applyToolOperation(
       return { targets: [] };
     }
     const fused = fuseNamed(target, tool, featureId, "boolean join failed");
-    const joined = unifyTool(fused, featureId);
+    const joined = finishJoin(fused, featureId, [target, tool], true);
     registerBodySolids(state, target.bodyId, joined.shape, joined.names);
     return { targets: [target.bodyId] };
   }
@@ -2064,7 +2077,10 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
       op.delete();
       current = { bodyId: target.bodyId, shape: result, names };
     }
-    const joined = f.operation === "join" ? unifyJoin(current, f.id) : current;
+    const joined =
+      f.operation === "join"
+        ? finishJoin(current, f.id, [target, ...tools])
+        : current;
     registerBodySolids(state, target.bodyId, joined.shape, joined.names);
     if (!f.keepTools) {
       for (const tool of tools) state.bodies.delete(tool.bodyId);
@@ -2210,7 +2226,7 @@ export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
       op.delete();
       current = { bodyId, shape: result, names };
     }
-    const joined = f.distance > 0 ? unifyJoin(current, f.id) : current;
+    const joined = f.distance > 0 ? finishJoin(current, f.id, [body]) : current;
     registerBodySolids(state, bodyId, joined.shape, joined.names);
   });
 }
@@ -2302,7 +2318,7 @@ export function evalMirror(state: EvalState, f: MirrorFeature): void {
           f.id,
           "mirror join failed",
         );
-        const joined = unifyJoin(fused, f.id);
+        const joined = finishJoin(fused, f.id, [body, { shape: mirrored }]);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       } else {
         const newId = `b:${f.id}:${bodyId}`;
@@ -2391,6 +2407,7 @@ export function evalLinearPattern(
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
+      const copies: { shape: Shape }[] = [body];
       for (let i = 1; i < f.count; i++) {
         const offset = V.scale(V.scale(direction, f.spacing), i);
         const prefix = `p${i}:${f.id}`;
@@ -2401,6 +2418,7 @@ export function evalLinearPattern(
         tr.delete();
         trsf.delete();
         if (f.combine) {
+          copies.push({ shape: instance });
           combined = {
             bodyId,
             ...fuseNamed(
@@ -2424,7 +2442,7 @@ export function evalLinearPattern(
         }
       }
       if (f.combine) {
-        const joined = unifyJoin(combined, f.id);
+        const joined = finishJoin(combined, f.id, copies);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       }
     }
@@ -2445,6 +2463,7 @@ export function evalCircularPattern(
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       let combined: NamedBody = body;
+      const copies: { shape: Shape }[] = [body];
       for (let i = 1; i < f.count; i++) {
         const trsf = placementToTrsf(
           Placement.fromAxisAngle(axis.direction, step * i, axis.origin),
@@ -2455,6 +2474,7 @@ export function evalCircularPattern(
         tr.delete();
         trsf.delete();
         if (f.combine) {
+          copies.push({ shape: instance });
           combined = {
             bodyId,
             ...fuseNamed(
@@ -2475,7 +2495,7 @@ export function evalCircularPattern(
         }
       }
       if (f.combine) {
-        const joined = unifyJoin(combined, f.id);
+        const joined = finishJoin(combined, f.id, copies);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       }
     }
