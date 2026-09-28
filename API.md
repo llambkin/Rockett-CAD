@@ -638,6 +638,17 @@ adds its byte limit `bytes` and `read(bytes, filename)`, which returns the
 features to insert and any blob sources. The import button accepts every
 extension the importers list.
 
+Server route modules add project routes through `registerRouteModule` in
+`server/src/api/routeModules.ts`. A module's `mount(api)` calls
+`api.projectRoute(route, read)`, which answers with `read(doc, req)` as JSON, or
+`api.projectMutation(route, edit)`, which runs `edit` through `mutateProject`
+and so needs `If-Match`. Both take a `ROUTES`-style entry under
+`/projects/:id/` and run behind the project access check and the project queue.
+A core module id has no dot; any other id is `<moduleId>.<name>` and its paths
+start with `/projects/:id/m/<moduleId>/`. A path outside the prefix throws when
+the router mounts. Measure is the first route module, in
+`server/src/api/measureRoutes.ts`.
+
 ## Assets (reference images)
 
 | Method & path                       | Body              | Notes                                                 |

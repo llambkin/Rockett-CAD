@@ -79,6 +79,8 @@ import { omitHeldMeshes } from "./heldMeshes.js";
 import { importers } from "./importers.js";
 import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
 import { createJobRoutes } from "./jobRoutes.js";
+import { mountRouteModules, type Edit } from "./routeModules.js";
+import "./measureRoutes.js";
 import { registerSettingsRoutes } from "./settingsRoutes.js";
 import type { UserStore } from "../auth/userStore.js";
 import type { FriendStore } from "../auth/friendStore.js";
@@ -135,16 +137,6 @@ const parseBody = (schema: NonNullable<Route["body"]>) =>
 const requireRevision = check((req, res) => {
   res.locals.revision = ifMatchRevision(req.get("If-Match"));
 });
-
-type Mutation = (
-  { label: string; cursor?: never } | { cursor: number; label?: never }
-) & {
-  document?: CadDocument;
-  position?: number | undefined;
-  [extra: string]: unknown;
-};
-
-type Edit = (doc: CadDocument, req: any) => Promise<Mutation>;
 
 const KEEPS_TARGETS = new Set(["name", "suppressed"]);
 
@@ -212,11 +204,12 @@ export function createApiRouter(
   const jobs = createJobRoutes(store, kernel, fail);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
   router.param("id", projectAccessGuard(store, folders));
+  const edits = new Set(DOCUMENT_EDITS);
   const on = (route: Route, ...handlers: RequestHandler[]) =>
     router[route.method.toLowerCase() as Lowercase<Method>](
       route.path,
       ...(route.body ? [parseBody(route.body)] : []),
-      ...(DOCUMENT_EDITS.has(route) ? [requireRevision] : []),
+      ...(edits.has(route) ? [requireRevision] : []),
       ...(route === ROUTES.jobEvents || route === ROUTES.cancelJob
         ? []
         : [jobs.start]),
@@ -915,15 +908,7 @@ export function createApiRouter(
     }),
   );
 
-  on(
-    ROUTES.measure,
-    wrap(async (req, res) => {
-      const doc = await store.load(req.params.id);
-      res.json(
-        await kernel.stateQuery(doc, { kind: "measure", request: req.body }),
-      );
-    }),
-  );
+  mountRouteModules({ kernel, store, edits, on, wrap, mutateProject });
 
   on(
     ROUTES.exportModel,
