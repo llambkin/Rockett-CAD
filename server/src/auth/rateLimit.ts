@@ -1,3 +1,4 @@
+import type { Response } from "express";
 import { TIMING_MS } from "../tunables.js";
 
 const USER_LIMIT = 5;
@@ -8,6 +9,13 @@ const HASH_LIMIT = 4;
 type Counter = { count: number; since: number; limit: number };
 
 export class HashCapacityError extends Error {}
+
+export function refused(res: Response, seconds: number) {
+  return res
+    .set("Retry-After", String(seconds))
+    .status(429)
+    .json({ error: "rate limited" });
+}
 
 export class AuthRateLimiter {
   private readonly counters = new Map<string, Counter>();

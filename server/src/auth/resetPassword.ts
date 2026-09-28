@@ -20,5 +20,8 @@ export async function resetPassword(
     .replace(/\r?\n$/, "");
   if (!checkPasswordPolicy(password))
     throw new Error("Password does not meet policy");
-  await users.update(user.id, { passwordHash: await hashPassword(password) });
+  await users.update(user.id, {
+    passwordHash: await hashPassword(password),
+    totp: null,
+  });
 }

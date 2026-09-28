@@ -7,6 +7,7 @@ export const TIMING_MS = {
   sessionIdle: 7 * DAY,
   sessionAbsolute: 30 * DAY,
   authFailureWindow: 15 * MINUTE,
+  signInStep: 10 * MINUTE,
   sizeLimitSearch: 1000,
   jobRetention: 10 * MINUTE,
   jobRuntime: 10 * MINUTE,

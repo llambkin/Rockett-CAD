@@ -18,24 +18,32 @@ import {
   hashPassword,
   verifyPassword,
 } from "./password.js";
-import { AuthRateLimiter, HashCapacityError } from "./rateLimit.js";
+import { AuthRateLimiter, HashCapacityError, refused } from "./rateLimit.js";
 import type { SessionStore } from "./sessions.js";
+import {
+  registerTotpRoutes,
+  signInScope,
+  STEP_COOKIE_AGE,
+} from "./totpRoutes.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
 import { registerUserRoutes } from "./users.js";
 
-function refused(res: Response, seconds: number) {
-  return res
-    .set("Retry-After", String(seconds))
-    .status(429)
-    .json({ error: "rate limited" });
-}
-
 type SignInResult =
-  "ok" | "bad-credentials" | "rate-limited" | "rejected" | "error";
+  | "ok"
+  | "needs-enrol"
+  | "needs-code"
+  | "bad-credentials"
+  | "bad-code"
+  | "rate-limited"
+  | "rejected"
+  | "error";
 
-function signInResult(status: number): SignInResult {
+function signInResult(res: Response, code: boolean): SignInResult {
+  const status = res.statusCode;
+  if (res.locals.step) return `needs-${res.locals.step as "enrol" | "code"}`;
   if (status < 300) return "ok";
-  if (status === 401 || status === 403) return "bad-credentials";
+  if (status === 401 || status === 403)
+    return code ? "bad-code" : "bad-credentials";
   if (status === 429) return "rate-limited";
   return status < 500 ? "rejected" : "error";
 }
@@ -47,16 +55,19 @@ function logField(value: unknown): string {
 }
 
 function registerSignInLog(router: Router): void {
-  for (const [event, path] of [
-    ["login", AUTH_ROUTES.login.path],
-    ["setup", AUTH_ROUTES.setup.path],
-    ["password-change", AUTH_ROUTES.passwordChange.path],
+  for (const [event, route, code] of [
+    ["login", AUTH_ROUTES.login, false],
+    ["setup", AUTH_ROUTES.setup, false],
+    ["password-change", AUTH_ROUTES.passwordChange, false],
+    ["totp", AUTH_ROUTES.totp, true],
+    ["totp-enrol", AUTH_ROUTES.totpConfirm, true],
+    ["totp-off", AUTH_ROUTES.totpOff, true],
   ] as const)
-    router.use(path, (req, res, next) => {
-      if (req.method === "POST")
+    router.use(route.path, (req, res, next) => {
+      if (req.method === route.method && req.path === "/")
         res.once("finish", () =>
           console.log(
-            `[rockett] auth ${event} ${signInResult(res.statusCode)} user=${logField(res.locals.user?.username ?? req.body?.username)} ip=${logField(req.ip)} at ${new Date().toISOString()}`,
+            `[rockett] auth ${event} ${signInResult(res, code)} user=${logField(res.locals.user?.username ?? req.body?.username)} ip=${logField(req.ip)} at ${new Date().toISOString()}`,
           ),
         );
       next();
@@ -138,18 +149,14 @@ function registerPasswordChange(
   );
 }
 
-export function createAuthRouter(
+function registerLogin(
+  router: Router,
   users: UserStore,
   sessions: SessionStore,
-  cookie: CookieConfig = cookieConfig(process.env.ROCKETT_COOKIE_SECURE),
-  setupToken: string | undefined = process.env.ROCKETT_SETUP_TOKEN,
-  limiter = new AuthRateLimiter(),
-  verify: typeof verifyPassword = verifyPassword,
-): Router {
-  const router = Router();
-  registerSignInLog(router);
-  registerSetupGuard(router, limiter);
-  registerBootstrapRoutes(router, users, setupToken, limiter);
+  cookie: CookieConfig,
+  limiter: AuthRateLimiter,
+  verify: typeof verifyPassword,
+): void {
   router.post(
     AUTH_ROUTES.login.path,
     json({ limit: "1kb" }),
@@ -178,13 +185,26 @@ export function createAuthRouter(
                     cookie.name,
                   );
                   if (oldToken) sessions.revoke(oldToken);
-                  return { current, token: sessions.create(current.id) };
+                  const scope = signInScope(current);
+                  return {
+                    current,
+                    scope,
+                    token: sessions.create(current.id, scope),
+                  };
                 },
               )
             : undefined;
         if (!login) {
           limiter.failure(username, ip);
           return res.status(401).json({ error: "unauthenticated" });
+        }
+        if (login.scope !== "full") {
+          res.locals.step = login.scope;
+          res.set(
+            "Set-Cookie",
+            sessionCookie(cookie, login.token, STEP_COOKIE_AGE),
+          );
+          return res.json({ step: login.scope });
         }
         limiter.success(username);
         res.set("Set-Cookie", sessionCookie(cookie, login.token));
@@ -194,6 +214,21 @@ export function createAuthRouter(
       }
     },
   );
+}
+
+export function createAuthRouter(
+  users: UserStore,
+  sessions: SessionStore,
+  cookie: CookieConfig = cookieConfig(process.env.ROCKETT_COOKIE_SECURE),
+  setupToken: string | undefined = process.env.ROCKETT_SETUP_TOKEN,
+  limiter = new AuthRateLimiter(),
+  verify: typeof verifyPassword = verifyPassword,
+): Router {
+  const router = Router();
+  registerSignInLog(router);
+  registerSetupGuard(router, limiter);
+  registerBootstrapRoutes(router, users, setupToken, limiter);
+  registerLogin(router, users, sessions, cookie, limiter, verify);
   router.post(AUTH_ROUTES.logout.path, (req, res) => {
     const token = readSessionCookie(req.headers.cookie, cookie.name);
     if (token) sessions.revoke(token);
@@ -203,6 +238,7 @@ export function createAuthRouter(
   });
   router.get(AUTH_ROUTES.me.path, (_req, res) => res.json(res.locals.user));
   registerPasswordChange(router, users, sessions, cookie, limiter, verify);
+  registerTotpRoutes(router, users, sessions, cookie, limiter);
   registerUserRoutes(router, users, sessions, limiter);
   router.use(
     (

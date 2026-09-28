@@ -251,12 +251,14 @@ exits 0 when every project is on version 2, and 1 otherwise.
   Set that account's email on the Users page first. Unmatched or disabled
   accounts receive 401; the Rockett login form remains available. Access key
   lookup needs outbound HTTPS to the configured team endpoint. A users-store
-  v1 migration writes a byte-identical backup under `/data/backups/users`
-  before saving v2. Restore only with the app stopped.
+  migration writes a byte-identical backup under `/data/backups/users`
+  before saving the new version. Restore only with the app stopped.
 - For a forgotten password, stop the instance and run the offline command
   `docker compose -p <instance> run --rm --no-deps -T rockett-cad node server.mjs reset-password <username>`.
   Send the new password on standard input, ending with a newline; keep it out
-  of arguments, shell history and logs. Restart the instance afterward.
+  of arguments, shell history and logs. The reset also turns off the
+  account's TOTP; an admin enrols again at the next sign-in. Restart the
+  instance afterward.
 - Healthcheck hits `/api/health` (30 s start period, one probe interval,
   ten times the 3 s planning figure for the kernel worker's boot). The
   kernel runs in a worker thread, so health answers 200 during a long

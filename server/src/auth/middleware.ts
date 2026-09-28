@@ -3,15 +3,33 @@ import type { RequestHandler } from "express";
 import { AUTH_ROUTES } from "@rockett/shared";
 import { readSessionCookie, SESSION_COOKIE_NAME } from "./cookie.js";
 import { verifyAccessJwt, type AccessKeyStore } from "./cfAccess.js";
-import type { SessionStore } from "./sessions.js";
+import type { SessionScope, SessionStore } from "./sessions.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
 
-export const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
-  "GET /api/health",
-  `${AUTH_ROUTES.login.method} /api${AUTH_ROUTES.login.path}`,
-  `${AUTH_ROUTES.status.method} /api${AUTH_ROUTES.status.path}`,
-  `${AUTH_ROUTES.setup.method} /api${AUTH_ROUTES.setup.path}`,
-]);
+function routeKeys(
+  ...routes: Array<{ method: string; path: string }>
+): ReadonlySet<string> {
+  return new Set(routes.map((route) => `${route.method} /api${route.path}`));
+}
+
+export const PUBLIC_ROUTES = routeKeys(
+  { method: "GET", path: "/health" },
+  AUTH_ROUTES.login,
+  AUTH_ROUTES.status,
+  AUTH_ROUTES.setup,
+);
+
+const STEP_ROUTES: Record<
+  Exclude<SessionScope, "full">,
+  ReadonlySet<string>
+> = {
+  code: routeKeys(AUTH_ROUTES.totp, AUTH_ROUTES.logout),
+  enrol: routeKeys(
+    AUTH_ROUTES.totpEnrol,
+    AUTH_ROUTES.totpConfirm,
+    AUTH_ROUTES.logout,
+  ),
+};
 
 export interface AccessIdentity {
   team: string;
@@ -27,13 +45,14 @@ export function requireSession(
   access?: AccessIdentity,
 ): RequestHandler {
   return async (req, res, next) => {
-    if (PUBLIC_ROUTES.has(`${req.method} ${req.baseUrl}${req.path}`))
-      return next();
+    const key = `${req.method} ${req.baseUrl}${req.path}`;
+    if (PUBLIC_ROUTES.has(key)) return next();
     const token = readSessionCookie(req.headers.cookie, cookieName);
     let credential = token;
     try {
-      const userId = token && sessions.resolve(token);
-      let record = userId ? await users.get(userId) : undefined;
+      const session = token ? sessions.resolve(token) : undefined;
+      let record = session ? await users.get(session.userId) : undefined;
+      let scope: SessionScope = session?.scope ?? "full";
       if (record?.status !== "active" && token) sessions.revoke(token);
       if (record?.status !== "active" && access) {
         const jwt = req.get("Cf-Access-Jwt-Assertion");
@@ -46,15 +65,19 @@ export function requireSession(
               now: access.now(),
             });
             record = claims ? await users.findByEmail(claims.email) : undefined;
+            scope = "full";
           } catch {
             record = undefined;
           }
         }
       }
-      if (record?.status !== "active") {
+      if (
+        record?.status !== "active" ||
+        (scope !== "full" && !STEP_ROUTES[scope].has(key))
+      )
         return res.status(401).json({ error: "unauthenticated" });
-      }
       res.locals.user = toPublicUser(record);
+      res.locals.scope = scope;
       res.locals.session = createHash("sha256")
         .update(credential ?? "")
         .digest("base64url");

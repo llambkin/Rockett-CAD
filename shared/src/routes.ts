@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "typebox";
-import type { User } from "./auth.js";
+import type { SignInStep, TotpEnrolment, User } from "./auth.js";
 import type {
   CadDocument,
   EdgeRef,
@@ -158,6 +158,11 @@ export const passwordChangeBody = Type.Object(
   { additionalProperties: false },
 );
 
+export const totpCodeBody = Type.Object(
+  { code: Type.String({ pattern: "^[0-9]{6}$" }) },
+  { additionalProperties: false },
+);
+
 export const userCreateBody = Type.Object(
   {
     username: Type.String({ minLength: 1, maxLength: 32 }),
@@ -195,7 +200,7 @@ export const AUTH_ROUTES = {
     { token: string; username: string; displayName: string; password: string },
     User
   >()("POST", "/auth/setup", setupBody),
-  login: route<{ username: string; password: string }, User>()(
+  login: route<{ username: string; password: string }, User | SignInStep>()(
     "POST",
     "/auth/login",
     loginBody,
@@ -207,6 +212,14 @@ export const AUTH_ROUTES = {
     "/me/password",
     passwordChangeBody,
   ),
+  totp: route<{ code: string }, User>()("POST", "/auth/totp", totpCodeBody),
+  totpEnrol: route<never, TotpEnrolment>()("POST", "/me/totp"),
+  totpConfirm: route<{ code: string }, User>()(
+    "POST",
+    "/me/totp/confirm",
+    totpCodeBody,
+  ),
+  totpOff: route<{ code: string }, User>()("DELETE", "/me/totp", totpCodeBody),
   users: route<never, User[]>()("GET", "/users"),
   userCreate: route<
     {

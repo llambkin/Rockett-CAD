@@ -3,18 +3,27 @@ import { parse, user, ValidationError, type User } from "@rockett/shared";
 import { JsonStore, StoreError } from "../store/jsonStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import type { Storage } from "../store/storage.js";
+import { matchTotp } from "./totp.js";
 
-const USERS_VERSION = 2;
+const USERS_VERSION = 3;
 const KEY = "users";
 
-export type UserRecord = User & { passwordHash: string };
+export interface TotpState {
+  secret: string;
+  step: number;
+}
+
+export type UserRecord = Omit<User, "totp"> & {
+  passwordHash: string;
+  totp?: TotpState;
+};
 export type NewUser = Pick<
   UserRecord,
   "username" | "displayName" | "role" | "passwordHash" | "email"
 >;
 export type UserPatch = Partial<
   Pick<UserRecord, "displayName" | "role" | "status" | "passwordHash">
-> & { email?: string | null };
+> & { email?: string | null; totp?: null };
 
 interface UsersFile {
   version: number;
@@ -22,8 +31,8 @@ interface UsersFile {
 }
 
 export function toPublicUser(record: UserRecord): User {
-  const { passwordHash: _passwordHash, ...rest } = record;
-  return rest;
+  const { passwordHash: _passwordHash, totp, ...rest } = record;
+  return totp ? { ...rest, totp: true } : rest;
 }
 
 function normalise(username: string): string {
@@ -41,6 +50,13 @@ function check(record: UserRecord): UserRecord {
       "passwordHash is not a scrypt hash",
       "/passwordHash",
     );
+  if (
+    record.totp !== undefined &&
+    (!/^[0-9a-f]{40}$/.test(String(record.totp.secret)) ||
+      !Number.isSafeInteger(record.totp.step) ||
+      record.totp.step < 0)
+  )
+    throw new ValidationError("totp is not a secret and step", "/totp");
   return record;
 }
 
@@ -73,7 +89,7 @@ export class UserStore {
         namespace: "users",
         current: USERS_VERSION,
         field: "version",
-        steps: { 1: (file) => file },
+        steps: { 1: (file) => file, 2: (file) => file },
       },
       validate,
     });
@@ -145,11 +161,12 @@ export class UserStore {
     return this.change((users, at) => {
       const index = users.findIndex((record) => record.id === id);
       if (index < 0) throw new StoreError("user not found", "not_found");
-      const { email: address, ...rest } = patch;
-      const { email: _oldEmail, ...current } = users[index]!;
+      const { email: address, totp: clear, ...rest } = patch;
+      const { email: _oldEmail, totp: oldTotp, ...current } = users[index]!;
       const record = check({
         ...current,
         ...rest,
+        ...(clear === undefined && oldTotp !== undefined && { totp: oldTotp }),
         ...(address === undefined &&
           _oldEmail !== undefined && { email: _oldEmail }),
         ...(typeof address === "string" && { email: email(address) }),
@@ -194,6 +211,49 @@ export class UserStore {
       });
       await this.file.write(KEY, file);
       return true;
+    });
+  }
+
+  enableTotp(
+    id: string,
+    secret: string,
+    code: string,
+  ): Promise<UserRecord | undefined> {
+    return this.totpChange(id, (record) => {
+      if (record.totp) throw new StoreError("totp is on", "conflict");
+      const step = matchTotp(Buffer.from(secret, "hex"), code, this.now());
+      return step === null ? undefined : { secret, step };
+    });
+  }
+
+  acceptTotp(id: string, code: string): Promise<UserRecord | undefined> {
+    return this.totpChange(id, ({ totp }) => {
+      if (!totp) return undefined;
+      const step = matchTotp(
+        Buffer.from(totp.secret, "hex"),
+        code,
+        this.now(),
+        totp.step,
+      );
+      return step === null ? undefined : { secret: totp.secret, step };
+    });
+  }
+
+  private totpChange(
+    id: string,
+    next: (record: UserRecord) => TotpState | undefined,
+  ): Promise<UserRecord | undefined> {
+    return this.queue.run(KEY, async () => {
+      const file = await this.read();
+      const index = file.users.findIndex((record) => record.id === id);
+      const current = file.users[index];
+      if (current?.status !== "active") return undefined;
+      const totp = next(current);
+      if (!totp) return undefined;
+      const record = check({ ...current, totp });
+      file.users[index] = record;
+      await this.file.write(KEY, file);
+      return record;
     });
   }
 

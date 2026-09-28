@@ -59,6 +59,8 @@ export async function signIn(
   password: string,
 ): Promise<void> {
   const user = await api.login(username, password);
+  if ("step" in user)
+    throw new Error("This account needs a TOTP step this app cannot show yet.");
   const id = returnProjectId();
   useSession.setState({ kind: "signed-in", user }, true);
   if (id !== null) await useStore.getState().openProject(id);

@@ -13,6 +13,7 @@ export const user = Type.Object(
         pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
       }),
     ),
+    totp: Type.Optional(Type.Boolean()),
     createdAt: Type.String(),
     modifiedAt: Type.String(),
   },
@@ -20,3 +21,12 @@ export const user = Type.Object(
 );
 
 export type User = Static<typeof user>;
+
+export interface SignInStep {
+  step: "enrol" | "code";
+}
+
+export interface TotpEnrolment {
+  secret: string;
+  uri: string;
+}
