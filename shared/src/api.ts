@@ -308,6 +308,7 @@ export type SizeLimit = { builds: number } & (
   | { kind: "upTo"; size: number }
   | { kind: "smooth" }
   | { kind: "none"; below: number }
+  | { kind: "stopped"; below: number }
   | { kind: "slow" }
 );
 

@@ -29,6 +29,8 @@ function sizeText(
       return "No corner: the faces meet flat or smoothly";
     case "none":
       return `Fails at every size tried, down to ${formatLength(limit.below, units)}`;
+    case "stopped":
+      return `Stopped early: fails at ${formatLength(limit.below, units)}, smaller sizes not checked`;
     case "slow":
       return "Too slow to find the usable size";
   }

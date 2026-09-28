@@ -102,7 +102,7 @@ export function sizeLimit(
     builds++;
     try {
       if (fits(size)) fit = size;
-      else fail = size;
+      else if (!late()) fail = size;
     } catch (error) {
       if (late()) break;
       if (refused(error)) return { kind: "smooth", builds };
@@ -114,6 +114,7 @@ export function sizeLimit(
     else size = Math.sqrt(fit * fail);
   }
   if (fit > 0) return { kind: "upTo", size: fit, builds };
-  if (fail < Infinity) return { kind: "none", below: fail, builds };
-  return { kind: "slow", builds };
+  if (fail === Infinity) return { kind: "slow", builds };
+  if (late()) return { kind: "stopped", below: fail, builds };
+  return { kind: "none", below: fail, builds };
 }
