@@ -236,11 +236,15 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
     });
   }
   for (const p of anyF.sections ?? []) {
-    selection.push({
-      kind: "profile",
-      sketchId: p.sketchId,
-      profileId: p.profileId,
-    });
+    selection.push(
+      p.kind === "face"
+        ? { kind: "face", bodyId: p.bodyId, faceName: p.faceName }
+        : {
+            kind: "profile",
+            sketchId: p.sketchId,
+            profileId: p.profileId,
+          },
+    );
   }
   for (const e of anyF.edges ?? []) {
     selection.push({ kind: "edge", bodyId: e.bodyId, edgeName: e.edgeName });

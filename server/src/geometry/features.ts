@@ -830,27 +830,75 @@ function evalLoft(state: EvalState, f: LoftFeature): void {
     throw new Error("loft requires at least two sections");
   const tool = kernelCall("loft", () => {
     const thru = new k.BRepOffsetAPI_ThruSections(true, false, LINEAR_TOL);
-    for (const ref of f.sections) {
-      const sketch = state.sketches.get(ref.sketchId);
-      if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
-      const profile = findProfile(sketch, ref.profileId);
-      if (!profile) throw new Error(`profile ${ref.profileId} not found`);
-      const pf = buildProfileFace(profile, sketch.entities, sketch.frame);
-      // use the outer wire of the face
-      const wires = [...exploreWires(pf.face)];
-      if (wires.length === 0) throw new Error("loft section has no wire");
-      thru.AddWire(wires[0]);
-    }
-    thru.Build(progress());
-    if (!thru.IsDone()) {
+    try {
+      for (const ref of f.sections) {
+        let face: Shape;
+        if ("kind" in ref) {
+          const body = state.bodies.get(ref.bodyId);
+          if (!body) throw new Error(`body ${ref.bodyId} no longer exists`);
+          face = findFace(body, ref.faceName);
+          if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
+          if (!planarFacePlane(face))
+            throw new Error("loft section face must be planar");
+        } else {
+          const sketch = state.sketches.get(ref.sketchId);
+          if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
+          const profile = findProfile(sketch, ref.profileId);
+          if (!profile) throw new Error(`profile ${ref.profileId} not found`);
+          face = buildProfileFace(profile, sketch.entities, sketch.frame).face;
+        }
+        const wires = [...exploreWires(face)];
+        if (wires.length === 0) throw new Error("loft section has no wire");
+        if ("kind" in ref && wires.length !== 1)
+          throw new Error(
+            "loft faces with holes are not supported; select a face with one outline",
+          );
+        thru.AddWire(wires[0]);
+      }
+      thru.Build(progress());
+      if (!thru.IsDone()) {
+        throw new Error("loft failed — sections may be incompatible");
+      }
+      const shape = thru.Shape();
+      if (f.sections.some((ref) => "kind" in ref)) {
+        const check = new k.BRepCheck_Analyzer(shape, true, false);
+        try {
+          if (
+            !check.IsValid_2() ||
+            solids(shape).length !== 1 ||
+            volumeOf(shape) <= LINEAR_TOL ** 3
+          )
+            throw new Error(
+              "loft did not produce a valid solid; choose distinct, compatible sections in order",
+            );
+        } finally {
+          check.delete();
+        }
+      }
+      const names = finalizeNames(shape, new ShapeMap(), f.id);
+      return { shape, names };
+    } finally {
       thru.delete();
-      throw new Error("loft failed — sections may be incompatible");
     }
-    const shape = thru.Shape();
-    const names = finalizeNames(shape, new ShapeMap(), f.id);
-    thru.delete();
-    return { shape, names };
   });
+  const sources = [
+    ...new Set(
+      f.sections.flatMap((ref) => ("kind" in ref ? [ref.bodyId] : [])),
+    ),
+  ];
+  if (f.operation === "join" && sources.length > 0) {
+    const toolId = `b:${f.id}`;
+    registerBodySolids(state, toolId, tool.shape, tool.names);
+    evalCombine(state, {
+      ...f,
+      type: "combine",
+      targetBody: sources[0]!,
+      toolBodies: [toolId, ...sources.slice(1)],
+      keepTools: false,
+      operation: "join",
+    });
+    return;
+  }
   applyToolOperation(state, f.id, tool, f.operation);
 }
 

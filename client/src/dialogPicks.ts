@@ -17,7 +17,7 @@ export const DIALOG_PICKS: Record<DialogType, DialogPicks> = {
   extrude: { profiles: true, faces: true },
   revolve: { profiles: true, edges: true, sketchLines: true },
   sweep: { profiles: true },
-  loft: { profiles: true },
+  loft: { profiles: true, faces: true },
   emboss: { profiles: true },
   fillet: { edges: true },
   chamfer: { edges: true },

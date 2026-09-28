@@ -108,6 +108,13 @@ const cases: Feature[] = [
   },
   {
     ...base,
+    id: "loFaces",
+    type: "loft",
+    sections: [face, prof, { ...face, bodyId: "b2", faceName: "f2" }],
+    operation: "join",
+  },
+  {
+    ...base,
     id: "fi",
     type: "fillet",
     edges: [edge],

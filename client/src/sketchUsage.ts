@@ -24,6 +24,7 @@ export function sketchUsage(document: CadDocument): SketchUsage {
     for (const p of anyF.profiles ?? [])
       profiles.add(profileKey(p.sketchId, p.profileId));
     for (const p of anyF.sections ?? []) {
+      if (p.kind === "face") continue;
       if (p.profileId) profiles.add(profileKey(p.sketchId, p.profileId));
       else sketches.add(p.sketchId);
     }

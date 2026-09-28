@@ -317,7 +317,8 @@ function withProfiles(state: EvalState, feature: Feature): Feature {
         ? feature.sections
         : [];
   for (const ref of refs)
-    ref.profileId = state.sketches.get(ref.sketchId)!.profiles[0]!.id;
+    if ("sketchId" in ref)
+      ref.profileId = state.sketches.get(ref.sketchId)!.profiles[0]!.id;
   return feature;
 }
 

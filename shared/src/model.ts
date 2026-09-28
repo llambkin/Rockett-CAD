@@ -11,7 +11,7 @@
 
 import type { Units } from "./units.js";
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -242,7 +242,7 @@ export interface SweepFeature extends FeatureBase {
 
 export interface LoftFeature extends FeatureBase {
   type: "loft";
-  sections: ProfileRef[];
+  sections: (ProfileRef | FaceRef)[];
   operation: BooleanOperation;
 }
 

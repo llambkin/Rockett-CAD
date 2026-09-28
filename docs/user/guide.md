@@ -75,6 +75,17 @@ Undo/redo stays inside an existing sketch and returns to Select.
 - Extrude: new body, join, cut or intersect; symmetric or two-sided; from
   sketch profiles _or_ planar faces.
 - Revolve, sweep, loft, emboss and deboss.
+
+For **Loft**, select two or more planar faces or sketch regions in the order
+the loft should pass through them. You can mix faces and regions. **Join**
+connects the bodies whose faces you selected; **New body** keeps them separate.
+Faces need one outline without holes.
+
+Loft already blends smoothly. With only two sections it may look straight;
+add an offset intermediate sketch region to define a bend. To carry one
+profile along a drawn curve, use **Sweep**. Loft guide curves and tangent
+blending into adjoining faces are not yet available.
+
 - Sweep paths take lines and arcs drawn in any order. A branched or broken path
   fails with "sweep path is not a connected chain".
 

@@ -1,5 +1,25 @@
 # Last run
 
+## Loft face selection
+
+CUST-038 adds ordered planar-face and sketch-profile loft sections. Join
+combines the selected source bodies. Smooth interpolation is unchanged;
+an intermediate profile can shape a bend. Curved faces and faces with holes
+report an error. No new control or layout was added; the existing section
+picker and help text follow DEC-004.
+
+Schema 12 leaves earlier lofts unchanged. A memory-storage test proves that
+the previous schema is backed up before a face loft is saved. The focused
+suite passed 103 tests, and typecheck and the application build passed.
+The full check stops at missing masterrulez comment tooling; the cost checker
+also cannot invoke its extensionless oxlint command on Windows. The required
+complexity skill and masterrulez standards were not available in this checkout
+or the configured skills. CUST-038 remains in-flight pending the full gate.
+The repository owner authorized publication to main with these validation
+limitations. Deployment is not part of that request.
+
+## Earlier handoff
+
 Paused on request after the batch deployed and 0.2.0 was proposed upstream. Dev runs `777efbb`, schema 11,
 with everything below. No agents are running.
 

@@ -14,6 +14,21 @@ Geometry exists only inside the evaluation state and its caches, and is
 rebuilt from the recipe on demand. Saved projects are JSON, and the modelling
 history survives close/reopen; embedded imports increase document size.
 
+### Loft sections
+
+Schema 12 lets a loft's ordered `sections` mix sketch `ProfileRef` entries
+with planar `FaceRef` entries. Existing sketch-only lofts keep their references
+and evaluation unchanged. The 11 to 12 migration changes only the schema
+version; the existing project store backs up the old document before saving.
+
+Face sections must have one closed outline and no holes. Curved faces and
+faces with holes report a feature error. Join combines the loft with every
+body referenced by its face sections, retaining the first selected body's ID.
+New body keeps the source bodies. Loft interpolates smoothly through the
+ordered sections; two sections may produce straight sides. Intermediate
+profiles can define a bend. Guide curves and endpoint tangency constraints
+are not supported.
+
 ### STEP, IGES and BREP imports
 
 Schema version 3 adds `importStep` features containing `filename` and the

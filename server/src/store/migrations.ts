@@ -142,5 +142,6 @@ export const documentMigrations: Migrations<CadDocument> = {
       context.show(split.shown);
       return split.doc;
     },
+    11: (doc) => doc,
   },
 };

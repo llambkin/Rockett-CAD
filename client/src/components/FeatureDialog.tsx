@@ -485,13 +485,20 @@ function DialogBody({
     }
     case "loft": {
       title = "Loft";
+      const sections = selection.filter(
+        (s) => s.kind === "profile" || s.kind === "face",
+      );
       body = (
         <>
           <SelInfo
             label="Sections (in order)"
-            picks={profiles}
-            hint="click 2+ profiles"
+            picks={sections}
+            hint="click 2+ planar faces or profiles"
           />
+          <p className="hint">
+            Select sections in order. Add intermediate profiles to shape a
+            smooth bend. With two sections, the transition may be straight.
+          </p>
           <SelectField
             label="Operation"
             value={p("operation", "join")}
@@ -505,13 +512,24 @@ function DialogBody({
         </>
       );
       build = () => {
-        need(profiles.length >= 2, "Select at least two section profiles");
+        need(
+          sections.length >= 2,
+          "Select at least two planar faces or profiles",
+        );
         return {
           id: editId ?? newId("loft"),
           type: "loft",
           name: p("name", ""),
           suppressed: false,
-          sections: profileRefs(),
+          sections: sections.map((s) =>
+            s.kind === "face"
+              ? {
+                  kind: "face" as const,
+                  bodyId: s.bodyId,
+                  faceName: s.faceName,
+                }
+              : { sketchId: s.sketchId, profileId: s.profileId },
+          ),
           operation: p("operation", "join"),
         };
       };
