@@ -101,6 +101,19 @@ function records(log: Buffer): Framed[] {
   return out;
 }
 
+export function snapshotBodies(log: Buffer): Buffer[] {
+  const found = records(log);
+  const first = found[0]?.head;
+  if (
+    (found.at(-1)?.body[1] ?? 0) !== log.length ||
+    (first && (first.kind !== "base" || first.version !== HISTORY_VERSION))
+  )
+    throw new StoreError("history log is damaged or too new", "internal");
+  return found.flatMap(({ head, body }) =>
+    bodied(head) ? [log.subarray(...body)] : [],
+  );
+}
+
 function replay(heads: HistoryRecord[]): History {
   let base = "";
   let position = 0;
@@ -557,6 +570,12 @@ export class Previews {
       if (this.bytes <= this.budget) break;
       this.drop(oldest);
     }
+  }
+
+  documents(project: string): CadDocument[] {
+    return [...this.open]
+      .filter(([key]) => key.startsWith(`${project}/`))
+      .map(([, held]) => held.preview.document);
   }
 
   end(project: string, tx: string): void {

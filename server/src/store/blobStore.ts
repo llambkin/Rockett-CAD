@@ -88,14 +88,12 @@ export class BlobStore {
 
   async put(bytes: Uint8Array): Promise<string> {
     const hash = sha256(bytes);
-    if (!(await this.has(hash)))
-      await this.storage.writeAtomic(this.file(hash), bytes);
+    await this.storage.writeAtomic(this.file(hash), bytes);
     return hash;
   }
 
   async adopt(staged: Staged): Promise<string> {
-    if (await this.has(staged.hash)) await this.storage.remove(staged.path);
-    else await this.storage.move(staged.path, this.file(staged.hash));
+    await this.storage.move(staged.path, this.file(staged.hash));
     return staged.hash;
   }
 
@@ -114,5 +112,19 @@ export class BlobStore {
 
   async has(hash: string): Promise<boolean> {
     return (await this.storage.list(this.dir)).includes(hash);
+  }
+
+  async list(): Promise<string[]> {
+    return (await this.storage.list(this.dir)).filter((name) =>
+      HASH_RE.test(name),
+    );
+  }
+
+  modified(hash: string): Promise<number> {
+    return this.storage.modified(this.file(hash));
+  }
+
+  remove(hash: string): Promise<void> {
+    return this.storage.remove(this.file(hash));
   }
 }

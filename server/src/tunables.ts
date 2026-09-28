@@ -20,6 +20,7 @@ export const TIMING_MS = {
   accessJwtSkew: MINUTE,
   accessKeyFetch: 10_000,
   previewIdle: HOUR,
+  orphanBlobAge: DAY,
 } as const;
 
 export const TRIAL_BUDGET = {

@@ -361,6 +361,13 @@ export interface HistoryList {
   checkpoints: HistoryMark[];
 }
 
+export interface BlobCollection {
+  dryRun: boolean;
+  skipped: string | null;
+  kept: number;
+  orphans: string[];
+}
+
 export interface ProjectResponse {
   document: CadDocument;
 }

@@ -34,6 +34,8 @@ import { StoreError } from "../store/projectStore.js";
 import { etag } from "../store/jsonStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { HistoryStore, Previews } from "../store/historyStore.js";
+import { collectBlobs } from "../store/blobGc.js";
+import { requireAdmin } from "../auth/users.js";
 import {
   acceptedNamingUpgrade,
   namingUpgraded,
@@ -848,6 +850,22 @@ export function createApiRouter(
       label: "Upgrade naming",
       ...(await acceptedNamingUpgrade(store, kernel, doc, req.body.accept)),
     })),
+  );
+
+  on(
+    ROUTES.collectBlobs,
+    requireAdmin,
+    wrap(async (req, res) => {
+      const { id } = req.params;
+      res.json(
+        await collectBlobs(
+          store,
+          id,
+          previews.documents(id),
+          req.body.dryRun ?? true,
+        ),
+      );
+    }),
   );
 
   on(

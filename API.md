@@ -261,8 +261,9 @@ characters) names the snapshot at the current state and answers
 `{ checkpoint }`. It edits no document and takes no `If-Match`; a project
 with no history yet gives 400. A checkpoint keeps its snapshot through any
 number of later edits. STEP sources and reference images are kept in the
-project's blob store by sha256 and never deleted, so a checkpoint's sources
-stay available after their features are deleted.
+project's blob store by sha256, and blob collection keeps every blob a
+checkpoint names, so a checkpoint's sources stay available after their
+features are deleted.
 
 `POST /projects/:id/history/restore` with `{ snapshot, held? }` and
 `If-Match` saves the snapshot of a listed checkpoint or entry as the next
@@ -270,6 +271,23 @@ revision and records it as one entry labelled `Restore <label>`, taking the
 checkpoint's label when both hold the snapshot. Undo reverses it like any
 other edit. The project keeps its current name, and any other snapshot is
 404 `not_found`.
+
+### Blob collection
+
+`POST /projects/:id/maintenance/gc` with `{ dryRun? }` is for admins only; any
+other user gets 403. It runs under the project's queue and never at boot.
+Its roots are every document file, every snapshot in the history log
+(entries, checkpoints and not yet compacted records), open previews, each
+backup under `backups/projects/<id>/` and the recovery record there. Each
+root is migrated and validated, and names blobs through `importStep.blob` and
+`referenceImage.assetId`. A blob no root names and last written 24 hours ago
+or more is an orphan; uploading the same bytes again resets its age. Any root
+that cannot be read, names an unknown feature type or holds `extensions`
+data skips the whole project. The answer is `BlobCollection`:
+`{ dryRun, skipped, kept, orphans }`, where `skipped` is null or the reason,
+`kept` counts the blobs left, and `orphans` lists the hashes removed. A dry
+run, the default, lists the orphans and removes nothing; `{ "dryRun": false }`
+removes them. `thumbnail.png` is not a blob and is never touched.
 
 ### Preview transactions
 
@@ -465,6 +483,7 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 | `GET /projects/:id/history`              | none                    | `HistoryList`: entries, position and checkpoints; see History                |
 | `POST /projects/:id/checkpoints`         | `{ label }`             | Name the current state; returns `{ checkpoint }`; see History                |
 | `POST /projects/:id/history/restore`     | `{ snapshot, held? }`   | Restore a listed checkpoint or entry as a new, undoable entry                |
+| `POST /projects/:id/maintenance/gc`      | `{ dryRun? }`           | Admin only; list or remove orphan blobs; see Blob collection                 |
 | `PUT /projects/:id/bodies/:bodyId`       | `{ name? }`             | Rename a body; any other field is 400                                        |
 | `PUT /projects/:id/groups`               | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
 

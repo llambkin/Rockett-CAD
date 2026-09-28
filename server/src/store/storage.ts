@@ -7,6 +7,7 @@ export type Data = string | Uint8Array | AsyncIterable<Uint8Array>;
 export interface Storage {
   read(file: string): Promise<Buffer>;
   stamp(file: string): Promise<string | undefined>;
+  modified(file: string): Promise<number>;
   writeAtomic(file: string, data: Data): Promise<void>;
   append(file: string, data: Uint8Array): Promise<void>;
   move(from: string, to: string): Promise<void>;
@@ -54,6 +55,10 @@ export class LocalStorage implements Storage {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       throw err;
     }
+  }
+
+  async modified(file: string): Promise<number> {
+    return (await this.fs.stat(this.resolve(file))).mtimeMs;
   }
 
   async writeAtomic(file: string, data: Data): Promise<void> {

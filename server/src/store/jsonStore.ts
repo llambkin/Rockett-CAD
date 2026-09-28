@@ -139,7 +139,7 @@ export class NamespaceBackup {
       );
   }
 
-  private async verify(backup: string): Promise<Array<[string, string]>> {
+  async verify(backup: string): Promise<Array<[string, string]>> {
     if (!/^[\w.]+-[0-9a-f]{16}$/.test(backup))
       throw new StoreError(`invalid backup name ${backup}`);
     const text = await this.storage.read(
@@ -154,11 +154,7 @@ export class NamespaceBackup {
     return entries;
   }
 
-  private async verified(
-    backup: string,
-    name: string,
-    sum: string,
-  ): Promise<Buffer> {
+  async verified(backup: string, name: string, sum: string): Promise<Buffer> {
     const data = await this.storage.read(
       path.posix.join(this.root, backup, "files", name),
     );

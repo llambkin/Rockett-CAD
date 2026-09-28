@@ -8,6 +8,7 @@ import type {
   TreeGroup,
 } from "./model.js";
 import type {
+  BlobCollection,
   EvaluateResult,
   ExportRequest,
   Folder,
@@ -484,6 +485,11 @@ export const ROUTES = {
     { accept?: NamingDecision[] } & HeldMeshes,
     NamingUpgradeResponse
   >()("POST", "/projects/:id/upgrade-naming/commit", namingUpgradeBody),
+  collectBlobs: route<{ dryRun?: boolean }, BlobCollection>()(
+    "POST",
+    "/projects/:id/maintenance/gc",
+    Type.Object({ dryRun: Type.Optional(Type.Boolean()) }),
+  ),
   getThumbnail: route<never, Blob>()("GET", "/projects/:id/thumbnail"),
   putThumbnail: route<Blob, { ok: true }>()("PUT", "/projects/:id/thumbnail"),
   getView: route<never, ProjectView>()("GET", "/projects/:id/view"),
