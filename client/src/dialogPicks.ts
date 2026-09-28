@@ -63,7 +63,6 @@ export const planar = (key: string, one: boolean) =>
   input(key, ["plane", "face"], { planar: true, ...(one && { one: true }) });
 
 const DIALOG_INPUTS: Partial<Record<DialogType, readonly PickInput[]>> = {
-  revolve: [profilesOrFaces, axis, targets],
   export: [bodies],
 };
 

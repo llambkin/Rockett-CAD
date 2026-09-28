@@ -1,4 +1,5 @@
 import "./extrude";
+import "./revolve";
 import "./sweep";
 import "./loft";
 import "./emboss";

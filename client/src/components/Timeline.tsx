@@ -10,7 +10,6 @@ import { featureRefs } from "@rockett/shared";
 import { pickInto } from "../dialogPicks";
 import { featureUI } from "../features/registry";
 import "../features/core";
-import { axisParams, axisSelection } from "../features/inputs";
 import {
   useStore,
   selectionKey,
@@ -28,7 +27,6 @@ import { QuickEdit, quickValues } from "./QuickEdit";
 const TYPE_ICONS: Record<string, string> = {
   importMesh: "⇩",
   sketch: "✏",
-  revolve: "↻",
 };
 
 const typeIcon = (type: string) =>
@@ -311,28 +309,13 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
   }
   const ui = featureUI(f.type);
   if (ui) return openDialog(f, ui.prefill(f));
-  const anyF = f as any;
   const selection = featureRefs(f)
     .filter((ref) => !ref.path.startsWith("/targets/"))
     .flatMap(refPick);
-
-  /** Reselect an edge or sketch-line axis so OK rebuilds the same axis. */
-  const pushAxis = (axis: any) => selection.push(...axisSelection(axis));
-
-  const params: Record<string, any> = { name: f.name, targets: anyF.targets };
-  switch (f.type) {
-    case "revolve":
-      Object.assign(params, {
-        angle: anyF.angle,
-        operation: anyF.operation,
-        ...axisParams(anyF.axis),
-      });
-      pushAxis(anyF.axis);
-      break;
-    default:
-      break;
-  }
-  openDialog(f, { params, selection });
+  openDialog(f, {
+    params: { name: f.name, targets: (f as any).targets },
+    selection,
+  });
 }
 
 function openDialog(

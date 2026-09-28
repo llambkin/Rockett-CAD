@@ -4,32 +4,22 @@
  * feature through the API.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import type { AxisRef, EdgeRef, ExportFormat, Feature } from "@rockett/shared";
-import { formatLength, newId } from "@rockett/shared";
-import {
-  featurePatch,
-  useStore,
-  type DialogType,
-  type Selection,
-} from "../store";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ExportFormat, Feature } from "@rockett/shared";
+import { formatLength } from "@rockett/shared";
+import { featurePatch, useStore, type DialogType } from "../store";
 import { api, saveDownload } from "../api";
-import { clearInput, takes } from "../dialogPicks";
+import { takes } from "../dialogPicks";
 import { createLivePreview } from "../livePreview";
-import { toolTargets } from "../toolTargets";
 import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
-import { AxisField, NumField, OperationField, SelInfo } from "./form/fields";
+import { SelInfo } from "./form/fields";
 import { DialogFooter } from "./form/DialogFooter";
 import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI } from "../features/registry";
-import { axisHint, profileSources, storedFeature } from "../features/inputs";
+import { axisMissing, axisPicks } from "../features/inputs";
 import { useSetting } from "../settings";
-
-function need(cond: unknown, message: string): asserts cond {
-  if (!cond) throw new Error(message);
-}
 
 function attempt(build: (() => Feature) | null): Feature | null {
   try {
@@ -106,80 +96,25 @@ function DialogBody({
   );
   const [pending, setPending] = useState(false);
 
-  const edges = selection.filter((s) => s.kind === "edge") as Extract<
-    Selection,
-    { kind: "edge" }
-  >[];
-  // selected sketch LINES (axis candidates for revolve / circular pattern)
-  const sketchLines = (
-    selection.filter((s) => s.kind === "sketchEntity") as any[]
-  ).filter((s) => {
-    const sk = document_?.features.find(
-      (f) => f.id === s.sketchId && f.type === "sketch",
-    ) as any;
-    return sk?.entities.find((x: any) => x.id === s.entityId)?.kind === "line";
-  });
-
-  const p = (key: string, dflt: any) => params[key] ?? dflt;
-  const num = (key: string, dflt: number) => {
-    const v = Number(params[key]);
-    return Number.isFinite(v) ? v : dflt;
-  };
-
   // Picking an edge or sketch line in an axis-based dialog switches the axis
   // to it — the dropdown alone gave no hint the pick was registered.
   const axisDialog =
     dialog === "constructionPlane"
       ? params.method === "angle"
       : takes(dialog, "axis");
+  const axisPicked = axisPicks(selection, document_).length > 0;
   useEffect(() => {
-    if (!axisDialog) return;
-    if (
-      (edges.length > 0 || sketchLines.length > 0) &&
-      params.axisSource !== "edge"
-    ) {
+    if (axisDialog && axisPicked && params.axisSource !== "edge")
       setParams({ axisSource: "edge" });
-    }
-  }, [edges.length, sketchLines.length, dialog]);
+  }, [axisPicked, dialog]);
   const originAxis = selection.findLast((s) => s.kind === "axis")?.axis;
   useEffect(() => {
     if (axisDialog && originAxis)
       setParams({ axisSource: "origin", axis: originAxis });
   }, [originAxis, dialog]);
 
-  const edgeRefs = (): EdgeRef[] =>
-    edges.map((x) => ({
-      kind: "edge",
-      bodyId: x.bodyId,
-      edgeName: x.edgeName,
-    }));
-  const sources = () => {
-    const found = profileSources(selection, storedFeature(editId));
-    if ("error" in found) throw new Error(found.error);
-    return found;
-  };
-  const axisMissing =
-    axisDialog &&
-    p("axisSource", "origin") === "edge" &&
-    edges.length + sketchLines.length === 0;
-  const chooseAxis = (key: string, patch: Record<string, unknown>) => {
-    setParams(patch);
-    clearInput(key);
-  };
-  const axisRef = (): AxisRef => {
-    if (p("axisSource", "origin") !== "edge")
-      return { kind: "originAxis", axis: p("axis", "Z") };
-    need(!axisMissing, "Pick an axis");
-    const line = sketchLines[0];
-    return line
-      ? { kind: "sketchLine", sketchId: line.sketchId, entityId: line.entityId }
-      : { kind: "edge", edge: edgeRefs()[0]! };
-  };
-
+  const noAxis = axisDialog && axisMissing(params, selection, document_);
   const close = () => setMode({ name: "idle" });
-
-  const targets = (operation: string) =>
-    toolTargets(operation, params.targets, document_?.namingVersion);
 
   const ui = featureUI(dialog);
   useEffect(() => {
@@ -187,72 +122,14 @@ function DialogBody({
     if (patch) setParams(patch);
   }, [dialog, selection, params]);
 
-  let title = "";
-  let body: ReactElement | null = null;
-  let build: (() => Feature) | null = null;
-  let panel: ReactElement | null = null;
-
-  if (ui?.Form) {
-    title = ui.title;
-    body = <ui.Form params={params} setParams={setParams} />;
-  }
   const uiBuild = ui?.build;
-  if (uiBuild)
-    build = () => {
-      const built = uiBuild(params, selection);
-      if ("error" in built) throw new Error(built.error);
-      return built;
-    };
-  switch (dialog) {
-    case "revolve": {
-      title = "Revolve";
-      body = (
-        <>
-          <SelInfo
-            label="Profiles / faces"
-            input="profiles"
-            hint="click sketch regions or Shift-click planar faces"
-          />
-          <SelInfo
-            label="Axis"
-            input="axis"
-            picks={[...edges, ...sketchLines]}
-            hint={axisHint(axisMissing)}
-          />
-          <AxisField
-            axisSource={params.axisSource}
-            axis={params.axis}
-            onChange={(patch) => chooseAxis("axis", patch)}
-          />
-          <NumField
-            label="Angle (°)"
-            autoFocus
-            value={p("angle", 360)}
-            onChange={(v) => setParams({ angle: v })}
-          />
-          <OperationField intersect />
-        </>
-      );
-      build = () => {
-        return {
-          id: editId ?? newId("revolve"),
-          type: "revolve",
-          name: p("name", ""),
-          suppressed: false,
-          ...sources(),
-          axis: axisRef(),
-          angle: num("angle", 360),
-          operation: p("operation", "join"),
-          ...targets(p("operation", "join")),
-        };
-      };
-      break;
-    }
-    case "export": {
-      panel = <ExportPanel onClose={close} />;
-      break;
-    }
-  }
+  const build = uiBuild
+    ? (): Feature => {
+        const built = uiBuild(params, selection);
+        if ("error" in built) throw new Error(built.error);
+        return built;
+      }
+    : null;
 
   const draft = attempt(build);
   const live = useLivePreview(editId, draft);
@@ -266,7 +143,7 @@ function DialogBody({
     return (
       <ui.Panel editId={editId} onClose={close} cancelPreview={live.cancel} />
     );
-  if (panel) return panel;
+  if (dialog === "export") return <ExportPanel onClose={close} />;
 
   const ok = async () => {
     let feature: Feature;
@@ -291,17 +168,17 @@ function DialogBody({
   };
 
   return (
-    <DraggablePanel title={title}>
+    <DraggablePanel title={ui?.title ?? ""}>
       <div className="dialog-body">
         <RefRepair />
-        {body}
+        {ui?.Form && <ui.Form params={params} setParams={setParams} />}
         <SizeLimitHint draft={draft} />
       </div>
       <DialogFooter
         onOk={() => void ok()}
         onCancel={cancel}
         pending={pending}
-        okDisabled={axisMissing}
+        okDisabled={noAxis}
         escapeAnywhere
       />
     </DraggablePanel>
