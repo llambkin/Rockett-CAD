@@ -12,28 +12,21 @@ change gets a `Schema N` line in the section that ships it.
 
 ### Added
 
-- Sketch curves that touch tangentially split regions, so a circle inscribed
-  in a square gives the disc and four corners to pick and extrude one by one.
-  Regions that share their bounding curves, such as the lens and crescents of
-  two overlapping circles, get distinct ids. Saved region ids keep resolving
-  to the region they named.
-- Sketch Trim (T) highlights the piece under the cursor and deletes it on
-  click. A curve that meets nothing is deleted whole, construction curves no
-  longer cut, tangent contacts do, new ends get coincident constraints on the
-  cutting curve, and constraints on the kept piece stay. Trim stays active.
+- Tangent sketch curves split regions. Regions sharing bounding curves get
+  distinct ids; saved region ids still resolve.
+- Sketch Trim (T) highlights and deletes the piece under the cursor. New
+  ends stay coincident with the cutting curve; construction curves do not
+  cut.
 
 ### Fixed
 
-- Rewinding the timeline (sketch edit, tangent-edge and projection queries)
-  no longer discards cached downstream features, so returning to the end does
-  not regenerate them.
+- Rewinding the timeline no longer discards cached downstream features.
 - Reopening a feature for editing keeps its references: circular and linear
   pattern edge or sketch-line axes, split body tools, and midplane inputs were
   lost and replaced by defaults on OK.
 - Editing a suppressed feature no longer unsuppresses it.
-- The API rejects unknown feature types, changing a feature's type, missing
-  reference arrays, and unknown export formats with 400. Sweep, loft, combine,
-  split body, mirror and chamfer edges are now validated.
+- The API rejects unknown feature types, type changes, missing reference
+  arrays and unknown export formats with 400.
 - M opens Move and I starts Measure, matching Fusion 360. Before, M was shown
   for both and started Measure.
 - Sweep paths with arcs build, and a path sweeps the same whatever order its
@@ -41,9 +34,7 @@ change gets a `Schema N` line in the section that ships it.
 - A shell with no open faces hollows the body. Before, it replaced the body
   with its inner offset solid.
 - The API rejects malformed features and documents with 400 instead of a 500
-  or a saved bad value: references, list items, enums, flags, plane and axis
-  refs, `suppressed`, the document base shape, and feature keys the type does
-  not declare.
+  or a saved bad value.
 - Export rejects unknown body ids, naming them, and a non-numeric `quality`.
   Before, unknown ids were dropped and `quality` fell back to 0.05.
 - Reading an evaluation no longer rewrites the project file.
@@ -55,11 +46,10 @@ change gets a `Schema N` line in the section that ships it.
 - Esc cancels an open feature dialog and reverts its preview.
 - Live previews keep one request in flight. A late reply no longer overwrites
   a newer preview, a cancel or a commit.
-- Sketch rebuilds, construction plane updates, reference image changes and
-  closing the viewport free their GPU geometry, materials and unused textures.
-- An upload over its limit returns 413. Before, an oversized image gave 500
-  and an oversized STEP file 400. An image stored as PNG must carry the full
-  PNG signature and header chunk; anything else returns 400.
+- Sketch rebuilds, plane and image updates and closing the viewport free
+  their GPU resources.
+- An upload over its limit returns 413. A PNG without a full signature and
+  header chunk returns 400.
 - The container no longer owns its own code: `/app` stays root-owned and
   `/data` is the only path the app writes.
 - The container healthcheck tolerates a long regeneration: a busy container
@@ -88,9 +78,7 @@ change gets a `Schema N` line in the section that ships it.
   bundle with its version, licence and upstream URL.
 - `npm test` runs `tsc` on all workspaces first. Every workspace compiles
   with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
-- `npm run check` is the ship command: lint, format, the comment and cost
-  ratchets, writing, README, pin and notice checks, build, tests, a
-  real-browser smoke test and the work order check.
+- `npm run check` is the ship command.
 - Docker: base image pinned by digest; build and runtime installs use `npm ci`
   from the lockfile. `docker/runtime-package.json` is removed.
 - Dependencies at their latest releases, pinned exactly: Express 5, multer 2,
@@ -101,8 +89,8 @@ change gets a `Schema N` line in the section that ships it.
 - Export requires `bodyIds`; a missing or non-array value returns 400. An
   empty array still exports every visible body. `ExportRequest.binary` is
   removed: STL export was always binary.
-- The Controls help opens up to 90% of the window in columns that reflow with
-  its width, resizes from its corner, and keeps that size until reload.
+- The Controls help opens up to 90% of the window and resizes from its
+  corner.
 
 ### Known issues
 

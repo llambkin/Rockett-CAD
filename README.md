@@ -111,28 +111,17 @@ everything downstream against persistent topology references.
 ROCKETT_ALLOWED_ORIGINS=http://localhost:8788 docker compose up -d
 ```
 
-Then open http://localhost:8788. The server refuses to start without
-`ROCKETT_ALLOWED_ORIGINS`, the comma-separated browser origins allowed to
-change projects; list the origin you browse to. All state lives in the
-`rockett-cad_data` volume; DOCKER.md covers LAN access, running dev and prod
-side by side, and promoting the image dev verified to prod.
-The container runs as the unprivileged `rockett` user: `/app` is root-owned
-and `/data` is the only path it writes.
-
-For Unraid, see [DOCKER.md](DOCKER.md) and the template in
-`docker/unraid-rockett-cad.xml`.
+Open http://localhost:8788. The server refuses to start without
+`ROCKETT_ALLOWED_ORIGINS`: list the origin you browse to. State lives in the
+`rockett-cad_data` volume. [DOCKER.md](DOCKER.md) covers LAN access, dev and
+prod instances, promotion, Unraid and backups.
 
 ## Running build
 
-The bottom-right corner of the project list and the workspace shows the
-running build: the image's `git describe` output, else `v<version> <commit>`,
-else `v<version> dev`. Hover it for the full commit, version and schema.
-`GET /api/health` returns the same fields.
-
-A plain `docker compose up` records neither, so the label reads
-`v<version> dev`. For a granular label, build with
-`--build-arg ROCKETT_COMMIT=$(git rev-parse HEAD) --build-arg ROCKETT_DESCRIBE=$(git describe --tags --always --dirty)`.
-[DOCKER.md](DOCKER.md) has the full Compose and `docker build` commands.
+The bottom-right corner shows the running build, and `GET /api/health`
+returns the same fields. A plain `docker compose up` bakes in no commit, so
+the label reads `v<version> dev`. [DOCKER.md](DOCKER.md) shows the build
+arguments that name the commit.
 
 ## Development
 

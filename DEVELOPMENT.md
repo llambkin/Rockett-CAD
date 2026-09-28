@@ -2,88 +2,80 @@
 
 ## Prerequisites
 
-- Node.js 24 or newer (`engines.node` is `>=24`). Develop on 24, the line the
-  Docker image pins (`node:24-trixie-slim`).
-- npm ≥ 10 (workspaces)
-- Docker (only for container builds)
-- `~/masterrulez/scripts/lint-writing` (only for `npm run check`)
+- Node.js 24 (`engines.node` is `>=24`; the image pins `node:24-trixie-slim`).
+- npm 10 or newer (workspaces).
+- Docker, only for container builds.
+- `~/masterrulez/scripts/lint-writing`, only for `npm run check`.
 
-## Setup & run
+## Setup and run
 
 ```bash
-npm ci
-npm run prepare
+npm ci                 # .npmrc sets ignore-scripts=true
+npm run prepare        # installs the husky hooks
 export ROCKETT_ALLOWED_ORIGINS=http://localhost:5173
-npm run dev
+npm run dev            # API on :8788, Vite client on :5173
 ```
 
-The server will not start without `ROCKETT_ALLOWED_ORIGINS`, and every write
-to `/api` needs an `Origin` in it. List bare origins separated by commas,
-such as `http://localhost:5173,https://cad.example.com`.
+The server will not start without `ROCKETT_ALLOWED_ORIGINS`. Every write to
+`/api` needs an allowed `Origin`: `server/test/csrf.test.ts`.
 
-`.npmrc` sets `ignore-scripts=true`, so `npm ci` skips lifecycle scripts.
-`npm run prepare` installs the husky git hooks.
-
-- API server: http://localhost:8788 (tsx watch; the OCCT WASM kernel takes a
-  few seconds to load on each restart)
-- Client: http://localhost:5173 (Vite, proxies `/api` to 8788)
-
-Data in dev goes to `./data/` (gitignored).
+The OCCT kernel takes a few seconds to load after each server restart. Dev
+data goes to `./data/` (gitignored).
 
 ## Workspaces
 
-| Workspace | Commands                                                                                                                                                  |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared`  | `npm test -w shared`: solver + profile-detection tests                                                                                                    |
-| `server`  | `npm run dev -w server`, `npm test -w server`, `npm run build -w server` (esbuild bundles → `server/dist/server.mjs` and `server/dist/kernel-worker.mjs`) |
-| `client`  | `npm run dev -w client`, `npm run build -w client` (Vite → `client/dist`), `npm run test:client` (from the root)                                          |
+| Workspace | Commands                                                                  |
+| --------- | ------------------------------------------------------------------------- |
+| `shared`  | `npm test -w shared`                                                      |
+| `server`  | `npm run dev -w server`, `npm test -w server`, `npm run build -w server`  |
+| `client`  | `npm run dev -w client`, `npm run build -w client`, `npm run test:client` |
 
-`@rockett/shared` is consumed as TypeScript source (tsx and Vite both
-transpile it); the server production build bundles it via esbuild.
+`@rockett/shared` is consumed as TypeScript source; the server build bundles
+it with esbuild.
 
 ## Testing
 
 ```bash
-npm test              # typecheck, then shared, server and client suites
-npm run test:browser  # real-browser smoke test against a disposable built app
-npm run check         # ship command: lint, format, comments, cost, writing, README,
-                      # pins, notices, build, test, browser smoke, work order
+npm test              # typecheck, then node and dom suites
+npm run test:browser  # real-browser smoke test against a built app
+npm run check         # ship command; see package.json "check"
 ```
 
 Run `npm run check` before every commit. It stops at the first failure.
 
-`playwright-core` ships no browser. Install the pinned headless shell once
-with `npx playwright-core install chromium-headless-shell`.
+`playwright-core` ships no browser. Install it once with
+`npx playwright-core install chromium-headless-shell`.
 
-The public repository carries the shared suites in `shared/test/`: solver,
-profiles, sketch edits, offsets, units, placement and DXF/SVG import. The
+The public repository carries `shared/test/` and `modules/cam/test/`. The
 server, client, DOM and browser suites stay in the team's working copies.
 
-Write geometry tests as _reproducible numeric models_ (exact volumes, bounding
-boxes, face counts). Never rely on visual confirmation alone.
+Geometry tests assert numbers: volumes, bounding boxes, face counts. Never
+rely on a picture.
 
-## Working on the geometry layer
+## Geometry layer
 
-- All raw kernel access stays inside `server/src/geometry/`. The OCCT API is
-  typed loosely (`OC = any`); check binding signatures against
-  `node_modules/opencascade.js/dist/opencascade.rockett.d.ts`, and the fork's
-  helpers such as `shapeHash` and `getExceptionMessage` against
-  `dist/rockett-helpers.d.ts`. Emscripten overloads carry `_1`, `_2`, …
+- Raw kernel access stays in `server/src/geometry/`. The API reaches it only
+  through `KernelClient` in `server/src/kernel/client.ts`.
+  `server/test/kernelSeam.test.ts` keeps `server/src/api/` free of geometry
+  imports.
+- The OCCT binding is typed loosely. Check signatures against
+  `node_modules/opencascade.js/dist/opencascade.rockett.d.ts` and
+  `dist/rockett-helpers.d.ts`. Emscripten overloads carry `_1`, `_2`
   suffixes. Int64 values are BigInt; `Standard_Size` is a number.
-- Every feature evaluator must: validate inputs, use `kernelCall()` so kernel
-  aborts become readable errors, and propagate persistent names
-  (`naming.ts`) for every face of every produced shape.
-- New feature types touch: `shared/src/model.ts` (schema + label),
-  `server/src/geometry/features.ts` (evaluator + dispatcher),
-  `server/src/api/validate.ts`, client dialog + `dialogPicks.ts`, and a test.
-- Schema changes bump `SCHEMA_VERSION` and add a step, keyed by the old
+- Wrap kernel calls in `kernelCall()` so aborts become readable errors:
+  `server/test/kernelCall.test.ts`.
+- A feature type registers through `shared/src/featureSpec.ts` and
+  `server/src/geometry/kinds.ts`. `shared/test/featureSpec.test.ts` and
+  `server/test/featureKinds.test.ts` fail on a missing registration.
+- A schema change bumps `SCHEMA_VERSION` and adds a step, keyed by the old
   version, to `documentMigrations` in `server/src/store/migrations.ts`.
+  `server/test/schemaFixtures.test.ts` loads the previous schema.
 
 ## Conventions
 
-- Internal units are always millimetres; convert only at display.
-- Never reference topology by index. Use persistent names only (CAD_MODEL.md).
-- The engine must keep working through feature failures: catch, record an
-  actionable error, continue with the pre-failure state.
-- Keep the working app runnable at every commit: `npm run check` + open the UI and
-  run a sketch→extrude→fillet loop before merging geometry changes.
+- Stored geometry is millimetres; convert only at display.
+- Never reference topology by index. Use persistent names (CAD_MODEL.md).
+- A failed feature records an error and the engine carries on with the
+  pre-failure state: `server/test/geometry.test.ts`.
+- Before merging geometry changes, run a sketch, extrude, fillet loop in the
+  UI.
