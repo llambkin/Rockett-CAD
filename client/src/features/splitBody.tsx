@@ -1,0 +1,50 @@
+import { newId, type SplitBodyFeature } from "@rockett/shared";
+import { SelInfo } from "../components/form/fields";
+import { planar } from "../dialogPicks";
+import { bodyIds, bodyPicks, selectedPlane } from "./inputs";
+import { registerFeatureUI, type FeatureUI } from "./registry";
+
+function SplitBodyForm() {
+  return (
+    <>
+      <SelInfo label="Body" input="body" hint="click the body to split" />
+      <SelInfo
+        label="Split plane"
+        input="tool"
+        hint="click an origin/construction plane or planar face"
+      />
+    </>
+  );
+}
+
+const splitBody: FeatureUI<SplitBodyFeature> = {
+  type: "splitBody",
+  icon: "∤",
+  title: "Split Body",
+  group: "modify",
+  picks: [{ key: "body", kinds: ["body"], one: true }, planar("tool", true)],
+  Form: SplitBodyForm,
+  build: (params, selection) => {
+    const [body] = bodyIds(selection);
+    if (!body) return { error: "Select a body to split" };
+    const tool = selectedPlane(selection);
+    if (!tool) return { error: "Select a splitting plane" };
+    return {
+      id: params.id ?? newId("split"),
+      type: "splitBody",
+      name: params.name ?? "",
+      suppressed: false,
+      body,
+      tool,
+    };
+  },
+  prefill: (f) => ({
+    params: { id: f.id, name: f.name },
+    selection: [
+      ...bodyPicks([f.body]),
+      { kind: "plane", ref: f.tool, label: "Tool" },
+    ],
+  }),
+};
+
+registerFeatureUI(splitBody);

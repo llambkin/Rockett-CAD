@@ -2,7 +2,7 @@ import { newId, type MoveFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
 import { bodies } from "../dialogPicks";
-import { num } from "./inputs";
+import { bodyIds, bodyPicks, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -45,7 +45,7 @@ const move: FeatureUI<MoveFeature> = {
   picks: [bodies],
   Form: MoveForm,
   build: (params, selection) => {
-    const ids = selection.flatMap((x) => (x.kind === "body" ? [x.bodyId] : []));
+    const ids = bodyIds(selection);
     if (ids.length === 0) return { error: "Select at least one body" };
     return {
       id: params.id ?? newId("move"),
@@ -68,7 +68,7 @@ const move: FeatureUI<MoveFeature> = {
       ty: f.translation[1],
       tz: f.translation[2],
     },
-    selection: f.bodies.map((bodyId) => ({ kind: "body", bodyId })),
+    selection: bodyPicks(f.bodies),
   }),
 };
 

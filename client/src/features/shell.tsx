@@ -2,6 +2,7 @@ import { newId, type ShellFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
 import { HANDLE_VALUES } from "../three/featureHandles";
+import { facePicks, faceRefs } from "./inputs";
 import {
   registerFeatureUI,
   type DialogParams,
@@ -46,20 +47,12 @@ const shell: FeatureUI<ShellFeature> = {
     type: "shell",
     name: params.name ?? "",
     suppressed: false,
-    openFaces: selection.flatMap((x) =>
-      x.kind === "face"
-        ? [{ kind: "face", bodyId: x.bodyId, faceName: x.faceName }]
-        : [],
-    ),
+    openFaces: faceRefs(selection),
     thickness: thickness(params),
   }),
   prefill: (f) => ({
     params: { id: f.id, name: f.name, thickness: f.thickness },
-    selection: f.openFaces.map((face) => ({
-      kind: "face",
-      bodyId: face.bodyId,
-      faceName: face.faceName,
-    })),
+    selection: facePicks(f.openFaces),
   }),
 };
 

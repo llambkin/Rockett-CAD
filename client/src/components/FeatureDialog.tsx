@@ -53,6 +53,9 @@ import { selectedPlane } from "../features/inputs";
 import "../features/shell";
 import "../features/fillet";
 import "../features/chamfer";
+import "../features/offsetFace";
+import "../features/combine";
+import "../features/splitBody";
 import { useSetting } from "../settings";
 
 function need(cond: unknown, message: string): asserts cond {
@@ -411,101 +414,6 @@ function DialogBody({
           angle: num("angle", 360),
           operation: p("operation", "join"),
           ...targets(p("operation", "join")),
-        };
-      };
-      break;
-    }
-    case "combine": {
-      title = "Combine";
-      body = (
-        <>
-          <SelInfo
-            label="Bodies (first = target)"
-            input="bodies"
-            hint="click bodies: first is the target"
-          />
-          <SelectField
-            label="Operation"
-            value={p("operation", "join")}
-            options={[
-              ["join", "Join"],
-              ["cut", "Cut"],
-              ["intersect", "Intersect"],
-            ]}
-            onChange={(v) => setParams({ operation: v })}
-          />
-          <CheckField
-            label="Keep tools"
-            value={!!p("keepTools", false)}
-            onChange={(v) => setParams({ keepTools: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(bodies.length >= 2, "Select a target body then tool bodies");
-        return {
-          id: editId ?? newId("combine"),
-          type: "combine",
-          name: p("name", ""),
-          suppressed: false,
-          operation: p("operation", "join"),
-          targetBody: bodies[0]!.bodyId,
-          toolBodies: bodies.slice(1).map((b) => b.bodyId),
-          keepTools: !!p("keepTools", false),
-        };
-      };
-      break;
-    }
-    case "splitBody": {
-      title = "Split Body";
-      body = (
-        <>
-          <SelInfo label="Body" input="body" hint="click the body to split" />
-          <SelInfo
-            label="Split plane"
-            input="tool"
-            hint="click an origin/construction plane or planar face"
-          />
-        </>
-      );
-      build = () => {
-        need(bodies.length > 0, "Select a body to split");
-        const tool = planeRef();
-        need(tool, "Select a splitting plane");
-        return {
-          id: editId ?? newId("split"),
-          type: "splitBody",
-          name: p("name", ""),
-          suppressed: false,
-          body: bodies[0]!.bodyId,
-          tool,
-        };
-      };
-      break;
-    }
-    case "offsetFace": {
-      title = "Press / Pull";
-      body = (
-        <>
-          <SelInfo label="Faces" input="faces" hint="click planar faces" />
-          <LengthField
-            label="Distance, − = inward"
-            units={units}
-            autoFocus
-            value={p("distance", main("offsetFace"))}
-            onChange={(v) => setParams({ distance: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(faces.length > 0, "Select faces");
-        return {
-          id: editId ?? newId("offsetf"),
-          type: "offsetFace",
-          name: p("name", ""),
-          suppressed: false,
-          faces: faceRefs(),
-          distance: main("offsetFace"),
         };
       };
       break;

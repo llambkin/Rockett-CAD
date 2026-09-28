@@ -29,9 +29,6 @@ const TYPE_ICONS: Record<string, string> = {
   sketch: "✏",
   extrude: "⬆",
   revolve: "↻",
-  combine: "∪",
-  splitBody: "∤",
-  offsetFace: "⇱",
   mirror: "⧉",
   linearPattern: "⋮⋮",
   circularPattern: "❋",
@@ -344,15 +341,6 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       });
       pushAxis(anyF.axis);
       break;
-    case "combine":
-      Object.assign(params, {
-        operation: anyF.operation,
-        keepTools: anyF.keepTools,
-      });
-      break;
-    case "offsetFace":
-      Object.assign(params, { distance: anyF.distance });
-      break;
     case "mirror":
       Object.assign(params, { combine: anyF.combine });
       if (anyF.plane?.kind)
@@ -375,10 +363,6 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         ...axisParams(anyF.axis),
       });
       pushAxis(anyF.axis);
-      break;
-    case "splitBody":
-      if (anyF.tool)
-        selection.push({ kind: "plane", ref: anyF.tool, label: "Tool" });
       break;
     default:
       break;
