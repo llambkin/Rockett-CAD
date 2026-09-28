@@ -51,9 +51,10 @@ disappears, the sketch reports a broken reference.
   profile.
 - Trim (T): hover a curve to highlight the piece between its nearest
   crossings, T-junctions or sketch points on it, then click to delete it. A
-  curve with none is deleted whole. A curve lying on top of another does not
-  cut it. Trim stays active; each click is one undo step. Constraints on the
-  deleted piece go and the rest stay.
+  curve with none is deleted whole. Construction curves cut too. A curve
+  lying on top of another does not cut it. Trim stays active; each click is
+  one undo step. Constraints on the deleted piece go and the rest stay. A
+  sketch whose constraints conflict refuses Trim and names them.
 - Extend: click near an endpoint to reach the first boundary.
 
 Trim and extend report the constraints they removed.

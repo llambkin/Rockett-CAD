@@ -5,6 +5,7 @@ import {
   type SketchPoint,
 } from "./model.js";
 import { arcAngles, curveHits, sampleArc, type CurveHit } from "./profiles.js";
+import { solveSketch } from "./solver.js";
 import {
   constraintEntityRefs,
   type SketchModification,
@@ -35,24 +36,19 @@ const pointsOf = (e: SketchEntity): string[] =>
         : [];
 
 function hitsOn(entities: SketchEntity[], curve: Curve): CurveHit[] {
-  const owned = new Set(entities.flatMap(pointsOf));
-  const loose = entities.filter(
-    (e): e is SketchPoint => e.kind === "point" && !owned.has(e.id),
-  );
   let hits = hitCache.get(entities);
   if (!hits) {
-    hits = curveHits(entities, loose);
+    const owned = new Set(entities.flatMap(pointsOf));
+    const loose = entities.filter(
+      (e): e is SketchPoint => e.kind === "point" && !owned.has(e.id),
+    );
+    const cutters = entities.map((e) =>
+      e.kind === "point" ? e : { ...e, construction: false },
+    );
+    hits = curveHits(cutters, loose);
     hitCache.set(entities, hits);
   }
-  let on = hits.get(curve.id);
-  if (!on) {
-    const cut = entities.map((e) =>
-      e.id === curve.id ? { ...curve, construction: false } : e,
-    );
-    on = curve.construction ? (curveHits(cut, loose).get(curve.id) ?? []) : [];
-    hits.set(curve.id, on);
-  }
-  return on;
+  return hits.get(curve.id) ?? [];
 }
 
 function pointIn(entities: SketchEntity[], id: string): SketchPoint {
@@ -207,6 +203,10 @@ function keptPieces(
   return pieces;
 }
 
+const named = (c: SketchConstraint): string =>
+  c.type.replace(/[A-Z]/g, (m) => ` ${m.toLowerCase()}`) +
+  ("value" in c ? ` ${c.value}` : "");
+
 function survivingConstraints(
   constraints: SketchConstraint[],
   curve: Curve,
@@ -234,6 +234,14 @@ export function trimSketch(
   if (curve.external)
     throw new Error(
       "Projected references cannot be trimmed. Draw a curve constrained to the reference instead.",
+    );
+  const { conflicts } = solveSketch({ entities, constraints });
+  if (conflicts.length)
+    throw new Error(
+      `Trim needs a sketch that solves. These constraints conflict: ${constraints
+        .filter((c) => conflicts.includes(c.id))
+        .map(named)
+        .join(", ")}.`,
     );
   const { from, to } = trimPiece(entities, entityId, at);
   const points: SketchEntity[] = [];

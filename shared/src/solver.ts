@@ -43,6 +43,7 @@ export interface SolveResult {
   converged: boolean;
   /** Max absolute residual after solving (mm / rad scale). */
   maxResidual: number;
+  conflicts: string[];
 }
 
 const CONV_TOL = 1e-8;
@@ -57,6 +58,7 @@ interface Problem {
   residuals: Residual[];
   /** residuals contributed by real constraints (excludes drag pulls) */
   hardCount: number;
+  owners: string[];
   apply: (x: Float64Array, entities: SketchEntity[]) => void;
   numVars: number;
 }
@@ -173,6 +175,7 @@ function buildProblem(input: SolveInput): Problem {
         Math.hypot(ex(x) - cx(x), ey(x) - cy(x)),
     );
   }
+  const owners = residuals.map(() => "");
 
   for (const c of input.constraints) {
     switch (c.type) {
@@ -384,6 +387,7 @@ function buildProblem(input: SolveInput): Problem {
         break;
       }
     }
+    while (owners.length < residuals.length) owners.push(c.id);
   }
 
   const hardCount = residuals.length;
@@ -416,6 +420,7 @@ function buildProblem(input: SolveInput): Problem {
     x0: Float64Array.from(vars),
     residuals,
     hardCount,
+    owners,
     apply,
     numVars: vars.length,
   };
@@ -601,7 +606,7 @@ function runLM(
 export function solveSketch(input: SolveInput): SolveResult {
   const entities: SketchEntity[] = input.entities.map((e) => ({ ...e }));
   const problem = buildProblem({ ...input, entities });
-  const { residuals, x0, numVars, hardCount } = problem;
+  const { residuals, x0, numVars, hardCount, owners } = problem;
 
   let { x } = runLM(residuals, x0, numVars);
 
@@ -618,6 +623,9 @@ export function solveSketch(input: SolveInput): SolveResult {
   let maxResidual = 0;
   for (const v of r) maxResidual = Math.max(maxResidual, Math.abs(v));
   const converged = maxResidual < CONFLICT_TOL;
+  const conflicts = [
+    ...new Set(owners.filter((id, i) => id && Math.abs(r[i]!) >= CONFLICT_TOL)),
+  ];
 
   // DOF analysis at the solution (hard constraints only).
   let dof = numVars;
@@ -637,5 +645,5 @@ export function solveSketch(input: SolveInput): SolveResult {
     status = "unconstrained";
   else status = "partially_constrained";
 
-  return { entities, status, dof, converged, maxResidual };
+  return { entities, status, dof, converged, maxResidual, conflicts };
 }
