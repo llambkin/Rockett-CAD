@@ -18,25 +18,25 @@ client/src/components/Toolbar.tsx SketchToolbar 104
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3203
+client/src/components/ViewportView.tsx 3243
 client/src/components/ViewportView.tsx ViewportHud 96
-client/src/components/ViewportView.tsx ViewportView 2933
-client/src/components/ViewportView.tsx dimLabelsRef.current.map() 81
+client/src/components/ViewportView.tsx ViewportView 2971
+client/src/components/ViewportView.tsx dimLabelsRef.current.map() 82
 client/src/components/ViewportView.tsx handleHover 138
 client/src/components/ViewportView.tsx handlePrimaryUp 138
 client/src/components/ViewportView.tsx handleSketchClick 233
 client/src/components/ViewportView.tsx onPointerMove 119
 client/src/components/ViewportView.tsx onPointerUp 86
 client/src/components/ViewportView.tsx pointerToSketchUV 221
-client/src/components/ViewportView.tsx useEffect() 101
+client/src/components/ViewportView.tsx useEffect() 112
 client/src/components/ViewportView.tsx useEffect()#2 296
 client/src/components/form/fields.tsx 557
 client/src/features/constructionPlane.tsx PlaneForm 108
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
 client/src/sketchTools.ts 1048
-client/src/store.ts 1384
+client/src/store.ts 1392
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 784
+client/src/store.ts useStore 791
 client/src/three/CadViewport.ts 1250
 client/src/three/CadViewport.ts addHighlight 85
 client/src/three/CadViewport.ts buildBody 88
@@ -58,12 +58,12 @@ server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 104
 server/src/store/historyStore.ts 593
 server/src/store/projectStore.ts 534
-shared/src/model.ts 573
+shared/src/model.ts 577
 shared/src/profiles.ts 607
 shared/src/routes.ts 574
 shared/src/sketchModify.ts 741
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts offsetRoundedChain 124
 shared/src/sketchModify.ts offsetSketch 159
-shared/src/solver.ts 669
-shared/src/solver.ts buildProblem 359
+shared/src/solver.ts 717
+shared/src/solver.ts buildProblem 360

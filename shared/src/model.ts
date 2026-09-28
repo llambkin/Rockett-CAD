@@ -162,8 +162,12 @@ export type GeometricConstraint =
   | (ConstraintBase & { type: "pointOnLine"; point: string; line: string })
   | (ConstraintBase & { type: "pointOnCircle"; point: string; circle: string });
 
+interface DimensionBase extends ConstraintBase {
+  driven?: true;
+}
+
 export type DimensionConstraint =
-  | (ConstraintBase & {
+  | (DimensionBase & {
       type: "distance";
       a: string; // point id
       b: string; // point id
@@ -171,28 +175,28 @@ export type DimensionConstraint =
       axis: "x" | "y" | null;
       value: number; // mm
     })
-  | (ConstraintBase & { type: "length"; line: string; value: number })
-  | (ConstraintBase & {
+  | (DimensionBase & { type: "length"; line: string; value: number })
+  | (DimensionBase & {
       type: "pointLineDistance";
       point: string;
       line: string;
       value: number;
     })
-  | (ConstraintBase & {
+  | (DimensionBase & {
       type: "lineDistance";
       a: string;
       b: string;
       value: number;
     })
-  | (ConstraintBase & {
+  | (DimensionBase & {
       type: "lineAngle";
       line: string;
       axis?: "y";
       value: number;
     })
-  | (ConstraintBase & { type: "radius"; entity: string; value: number })
-  | (ConstraintBase & { type: "diameter"; entity: string; value: number })
-  | (ConstraintBase & { type: "angle"; a: string; b: string; value: number }); // degrees
+  | (DimensionBase & { type: "radius"; entity: string; value: number })
+  | (DimensionBase & { type: "diameter"; entity: string; value: number })
+  | (DimensionBase & { type: "angle"; a: string; b: string; value: number }); // degrees
 
 export type SketchConstraint = GeometricConstraint | DimensionConstraint;
 

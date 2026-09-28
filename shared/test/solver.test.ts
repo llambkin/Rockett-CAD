@@ -233,3 +233,20 @@ describe("line angle constraint", () => {
     expect(clash.status).toBe("over_constrained");
   });
 });
+
+describe("damped steps", () => {
+  it("makes a circle tangent to an arc whose centres share an axis", () => {
+    const res = solveSketch({
+      entities: [
+        pt("c0", 0, 0),
+        { id: "o1", kind: "circle", center: "c0", radius: 10 },
+        pt("c1", 20, 0),
+        pt("s", 25, 0),
+        pt("t", 20, 5),
+        { id: "r1", kind: "arc", center: "c1", start: "s", end: "t" },
+      ],
+      constraints: [{ id: "tan", type: "tangent", a: "o1", b: "r1" }],
+    });
+    expect(res.converged).toBe(true);
+  });
+});

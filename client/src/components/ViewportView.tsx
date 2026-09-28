@@ -7,6 +7,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type {
+  DimensionConstraint,
   PlaneFrame,
   SketchConstraint,
   SketchEntity,
@@ -102,6 +103,7 @@ function parsedDimEditValue(field: DimEditField, units: Units): number | null {
 interface DimLabel {
   id: string;
   text: string;
+  driven: boolean;
   world: THREE.Vector3;
   /** Attachment on the measured geometry, independent of label placement. */
   anchorWorld: THREE.Vector3;
@@ -160,6 +162,7 @@ export function ViewportView() {
     () => new GizmoSlot<ExtrudeGizmo | RevolveGizmo>(),
   );
   const featureHandleRef = useRef<FeatureHandle | null>(null);
+  const dimCommitting = useRef(false);
   /** in-progress dimension-label drag (repositioning the label) */
   const dimDragRef = useRef<{
     id: string;
@@ -456,9 +459,20 @@ export function ViewportView() {
           if (layout) {
             const anchor = layout.label;
             const off = c.labelOffset;
+            const driven = "driven" in c && c.driven === true;
+            const text = dimensionText(
+              driven
+                ? {
+                    ...c,
+                    value: tools.measureDimension(c, draftSketch.entities),
+                  }
+                : c,
+              units,
+            );
             labels.push({
               id: c.id,
-              text: dimensionText(c, units),
+              text: driven ? `(${text})` : text,
+              driven,
               world: uv3(
                 sk.frame,
                 anchor.x + (off?.[0] ?? 0),
@@ -2706,7 +2720,7 @@ export function ViewportView() {
 
   // dimension label click → edit
   async function commitDimEdit() {
-    if (!dimEdit) return;
+    if (!dimEdit || dimCommitting.current) return;
     const s = useStore.getState();
     const draft = s.draftSketch;
     if (!draft) {
@@ -2727,15 +2741,40 @@ export function ViewportView() {
       // the edited value wins; any other dimension on the same target is a
       // stale duplicate (older sketches could stack them) and goes away
       constraints = tools.dedupeDimensions(
-        constraints.map((c) =>
-          c.id === f.constraintId ? { ...c, value: v } : c,
-        ) as SketchConstraint[],
+        constraints.map((c) => {
+          if (c.id !== f.constraintId) return c;
+          const { driven: _driven, ...driving } = {
+            ...(c as DimensionConstraint),
+            value: v,
+          };
+          return driving;
+        }) as SketchConstraint[],
         f.constraintId,
       );
     }
     if (constraints !== draft.constraints) {
-      s.updateDraftSketch(draft.entities, constraints);
-      await s.commitDraftSketch();
+      dimCommitting.current = true;
+      try {
+        const refused = s.updateDraftSketch(draft.entities, constraints);
+        if (
+          refused &&
+          "value" in refused &&
+          window.confirm(
+            `${useStore.getState().error} Add it as a driven dimension instead?`,
+          )
+        ) {
+          useStore.setState({ error: null });
+          s.updateDraftSketch(
+            draft.entities,
+            constraints.map((c) =>
+              c.id === refused.id ? { ...refused, driven: true } : c,
+            ),
+          );
+        }
+        await s.commitDraftSketch();
+      } finally {
+        dimCommitting.current = false;
+      }
     }
     setDimEdit(null);
   }
@@ -2818,6 +2857,7 @@ export function ViewportView() {
           <div
             key={l.id}
             className="dim-label"
+            style={l.driven ? { color: "var(--text-dim)" } : undefined}
             onContextMenu={(e) => openDimensionChoices(l.id, e)}
             onPointerDown={(e) => {
               e.stopPropagation();

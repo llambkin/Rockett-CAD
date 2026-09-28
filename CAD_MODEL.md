@@ -212,6 +212,12 @@ input bound, not a tolerance.
 - Trim (`shared/src/sketchTrim.ts`) and extend (`extendSketch` in
   `shared/src/sketchModify.ts`) keep unchanged endpoints:
   `shared/test/sketchModify.test.ts`.
+- `editedEntities` in `shared/src/solver.ts` refuses a write whose added or
+  changed constraints stop a converging sketch from converging, and names the
+  first such constraint. Client and server both call it. A sketch already in
+  conflict is not refused.
+- The solver skips a dimension with `driven: true`. The field is optional, so
+  sketches saved without it load unchanged with no schema step.
 
 ## Frame conventions
 

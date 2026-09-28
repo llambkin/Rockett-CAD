@@ -136,6 +136,15 @@ const constraint = <const T extends string, P extends TProperties>(
     ...properties,
   });
 
+const dimension = <const T extends string, P extends TProperties>(
+  type: T,
+  properties: P,
+) =>
+  constraint(type, {
+    ...properties,
+    driven: Type.Optional(Type.Literal(true)),
+  });
+
 const pair = { a: id, b: id };
 const value = Type.Number();
 
@@ -153,22 +162,22 @@ const sketchConstraint = Type.Union([
   constraint("fix", { point: id }),
   constraint("pointOnLine", { point: id, line: id }),
   constraint("pointOnCircle", { point: id, circle: id }),
-  constraint("distance", {
+  dimension("distance", {
     ...pair,
     axis: Type.Union([Type.Literal("x"), Type.Literal("y"), Type.Null()]),
     value,
   }),
-  constraint("length", { line: id, value }),
-  constraint("pointLineDistance", { point: id, line: id, value }),
-  constraint("lineDistance", { ...pair, value }),
-  constraint("lineAngle", {
+  dimension("length", { line: id, value }),
+  dimension("pointLineDistance", { point: id, line: id, value }),
+  dimension("lineDistance", { ...pair, value }),
+  dimension("lineAngle", {
     line: id,
     axis: Type.Optional(Type.Literal("y")),
     value: Type.Number({ exclusiveMinimum: -180, maximum: 180 }),
   }),
-  constraint("radius", { entity: id, value }),
-  constraint("diameter", { entity: id, value }),
-  constraint("angle", { ...pair, value }),
+  dimension("radius", { entity: id, value }),
+  dimension("diameter", { entity: id, value }),
+  dimension("angle", { ...pair, value }),
 ]);
 
 const entityIds = Type.Array(id, {

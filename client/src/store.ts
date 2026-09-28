@@ -32,6 +32,7 @@ import {
   newId,
   solveSketch,
   editedEntities,
+  OverConstrainedError,
   createSketchOffset,
   editSketchOffset,
   constraintEntityRefs,
@@ -218,7 +219,7 @@ interface State {
   updateDraftSketch: (
     entities: SketchEntity[],
     constraints: SketchConstraint[],
-  ) => void;
+  ) => SketchConstraint | null;
   solveDraft: (drag?: { pointId: string; x: number; y: number }) => void;
   commitDraftSketch: () => Promise<void>;
   finishSketch: () => Promise<void>;
@@ -1000,17 +1001,24 @@ export const useStore = create<State>((set, get) => ({
 
   updateDraftSketch(entities, constraints) {
     const { draftSketch } = get();
-    if (!draftSketch) return;
-    set({
-      draftSketch: {
-        ...draftSketch,
-        entities: editedEntities(draftSketch.constraints, {
-          entities,
+    if (!draftSketch) return null;
+    try {
+      set({
+        draftSketch: {
+          ...draftSketch,
+          entities: editedEntities(draftSketch.constraints, {
+            entities,
+            constraints,
+          }),
           constraints,
-        }),
-        constraints,
-      },
-    });
+        },
+      });
+      return null;
+    } catch (e) {
+      if (!(e instanceof OverConstrainedError)) throw e;
+      set({ error: e.message });
+      return e.constraint;
+    }
   },
 
   solveDraft(drag) {

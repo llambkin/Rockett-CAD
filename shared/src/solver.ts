@@ -22,6 +22,8 @@ import type {
   SketchPoint,
   SketchSolveStatus,
 } from "./model.js";
+import { ValidationError } from "./schema/index.js";
+import { formatAngle, formatLength } from "./units.js";
 
 export interface SolveInput {
   entities: SketchEntity[];
@@ -49,6 +51,7 @@ const CONV_TOL = 1e-8;
 const CONFLICT_TOL = 1e-4;
 const MAX_ITER = 120;
 const DRAG_WEIGHT = 0.02;
+const DAMPING_FLOOR = 1e-6;
 
 type Residual = (x: Float64Array) => number;
 
@@ -175,6 +178,7 @@ function buildProblem(input: SolveInput): Problem {
   }
 
   for (const c of input.constraints) {
+    if ("driven" in c && c.driven) continue;
     switch (c.type) {
       case "fix":
         break; // handled via variable pinning
@@ -492,10 +496,13 @@ function solveNormal(
       A[a]![n]! -= row[a]! * r[ri]!;
     }
   }
+  let floor = 0;
+  for (let a = 0; a < n; a++)
+    floor = Math.max(floor, A[a]![a]! * DAMPING_FLOOR);
   for (let a = 0; a < n; a++) {
     for (let b = 0; b < a; b++) A[a]![b] = A[b]![a]!;
     A[a]![a]! *= 1 + lambda;
-    A[a]![a]! += 1e-12;
+    A[a]![a]! += 1e-12 + lambda * floor;
   }
   // Gaussian elimination with partial pivoting
   for (let col = 0; col < n; col++) {
@@ -650,18 +657,59 @@ const holds = (input: SolveInput): boolean => {
   return residuals.every((r) => Math.abs(r(x0)) < CONFLICT_TOL);
 };
 
+const constraintName = (c: SketchConstraint): string => {
+  const words = c.type.replace(/[A-Z]/g, (m) => ` ${m.toLowerCase()}`);
+  const name = words.charAt(0).toUpperCase() + words.slice(1);
+  if (!("value" in c)) return name;
+  const angle = c.type === "angle" || c.type === "lineAngle";
+  return `${name} ${angle ? formatAngle(c.value, 3) : formatLength(c.value, "mm")}`;
+};
+
+export class OverConstrainedError extends ValidationError {
+  constructor(readonly constraint: SketchConstraint) {
+    super(`${constraintName(constraint)} would over-constrain the sketch.`);
+  }
+}
+
+const converges = (
+  entities: SketchEntity[],
+  constraints: SketchConstraint[],
+): boolean => solveSketch({ entities, constraints }).converged;
+
+function firstConflict(
+  entities: SketchEntity[],
+  kept: SketchConstraint[],
+  added: SketchConstraint[],
+): SketchConstraint {
+  let lo = 0;
+  let hi = added.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (converges(entities, [...kept, ...added.slice(0, mid + 1)]))
+      lo = mid + 1;
+    else hi = mid;
+  }
+  return added[lo]!;
+}
+
 export function editedEntities(
   before: SketchConstraint[],
   after: { entities: SketchEntity[]; constraints: SketchConstraint[] },
 ): SketchEntity[] {
   const had = new Set(before.map((c) => JSON.stringify(c)));
-  const constraints = after.constraints.filter(
-    (c) => !had.has(JSON.stringify(c)),
-  );
+  const isNew = (c: SketchConstraint) => !had.has(JSON.stringify(c));
+  const added = after.constraints.filter(isNew);
   try {
-    return holds({ entities: after.entities, constraints })
-      ? after.entities
-      : settledEntities(solveSketch(after), after.entities);
+    if (holds({ entities: after.entities, constraints: added }))
+      return after.entities;
+    const solved = solveSketch(after);
+    if (solved.converged) return solved.entities;
+    const kept = after.constraints.filter((c) => !isNew(c));
+    if (converges(after.entities, kept))
+      throw new OverConstrainedError(
+        firstConflict(after.entities, kept, added),
+      );
+    return after.entities;
   } catch (e) {
     if (e instanceof SolverModelError) return after.entities;
     throw e;

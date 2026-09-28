@@ -22,6 +22,12 @@ its degrees of freedom live. Right-click with sketch geometry selected to list
 the relations that fit the whole selection. Deleting a dimension, relation or
 trimmed piece moves no other point.
 
+A constraint or dimension that would over-constrain the sketch is refused with
+a message naming it. For a dimension you may keep it as a driven dimension
+instead: it drives nothing and shows its measured value in parentheses, dimmed,
+such as `(102 mm)`. Typing a value into a driven dimension makes it drive
+again, unless that would over-constrain the sketch.
+
 ### Sketch offsets
 
 The Offset tool previews the result in yellow. Select a curve, set the
