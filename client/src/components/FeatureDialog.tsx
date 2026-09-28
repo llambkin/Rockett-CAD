@@ -11,7 +11,6 @@ import type {
   ExportFormat,
   FaceRef,
   Feature,
-  PlaneRef,
   ProfileRef,
 } from "@rockett/shared";
 import { formatLength, newId } from "@rockett/shared";
@@ -23,7 +22,6 @@ import {
 } from "../store";
 import { api, saveDownload } from "../api";
 import { extrudeOperation } from "../extrudeReach";
-import { HANDLE_VALUES, type HandleDialog } from "../three/featureHandles";
 import { clearInput, takes } from "../dialogPicks";
 import { createLivePreview } from "../livePreview";
 import { toolTargets } from "../toolTargets";
@@ -31,8 +29,6 @@ import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
 import {
   AxisField,
-  axisOptions,
-  CheckField,
   LengthField,
   NumField,
   SelInfo,
@@ -40,22 +36,10 @@ import {
   TargetField,
 } from "./form/fields";
 import { DialogFooter } from "./form/DialogFooter";
-import "../features/sweep";
-import "../features/loft";
-import "../features/emboss";
-import "../features/move";
-import "../features/constructionPlane";
-import "../features/referenceImage";
-import "../features/importStep";
+import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI } from "../features/registry";
-import { selectedPlane } from "../features/inputs";
-import "../features/shell";
-import "../features/fillet";
-import "../features/chamfer";
-import "../features/offsetFace";
-import "../features/combine";
-import "../features/splitBody";
+import { axisHint } from "../features/inputs";
 import { useSetting } from "../settings";
 
 function need(cond: unknown, message: string): asserts cond {
@@ -150,10 +134,6 @@ function DialogBody({
     Selection,
     { kind: "face" }
   >[];
-  const bodies = selection.filter((s) => s.kind === "body") as Extract<
-    Selection,
-    { kind: "body" }
-  >[];
   // selected sketch LINES (axis candidates for revolve / circular pattern)
   const sketchLines = (
     selection.filter((s) => s.kind === "sketchEntity") as any[]
@@ -169,8 +149,6 @@ function DialogBody({
     const v = Number(params[key]);
     return Number.isFinite(v) ? v : dflt;
   };
-  const main = (d: HandleDialog) =>
-    num(HANDLE_VALUES[d].param, HANDLE_VALUES[d].fallback);
 
   // Picking an edge or sketch line in an axis-based dialog switches the axis
   // to it — the dropdown alone gave no hint the pick was registered.
@@ -221,14 +199,10 @@ function DialogBody({
       }),
     };
   };
-  const planeRef = (): PlaneRef | null => selectedPlane(selection);
   const axisMissing =
     axisDialog &&
     p("axisSource", "origin") === "edge" &&
     edges.length + sketchLines.length === 0;
-  const axisHint = axisMissing
-    ? "Pick an axis"
-    : "click a sketch line or body edge, or pick X/Y/Z";
   const chooseAxis = (key: string, patch: Record<string, unknown>) => {
     setParams(patch);
     clearInput(key);
@@ -387,7 +361,7 @@ function DialogBody({
             label="Axis"
             input="axis"
             picks={[...edges, ...sketchLines]}
-            hint={axisHint}
+            hint={axisHint(axisMissing)}
           />
           <AxisField
             axisSource={params.axisSource}
@@ -414,161 +388,6 @@ function DialogBody({
           angle: num("angle", 360),
           operation: p("operation", "join"),
           ...targets(p("operation", "join")),
-        };
-      };
-      break;
-    }
-    case "mirror": {
-      title = "Mirror";
-      body = (
-        <>
-          <SelInfo label="Bodies" input="bodies" hint="click bodies" />
-          <SelInfo
-            label="Mirror plane"
-            input="plane"
-            hint="origin/construction plane or planar face"
-          />
-          <CheckField
-            label="Join with source"
-            value={!!p("combine", true)}
-            onChange={(v) => setParams({ combine: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(bodies.length > 0, "Select bodies to mirror");
-        const plane = planeRef();
-        need(plane, "Select a mirror plane");
-        return {
-          id: editId ?? newId("mirror"),
-          type: "mirror",
-          name: p("name", ""),
-          suppressed: false,
-          bodies: bodies.map((b) => b.bodyId),
-          plane,
-          combine: p("combine", true),
-        };
-      };
-      break;
-    }
-    case "linearPattern": {
-      title = "Rectangular Pattern";
-      body = (
-        <>
-          <SelInfo label="Bodies" input="bodies" hint="click bodies" />
-          <SelInfo
-            label="Direction edge"
-            input="direction"
-            picks={edges}
-            hint={
-              axisMissing
-                ? "Pick a direction"
-                : "click a body edge, or pick X/Y/Z"
-            }
-          />
-          <SelectField
-            label="Direction"
-            value={
-              p("axisSource", "origin") === "edge" ? "edge" : p("axis", "X")
-            }
-            options={[...axisOptions, ["edge", "Selected edge"]]}
-            onChange={(v) =>
-              chooseAxis(
-                "direction",
-                v === "edge"
-                  ? { axisSource: "edge" }
-                  : { axisSource: "origin", axis: v },
-              )
-            }
-          />
-          <NumField
-            label="Quantity"
-            value={p("count", 3)}
-            onChange={(v) => setParams({ count: v })}
-            int
-          />
-          <LengthField
-            label="Spacing"
-            units={units}
-            autoFocus
-            value={p("spacing", main("linearPattern"))}
-            onChange={(v) => setParams({ spacing: v })}
-          />
-          <CheckField
-            label="Join instances"
-            value={!!p("combine", false)}
-            onChange={(v) => setParams({ combine: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(bodies.length > 0, "Select bodies to pattern");
-        need(!axisMissing, "Pick a direction");
-        const direction =
-          p("axisSource", "origin") === "edge"
-            ? ({ kind: "edge", edge: edgeRefs()[0]! } as const)
-            : ({ kind: "axis", axis: p("axis", "X") } as const);
-        return {
-          id: editId ?? newId("lpat"),
-          type: "linearPattern",
-          name: p("name", ""),
-          suppressed: false,
-          bodies: bodies.map((b) => b.bodyId),
-          direction,
-          count: Math.round(num("count", 3)),
-          spacing: main("linearPattern"),
-          combine: !!p("combine", false),
-        };
-      };
-      break;
-    }
-    case "circularPattern": {
-      title = "Circular Pattern";
-      body = (
-        <>
-          <SelInfo label="Bodies" input="bodies" hint="click bodies" />
-          <SelInfo
-            label="Axis"
-            input="axis"
-            picks={[...edges, ...sketchLines]}
-            hint={axisHint}
-          />
-          <AxisField
-            axisSource={params.axisSource}
-            axis={params.axis}
-            onChange={(patch) => chooseAxis("axis", patch)}
-          />
-          <NumField
-            label="Quantity"
-            autoFocus
-            value={p("count", 6)}
-            onChange={(v) => setParams({ count: v })}
-            int
-          />
-          <NumField
-            label="Total angle (°)"
-            value={p("totalAngle", main("circularPattern"))}
-            onChange={(v) => setParams({ totalAngle: v })}
-          />
-          <CheckField
-            label="Join instances"
-            value={!!p("combine", false)}
-            onChange={(v) => setParams({ combine: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(bodies.length > 0, "Select bodies to pattern");
-        return {
-          id: editId ?? newId("cpat"),
-          type: "circularPattern",
-          name: p("name", ""),
-          suppressed: false,
-          bodies: bodies.map((b) => b.bodyId),
-          axis: axisRef(),
-          count: Math.round(num("count", 6)),
-          totalAngle: main("circularPattern"),
-          combine: !!p("combine", false),
         };
       };
       break;

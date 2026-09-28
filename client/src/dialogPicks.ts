@@ -63,9 +63,6 @@ export const planar = (key: string, one: boolean) =>
 const DIALOG_INPUTS: Partial<Record<DialogType, readonly PickInput[]>> = {
   extrude: [profilesOrFaces, targets],
   revolve: [profilesOrFaces, axis, targets],
-  mirror: [bodies, planar("plane", true)],
-  linearPattern: [bodies, input("direction", ["edge", "axis"], line)],
-  circularPattern: [bodies, axis],
   export: [bodies],
 };
 

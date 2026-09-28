@@ -9,6 +9,7 @@ import type {
 import { featureRefs } from "@rockett/shared";
 import { pickInto } from "../dialogPicks";
 import { featureUI } from "../features/registry";
+import "../features/core";
 import { axisParams, axisSelection } from "../features/inputs";
 import {
   useStore,
@@ -29,9 +30,6 @@ const TYPE_ICONS: Record<string, string> = {
   sketch: "✏",
   extrude: "⬆",
   revolve: "↻",
-  mirror: "⧉",
-  linearPattern: "⋮⋮",
-  circularPattern: "❋",
 };
 
 const typeIcon = (type: string) =>
@@ -337,29 +335,6 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
       Object.assign(params, {
         angle: anyF.angle,
         operation: anyF.operation,
-        ...axisParams(anyF.axis),
-      });
-      pushAxis(anyF.axis);
-      break;
-    case "mirror":
-      Object.assign(params, { combine: anyF.combine });
-      if (anyF.plane?.kind)
-        selection.push({ kind: "plane", ref: anyF.plane, label: "Plane" });
-      break;
-    case "linearPattern":
-      Object.assign(params, {
-        count: anyF.count,
-        spacing: anyF.spacing,
-        combine: anyF.combine,
-        axisSource: anyF.direction?.kind === "axis" ? "origin" : "edge",
-        axis: anyF.direction?.kind === "axis" ? anyF.direction.axis : "X",
-      });
-      break;
-    case "circularPattern":
-      Object.assign(params, {
-        count: anyF.count,
-        totalAngle: anyF.totalAngle,
-        combine: anyF.combine,
         ...axisParams(anyF.axis),
       });
       pushAxis(anyF.axis);

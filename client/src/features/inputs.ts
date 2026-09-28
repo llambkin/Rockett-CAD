@@ -3,6 +3,7 @@ import type {
   CadDocument,
   EdgeRef,
   FaceRef,
+  LinearPatternFeature,
   PlaneRef,
   ProfileRef,
 } from "@rockett/shared";
@@ -102,6 +103,9 @@ export const axisMissing = (
 ) =>
   params.axisSource === "edge" && axisPicks(selection, document).length === 0;
 
+export const axisHint = (missing: boolean) =>
+  missing ? "Pick an axis" : "click a sketch line or body edge, or pick X/Y/Z";
+
 export function axisRef(
   params: DialogParams,
   selection: Selection[],
@@ -125,12 +129,14 @@ export function axisRef(
     : null;
 }
 
-export const axisParams = (axis: AxisRef | undefined) => ({
-  axisSource: axis?.kind === "originAxis" ? "origin" : "edge",
-  axis: axis?.kind === "originAxis" ? axis.axis : "Z",
-});
+type AxisChoice = AxisRef | LinearPatternFeature["direction"];
 
-export const axisSelection = (axis: AxisRef): Selection[] => {
+export const axisParams = (axis: AxisChoice | undefined, defaultAxis = "Z") =>
+  axis?.kind === "originAxis" || axis?.kind === "axis"
+    ? { axisSource: "origin", axis: axis.axis }
+    : { axisSource: "edge", axis: defaultAxis };
+
+export const axisSelection = (axis: AxisChoice): Selection[] => {
   if (axis.kind === "edge")
     return [
       { kind: "edge", bodyId: axis.edge.bodyId, edgeName: axis.edge.edgeName },

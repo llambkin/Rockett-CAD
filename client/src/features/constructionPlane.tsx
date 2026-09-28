@@ -17,6 +17,7 @@ import { axis, clearInput, planar, type PickInput } from "../dialogPicks";
 import { useStore, type Selection } from "../store";
 import { useSetting } from "../settings";
 import {
+  axisHint,
   axisMissing,
   axisParams,
   axisPicks,
@@ -133,11 +134,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
             label="Axis"
             input="axis"
             picks={axisPicks(selection, doc)}
-            hint={
-              axisMissing(params, selection, doc)
-                ? "Pick an axis"
-                : "click a sketch line or body edge, or pick X/Y/Z"
-            }
+            hint={axisHint(axisMissing(params, selection, doc))}
           />
           <AxisField
             axisSource={params.axisSource}

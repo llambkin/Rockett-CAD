@@ -210,27 +210,30 @@ export function SelectField({
   );
 }
 
-export const axisOptions = ORIGIN_AXES.map((a): [string, string] => [
-  a,
-  `${a} axis`,
-]);
+const axisOptions = ORIGIN_AXES.map((a): [string, string] => [a, `${a} axis`]);
 
 export function AxisField({
   axisSource,
   axis,
   onChange,
+  label = "Axis",
+  defaultAxis = "Z",
+  edgeLabel = "Selected line/edge",
 }: {
   axisSource: unknown;
   axis: string | undefined;
   onChange: (
     patch: { axisSource: "edge" } | { axisSource: "origin"; axis: string },
   ) => void;
+  label?: string;
+  defaultAxis?: string;
+  edgeLabel?: string;
 }) {
   return (
     <SelectField
-      label="Axis"
-      value={axisSource === "edge" ? "edge" : (axis ?? "Z")}
-      options={[...axisOptions, ["edge", "Selected line/edge"]]}
+      label={label}
+      value={axisSource === "edge" ? "edge" : (axis ?? defaultAxis)}
+      options={[...axisOptions, ["edge", edgeLabel]]}
       onChange={(v) =>
         onChange(
           v === "edge"
