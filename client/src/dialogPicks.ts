@@ -19,6 +19,7 @@ export interface PickInput {
   planar?: true;
   straight?: true;
   optional?: true;
+  shiftFaces?: true;
   param?: {
     read: (s: Store) => Selection[];
     write: (next: Selection[], s: Store) => void;
@@ -32,8 +33,9 @@ const input = (
 ): PickInput => ({ key, kinds, ...rules });
 
 export const profiles = input("profiles", ["profile"]);
-const profilesOrFaces = input("profiles", ["profile", "face"], {
+export const profilesOrFaces = input("profiles", ["profile", "face"], {
   planar: true,
+  shiftFaces: true,
 });
 export const targets = input("targets", ["body"], {
   optional: true,
@@ -61,7 +63,6 @@ export const planar = (key: string, one: boolean) =>
   input(key, ["plane", "face"], { planar: true, ...(one && { one: true }) });
 
 const DIALOG_INPUTS: Partial<Record<DialogType, readonly PickInput[]>> = {
-  extrude: [profilesOrFaces, targets],
   revolve: [profilesOrFaces, axis, targets],
   export: [bodies],
 };
@@ -163,7 +164,7 @@ function isStraight(sel: Selection, s: Store): boolean {
 
 export function pickOptions(i: PickInput | undefined, shift?: boolean) {
   const has = (kind: Kind) => !!i?.kinds.includes(kind);
-  const split = shift !== undefined && has("profile") && has("face");
+  const split = shift !== undefined && !!i?.shiftFaces;
   return {
     profiles: has("profile") && !(split && shift),
     edges: has("edge"),

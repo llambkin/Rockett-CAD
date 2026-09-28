@@ -5,14 +5,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import type {
-  AxisRef,
-  EdgeRef,
-  ExportFormat,
-  FaceRef,
-  Feature,
-  ProfileRef,
-} from "@rockett/shared";
+import type { AxisRef, EdgeRef, ExportFormat, Feature } from "@rockett/shared";
 import { formatLength, newId } from "@rockett/shared";
 import {
   featurePatch,
@@ -21,25 +14,17 @@ import {
   type Selection,
 } from "../store";
 import { api, saveDownload } from "../api";
-import { extrudeOperation } from "../extrudeReach";
 import { clearInput, takes } from "../dialogPicks";
 import { createLivePreview } from "../livePreview";
 import { toolTargets } from "../toolTargets";
 import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
-import {
-  AxisField,
-  LengthField,
-  NumField,
-  SelInfo,
-  SelectField,
-  TargetField,
-} from "./form/fields";
+import { AxisField, NumField, OperationField, SelInfo } from "./form/fields";
 import { DialogFooter } from "./form/DialogFooter";
 import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI } from "../features/registry";
-import { axisHint } from "../features/inputs";
+import { axisHint, profileSources, storedFeature } from "../features/inputs";
 import { useSetting } from "../settings";
 
 function need(cond: unknown, message: string): asserts cond {
@@ -108,7 +93,6 @@ function DialogBody({
   editId?: string | undefined;
 }) {
   const selection = useStore((s) => s.selection);
-  const units = useSetting("units.length");
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
   const setMode = useStore((s) => s.setMode);
@@ -122,17 +106,9 @@ function DialogBody({
   );
   const [pending, setPending] = useState(false);
 
-  const profiles = selection.filter((s) => s.kind === "profile") as Extract<
-    Selection,
-    { kind: "profile" }
-  >[];
   const edges = selection.filter((s) => s.kind === "edge") as Extract<
     Selection,
     { kind: "edge" }
-  >[];
-  const faces = selection.filter((s) => s.kind === "face") as Extract<
-    Selection,
-    { kind: "face" }
   >[];
   // selected sketch LINES (axis candidates for revolve / circular pattern)
   const sketchLines = (
@@ -171,33 +147,16 @@ function DialogBody({
       setParams({ axisSource: "origin", axis: originAxis });
   }, [originAxis, dialog]);
 
-  const profileRefs = (): ProfileRef[] =>
-    profiles.map((x) => ({ sketchId: x.sketchId, profileId: x.profileId }));
   const edgeRefs = (): EdgeRef[] =>
     edges.map((x) => ({
       kind: "edge",
       bodyId: x.bodyId,
       edgeName: x.edgeName,
     }));
-  const faceRefs = (): FaceRef[] =>
-    faces.map((x) => ({
-      kind: "face",
-      bodyId: x.bodyId,
-      faceName: x.faceName,
-    }));
-  const storedFeature = () =>
-    document_?.features.find((f) => f.id === editId) ?? {};
-  const profileSources = () => {
-    need(
-      profiles.length + faces.length > 0,
-      "Select at least one profile or planar face",
-    );
-    return {
-      profiles: profileRefs(),
-      ...((faces.length > 0 || "faces" in storedFeature()) && {
-        faces: faceRefs(),
-      }),
-    };
+  const sources = () => {
+    const found = profileSources(selection, storedFeature(editId));
+    if ("error" in found) throw new Error(found.error);
+    return found;
   };
   const axisMissing =
     axisDialog &&
@@ -221,36 +180,11 @@ function DialogBody({
 
   const targets = (operation: string) =>
     toolTargets(operation, params.targets, document_?.namingVersion);
-  const operationField = (intersect: boolean, extra: object = {}) => (
-    <>
-      <SelectField
-        label="Operation"
-        value={p("operation", "join")}
-        options={[
-          ["newBody", "New body"],
-          ["join", "Join"],
-          ["cut", "Cut"],
-          ...(intersect
-            ? [["intersect", "Intersect"] as [string, string]]
-            : []),
-        ]}
-        onChange={(v) => setParams({ operation: v, ...extra })}
-      />
-      <TargetField operation={p("operation", "join")} />
-    </>
-  );
 
+  const ui = featureUI(dialog);
   useEffect(() => {
-    if (dialog !== "extrude" || num("distance", 10) === 0) return;
-    if (params.operation !== undefined && !params.autoOperation) return;
-    const operation = extrudeOperation(
-      p("direction", "normal"),
-      num("distance", 10),
-      num("startOffset", 0),
-      num("distance2", 5),
-    );
-    if (operation !== params.operation)
-      setParams({ operation, autoOperation: true });
+    const patch = ui?.onParamsChange?.(params);
+    if (patch) setParams(patch);
   }, [dialog, selection, params]);
 
   let title = "";
@@ -258,7 +192,6 @@ function DialogBody({
   let build: (() => Feature) | null = null;
   let panel: ReactElement | null = null;
 
-  const ui = featureUI(dialog);
   if (ui?.Form) {
     title = ui.title;
     body = <ui.Form params={params} setParams={setParams} />;
@@ -271,83 +204,6 @@ function DialogBody({
       return built;
     };
   switch (dialog) {
-    case "extrude": {
-      title = "Extrude";
-      body = (
-        <>
-          <SelInfo
-            label="Profiles / faces"
-            input="profiles"
-            hint="click sketch regions or planar faces"
-          />
-          <LengthField
-            label="Start offset"
-            units={units}
-            value={p("startOffset", 0)}
-            onChange={(v) => setParams({ startOffset: v })}
-          />
-          <div className="field-hint">
-            0 = start on the sketch / face; ± moves the start plane along its
-            normal
-          </div>
-          <LengthField
-            label="Distance"
-            units={units}
-            autoFocus
-            value={p("distance", 10)}
-            onChange={(v) => setParams({ distance: v })}
-          />
-          <div className="field-hint">
-            Negative = the other side (Cut when it meets a body)
-          </div>
-          <SelectField
-            label="Direction"
-            value={p("direction", "normal")}
-            options={[
-              ["normal", "One side"],
-              ["reverse", "Reversed"],
-              ["symmetric", "Symmetric"],
-              ["twoSided", "Two sided"],
-            ]}
-            onChange={(v) => setParams({ direction: v })}
-          />
-          {p("direction", "normal") === "twoSided" && (
-            <LengthField
-              label="Distance 2"
-              units={units}
-              value={p("distance2", 5)}
-              onChange={(v) => setParams({ distance2: v })}
-            />
-          )}
-          {operationField(true, { autoOperation: false })}
-        </>
-      );
-      build = () => {
-        const sources = profileSources();
-        need(num("distance", 10) !== 0, "Extrude distance must be non-zero");
-        const stored = storedFeature();
-        const direction = p("direction", "normal");
-        const startOffset = num("startOffset", 0);
-        return {
-          id: editId ?? newId("extrude"),
-          type: "extrude",
-          name: p("name", ""),
-          suppressed: false,
-          ...sources,
-          distance: num("distance", 10),
-          ...((direction === "twoSided" || "distance2" in stored) && {
-            distance2: num("distance2", 5),
-          }),
-          ...((startOffset !== 0 || "startOffset" in stored) && {
-            startOffset,
-          }),
-          direction,
-          operation: p("operation", "join"),
-          ...targets(p("operation", "join")),
-        };
-      };
-      break;
-    }
     case "revolve": {
       title = "Revolve";
       body = (
@@ -374,7 +230,7 @@ function DialogBody({
             value={p("angle", 360)}
             onChange={(v) => setParams({ angle: v })}
           />
-          {operationField(true)}
+          <OperationField intersect />
         </>
       );
       build = () => {
@@ -383,7 +239,7 @@ function DialogBody({
           type: "revolve",
           name: p("name", ""),
           suppressed: false,
-          ...profileSources(),
+          ...sources(),
           axis: axisRef(),
           angle: num("angle", 360),
           operation: p("operation", "join"),

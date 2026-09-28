@@ -54,6 +54,23 @@ export const faceRefs = (selection: Selection[]): FaceRef[] =>
 export const facePicks = (faces: FaceRef[]): Selection[] =>
   faces.map((x) => ({ kind: "face", bodyId: x.bodyId, faceName: x.faceName }));
 
+export const storedFeature = (id: string | undefined): object =>
+  useStore.getState().document?.features.find((f) => f.id === id) ?? {};
+
+export function profileSources(
+  selection: Selection[],
+  stored: object,
+): { error: string } | { profiles: ProfileRef[]; faces?: FaceRef[] } {
+  const profiles = profileRefs(selection);
+  const faces = faceRefs(selection);
+  if (profiles.length + faces.length === 0)
+    return { error: "Select at least one profile or planar face" };
+  return {
+    profiles,
+    ...((faces.length > 0 || "faces" in stored) && { faces }),
+  };
+}
+
 export const bodyIds = (selection: Selection[]): string[] =>
   selection.flatMap((x) => (x.kind === "body" ? [x.bodyId] : []));
 

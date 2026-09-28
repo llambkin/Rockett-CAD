@@ -28,7 +28,6 @@ import { QuickEdit, quickValues } from "./QuickEdit";
 const TYPE_ICONS: Record<string, string> = {
   importMesh: "⇩",
   sketch: "✏",
-  extrude: "⬆",
   revolve: "↻",
 };
 
@@ -322,15 +321,6 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
 
   const params: Record<string, any> = { name: f.name, targets: anyF.targets };
   switch (f.type) {
-    case "extrude":
-      Object.assign(params, {
-        distance: anyF.distance,
-        distance2: anyF.distance2,
-        startOffset: anyF.startOffset ?? 0,
-        direction: anyF.direction,
-        operation: anyF.operation,
-      });
-      break;
     case "revolve":
       Object.assign(params, {
         angle: anyF.angle,

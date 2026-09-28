@@ -31,6 +31,7 @@ interface FeatureUIBase<F extends Feature> {
   picksFor?: (params: DialogParams) => readonly PickInput[];
   prefill(f: F): { params: DialogParams; selection: Selection[] };
   onPick?(pick: Selection, s: PickState): Promise<void> | undefined;
+  onParamsChange?(params: DialogParams): DialogParams | undefined;
 }
 
 export type FeatureUI<F extends Feature = Feature> = FeatureUIBase<F> &

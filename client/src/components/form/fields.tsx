@@ -525,7 +525,13 @@ export function TargetField({ operation }: { operation: string }) {
   );
 }
 
-export function OperationField() {
+export function OperationField({
+  intersect,
+  onChange,
+}: {
+  intersect?: boolean;
+  onChange?: (operation: string) => void;
+}) {
   const operation: string = useStore((s) => s.dialogParams.operation ?? "join");
   const setParams = useStore((s) => s.setDialogParams);
   return (
@@ -537,8 +543,11 @@ export function OperationField() {
           ["newBody", "New body"],
           ["join", "Join"],
           ["cut", "Cut"],
+          ...(intersect
+            ? [["intersect", "Intersect"] as [string, string]]
+            : []),
         ]}
-        onChange={(v) => setParams({ operation: v })}
+        onChange={onChange ?? ((v) => setParams({ operation: v }))}
       />
       <TargetField operation={operation} />
     </>
