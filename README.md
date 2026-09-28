@@ -82,6 +82,7 @@ everything downstream against persistent topology references.
 - **Theme**: pick grey or black and an accent colour in Settings; the app and viewport recolour at once.
 - **Display units**: sketch dimensions, measurements and feature lengths follow the selected unit; typed lengths accept unit suffixes while models remain in millimetres.
 - **Friend requests and notices**: request by email, accept or reject in the user menu, and open newly shared projects.
+- **Model tree width**: drag or arrow-key the tree's right edge, double-click to reset; the width follows you to every machine.
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, camera preferences, pick tolerance; projects reopen at your last camera.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.

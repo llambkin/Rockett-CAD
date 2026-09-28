@@ -11,6 +11,7 @@ import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { useSplitter } from "./components/Splitter";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { AccountTotp, LoginScreen } from "./components/LoginScreen";
 import { UserMenu } from "./components/UserMenu";
@@ -232,6 +233,16 @@ function SaveIndicator() {
   );
 }
 
+export function TreePane() {
+  const tree = useSplitter("ui.treeWidth", "Model tree width");
+  return (
+    <div className="tree-pane" style={{ width: tree.width }}>
+      <ModelTree />
+      {tree.splitter}
+    </div>
+  );
+}
+
 function Workspace({ onUsers }: { onUsers: () => void }) {
   const [showHelp, setShowHelp] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -349,7 +360,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
       <RecoveryBanner />
       <NotSavedBanner />
       <div className="main-row">
-        <ModelTree />
+        <TreePane />
         <ViewportView />
         <FeatureDialog />
         <SketchOffsetPanel />

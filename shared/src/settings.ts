@@ -40,6 +40,7 @@ export interface SettingTypes {
   "appearance.previewGhostOpacity": number;
   "auth.sessionDays": number;
   "auth.sessionMaxDays": number;
+  "ui.treeWidth": number;
 }
 
 export type SettingOf<D extends SettingDefinition> = Static<D["schema"]>;
@@ -317,6 +318,17 @@ export const SESSION_MAX_DAYS = defineSetting({
   schema: Type.Integer(SESSION_DAY_RANGE),
 });
 
+export const PANEL_MIN_PX = 160;
+
+export const UI_TREE_WIDTH = defineSetting({
+  key: "ui.treeWidth",
+  label: "Model tree width (px)",
+  scopes: ["user"],
+  section: "user",
+  default: 220,
+  schema: Type.Integer({ minimum: PANEL_MIN_PX }),
+});
+
 registerSettings([
   UNITS_LENGTH,
   VIEWPORT_PICK_TOLERANCE,
@@ -332,4 +344,5 @@ registerSettings([
   PREVIEW_GHOST_OPACITY,
   SESSION_DAYS,
   SESSION_MAX_DAYS,
+  UI_TREE_WIDTH,
 ]);

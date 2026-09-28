@@ -277,13 +277,35 @@ button.doc-name:hover .doc-name-pen {
 
 /* ---------- model tree ---------- */
 
-.model-tree {
-  width: 220px;
-  min-width: 220px;
+.tree-pane {
+  position: relative;
+  display: flex;
+  flex: none;
   background: var(--bg1);
-  border-right: 1px solid var(--border);
+}
+
+.model-tree {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 6px 0;
+}
+
+.splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -3px;
+  z-index: 1;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  background: linear-gradient(var(--border), var(--border)) 2px 0 / 1px 100%
+    no-repeat;
+}
+.splitter:hover,
+.splitter.dragging {
+  background-image: linear-gradient(var(--accent), var(--accent));
 }
 
 .tree-doc {
