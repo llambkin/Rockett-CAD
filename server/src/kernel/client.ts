@@ -1,4 +1,5 @@
 import {
+  MAX_IMPORT_BYTES,
   projectEdge,
   ValidationError,
   type CadDocument,
@@ -36,7 +37,13 @@ import { signRefs } from "../geometry/signature.js";
 import { planNamingUpgrade } from "../geometry/upgradeNaming.js";
 import { tangentEdges } from "../geometry/tangentEdges.js";
 import { sizeLimit } from "../geometry/sizeLimit.js";
-import { importerFor, IMPORTERS, type Sources } from "../geometry/importers.js";
+import { IMPORTERS, type Sources } from "../geometry/importers.js";
+import {
+  importers,
+  importFile,
+  registerImporter,
+  type ImportUpload,
+} from "../api/importers.js";
 import {
   EXPORT_QUALITY,
   exporterFor,
@@ -75,17 +82,15 @@ export interface ExportJob extends Omit<ExportRequest, "retain"> {
   hidden: readonly string[];
 }
 
-export interface ImportUpload {
-  name: string;
-  bytes: () => Promise<Buffer>;
-}
-
 export interface Imported {
   label: string;
   filename: string;
   features: Feature[];
   sources: Sources;
 }
+
+for (const importer of IMPORTERS)
+  registerImporter({ ...importer, bytes: MAX_IMPORT_BYTES });
 
 export interface NamingPlan {
   document: CadDocument;
@@ -339,7 +344,7 @@ export class InProcessKernel implements KernelClient {
           mime,
           source,
         })),
-      importers: IMPORTERS.map(({ format, label, extensions }) => ({
+      importers: importers.list().map(({ format, label, extensions }) => ({
         format,
         label,
         extensions,
@@ -347,15 +352,8 @@ export class InProcessKernel implements KernelClient {
     };
   }
 
-  async importStep(upload: ImportUpload | undefined) {
-    const importer = upload && importerFor(upload.name);
-    if (!upload || !importer)
-      throw new ValidationError(
-        `Choose a ${IMPORTERS.flatMap((i) => i.extensions).join(", ")} file`,
-      );
-    const filename = upload.name.replace(/^.*[\\/]/, "").slice(0, 255);
-    const { features, sources } = importer.read(await upload.bytes(), filename);
-    return { label: importer.label, filename, features, sources };
+  importStep(upload: ImportUpload | undefined) {
+    return importFile(upload);
   }
 
   async planNamingUpgrade(doc: CadDocument, accept?: NamingDecision[]) {

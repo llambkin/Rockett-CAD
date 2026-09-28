@@ -342,9 +342,9 @@ export const ROUTES = {
       folderId: Type.Optional(folderId),
     }),
   ),
-  importStep: route<FormData, MutationResponse>()(
+  importProject: route<FormData, MutationResponse>()(
     "POST",
-    "/projects/import-step",
+    "/projects/import",
   ),
   uploadProjectFile: route<FormData, ProjectResponse>()(
     "POST",
@@ -384,9 +384,9 @@ export const ROUTES = {
   ),
   jobEvents: route<never, never>()("GET", "/jobs/:jobId/events"),
   cancelJob: route<never, { ok: true }>()("DELETE", "/jobs/:jobId"),
-  importStepInto: route<FormData, MutationResponse>()(
+  importInto: route<FormData, MutationResponse>()(
     "POST",
-    "/projects/:id/import-step",
+    "/projects/:id/import",
   ),
   addFeature: route<{ feature: Feature } & HeldMeshes, WireMutationResponse>()(
     "POST",
@@ -548,7 +548,7 @@ export const PREVIEW_HEADER = "X-Rockett-Preview";
 
 export const DOCUMENT_EDITS: ReadonlySet<Route> = new Set<Route>([
   ROUTES.renameProject,
-  ROUTES.importStepInto,
+  ROUTES.importInto,
   ROUTES.addFeature,
   ROUTES.updateFeature,
   ROUTES.deleteFeature,

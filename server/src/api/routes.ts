@@ -60,7 +60,6 @@ import {
   discarding,
   IMPORT_LIMITS,
   JSON_BODY_LIMIT_BYTES,
-  readUpload,
   receiveImage,
   receiveImport,
   receiveProjectFile,
@@ -77,6 +76,7 @@ import {
   transactionId,
 } from "./revision.js";
 import { omitHeldMeshes } from "./heldMeshes.js";
+import { importers } from "./importers.js";
 import { projectAccessGuard, visibleProjects } from "./projectAccess.js";
 import { createJobRoutes } from "./jobRoutes.js";
 import { registerSettingsRoutes } from "./settingsRoutes.js";
@@ -204,7 +204,7 @@ export function createApiRouter(
   notices?: NoticeStore,
   friends?: FriendStore,
 ): Router {
-  const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
+  const { uploadBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
   const history = new HistoryStore(store.documents.options.storage, store);
   const previews = new Previews();
@@ -545,14 +545,14 @@ export function createApiRouter(
     }),
   );
 
-  const receiveStep = receiveImport(store.uploads, uploadBytes);
+  const receive = receiveImport(store.uploads, uploadBytes, importers.list());
   type Received = Awaited<ReturnType<typeof received>>;
   async function received(req: any) {
     const file: Upload | undefined = req.file;
     const imported = await kernel.importStep(
       file && {
         name: file.originalname,
-        bytes: () => readUpload(store.uploads, file, importBytes),
+        bytes: () => store.uploads.read(file),
       },
     );
     imported.features.forEach(validateFeature);
@@ -587,8 +587,8 @@ export function createApiRouter(
     }
   }
   on(
-    ROUTES.importStep,
-    receiveStep,
+    ROUTES.importProject,
+    receive,
     wrap(
       discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
         const upload = await received(req);
@@ -612,8 +612,8 @@ export function createApiRouter(
     ),
   );
   on(
-    ROUTES.importStepInto,
-    receiveStep,
+    ROUTES.importInto,
+    receive,
     mutateProject(async (doc, req) => insert(doc, await received(req))),
   );
 

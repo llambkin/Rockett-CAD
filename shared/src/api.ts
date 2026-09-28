@@ -293,6 +293,11 @@ export interface ImportFormat {
   extensions: string[];
 }
 
+export const importLabels = (formats: readonly ImportFormat[]) =>
+  new Intl.ListFormat("en-GB", { type: "disjunction" }).format(
+    formats.map((format) => format.label),
+  );
+
 export interface Formats {
   exporters: ExportFormat[];
   importers: ImportFormat[];

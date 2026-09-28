@@ -363,7 +363,7 @@ export function send<P extends string, Req, Res>(
     body,
     signal,
     ...(onEtag && { onEtag }),
-    ...((DOCUMENT_EDITS.has(route) || route === ROUTES.importStep) && {
+    ...((DOCUMENT_EDITS.has(route) || route === ROUTES.importProject) && {
       jobId: crypto.randomUUID(),
     }),
     headers: {
@@ -473,8 +473,8 @@ export const api = {
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
     const options = { body: fileForm("file", file), signal };
     return projectId
-      ? send(ROUTES.importStepInto, { id: projectId }, options)
-      : send(ROUTES.importStep, {}, options);
+      ? send(ROUTES.importInto, { id: projectId }, options)
+      : send(ROUTES.importProject, {}, options);
   },
   listProjects: () =>
     send(ROUTES.listProjects, {}).then((projects) => {

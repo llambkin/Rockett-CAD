@@ -447,16 +447,20 @@ Only an owner or admin changes a folder share. Members must be active users and 
 
 ## Model
 
-### STEP, IGES and BREP import
+### File import
 
-`POST /projects/import-step` creates a project named from the filename.
-`POST /projects/:id/import-step` inserts into an existing project's timeline
-at the current marker. Both accept multipart field `file` (`.step`/`.stp`,
-`.igs`/`.iges`, `.brep`, `.stl`, `.obj` or `.3mf`) and return
-`{ document, evaluation }`. The upload streams to `uploads/` while it is
-hashed. Two limits apply, each 10 MB by default: the upload limit stops the
-transfer with 413 as soon as it is passed, and the import limit returns 413
-before the kernel reads a file over it. A STEP, IGES or BREP source moves
+`POST /projects/import` creates a project named from the filename, owned by
+the importing user. `POST /projects/:id/import` inserts into an existing
+project's timeline at the current marker, needs `If-Match` like every
+document edit, and records one undoable history entry. Both accept multipart
+field `file` and return `{ document, evaluation }`. The file extension picks
+the importer from the importer registry: `.step`/`.stp`, `.igs`/`.iges`,
+`.brep`, `.stl`, `.obj` or `.3mf` in core. Any other extension is 400 listing
+the accepted ones. DXF and SVG are sketch inserts, not file imports. The upload
+streams to `uploads/` while it is hashed. Two limits apply, each 10 MB by
+default: the upload limit stops the transfer with 413 as soon as it is passed,
+and the importer's byte limit returns 413 before the kernel parses a file over
+it. A STEP, IGES or BREP source moves
 from `uploads/` into the blob store once the import succeeds. A
 cancelled, oversized or unreadable upload removes its own file in `uploads/`
 and keeps no new project. Exact files must contain solid bodies. A file with
@@ -621,13 +625,18 @@ construction geometry goes on the `CONSTRUCTION` layer. Any other face edge,
 such as a spline, becomes a `POLYLINE` sampled so the curve midpoint of each
 span lies within `quality` mm of its chord.
 
-`GET /formats` returns `Formats`: `{ exporters, importers }`. Exporters are
-read from the exporter registry on each request, importers from `IMPORTERS`
-in `server/src/geometry/importers.ts`. An exporter is `{ format, label, ext, mime, source }`
-and an importer `{ format, label, extensions }`. Core registers the `stl`,
-`3mf`, `step` and `dxf` exporters through `registerExporter` in
+`GET /formats` returns `Formats`: `{ exporters, importers }`, read from the
+exporter and importer registries on each request. An exporter is
+`{ format, label, ext, mime, source }` and an importer
+`{ format, label, extensions }`. Core registers the `stl`, `3mf`, `step` and
+`dxf` exporters through `registerExporter` in
 `server/src/geometry/exporters.ts`, which returns a disposer; the export
-panel lists the `bodies` exporters it returns.
+panel lists the `bodies` exporters it returns. Core registers the `step`,
+`iges`, `brep`, `stl`, `obj` and `3mf` importers through `registerImporter` from
+`server/src/api/importers.ts`, which also returns a disposer. An `Importer`
+adds its byte limit `bytes` and `read(bytes, filename)`, which returns the
+features to insert and any blob sources. The import button accepts every
+extension the importers list.
 
 ## Assets (reference images)
 

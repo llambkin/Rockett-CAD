@@ -8,12 +8,12 @@ import type { ProjectStore } from "../store/projectStore.js";
 import { StoreError } from "../store/projectStore.js";
 import { TIMING_MS } from "../tunables.js";
 import type { Sources } from "../geometry/importers.js";
+import type { ImportUpload } from "../api/importers.js";
 import type { EvaluateHooks } from "../geometry/engine.js";
 import type { CrashFeature } from "../geometry/resolve.js";
 import { jobContext, type Job } from "./jobs.js";
 import type {
   ExportJob,
-  ImportUpload,
   KernelClient,
   StateAnswers,
   StateQuery,
