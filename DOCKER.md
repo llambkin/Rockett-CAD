@@ -131,14 +131,16 @@ its environment as described under Security.
 ├── users/
 │   ├── users.json          # accounts
 │   └── {userId}/
-│       └── settings.json   # the user's setting values
+│       ├── settings.json   # the user's setting values
+│       └── views/
+│           └── {projectId}.json  # the user's hidden bodies and features and camera for one project
 ├── uploads/                # model imports while they stream in; each is removed when its request ends
 └── projects/
     └── {projectId}/
         ├── project.json    # the manifest: its version and documents, each an id and a type
         ├── documents/
         │   └── {projectId}.json  # the part document (full history)
-        ├── view.json       # hidden bodies and features, outside the document
+        ├── view.json       # the shared view from before per-user views; only read, never written
         ├── settings.json   # the project's setting values, copied by duplicate
         ├── temporary.json  # present only on a temporary copy of a browser project
         ├── blobs/          # reference images and STEP, IGES and BREP sources, each named by its sha256
@@ -155,7 +157,7 @@ Before that write, the whole project directory is copied to `backups/`, named
 by the old schema and a hash of its contents, so a second migration of
 different contents never overwrites the first backup. The backup holds the
 project exactly as it was: files a migration adds, such as blobs moved out of
-the document, a first `view.json`, the manifest or the moved document, are
+the document, a first user view, the manifest or the moved document, are
 written after it. A project from before schema 9 keeps its reference images in `assets/`; the migration copies
 them into `blobs/`, and `assets/` is removed only after the backup reads back
 intact and the migrated document is written. While the migration runs,

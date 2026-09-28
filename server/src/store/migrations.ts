@@ -3,8 +3,10 @@ import {
   MANIFEST_VERSION,
   SCHEMA_VERSION,
   UNITS_LENGTH,
+  VIEW_VERSION,
   type CadDocument,
   type ProjectManifest,
+  type ProjectView,
   type Visibility,
 } from "@rockett/shared";
 
@@ -186,6 +188,13 @@ export const documentMigrations: Migrations<CadDocument> = {
         : doc,
     20: (doc) => ({ ...doc, modifiedBy: null }),
   },
+};
+
+export const viewMigrations: Migrations<ProjectView> = {
+  namespace: "view",
+  current: VIEW_VERSION,
+  field: "version",
+  steps: { 1: (view) => ({ ...view, camera: null }) },
 };
 
 export const manifestMigrations: Migrations<ProjectManifest> = {

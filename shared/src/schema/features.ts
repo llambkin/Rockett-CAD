@@ -15,7 +15,7 @@ const name = Type.String({ minLength: 1, maxLength: NAME_LENGTH });
 const coordinate = Type.Number({ minimum: -MAX_DIM, maximum: MAX_DIM });
 const flag = Type.Optional(Type.Boolean());
 
-const vec3 = Type.Tuple([Type.Number(), Type.Number(), Type.Number()]);
+export const vec3 = Type.Tuple([Type.Number(), Type.Number(), Type.Number()]);
 
 const sig = Type.Optional(
   Type.Object({

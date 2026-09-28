@@ -77,7 +77,7 @@ revision, so saving an unchanged file reads nothing; any other change to the
 file moves its stamp and the next save reads it again. `BlobStore` keeps
 a project's source files and images by sha256. `ProjectStore` assembles a
 project from its `project.json` manifest (`ManifestStore`), its part
-document, `view.json` and blobs. `HistoryStore` keeps a project's undo
+document and blobs; `ViewStore` keeps each user's view of a project. `HistoryStore` keeps a project's undo
 history in `history/log.bin`, an append-only log of records: the base
 snapshot, labelled entries with their revision and checkpoints. Snapshots are
 gzip documents named by the sha256 of their stored bytes. The history is the

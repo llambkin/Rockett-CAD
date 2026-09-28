@@ -4,17 +4,16 @@ import {
   createEmptyDocument,
   emptyView,
   MB,
-  parse,
-  projectView,
-  VIEW_VERSION,
   withShown,
   type CadDocument,
   type ProjectSummary,
   type ProjectView,
+  type ProjectViewBody,
 } from "@rockett/shared";
+import { UserStore } from "../auth/userStore.js";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
-import { JsonStore, sha256, StoreError } from "./jsonStore.js";
+import { etag, JsonStore, sha256, StoreError } from "./jsonStore.js";
 import type { Inventory, Write } from "./jsonStore.js";
 import {
   checkManifest,
@@ -25,6 +24,7 @@ import {
 import { documentMigrations, TooNewError } from "./migrations.js";
 import { SettingsStore } from "./settingsStore.js";
 import type { Storage } from "./storage.js";
+import { ViewStore } from "./viewStore.js";
 import { TIMING_MS } from "../tunables.js";
 
 export { StoreError };
@@ -82,7 +82,8 @@ function imageBlobs(doc: CadDocument): string[] {
 
 export class ProjectStore {
   readonly documents: JsonStore<CadDocument, PendingBlobs>;
-  private views: JsonStore<ProjectView>;
+  private views: ViewStore;
+  private users: UserStore;
   private manifests: ManifestStore;
   readonly uploads: Uploads;
   readonly settings: SettingsStore;
@@ -94,21 +95,8 @@ export class ProjectStore {
   ) {
     this.uploads = new Uploads(storage);
     this.settings = new SettingsStore(storage);
-    this.views = new JsonStore({
-      storage,
-      root: "projects",
-      name: "project",
-      key: ID_RE,
-      file: () => "view.json",
-      migrations: {
-        namespace: "view",
-        current: VIEW_VERSION,
-        field: "version",
-        steps: {},
-      },
-      unbacked: async () => true,
-      validate: (view) => parse(projectView, view),
-    });
+    this.views = new ViewStore(storage, (id) => this.documents.dir(id));
+    this.users = new UserStore(storage);
     this.manifests = new ManifestStore(storage);
     this.documents = new JsonStore({
       storage,
@@ -129,10 +117,15 @@ export class ProjectStore {
           const out = new Map<string, string | Uint8Array>();
           for (const [hash, bytes] of pending.blobs)
             if (!(await blobs.has(hash))) out.set(blobs.file(hash), bytes);
-          if (!(await this.savedView(id)))
-            out.set(
-              ...this.views.encode(id, withShown(emptyView(), pending.shown)),
-            );
+          const shown = withShown(emptyView(), pending.shown);
+          const copier = await this.copier(id);
+          if (
+            copier &&
+            (shown.hidden.bodies.length || shown.hidden.features.length) &&
+            !(await this.views.legacy(id)) &&
+            !(await this.views.read(copier, id))
+          )
+            out.set(...this.views.encode(copier, id, shown));
           if (Object.keys(pending.settings).length)
             out.set(...(await this.settings.staged(id, pending.settings)));
           if (await this.manifests.missing(id))
@@ -191,10 +184,20 @@ export class ProjectStore {
   }
 
   async projectAccess(id: string): Promise<ProjectAccess> {
+    await this.exists(id);
+    return this.manifests.access(id);
+  }
+
+  private async exists(id: string): Promise<void> {
     const files = await this.storage.list(this.documents.dir(id));
     if (!files.includes(LEGACY) && !files.includes(DOCUMENTS))
       throw new StoreError(`project ${id} not found`, "not_found");
-    return this.manifests.access(id);
+  }
+
+  private async copier(id: string): Promise<string | undefined> {
+    const { owner } = await this.manifests.read(id);
+    if (owner) return owner;
+    return (await this.users.list()).find((user) => user.role === "admin")?.id;
   }
 
   async setProjectAccess(id: string, access: ProjectAccess): Promise<void> {
@@ -234,12 +237,9 @@ export class ProjectStore {
     return (await this.part(projectId, documentId)).doc;
   }
 
-  async open(id: string): Promise<{ doc: CadDocument; view: ProjectView }> {
-    const { doc, context } = await this.part(id, id);
-    return {
-      doc,
-      view: (await this.savedView(id)) ?? withShown(emptyView(), context.shown),
-    };
+  private async documentView(id: string): Promise<ProjectView> {
+    const { context } = await this.part(id, id);
+    return withShown(emptyView(), context.shown);
   }
 
   private async part(id: string, documentId: string) {
@@ -285,28 +285,29 @@ export class ProjectStore {
     doc.savedWith = snapshot.savedWith;
   }
 
-  async view(id: string): Promise<ProjectView> {
-    if (await this.hasView(id)) return this.views.read(id);
-    return (await this.open(id)).view;
+  async view(id: string, userId: string): Promise<ProjectView> {
+    await this.exists(id);
+    const own = await this.views.read(userId, id);
+    if (own) return own;
+    if (userId !== (await this.copier(id))) return emptyView();
+    const copy = (await this.views.legacy(id)) ?? (await this.documentView(id));
+    await this.views.write(userId, id, copy);
+    return copy;
   }
 
-  async setView(id: string, view: ProjectView): Promise<void> {
-    if (!(await this.hasView(id))) await this.documents.settle(id);
-    await this.views.write(id, view);
-  }
-
-  private savedView(id: string): Promise<ProjectView | undefined> {
-    return this.views.read(id).catch((err) => {
-      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
-      return undefined;
-    });
-  }
-
-  private async hasView(id: string): Promise<boolean> {
-    const files = await this.storage.list(this.documents.dir(id));
-    if (!files.includes(LEGACY) && !files.includes(DOCUMENTS))
-      throw new StoreError(`project ${id} not found`, "not_found");
-    return files.includes("view.json");
+  async setView(
+    id: string,
+    userId: string,
+    view: ProjectViewBody,
+    expected?: string,
+  ): Promise<ProjectView> {
+    await this.exists(id);
+    if (
+      expected !== undefined &&
+      expected !== etag(await this.view(id, userId))
+    )
+      throw new StoreError("This view changed in another session.", "conflict");
+    return this.views.write(userId, id, view);
   }
 
   exclusive<R>(id: string, operation: () => Promise<R>): Promise<R> {
@@ -402,8 +403,9 @@ export class ProjectStore {
     }
   }
 
-  remove(id: string): Promise<void> {
-    return this.documents.remove(id);
+  async remove(id: string): Promise<void> {
+    await this.documents.remove(id);
+    await this.views.remove(id);
   }
 
   async saveAsset(
@@ -436,7 +438,8 @@ export class ProjectStore {
       }
       const imported = { ...doc, id };
       await this.add(imported, actor);
-      await this.views.write(id, view);
+      const copier = await this.copier(id);
+      if (copier) await this.views.write(copier, id, view);
       return imported;
     } catch (error) {
       await this.remove(id);

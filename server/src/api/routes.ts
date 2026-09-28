@@ -31,6 +31,7 @@ import type { ProjectStore } from "../store/projectStore.js";
 import { splitView } from "../store/migrations.js";
 import type { FolderStore } from "../store/folderStore.js";
 import { StoreError } from "../store/projectStore.js";
+import { etag } from "../store/jsonStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { HistoryStore, Previews } from "../store/historyStore.js";
 import {
@@ -281,8 +282,8 @@ export function createApiRouter(
       pinTargets(feature, await kernel.visibleTargets(doc, index, hidden));
   }
 
-  async function written(doc: CadDocument, index: number) {
-    await pinned(doc, index, (await store.view(doc.id)).hidden.bodies);
+  async function written(doc: CadDocument, index: number, user: User) {
+    await pinned(doc, index, (await store.view(doc.id, user.id)).hidden.bodies);
     startFirst(doc.features[index]!);
   }
 
@@ -656,7 +657,7 @@ export function createApiRouter(
       await signed(doc, at, feature);
       doc.features.splice(at, 0, feature);
       doc.timelinePosition = at + 1;
-      await written(doc, at);
+      await written(doc, at, req.res.locals.user);
       return { label: `Add ${feature.name}` };
     }, true),
   );
@@ -678,7 +679,9 @@ export function createApiRouter(
       validateFeature(updated);
       await signed(doc, idx, updated, current);
       doc.features[idx] = updated;
-      await (keepsTargets(patch) ? pinned(doc, idx) : written(doc, idx));
+      await (keepsTargets(patch)
+        ? pinned(doc, idx)
+        : written(doc, idx, req.res.locals.user));
       return { label: `Edit ${updated.name}`, position };
     }, true),
   );
@@ -848,16 +851,22 @@ export function createApiRouter(
 
   on(
     ROUTES.getView,
-    wrap(async (req, res) => {
-      res.json(await store.view(req.params.id));
+    wrap(async (req, res, ctx) => {
+      const view = await store.view(req.params.id, ctx.user.id);
+      res.set("ETag", etag(view)).json(view);
     }),
   );
 
   on(
     ROUTES.putView,
-    wrap(async (req, res) => {
-      await store.setView(req.params.id, req.body);
-      res.json(req.body);
+    wrap(async (req, res, ctx) => {
+      const view = await store.setView(
+        req.params.id,
+        ctx.user.id,
+        req.body,
+        req.get("If-Match"),
+      );
+      res.set("ETag", etag(view)).json(view);
     }),
   );
 
@@ -896,10 +905,11 @@ export function createApiRouter(
 
   on(
     ROUTES.exportModel,
-    wrap(async (req, res) => {
+    wrap(async (req, res, ctx) => {
       if (req.body.retain && res.locals.projectRole === "view")
         return res.status(403).json({ error: "forbidden" });
-      const { doc, view } = await store.open(req.params.id);
+      const doc = await store.load(req.params.id);
+      const view = await store.view(doc.id, ctx.user.id);
       const { retain, ...request }: ExportRequest = req.body;
       const { data, mime, ext } = await kernel.export(doc, {
         ...request,

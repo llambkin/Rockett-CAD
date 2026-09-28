@@ -32,7 +32,8 @@ import type {
 import type { ProjectMember } from "./model.js";
 import { settingsRoutes } from "./settingsRoutes.js";
 import { VIEW_VERSION } from "./api.js";
-import { edgeRef, faceRef, groupsSchema } from "./schema/features.js";
+import { VIEW_PROJECTION } from "./settings.js";
+import { edgeRef, faceRef, groupsSchema, vec3 } from "./schema/features.js";
 import { LABEL_LIMIT, snapshotHash } from "./schema/history.js";
 import {
   createFolderBody,
@@ -272,6 +273,16 @@ const namingUpgradeBody = Type.Object({
   ),
 });
 
+export const viewCamera = Type.Object(
+  {
+    position: vec3,
+    target: vec3,
+    up: vec3,
+    projection: VIEW_PROJECTION.schema,
+  },
+  { additionalProperties: false },
+);
+
 export const projectView = Type.Object(
   {
     version: Type.Literal(VIEW_VERSION),
@@ -279,9 +290,12 @@ export const projectView = Type.Object(
       { bodies: viewIds, features: viewIds },
       { additionalProperties: false },
     ),
+    camera: Type.Optional(Type.Union([viewCamera, Type.Null()])),
   },
   { additionalProperties: false },
 );
+
+export type ProjectViewBody = Static<typeof projectView>;
 
 const projectMembersBody = Type.Object(
   {
@@ -466,7 +480,7 @@ export const ROUTES = {
     NamingUpgradeResponse
   >()("POST", "/projects/:id/upgrade-naming/commit", namingUpgradeBody),
   getView: route<never, ProjectView>()("GET", "/projects/:id/view"),
-  putView: route<ProjectView, ProjectView>()(
+  putView: route<ProjectViewBody, ProjectView>()(
     "PUT",
     "/projects/:id/view",
     projectView,

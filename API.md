@@ -217,7 +217,8 @@ with the stored document:
 
 Creating, duplicating, uploading and deleting a project, placing it in a
 folder, saving its view state, uploading an image and retaining an export do
-not edit the document and take no `If-Match`. `client/src/api.ts` remembers
+not edit the document and take no revision `If-Match`; the view has its own
+tag (see View state). `client/src/api.ts` remembers
 the highest revision it has received per project and sends it on every
 document edit.
 
@@ -355,7 +356,7 @@ present. A file from before schema 9 may key its images by their old
 `<16hex>.<ext>` ids and may hold STEP sources inline; migration hashes both
 and rekeys them. Before migrating, any `visible` flag the file carries on a
 body in `bodyMeta` or on a sketch or reference image moves to the new
-project's `view.json`, whatever the file's schema, so the stored document
+importer's view (see View state), whatever the file's schema, so the stored document
 holds none. A browser project opens through this route, so its record keeps
 its hidden bodies and sketches too.
 A file with a newer
@@ -453,20 +454,35 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 
 ### View state
 
-`GET /projects/:id/view` returns the project's view state from
-`projects/<id>/view.json`:
-`{ version: 1, hidden: { bodies: string[], features: string[] } }`. A project
-with no saved view returns empty lists. `PUT /projects/:id/view` replaces it
-with a body of the same shape and echoes it back. The body is validated, with
-unknown fields rejected, and a bad one is 400 with nothing written. The PUT
-never edits the document, never evaluates and never raises the revision, so
-it takes no `If-Match`; the last write wins. A missing project is 404. The
-view stays with the project and is shared by everyone who opens it. Once
-`view.json` exists, the GET and PUT touch only that file and never read the
-document. A GET on a project saved before schema 11 reports the visibility its
-document held. A PUT on a project with no `view.json` first migrates the
-document on disk, after its backup. The migration writes the old flags only
-into a missing `view.json`, so they cannot return over a saved view.
+Each user has their own view of a project, stored in
+`users/<userId>/views/<projectId>.json`. `GET /projects/:id/view` returns the
+signed-in user's view with an `ETag`:
+`{ version: 2, hidden: { bodies: string[], features: string[] }, camera }`.
+`camera` is null or `{ position, target, up, projection }`: three finite
+numbers for each vector and `orthographic` or `perspective`. A stored camera
+that is missing or breaks those rules reads as null, and a version 1 view
+reads as version 2 with a null camera. A user with no saved view gets empty
+lists and a null camera.
+
+`PUT /projects/:id/view` replaces the user's view with a body of the same
+shape, where a left-out `camera` means null, and returns the stored view and
+its new `ETag`. With `If-Match`, a tag other than the current view's is 409
+`conflict` and nothing is written; without it the last write wins. The body
+is validated, with unknown fields rejected, and a bad one is 400 with nothing
+written. The PUT never edits the document, never evaluates and never raises
+the revision. Both routes sit behind the project access guard: no access or a
+missing project is 404, and a viewer's PUT is 403. Once a user's view exists,
+the GET and PUT read only that file and never the document.
+
+A project's older, shared `projects/<id>/view.json` is only ever read. The
+first time the owner, or the first admin account when the project has no
+owner, reads without a view of their own, it is copied to their view as
+version 2. The project file itself never changes, so an older server still
+reads it. With no project file, that first read copies the visibility a
+document saved before schema 11 held; if a save migrates such a document
+first, its hidden flags go to that user's view instead. An imported project's
+visibility goes to the importer's view. Deleting a project deletes every
+user's view of it.
 
 Visibility lives only in the view. Documents and evaluations carry no
 `visible`. A body PUT or a feature add or patch that carries `visible` is 400.

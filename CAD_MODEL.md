@@ -114,9 +114,10 @@ Bodies get stable ids derived from the feature that created them:
 A body's display name lives in `document.bodyMeta[bodyId]` and is assigned
 server-side the first time a body id appears (`Body1`, `Body2`, …). Which
 bodies, sketches and reference images are hidden lives outside the document,
-in `view.json` (see [API.md](API.md), View state). The 10 to 11 migration
-moves every `visible` flag there, unless the project already has a
-`view.json`, and drops the unused `camera`.
+in each user's view (see [API.md](API.md), View state). The 10 to 11 migration
+moves every `visible` flag to the owner's or first admin's view, unless the
+project has a `view.json` or that user has a view, and drops the unused
+document `camera`.
 
 `document.groups` holds model tree folders: `{ id, name, kind, members }`,
 where `kind` is `body` or `sketch` and `members` are body ids or sketch feature
@@ -756,7 +757,7 @@ hidden body ids are not remapped.
 
 Some schema 11 and 12 documents still carry `visible` on a sketch, a
 reference image or a body's metadata: project uploads stored the flag every
-response carries. `view.json` owns visibility, so these copies are stale, and
+response carries. The view owns visibility, so these copies are stale, and
 a feature edit would copy one back into the view. The 12 to 13 migration
 drops every `visible` from features and `bodyMeta` without moving it, backed
 up with the rest of the project before its first save.

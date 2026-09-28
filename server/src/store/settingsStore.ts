@@ -1,5 +1,4 @@
 import path from "node:path";
-import { createHash } from "node:crypto";
 import {
   SETTINGS,
   SETTING_KEY,
@@ -11,7 +10,7 @@ import {
   type LayerValues,
   type SettingsPatch,
 } from "@rockett/shared";
-import { JsonStore, StoreError } from "./jsonStore.js";
+import { etag, JsonStore, StoreError } from "./jsonStore.js";
 import { ID_RE } from "./manifestStore.js";
 import { ProjectQueue } from "./projectQueue.js";
 import type { Storage } from "./storage.js";
@@ -119,7 +118,7 @@ export class SettingsStore {
   }
 
   version(values: LayerValues): string {
-    return `"${createHash("sha256").update(JSON.stringify(values)).digest("hex")}"`;
+    return etag(values);
   }
 
   patch(

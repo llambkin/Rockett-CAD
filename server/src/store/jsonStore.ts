@@ -52,6 +52,10 @@ export function sha256(data: string | Uint8Array): string {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
+export function etag(value: unknown): string {
+  return `"${sha256(JSON.stringify(value))}"`;
+}
+
 export class NamespaceBackup {
   private readonly dir: string;
   private readonly root: string;

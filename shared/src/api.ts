@@ -14,6 +14,7 @@ import type {
   SketchEntity,
 } from "./model.js";
 import type { Profile } from "./profiles.js";
+import type { SettingTypes } from "./settings.js";
 
 export type Vec3 = [number, number, number];
 
@@ -190,11 +191,19 @@ export interface ProjectSummary {
   schemaVersion?: number;
 }
 
-export const VIEW_VERSION = 1;
+export const VIEW_VERSION = 2;
+
+export interface ViewCamera {
+  position: Vec3;
+  target: Vec3;
+  up: Vec3;
+  projection: SettingTypes["view.projection"];
+}
 
 export interface ProjectView {
   version: typeof VIEW_VERSION;
   hidden: { bodies: string[]; features: string[] };
+  camera: ViewCamera | null;
 }
 
 export interface Visibility {
@@ -203,7 +212,11 @@ export interface Visibility {
 }
 
 export function emptyView(): ProjectView {
-  return { version: VIEW_VERSION, hidden: { bodies: [], features: [] } };
+  return {
+    version: VIEW_VERSION,
+    hidden: { bodies: [], features: [] },
+    camera: null,
+  };
 }
 
 function applyShown(ids: string[], flags: Record<string, boolean>): string[] {
@@ -217,7 +230,7 @@ function applyShown(ids: string[], flags: Record<string, boolean>): string[] {
 
 export function withShown(view: ProjectView, shown: Visibility): ProjectView {
   return {
-    version: VIEW_VERSION,
+    ...view,
     hidden: {
       bodies: applyShown(view.hidden.bodies, shown.bodies),
       features: applyShown(view.hidden.features, shown.features),
