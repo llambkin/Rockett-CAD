@@ -54,7 +54,6 @@ import {
   dir,
   edgeCentroid,
   edges as edgesOf,
-  explore,
   faceCentroid,
   faces as facesOf,
   getKernel,
@@ -93,7 +92,7 @@ import {
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { checkedCut } from "./cutCheck.js";
+import { checkedCut, cutsThrough } from "./cutCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -1625,64 +1624,6 @@ function spilledEnds(op: any): Set<number> {
 
 function runsPastEnd(op: any): boolean {
   return spilledEnds(op).size > 0;
-}
-
-function shellCount(shape: Shape): number {
-  const shells = [...explore(shape, "shell")];
-  release(shells);
-  return shells.length;
-}
-
-function cutsThrough(
-  op: any,
-  sourceEdges: { edge: Shape }[],
-  result: Shape,
-  before: Shape,
-): boolean | null {
-  if (shellCount(result) !== shellCount(before)) return true;
-  if (!op) return false;
-  const k = getKernel();
-  const made = new Set<number>();
-  for (const { edge } of sourceEdges) {
-    const ends = verticesOf(edge);
-    for (const from of [edge, ...ends]) {
-      const generated = listToArray(op.Generated(from));
-      for (const shape of generated) made.add(shapeHash(shape));
-      release(generated);
-    }
-    release(ends);
-  }
-  const now = facesOf(result);
-  const bounds = now.map((face) => {
-    const around = edgesOf(face);
-    const hashes = around.map(shapeHash);
-    release(around);
-    return hashes;
-  });
-  const madeEdges = new Set(
-    bounds.filter((_, i) => made.has(shapeHash(now[i]!))).flat(),
-  );
-  try {
-    return scoped((own) => {
-      const picked: Shape[] = [];
-      const builder = own(new k.BRep_Builder());
-      const rest = own(new k.TopoDS_Compound());
-      builder.MakeCompound(rest);
-      now.forEach((face, i) => {
-        if (made.has(shapeHash(face))) picked.push(face);
-        else if (!bounds[i]!.some((edge) => madeEdges.has(edge)))
-          builder.Add(rest, face);
-      });
-      const fuse = own(new k.BRepAlgoAPI_BuilderAlgo_1());
-      fuse.SetArguments(own(shapeList([...picked, rest])));
-      fuse.SetNonDestructive(true);
-      fuse.Build(progress());
-      if (fuse.HasErrors()) return null;
-      return !own(fuse.SectionEdges()).IsEmpty();
-    });
-  } finally {
-    release(now);
-  }
 }
 
 export function invalidPart(shape: Shape): string | null {

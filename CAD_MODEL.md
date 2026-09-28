@@ -257,10 +257,19 @@ earlier feature.
 `BRepCheck_Analyzer` does not report faces crossing each other, so a fillet or
 chamfer that is too large can cut through the body and still pass it. Fillet
 and Chamfer also reject such a result with an error that it cuts through the
-body, and keep the previous body. The faces the blend generated go through a
-general fuse, `BRepAlgoAPI_BuilderAlgo`, against every face that shares no edge
-with them. Any section edge means a crossing. Neighbours are left out because a
-blend meets them along its own edges, and intersecting tangent faces is slow.
+body, and keep the previous body. Each face the blend generated goes through a
+general fuse, `BRepAlgoAPI_BuilderAlgo`, against the later generated faces and
+every face of the body that shares no edge with the blend, leaving out any face
+that shares an edge with it. Any section edge means a crossing. Neighbours are
+left out because a blend meets them along its own edges, and intersecting
+tangent faces is slow. A pair whose bounding boxes, grown by 0.01 mm, do not
+overlap is not fused. The kernel counts faces within their tolerances of each
+other as touching, and a blend can come back with vertex and edge tolerances
+of 1 to 10 mm. On a stepped block with a chamfered corner, the fillet run
+past its end took the fuse up to 228 s, 60 to 90 s of it for one B-spline
+patch against a plane 2 mm away. So a pair whose tolerances sum to more than
+0.01 mm is fused only when `BRepExtrema_DistShapeShape` puts the faces within
+0.01 mm; that input now takes about 25 ms.
 A blend also must not change the number of shells: a fillet into the cavity of
 a closed shell can return the box with the cavity filled in. The pinned kernel
 binds neither `BOPAlgo_ArgumentAnalyzer` nor `BRepAlgoAPI_Check`. On the
@@ -284,10 +293,9 @@ on, and the two parts are fused back and their split faces merged. The fillet
 stops at the end vertex, its end closed flat in that plane: a small cap on a
 concave fillet, a small step on a convex one. The filleted part gets every
 blend check and the fused body the validity and shell checks. The stepped
-block builds this way at 2 mm in 0.5 to 2 s, most of it in the cut-through
-fuse. Chamfer, and a split that cannot keep every selected edge whole, still
-error when an end runs past, and keep the previous body. The check runs
-before the fuse.
+block builds this way at 2 mm in about 0.45 s. Chamfer, and a split that
+cannot keep every selected edge whole, still error when an end runs past, and
+keep the previous body. The check runs before the fuse.
 Chamfer's envelope fallback is a boolean, so its faces cannot cross, but it can
 open a cavity: it gets the shell count check only. Shell gets no cut-through
 check: on the pinned kernel its offset fails rather than build a wall that

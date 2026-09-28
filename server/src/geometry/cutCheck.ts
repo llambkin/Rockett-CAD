@@ -1,11 +1,17 @@
 import { LINEAR_TOL } from "@rockett/shared";
 import {
   areaOf,
+  edges,
+  explore,
   faces,
   getKernel,
   listToArray,
   progress,
+  release,
   scoped,
+  shapeHash,
+  shapeList,
+  vertices,
   volumeOf,
   type Shape,
 } from "./kernel.js";
@@ -107,4 +113,120 @@ export function checkedCut(body: Shape, tool: Shape, failed: string): any {
     op.delete();
     throw err;
   }
+}
+
+const CONTACT = 0.01;
+
+interface Patch {
+  face: Shape;
+  edges: Set<number>;
+  tolerance: number;
+  box: any;
+}
+
+function shellCount(shape: Shape): number {
+  const shells = [...explore(shape, "shell")];
+  release(shells);
+  return shells.length;
+}
+
+function generatedBy(op: any, sourceEdges: { edge: Shape }[]): Set<number> {
+  const made = new Set<number>();
+  for (const { edge } of sourceEdges) {
+    const ends = vertices(edge);
+    for (const from of [edge, ...ends]) {
+      const generated = listToArray(op.Generated(from));
+      for (const shape of generated) made.add(shapeHash(shape));
+      release(generated);
+    }
+    release(ends);
+  }
+  return made;
+}
+
+function patch(face: Shape, box: any): Patch {
+  const k = getKernel();
+  const tolerance = Math.max(
+    ...["VERTEX", "EDGE", "FACE"].map((type) =>
+      k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum[`TopAbs_${type}`]),
+    ),
+  );
+  if (tolerance > CONTACT) k.BRepBndLib.AddOptimal(face, box, false, false);
+  else k.BRepBndLib.Add(face, box, true);
+  box.Enlarge(CONTACT);
+  const around = edges(face);
+  const hashes = new Set(around.map(shapeHash));
+  release(around);
+  return { face, edges: hashes, tolerance, box };
+}
+
+function touches(a: Patch, b: Patch): boolean {
+  return [...a.edges].some((edge) => b.edges.has(edge));
+}
+
+function near(a: Patch, b: Patch): boolean {
+  if (a.box.IsOut_4(b.box)) return false;
+  if (a.tolerance + b.tolerance <= CONTACT) return true;
+  const k = getKernel();
+  return scoped((own) => {
+    const dist = own(
+      new k.BRepExtrema_DistShapeShape_2(
+        a.face,
+        b.face,
+        k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
+        k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
+        progress(),
+      ),
+    );
+    return !dist.IsDone() || dist.Value() <= CONTACT;
+  });
+}
+
+function crosses(face: Shape, others: Shape[]): boolean | null {
+  const k = getKernel();
+  return scoped((own) => {
+    const builder = own(new k.BRep_Builder());
+    const rest = own(new k.TopoDS_Compound());
+    builder.MakeCompound(rest);
+    for (const other of others) builder.Add(rest, other);
+    const fuse = own(new k.BRepAlgoAPI_BuilderAlgo_1());
+    fuse.SetArguments(own(shapeList([face, rest])));
+    fuse.SetNonDestructive(true);
+    fuse.Build(progress());
+    if (fuse.HasErrors()) return null;
+    return !own(fuse.SectionEdges()).IsEmpty();
+  });
+}
+
+export function cutsThrough(
+  op: any,
+  sourceEdges: { edge: Shape }[],
+  result: Shape,
+  before: Shape,
+): boolean | null {
+  if (shellCount(result) !== shellCount(before)) return true;
+  if (!op) return false;
+  const made = generatedBy(op, sourceEdges);
+  const k = getKernel();
+  return scoped((own) => {
+    const all = faces(result).map((face) =>
+      patch(own(face), own(new k.Bnd_Box_1())),
+    );
+    const blend = all.filter((p) => made.has(shapeHash(p.face)));
+    const rest = all.filter(
+      (p) => !made.has(shapeHash(p.face)) && !blend.some((b) => touches(p, b)),
+    );
+    for (const [n, a] of blend.entries()) {
+      const partners = [...blend.slice(n + 1), ...rest].filter(
+        (b) => !touches(a, b) && near(a, b),
+      );
+      if (partners.length === 0) continue;
+      const verdict = crosses(
+        a.face,
+        partners.map((b) => b.face),
+      );
+      if (verdict !== false) return verdict;
+    }
+    return false;
+  });
 }
