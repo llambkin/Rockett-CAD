@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  APPEARANCE_ACCENT,
   SETTINGS,
   resolveSettings,
   validateSettingValue,
@@ -14,6 +15,7 @@ import {
 } from "../settings";
 import { useSession } from "../session";
 import { useStore } from "../store";
+import { AccentPicker } from "./AccentPicker";
 import { CheckField, NumField, SelectField } from "./form/fields";
 
 const scopes: SettingScope[] = ["app", "user", "project"];
@@ -95,6 +97,14 @@ function FieldControl({
   schema: FieldSchema;
   onChange: (value: unknown) => void;
 }) {
+  if (definition.key === APPEARANCE_ACCENT.key)
+    return (
+      <AccentPicker
+        label={definition.label}
+        value={String(value)}
+        onChange={onChange}
+      />
+    );
   const choices = schema.enum?.filter(
     (item): item is string => typeof item === "string",
   );

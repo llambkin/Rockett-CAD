@@ -1,6 +1,6 @@
 import { PREVIEW_TINT_STRENGTH, type SettingTypes } from "@rockett/shared";
 import { getSetting, subscribe } from "../settings";
-import { rgb } from "./contrast";
+import { contrastRatio, rgb } from "./contrast";
 
 function blend(from: string, to: string, strength: number): string {
   const target = rgb(to);
@@ -170,9 +170,37 @@ export function applyTheme(
   for (const listener of listeners) listener(tokens);
 }
 
+export const ACCENT_MIN_CONTRAST = 3;
+const ACCENT_FILL_DARKEN = 0.65;
+
+export function accentContrast(accent: string, theme: ThemeTokens): number {
+  return contrastRatio(accent, theme.bg0);
+}
+
+export function accentFits(accent: string, theme: ThemeTokens): boolean {
+  return accentContrast(accent, theme) >= ACCENT_MIN_CONTRAST;
+}
+
+function withAccent(theme: ThemeTokens, accent: string): ThemeTokens {
+  if (!accent || !accentFits(accent, theme)) return theme;
+  const fill = blend(accent, black, ACCENT_FILL_DARKEN);
+  return {
+    ...theme,
+    accent,
+    "accent-dim": fill,
+    "accent-wash": fill,
+    selection: accent,
+    "profile-fill": accent,
+    gizmo: accent,
+  };
+}
+
 function applyAppearance(): void {
   applyTheme({
-    ...THEMES[getSetting("appearance.theme")],
+    ...withAccent(
+      THEMES[getSetting("appearance.theme")],
+      getSetting("appearance.accent"),
+    ),
     ...previewTints(getSetting("appearance.previewTintStrength")),
   });
 }
@@ -180,6 +208,7 @@ function applyAppearance(): void {
 export function followAppearance(): () => void {
   const stops = [
     subscribe("appearance.theme", applyAppearance),
+    subscribe("appearance.accent", applyAppearance),
     subscribe("appearance.previewTintStrength", applyAppearance),
   ];
   return () => {

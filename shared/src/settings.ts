@@ -35,6 +35,7 @@ export interface SettingTypes {
   "sketch.angleStep": number;
   "sketch.angles": number[];
   "appearance.theme": "grey" | "black";
+  "appearance.accent": string;
   "appearance.previewTintStrength": number;
   "appearance.previewGhostOpacity": number;
   "auth.sessionDays": number;
@@ -269,6 +270,15 @@ export const APPEARANCE_THEME = defineSetting({
   schema: Type.Enum(["grey", "black"]),
 });
 
+export const APPEARANCE_ACCENT = defineSetting({
+  key: "appearance.accent",
+  label: "Accent",
+  scopes: ["app", "user"],
+  section: "user",
+  default: "",
+  schema: Type.String({ pattern: "^(#[0-9a-fA-F]{6})?$" }),
+});
+
 export const PREVIEW_TINT_STRENGTH = defineSetting({
   key: "appearance.previewTintStrength",
   label: "Preview tint strength",
@@ -317,6 +327,7 @@ registerSettings([
   SKETCH_ANGLE_STEP,
   SKETCH_ANGLES,
   APPEARANCE_THEME,
+  APPEARANCE_ACCENT,
   PREVIEW_TINT_STRENGTH,
   PREVIEW_GHOST_OPACITY,
   SESSION_DAYS,

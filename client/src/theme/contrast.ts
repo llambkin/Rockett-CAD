@@ -1,5 +1,11 @@
+const HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i;
+
+export function isHexColour(text: string): boolean {
+  return HEX.test(text);
+}
+
 export function rgb(hex: string): [number, number, number] {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  const match = HEX.exec(hex);
   if (!match) throw new Error(`Not a #rrggbb colour: ${hex}`);
   return match.slice(1).map((byte) => parseInt(byte, 16)) as [
     number,
