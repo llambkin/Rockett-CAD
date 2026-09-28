@@ -1174,13 +1174,18 @@ kbd {
 
 .project-list-card h1 {
   font-size: 22px;
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.project-list-card h1 .icon-btn {
-  position: absolute;
-  right: 0;
-  top: 0;
+.project-list-card h1 > :not(.logo) {
+  font-size: 1rem;
+  font-weight: normal;
+}
+
+.project-list-card h1 .icon-btn:first-of-type {
+  margin-left: auto;
 }
 
 .project-list-card .logo {
