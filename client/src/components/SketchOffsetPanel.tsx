@@ -18,13 +18,6 @@ import { DialogFooter } from "./form/DialogFooter";
 import { LengthField } from "./form/fields";
 
 export function SketchOffsetPanel() {
-  const mode = useStore((s) => s.mode);
-  return mode.name === "sketch" && mode.tool === "offset" ? (
-    <OffsetBody />
-  ) : null;
-}
-
-function OffsetBody() {
   const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
   const selection = useStore((s) => s.selection);

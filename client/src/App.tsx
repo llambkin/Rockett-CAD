@@ -9,11 +9,8 @@ import { registerCommand } from "./commands/registry";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
-import { FeatureDialog } from "./components/FeatureDialog";
 import { ExportPanel } from "./components/ExportPanel";
-import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
-import { MeasurePanel } from "./components/MeasurePanel";
-import { ControlsHelp } from "./components/ControlsHelp";
+import { HELP_PANEL, Panels, togglePanel, usePanelOpen } from "./shell/panels";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { useSplitter } from "./components/Splitter";
 import { ProjectList, backToProjects } from "./components/ProjectList";
@@ -246,7 +243,7 @@ export function TreePane() {
 }
 
 function Workspace({ onUsers }: { onUsers: () => void }) {
-  const [showHelp, setShowHelp] = useState(false);
+  const showHelp = usePanelOpen(HELP_PANEL);
   const [showHistory, setShowHistory] = useState(false);
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
@@ -262,7 +259,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
         label: "Controls",
         keys: ["?"],
         keyContext: "global",
-        run: () => setShowHelp((v) => !v),
+        run: () => togglePanel(HELP_PANEL),
       }),
     [],
   );
@@ -294,7 +291,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
           className="icon-btn"
           title="Keyboard and mouse controls (?)"
           aria-expanded={showHelp}
-          onClick={() => setShowHelp((v) => !v)}
+          onClick={() => togglePanel(HELP_PANEL)}
         >
           Controls
         </button>
@@ -305,12 +302,9 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
       <div className="main-row">
         <TreePane />
         <ViewportView />
-        <FeatureDialog />
         <ExportPanel />
-        <SketchOffsetPanel />
-        <MeasurePanel />
         <VersionLabel />
-        {showHelp && <ControlsHelp onClose={() => setShowHelp(false)} />}
+        <Panels />
         {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}
       </div>
       <Timeline />

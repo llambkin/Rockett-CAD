@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Feature } from "@rockett/shared";
-import { featurePatch, useStore } from "../store";
+import { featurePatch, useStore, type Mode } from "../store";
 import { takesAxis } from "../dialogPicks";
 import { createLivePreview } from "../livePreview";
 import { DraggablePanel } from "./DraggablePanel";
@@ -10,6 +10,8 @@ import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI, type FeatureUI } from "../features/registry";
 import { axisMissing, axisPicks } from "../features/inputs";
+
+type DialogMode = Extract<Mode, { name: "dialog" }>;
 
 function attempt(build: (() => Feature) | null): Feature | null {
   try {
@@ -54,14 +56,11 @@ function useLivePreview(editId: string | undefined, draft: Feature | null) {
 }
 
 export function FeatureDialog() {
-  const mode = useStore((s) => s.mode);
-  if (mode.name !== "dialog") return null;
-  const ui = featureUI(mode.dialog);
-  if (!ui) return null;
+  const mode = useStore((s) => s.mode) as DialogMode;
   return (
     <DialogBody
       key={mode.dialog + (mode.editFeatureId ?? "")}
-      ui={ui}
+      ui={featureUI(mode.dialog)!}
       editId={mode.editFeatureId}
     />
   );

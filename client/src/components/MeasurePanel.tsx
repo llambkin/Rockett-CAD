@@ -8,13 +8,10 @@ import { DialogFooter } from "./form/DialogFooter";
 
 export function MeasurePanel() {
   const units = useSetting("units.length");
-  const mode = useStore((s) => s.mode);
   const result = useStore((s) => s.measureResult);
   const selection = useStore((s) => s.selection);
   const fmt = (v: number | undefined) =>
     v === undefined ? "-" : formatLength(v, units);
-
-  if (mode.name !== "measure") return null;
 
   return (
     <DraggablePanel title="Measure" className="measure">
