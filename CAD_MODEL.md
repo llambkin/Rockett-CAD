@@ -32,6 +32,11 @@ a test that loads the previous schema.
   sha256 (`server/src/store/blobStore.ts`). The feature holds `blob`.
 - `extensions` values keep their `{ version, data }` envelope. The server
   never reads `data`.
+- A feature is a `CoreFeature` or an `ExtensionFeature`, whose dotted
+  `type` names its module and whose own `version` and `params` its
+  `FeatureSpec` owns. Load runs the spec's `migrate` through `migrate`, with
+  the type as namespace (`documentMigrations.nested`). Core features carry no
+  `version` and load unchanged; an unregistered type stays as stored.
 
 ### Schema steps
 

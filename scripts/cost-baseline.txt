@@ -58,7 +58,7 @@ server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 104
 server/src/store/historyStore.ts 593
 server/src/store/projectStore.ts 534
-shared/src/model.ts 561
+shared/src/model.ts 573
 shared/src/profiles.ts 607
 shared/src/routes.ts 574
 shared/src/sketchModify.ts 741

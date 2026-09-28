@@ -82,7 +82,7 @@ export function Panels() {
 registerPanel({
   id: "design.feature",
   title: "Feature",
-  when: (s) => s.mode.name === "dialog" && !!featureUI(s.mode.dialog),
+  when: (s) => s.mode.name === "dialog" && !!featureUI(s.mode.dialog)?.prefill,
   component: FeatureDialog,
 });
 registerPanel({

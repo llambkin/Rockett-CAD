@@ -1,5 +1,6 @@
 import type { EdgeRef, FaceRef, Feature } from "./model.js";
-import { FEATURE_SCHEMAS, MAX_TARGETS } from "./schema/features.js";
+import { featureSpec } from "./featureSpec.js";
+import { MAX_TARGETS } from "./schema/features.js";
 
 export function topoRefPaths(
   feature: Feature,
@@ -46,7 +47,7 @@ export function unsignedRefs(
 export function lacksTargets(feature: Feature): boolean {
   return (
     !("targets" in feature) &&
-    "targets" in FEATURE_SCHEMAS[feature.type].properties
+    "targets" in (featureSpec(feature.type)?.paramsSchema.properties ?? {})
   );
 }
 

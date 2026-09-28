@@ -93,6 +93,12 @@ const feature = <const T extends string, P extends TProperties>(
     ...properties,
   });
 
+export const extensionFeatureSchema = <P extends TSchema>(
+  type: string,
+  version: number,
+  params: P,
+) => feature(type, { version: Type.Literal(version), params });
+
 const entityBase = { id, construction: flag, external: flag };
 const projected = { ...entityBase, projection: Type.Optional(edgeRef) };
 

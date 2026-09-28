@@ -220,6 +220,8 @@ projects.
   through their registered `FeatureSpec` (`shared/src/featureSpec.ts`); an
   unregistered type is 400 `unknown feature type <type>`. Core schemas and
   `documentSchema` live in `shared/src/schema/features.ts`.
+  `registerExtensionSpec` builds a dotted type's spec from its `params`
+  schema and `version`; a feature at another version is 400.
 - Feature add and update fill a missing reference `sig` from the model
   (`server/src/geometry/signature.ts`). They also write `targets`, leaving
   out bodies the caller's view hides: `server/src/api/routes.ts`. See

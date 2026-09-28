@@ -425,7 +425,17 @@ export interface ImportMeshFeature extends FeatureBase {
   data: string;
 }
 
-export type Feature =
+export type ExtensionType = `${string}.${string}`;
+
+export interface ExtensionFeature<
+  P = Record<string, unknown>,
+> extends FeatureBase {
+  type: ExtensionType;
+  version: number;
+  params: P;
+}
+
+export type CoreFeature =
   | ImportStepFeature
   | ImportMeshFeature
   | SketchFeature
@@ -447,7 +457,9 @@ export type Feature =
   | EmbossFeature
   | MoveFeature;
 
-export type FeatureType = Feature["type"];
+export type Feature = CoreFeature | ExtensionFeature;
+
+export type FeatureType = CoreFeature["type"];
 
 // ---------------------------------------------------------------------------
 // Document

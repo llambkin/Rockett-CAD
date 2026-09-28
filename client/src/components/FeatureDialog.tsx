@@ -8,7 +8,7 @@ import { RefRepair } from "./RefRepair";
 import { DialogFooter } from "./form/DialogFooter";
 import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
-import { featureUI, type FeatureUI } from "../features/registry";
+import { featureUI, type DialogFeatureUI } from "../features/registry";
 import { axisMissing, axisPicks } from "../features/inputs";
 
 type DialogMode = Extract<Mode, { name: "dialog" }>;
@@ -60,7 +60,7 @@ export function FeatureDialog() {
   return (
     <DialogBody
       key={mode.dialog + (mode.editFeatureId ?? "")}
-      ui={featureUI(mode.dialog)!}
+      ui={featureUI(mode.dialog) as DialogFeatureUI}
       editId={mode.editFeatureId}
     />
   );
@@ -70,7 +70,7 @@ function DialogBody({
   ui,
   editId,
 }: {
-  ui: FeatureUI;
+  ui: DialogFeatureUI;
   editId?: string | undefined;
 }) {
   const dialog = ui.type;

@@ -3,6 +3,8 @@ import type {
   AxisRef,
   CadDocument,
   EdgeRef,
+  ExtensionFeature,
+  ExtensionType,
   FaceRef,
   Feature,
   FeatureType,
@@ -11,7 +13,7 @@ import type {
   ProfileRef,
 } from "./model.js";
 import { createRegistry } from "./registry.js";
-import { FEATURE_SCHEMAS } from "./schema/features.js";
+import { extensionFeatureSchema, FEATURE_SCHEMAS } from "./schema/features.js";
 import { parse } from "./schema/index.js";
 
 interface RefTargets {
@@ -61,7 +63,7 @@ export function featureRefs(f: Feature): FeatureRef[] {
   return specOf(f.type).refs(f);
 }
 
-export function nextFeatureName(doc: CadDocument, type: FeatureType): string {
+export function nextFeatureName(doc: CadDocument, type: string): string {
   const label = specOf(type).label;
   const n = (doc.counters[type] ?? 0) + 1;
   doc.counters[type] = n;
@@ -105,6 +107,36 @@ export function registerCoreSpec<T extends FeatureType>(
     },
     refs,
     displayOnly: [],
+  };
+  return registerFeatureSpec(spec);
+}
+
+export function registerExtensionSpec<P extends TSchema>({
+  type,
+  label,
+  version,
+  params,
+  migrate,
+}: {
+  type: ExtensionType;
+  label: string;
+  version: number;
+  params: P;
+  migrate?: (fromVersion: number, f: ExtensionFeature) => ExtensionFeature;
+}): () => void {
+  const schema = extensionFeatureSchema(type, version, params);
+  const spec: FeatureSpec<ExtensionFeature> = {
+    type,
+    label,
+    producesGeometry: true,
+    version,
+    paramsSchema: schema,
+    validate: (f) => {
+      parse(schema, f);
+    },
+    refs: () => [],
+    displayOnly: [],
+    ...(migrate && { migrate }),
   };
   return registerFeatureSpec(spec);
 }

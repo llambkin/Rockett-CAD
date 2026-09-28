@@ -11,6 +11,7 @@ import {
   type FaceRef,
   type Feature,
   type FeatureRef,
+  type FeatureType,
   type PlaneRef,
   type PointRef,
   type ProfileRef,
@@ -733,7 +734,7 @@ const markedPaths = (v: unknown, at = ""): string[] =>
 const target = (ref: FeatureRef) =>
   (ref as unknown as Record<string, unknown>)[ref.kind];
 
-const LABELS: Record<Feature["type"], string> = {
+const LABELS: Record<FeatureType, string> = {
   importStep: "Import STEP",
   importMesh: "Import mesh",
   sketch: "Sketch",
@@ -762,12 +763,12 @@ describe.each(Object.entries(cases))("%s feature spec", (type, specCase) => {
   it("is registered with its schema and label", () => {
     expect(spec).toMatchObject({
       type,
-      label: LABELS[type as Feature["type"]],
+      label: LABELS[type as FeatureType],
       producesGeometry: specCase.producesGeometry,
       version: 1,
       displayOnly: [],
     });
-    expect(spec.paramsSchema).toBe(FEATURE_SCHEMAS[type as Feature["type"]]);
+    expect(spec.paramsSchema).toBe(FEATURE_SCHEMAS[type as FeatureType]);
   });
 
   it("accepts valid features", () => {
@@ -786,7 +787,7 @@ describe.each(Object.entries(cases))("%s feature spec", (type, specCase) => {
 
   it("lists every reference with its param path", () => {
     for (const f of [...specCase.valid, ...(specCase.refsOnly ?? [])]) {
-      const properties = Object.keys(FEATURE_SCHEMAS[f.type].properties);
+      const properties = Object.keys(spec.paramsSchema.properties);
       expect(properties.filter((key) => !(key in f))).toEqual([]);
       const refs = featureRefs(f);
       for (const ref of refs) expect(valueAt(f, ref.path)).toEqual(target(ref));

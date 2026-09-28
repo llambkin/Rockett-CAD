@@ -1,10 +1,12 @@
 import {
   compareNames,
+  featureSpec,
   MANIFEST_VERSION,
   SCHEMA_VERSION,
   UNITS_LENGTH,
   VIEW_VERSION,
   type CadDocument,
+  type FeatureSpec,
   type ProjectManifest,
   type ProjectView,
   type Visibility,
@@ -24,6 +26,7 @@ export interface Migrations<T> {
   current: number;
   field: keyof T & string;
   steps: Record<number, (value: Value, context: MigrationContext) => Value>;
+  nested?: (value: Value) => Value;
 }
 
 export const NO_BLOBS: MigrationContext = {
@@ -80,7 +83,34 @@ export function migrate<T>(
     if (!step) throw new MissingStepError(table.namespace, from, table.current);
     current = { ...step(current, context), [table.field]: from + 1 };
   }
-  return current as T;
+  return (table.nested?.(current) ?? current) as T;
+}
+
+function featureMigrations({
+  type,
+  version,
+  migrate: step,
+}: FeatureSpec): Migrations<Value> {
+  const steps: Migrations<Value>["steps"] = {};
+  if (step)
+    for (let from = 1; from < version; from++)
+      steps[from] = (feature) => ({ ...step(from, feature as never) });
+  return { namespace: type, current: version, field: "version", steps };
+}
+
+function extensionFeatures(doc: Value): Value {
+  const features = doc.features;
+  if (!Array.isArray(features)) return doc;
+  const migrated = features.map((feature: Value) => {
+    const spec =
+      typeof feature.type === "string" && feature.type.includes(".")
+        ? featureSpec(feature.type)
+        : undefined;
+    return spec ? migrate(featureMigrations(spec), feature) : feature;
+  });
+  return migrated.every((feature, i) => feature === features[i])
+    ? doc
+    : { ...doc, features: migrated };
 }
 
 function stepBlob(feature: Value, context: MigrationContext): Value {
@@ -188,6 +218,7 @@ export const documentMigrations: Migrations<CadDocument> = {
         : doc,
     20: (doc) => ({ ...doc, modifiedBy: null }),
   },
+  nested: extensionFeatures,
 };
 
 export const viewMigrations: Migrations<ProjectView> = {

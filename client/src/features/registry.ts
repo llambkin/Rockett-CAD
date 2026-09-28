@@ -1,5 +1,9 @@
 import type { ComponentType } from "react";
-import { createRegistry, type Feature } from "@rockett/shared";
+import {
+  createRegistry,
+  type Feature,
+  type FeatureType,
+} from "@rockett/shared";
 import type { PickInput } from "../dialogPicks";
 import { useStore, type Selection } from "../store";
 
@@ -34,6 +38,7 @@ interface FeatureUIBase<F extends Feature> {
 }
 
 interface DialogUI<F extends Feature> {
+  type: F["type"] & FeatureType;
   prefill(f: F): { params: DialogParams; selection: Selection[] };
 }
 
@@ -58,7 +63,7 @@ export type FeatureUI<F extends Feature = Feature> = FeatureUIBase<F> &
       }
   );
 
-type DialogFeatureUI = Extract<FeatureUI, { prefill: unknown }>;
+export type DialogFeatureUI = Extract<FeatureUI, { prefill: unknown }>;
 
 async function openInDialog(ui: DialogFeatureUI, f: Feature): Promise<void> {
   if (useStore.getState().mode.name === "sketch") {
