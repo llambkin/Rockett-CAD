@@ -210,15 +210,10 @@ function SettingField({
   const layers = useSettings((state) => state.layers);
   const [error, setError] = useState<string | null>(null);
   const inScope = definition.scopes.includes(scope);
-  const own =
-    inScope &&
-    scope !== "user" &&
-    Object.hasOwn(
-      layers[scope === "project" ? "project" : "app"],
-      definition.key,
-    );
+  const own = inScope && Object.hasOwn(layers[scope], definition.key);
   const visible = resolveSettings({
     app: layers.app,
+    ...(scope !== "app" && { user: layers.user }),
     ...(scope === "project" && { project: layers.project }),
   }).values[definition.key] ?? { value: definition.default, source: "default" };
   const full = useSettings((state) => state.resolved[definition.key]);
@@ -296,7 +291,8 @@ function PageContent({
   const loaded = useSettings((state) => state.loaded);
   const loadError = useSettings((state) => state.loadError);
   const projectOpen = useSettings((state) => state.projectOpen);
-  const failed = selected === "project" ? loadError.project : loadError.app;
+  const failedScope = loadError[selected] ? selected : "app";
+  const failed = loadError[failedScope];
   return (
     <div className="dialog-body settings-content">
       <div className="settings-heading">
@@ -320,9 +316,7 @@ function PageContent({
           Settings did not load: {failed}.{" "}
           <button
             onClick={() =>
-              void retrySettingsLoad(
-                selected === "project" ? "project" : "app",
-              ).catch((error: Error) =>
+              void retrySettingsLoad(failedScope).catch((error: Error) =>
                 useStore.getState().setError(error.message),
               )
             }
@@ -330,7 +324,7 @@ function PageContent({
             Retry
           </button>
         </p>
-      ) : !loaded.app || (selected === "project" && !loaded.project) ? (
+      ) : !loaded.app || !loaded[selected] ? (
         <p>Loading settings...</p>
       ) : page.length === 0 ? (
         <p>No settings in this section.</p>
@@ -364,8 +358,7 @@ function writableScopes(
     (scope) =>
       definitions.some((definition) => definition.scopes.includes(scope)) &&
       (scope !== "project" || projectOpen) &&
-      (scope !== "app" || admin) &&
-      scope !== "user",
+      (scope !== "app" || admin),
   );
 }
 

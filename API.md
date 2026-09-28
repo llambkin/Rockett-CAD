@@ -72,6 +72,11 @@ before the last accepted one is refused. Admins must use TOTP and members may
 opt in. An admin without TOTP signs in to an enrol step, and an account with
 TOTP signs in to a code step. A step cookie lasts 10 minutes and reaches only
 its own routes and logout; every other route returns 401 `unauthenticated`.
+A full session ends once unused for the user's `auth.sessionDays` (1 to 365,
+default 30) or the app's `auth.sessionMaxDays` (default 365), whichever is
+shorter. A change to either applies at the session's next request. Each
+request on a full session resends its cookie with a 365-day `Max-Age`, so the
+browser keeps it as long as the server does.
 Wrong codes count toward the sign-in rate limit. The offline password reset
 also turns TOTP off. When both `ROCKETT_CF_ACCESS_TEAM`
 and `ROCKETT_CF_ACCESS_AUD` are set, a verified `Cf-Access-Jwt-Assertion`

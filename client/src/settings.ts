@@ -8,6 +8,7 @@ import {
   type ResolvedSettings,
   type SettingScope,
   type SettingValue,
+  type SettingsPatch,
 } from "@rockett/shared";
 import { ApiError } from "./api";
 import { settingsApi } from "./settingsApi";
@@ -39,9 +40,30 @@ function discard(layer: Layer): void {
     edit.reject(new Error("Settings context changed."));
   layer.pending = [];
 }
-let app = fresh();
-let project = fresh();
+const layers: Record<SettingScope, Layer> = {
+  app: fresh(),
+  user: fresh(),
+  project: fresh(),
+};
 let projectId: string | null = null;
+const noErrors = () => ({ app: null, user: null, project: null });
+
+function fetchLayer(scope: SettingScope, id: string | null) {
+  if (scope === "app") return settingsApi.getAppSettings();
+  if (scope === "user") return settingsApi.getUserSettings();
+  return settingsApi.getProjectSettings(id!);
+}
+
+function patchLayer(
+  scope: SettingScope,
+  id: string | null,
+  patch: SettingsPatch,
+  version: string,
+) {
+  if (scope === "app") return settingsApi.patchAppSettings(patch, version);
+  if (scope === "user") return settingsApi.patchUserSettings(patch, version);
+  return settingsApi.patchProjectSettings(id!, patch, version);
+}
 
 function values(layer: Layer): LayerValues {
   const result = { ...layer.base };
@@ -55,32 +77,41 @@ function values(layer: Layer): LayerValues {
 const initial = () => resolveSettings({}).values;
 export const useSettings = create<{
   resolved: ResolvedSettings["values"];
-  layers: { app: LayerValues; project: LayerValues };
-  loaded: { app: boolean; project: boolean };
+  layers: Record<SettingScope, LayerValues>;
+  loaded: Record<SettingScope, boolean>;
   projectOpen: boolean;
   errors: ResolvedSettings["errors"];
-  loadError: { app: string | null; project: string | null };
+  loadError: Record<SettingScope, string | null>;
 }>(() => ({
   resolved: initial(),
-  layers: { app: {}, project: {} },
-  loaded: { app: false, project: false },
+  layers: { app: {}, user: {}, project: {} },
+  loaded: { app: false, user: false, project: false },
   projectOpen: false,
   errors: [],
-  loadError: { app: null, project: null },
+  loadError: noErrors(),
 }));
 
-let loadError = { app: null as string | null, project: null as string | null };
+let loadError: Record<SettingScope, string | null> = noErrors();
 
 function publish(): void {
-  const layers = { app: values(app), project: values(project) };
+  const shown = {
+    app: values(layers.app),
+    user: values(layers.user),
+    project: values(layers.project),
+  };
   const next = resolveSettings({
-    app: layers.app,
-    ...(projectId && { project: layers.project }),
+    app: shown.app,
+    user: shown.user,
+    ...(projectId && { project: shown.project }),
   });
   useSettings.setState({
     resolved: next.values,
-    layers,
-    loaded: { app: Boolean(app.version), project: Boolean(project.version) },
+    layers: shown,
+    loaded: {
+      app: Boolean(layers.app.version),
+      user: Boolean(layers.user.version),
+      project: Boolean(layers.project.version),
+    },
     projectOpen: Boolean(projectId),
     errors: next.errors,
     loadError,
@@ -108,20 +139,20 @@ export function subscribe<K extends string>(
   });
 }
 
-export async function loadAppSettings(): Promise<void> {
-  const current = app;
+async function loadLayer(scope: "app" | "user"): Promise<void> {
+  const current = layers[scope];
   try {
-    const snapshot = await settingsApi.getAppSettings();
-    if (current !== app) return;
-    app.base = snapshot.values;
-    app.version = snapshot.version;
-    loadError = { ...loadError, app: null };
+    const snapshot = await fetchLayer(scope, null);
+    if (current !== layers[scope]) return;
+    current.base = snapshot.values;
+    current.version = snapshot.version;
+    loadError = { ...loadError, [scope]: null };
     publish();
   } catch (error) {
-    if (current === app) {
+    if (current === layers[scope]) {
       loadError = {
         ...loadError,
-        app: String(error instanceof Error ? error.message : error),
+        [scope]: String(error instanceof Error ? error.message : error),
       };
       publish();
     }
@@ -129,20 +160,23 @@ export async function loadAppSettings(): Promise<void> {
   }
 }
 
+export const loadAppSettings = () => loadLayer("app");
+export const loadUserSettings = () => loadLayer("user");
+
 export async function openProjectSettings(id: string): Promise<void> {
   closeProjectSettings();
   projectId = id;
-  const current = project;
+  const current = layers.project;
   publish();
   try {
-    const snapshot = await settingsApi.getProjectSettings(id);
-    if (current !== project || projectId !== id) return;
-    project.base = snapshot.values;
-    project.version = snapshot.version;
+    const snapshot = await fetchLayer("project", id);
+    if (current !== layers.project || projectId !== id) return;
+    current.base = snapshot.values;
+    current.version = snapshot.version;
     loadError = { ...loadError, project: null };
     publish();
   } catch (error) {
-    if (current === project && projectId === id) {
+    if (current === layers.project && projectId === id) {
       loadError = {
         ...loadError,
         project: String(error instanceof Error ? error.message : error),
@@ -154,23 +188,25 @@ export async function openProjectSettings(id: string): Promise<void> {
 }
 
 export function closeProjectSettings(): void {
-  discard(project);
+  discard(layers.project);
   projectId = null;
-  project = fresh();
+  layers.project = fresh();
   loadError = { ...loadError, project: null };
   publish();
 }
 
 export function clearSettings(): void {
-  discard(app);
-  app = fresh();
-  loadError = { app: null, project: null };
+  discard(layers.app);
+  discard(layers.user);
+  layers.app = fresh();
+  layers.user = fresh();
+  loadError = noErrors();
   closeProjectSettings();
   publish();
 }
 
-export function retrySettingsLoad(scope: "app" | "project"): Promise<void> {
-  if (scope === "app") return loadAppSettings();
+export function retrySettingsLoad(scope: SettingScope): Promise<void> {
+  if (scope !== "project") return loadLayer(scope);
   return projectId
     ? openProjectSettings(projectId)
     : Promise.reject(new Error("Open a project to load its settings."));
@@ -181,7 +217,7 @@ function report(error: Error): void {
 }
 
 async function drain(
-  scope: "app" | "project",
+  scope: SettingScope,
   layer: Layer,
   id: string | null,
 ): Promise<void> {
@@ -189,32 +225,26 @@ async function drain(
   layer.busy = true;
   try {
     while (layer.pending.length) {
-      if ((scope === "app" ? app : project) !== layer) break;
+      if (layers[scope] !== layer) break;
       const edit = layer.pending[0]!;
       try {
         const patch = edit.reset
           ? { reset: [edit.key] }
           : { set: { [edit.key]: edit.value } };
-        const response =
-          scope === "app"
-            ? await settingsApi.patchAppSettings(patch, layer.version)
-            : await settingsApi.patchProjectSettings(id!, patch, layer.version);
-        if ((scope === "app" ? app : project) !== layer) return;
+        const response = await patchLayer(scope, id, patch, layer.version);
+        if (layers[scope] !== layer) return;
         layer.base = response.values;
         layer.version = response.version;
         layer.pending.shift();
         edit.resolve();
         publish();
       } catch (cause) {
-        if ((scope === "app" ? app : project) !== layer) return;
+        if (layers[scope] !== layer) return;
         const error = cause instanceof Error ? cause : new Error(String(cause));
         if (error instanceof ApiError && error.status === 409) {
           try {
-            const current =
-              scope === "app"
-                ? await settingsApi.getAppSettings()
-                : await settingsApi.getProjectSettings(id!);
-            if ((scope === "app" ? app : project) !== layer) return;
+            const current = await fetchLayer(scope, id);
+            if (layers[scope] !== layer) return;
             layer.base = current.values;
             layer.version = current.version;
           } catch {
@@ -247,49 +277,28 @@ async function drain(
   }
 }
 
-export function setSetting<K extends string>(
-  key: K,
-  value: SettingValue<K>,
-  scope?: SettingScope,
-): Promise<void> {
-  const definition = SETTINGS.get(key);
-  if (!definition) return Promise.reject(new Error(`${key} is not a setting.`));
+function writable(scope: SettingScope): boolean {
   const role = useSession.getState();
-  const target =
-    scope ??
-    (projectId && definition.scopes.includes("project")
-      ? "project"
-      : role.kind === "signed-in" &&
-          role.user.role === "admin" &&
-          definition.scopes.includes("app")
-        ? "app"
-        : "user");
-  if (
-    target === "user" ||
-    (target === "project" && !projectId) ||
-    (target === "app" &&
-      (role.kind !== "signed-in" || role.user.role !== "admin"))
-  )
-    return Promise.reject(
-      new Error(`The ${target} settings layer is not writable here.`),
-    );
-  const invalid = validateSettingValue(key, target, value);
-  if (invalid) return Promise.reject(new SettingsError([invalid]));
-  const layer = target === "app" ? app : project;
-  if (!layer.version)
-    return Promise.reject(
-      new Error(`The ${target} settings layer is not loaded.`),
-    );
-  return queueEdit(target, layer, key, value, false);
+  if (scope === "project") return Boolean(projectId);
+  if (role.kind !== "signed-in") return false;
+  return scope === "user" || role.user.role === "admin";
 }
 
 function queueEdit(
-  scope: "app" | "project",
-  layer: Layer,
+  scope: SettingScope,
   key: string,
   value: unknown,
   reset: boolean,
 ): Promise<void> {
+  if (!writable(scope))
+    return Promise.reject(
+      new Error(`The ${scope} settings layer is not writable here.`),
+    );
+  const layer = layers[scope];
+  if (!layer.version)
+    return Promise.reject(
+      new Error(`The ${scope} settings layer is not loaded.`),
+    );
   return new Promise<void>((resolve, reject) => {
     layer.pending.push({ key, value, reset, resolve, reject });
     publish();
@@ -297,31 +306,35 @@ function queueEdit(
   });
 }
 
-export function resetSetting(key: string, scope: SettingScope): Promise<void> {
+export function setSetting<K extends string>(
+  key: K,
+  value: SettingValue<K>,
+  scope?: SettingScope,
+): Promise<void> {
   const definition = SETTINGS.get(key);
-  if (!definition?.scopes.includes(scope))
+  if (!definition) return Promise.reject(new Error(`${key} is not a setting.`));
+  const target =
+    scope ??
+    (["project", "user", "app"] as const).find(
+      (candidate) =>
+        definition.scopes.includes(candidate) && writable(candidate),
+    ) ??
+    "user";
+  const invalid = validateSettingValue(key, target, value);
+  if (invalid) return Promise.reject(new SettingsError([invalid]));
+  return queueEdit(target, key, value, false);
+}
+
+export function resetSetting(key: string, scope: SettingScope): Promise<void> {
+  if (!SETTINGS.get(key)?.scopes.includes(scope))
     return Promise.reject(
       new Error(`${key} cannot be reset at the ${scope} layer.`),
     );
-  const role = useSession.getState();
-  if (
-    scope === "user" ||
-    (scope === "app" &&
-      (role.kind !== "signed-in" || role.user.role !== "admin")) ||
-    (scope === "project" && !projectId)
-  )
-    return Promise.reject(
-      new Error(`The ${scope} settings layer is not writable here.`),
-    );
-  const layer = scope === "app" ? app : project;
-  if (!layer.version)
-    return Promise.reject(
-      new Error(`The ${scope} settings layer is not loaded.`),
-    );
-  return queueEdit(scope, layer, key, undefined, true);
+  return queueEdit(scope, key, undefined, true);
 }
 
 export function retryPendingSettings(): void {
-  void drain("app", app, null);
-  if (projectId) void drain("project", project, projectId);
+  void drain("app", layers.app, null);
+  void drain("user", layers.user, null);
+  if (projectId) void drain("project", layers.project, projectId);
 }

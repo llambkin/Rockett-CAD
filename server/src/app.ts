@@ -145,7 +145,7 @@ export function createApp({
     (team && aud
       ? { team, aud, keys: new AccessKeyStore(team), now: Date.now }
       : undefined);
-  app.use("/api", requireSession(sessions, users, cookie.name, identity));
+  app.use("/api", requireSession(sessions, users, cookie, identity));
   app.use("/api", createAuthRouter(users, sessions, cookie, setupToken));
   app.use("/api", createFriendRouter(users, friends, store, folders, notices));
   app.use(

@@ -1,5 +1,12 @@
 import crypto from "node:crypto";
+import {
+  resolveSettings,
+  SESSION_DAY_RANGE,
+  SESSION_DAYS,
+  SESSION_MAX_DAYS,
+} from "@rockett/shared";
 import { JsonStore, sha256, StoreError } from "../store/jsonStore.js";
+import { SettingsStore } from "../store/settingsStore.js";
 import type { Storage } from "../store/storage.js";
 import { TIMING_MS } from "../tunables.js";
 
@@ -45,6 +52,7 @@ export class SessionStore {
 
   private constructor(
     private readonly file: JsonStore<SessionsFile>,
+    private readonly settings: SettingsStore,
     private readonly now: () => number,
   ) {
     this.savedAt = now();
@@ -69,6 +77,7 @@ export class SessionStore {
         },
         validate,
       }),
+      new SettingsStore(storage),
       now,
     );
     await store.load();
@@ -113,9 +122,15 @@ export class SessionStore {
   async resolve(
     token: string,
   ): Promise<{ userId: string; scope: SessionScope } | undefined> {
-    const session = this.live(sha256(token));
+    const hash = sha256(token);
+    const session = this.live(hash);
     if (!session) return undefined;
-    session.lastSeenAt = this.now();
+    const now = this.now();
+    if (session.scope === "full" && (await this.outlived(session, now))) {
+      if (this.drop(hash)) await this.save();
+      return undefined;
+    }
+    session.lastSeenAt = now;
     if (session.lastSeenAt - this.savedAt >= TIMING_MS.sessionSave)
       await this.save();
     return { userId: session.userId, scope: session.scope };
@@ -178,12 +193,24 @@ export class SessionStore {
     return saving;
   }
 
-  private expired(session: Session, now: number): boolean {
-    if (session.scope !== "full")
-      return now - session.createdAt >= TIMING_MS.signInStep;
-    return (
-      now - session.lastSeenAt >= TIMING_MS.sessionIdle ||
-      now - session.createdAt >= TIMING_MS.sessionAbsolute
+  private async outlived(session: Session, now: number): Promise<boolean> {
+    const idle = now - session.lastSeenAt;
+    const day = TIMING_MS.sessionDay;
+    if (idle < SESSION_DAY_RANGE.minimum * day) return false;
+    const { values } = resolveSettings({
+      app: await this.settings.read({ scope: "app" }),
+      user: await this.settings.read({ scope: "user", id: session.userId }),
+    });
+    const days = Math.min(
+      values[SESSION_DAYS.key]?.value as number,
+      values[SESSION_MAX_DAYS.key]?.value as number,
     );
+    return idle >= days * day;
+  }
+
+  private expired(session: Session, now: number): boolean {
+    return session.scope === "full"
+      ? now - session.lastSeenAt >= TIMING_MS.sessionLongest
+      : now - session.createdAt >= TIMING_MS.signInStep;
   }
 }

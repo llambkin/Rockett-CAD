@@ -36,6 +36,8 @@ export interface SettingTypes {
   "sketch.angles": number[];
   "appearance.previewTintStrength": number;
   "appearance.previewGhostOpacity": number;
+  "auth.sessionDays": number;
+  "auth.sessionMaxDays": number;
 }
 
 export type SettingOf<D extends SettingDefinition> = Static<D["schema"]>;
@@ -275,6 +277,26 @@ export const PREVIEW_GHOST_OPACITY = defineSetting({
   schema: Type.Number({ minimum: 0, maximum: 1 }),
 });
 
+export const SESSION_DAY_RANGE = { minimum: 1, maximum: 365 };
+
+export const SESSION_DAYS = defineSetting({
+  key: "auth.sessionDays",
+  label: "Stay signed in for (days)",
+  scopes: ["user"],
+  section: "user",
+  default: 30,
+  schema: Type.Integer(SESSION_DAY_RANGE),
+});
+
+export const SESSION_MAX_DAYS = defineSetting({
+  key: "auth.sessionMaxDays",
+  label: "Longest stay signed in (days)",
+  scopes: ["app"],
+  section: "app",
+  default: 365,
+  schema: Type.Integer(SESSION_DAY_RANGE),
+});
+
 registerSettings([
   UNITS_LENGTH,
   VIEWPORT_PICK_TOLERANCE,
@@ -286,4 +308,6 @@ registerSettings([
   SKETCH_ANGLES,
   PREVIEW_TINT_STRENGTH,
   PREVIEW_GHOST_OPACITY,
+  SESSION_DAYS,
+  SESSION_MAX_DAYS,
 ]);

@@ -23,6 +23,7 @@ import { browserKeyFromPath } from "./paths";
 import {
   closeProjectSettings,
   loadAppSettings,
+  loadUserSettings,
   openProjectSettings,
 } from "./settings";
 
@@ -44,7 +45,7 @@ export function App() {
   useEffect(() => {
     if (session.kind !== "signed-in") return;
     let active = true;
-    void loadAppSettings()
+    void Promise.all([loadAppSettings(), loadUserSettings()])
       .catch((error: Error) => {
         if (active) useStore.getState().setError(error.message);
       })

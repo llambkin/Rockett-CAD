@@ -29,7 +29,7 @@ export function readSessionCookie(
 export function sessionCookie(
   config: CookieConfig,
   token: string,
-  maxAge = TIMING_MS.sessionAbsolute / 1000,
+  maxAge = TIMING_MS.sessionLongest / 1000,
 ): string {
   return `${config.name}=${token}; ${config.secure ? "Secure; " : ""}HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
 }

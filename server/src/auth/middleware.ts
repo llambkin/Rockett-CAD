@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import type { RequestHandler } from "express";
 import { AUTH_ROUTES } from "@rockett/shared";
-import { readSessionCookie, SESSION_COOKIE_NAME } from "./cookie.js";
+import {
+  cookieConfig,
+  readSessionCookie,
+  sessionCookie,
+  type CookieConfig,
+} from "./cookie.js";
 import { verifyAccessJwt, type AccessKeyStore } from "./cfAccess.js";
 import type { SessionScope, SessionStore } from "./sessions.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
@@ -41,13 +46,13 @@ export interface AccessIdentity {
 export function requireSession(
   sessions: SessionStore,
   users: UserStore,
-  cookieName = SESSION_COOKIE_NAME,
+  cookie: CookieConfig = cookieConfig(undefined),
   access?: AccessIdentity,
 ): RequestHandler {
   return async (req, res, next) => {
     const key = `${req.method} ${req.baseUrl}${req.path}`;
     if (PUBLIC_ROUTES.has(key)) return next();
-    const token = readSessionCookie(req.headers.cookie, cookieName);
+    const token = readSessionCookie(req.headers.cookie, cookie.name);
     let credential = token;
     try {
       const session = token ? await sessions.resolve(token) : undefined;
@@ -76,6 +81,8 @@ export function requireSession(
         (scope !== "full" && !STEP_ROUTES[scope].has(key))
       )
         return res.status(401).json({ error: "unauthenticated" });
+      if (token && credential === token && scope === "full")
+        res.set("Set-Cookie", sessionCookie(cookie, token));
       res.locals.user = toPublicUser(record);
       res.locals.scope = scope;
       res.locals.session = createHash("sha256")

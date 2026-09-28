@@ -35,6 +35,9 @@ export const settingsApi = {
   getAppSettings: () => settingsRequest(ROUTES.appSettings, {}),
   patchAppSettings: (patch: SettingsPatch, version: string) =>
     settingsRequest(ROUTES.patchAppSettings, {}, patch, version),
+  getUserSettings: () => settingsRequest(ROUTES.userSettings, {}),
+  patchUserSettings: (patch: SettingsPatch, version: string) =>
+    settingsRequest(ROUTES.patchUserSettings, {}, patch, version),
   getProjectSettings: (id: string) =>
     settingsRequest(ROUTES.projectSettings, { id }),
   patchProjectSettings: (id: string, patch: SettingsPatch, version: string) =>

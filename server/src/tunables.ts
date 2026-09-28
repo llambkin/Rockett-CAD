@@ -1,11 +1,11 @@
-import { DAY, HOUR, MB, MINUTE } from "@rockett/shared";
+import { DAY, HOUR, MB, MINUTE, SESSION_DAY_RANGE } from "@rockett/shared";
 
 export const TIMING_MS = {
   temporaryProjectLifetime: DAY,
   temporaryProjectTouch: MINUTE,
   temporaryProjectSweep: HOUR,
-  sessionIdle: 7 * DAY,
-  sessionAbsolute: 30 * DAY,
+  sessionDay: DAY,
+  sessionLongest: SESSION_DAY_RANGE.maximum * DAY,
   sessionSave: MINUTE,
   authFailureWindow: 15 * MINUTE,
   signInStep: 10 * MINUTE,
