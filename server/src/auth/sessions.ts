@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import {
   resolveSettings,
   SESSION_DAY_RANGE,
@@ -12,6 +13,7 @@ import { TIMING_MS } from "../tunables.js";
 
 const MAX_PER_USER = 20;
 const KEY = "sessions";
+const FILE = "sessions.json";
 const SCOPES = ["full", "enrol", "code"] as const;
 
 export type SessionScope = (typeof SCOPES)[number];
@@ -68,7 +70,7 @@ export class SessionStore {
         root: "",
         name: "sessions",
         key: /^sessions$/,
-        file: () => "sessions.json",
+        file: () => FILE,
         migrations: {
           namespace: "sessions",
           current: 1,
@@ -88,15 +90,25 @@ export class SessionStore {
     let stored: SessionsFile;
     try {
       stored = await this.file.read(KEY);
+      validate(stored);
     } catch (error) {
       if (error instanceof StoreError && error.code === "not_found") return;
-      throw error;
+      return this.moveAside();
     }
-    validate(stored);
     const now = this.now();
     for (const { hash, ...session } of stored.sessions)
       if (!this.expired(session, now)) this.sessions.set(hash, session);
     if (this.sessions.size < stored.sessions.length) await this.save();
+  }
+
+  private async moveAside(): Promise<void> {
+    const file = path.posix.join(this.file.dir(KEY), FILE);
+    const stamp = new Date(this.now()).toISOString().replace(/[:.]/g, "-");
+    const aside = `${file}.corrupt-${stamp}`;
+    await this.file.options.storage.move(file, aside);
+    console.warn(
+      `[rockett] ${file} failed validation; moved it to ${aside} and signed everyone out`,
+    );
   }
 
   async create(userId: string, scope: SessionScope = "full"): Promise<string> {
