@@ -34,6 +34,7 @@ export interface SettingTypes {
   "view.invertZoom": boolean;
   "sketch.angleStep": number;
   "sketch.angles": number[];
+  "appearance.theme": "grey" | "black";
   "appearance.previewTintStrength": number;
   "appearance.previewGhostOpacity": number;
   "auth.sessionDays": number;
@@ -259,6 +260,15 @@ export const SKETCH_ANGLES = defineSetting({
   schema: Type.Array(Type.Number({ minimum: 0, exclusiveMaximum: 360 })),
 });
 
+export const APPEARANCE_THEME = defineSetting({
+  key: "appearance.theme",
+  label: "Theme",
+  scopes: ["app", "user"],
+  section: "user",
+  default: "grey",
+  schema: Type.Enum(["grey", "black"]),
+});
+
 export const PREVIEW_TINT_STRENGTH = defineSetting({
   key: "appearance.previewTintStrength",
   label: "Preview tint strength",
@@ -306,6 +316,7 @@ registerSettings([
   VIEW_INVERT_ZOOM,
   SKETCH_ANGLE_STEP,
   SKETCH_ANGLES,
+  APPEARANCE_THEME,
   PREVIEW_TINT_STRENGTH,
   PREVIEW_GHOST_OPACITY,
   SESSION_DAYS,

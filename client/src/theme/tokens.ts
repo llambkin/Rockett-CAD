@@ -1,5 +1,5 @@
-import { PREVIEW_TINT_STRENGTH } from "@rockett/shared";
-import { subscribe } from "../settings";
+import { PREVIEW_TINT_STRENGTH, type SettingTypes } from "@rockett/shared";
+import { getSetting, subscribe } from "../settings";
 import { rgb } from "./contrast";
 
 function blend(from: string, to: string, strength: number): string {
@@ -26,6 +26,10 @@ const blue = "#66b3ff";
 const red = "#ff8080";
 const green = "#4cc36a";
 const body = "#b7bcc1";
+const lightGrey = "#b3b3b3";
+const black = "#000000";
+const raised = "#1a1a1a";
+const blackBorder = "#737373";
 
 function previewTints(strength: number) {
   return {
@@ -72,7 +76,7 @@ export const THEME_TOKENS = {
   hover,
   "sketch-line": text,
   "sketch-point": text,
-  "sketch-inactive": "#b3b3b3",
+  "sketch-inactive": lightGrey,
   "sketch-dimmed": border,
   "sketch-construction": "#8f7fe8",
   "sketch-external": "#bb88ff",
@@ -106,6 +110,34 @@ export type ThemeTokens = { readonly [K in keyof typeof THEME_TOKENS]: string };
 
 export type ThemeColor = keyof ThemeTokens;
 
+export const THEMES: Record<SettingTypes["appearance.theme"], ThemeTokens> = {
+  grey: THEME_TOKENS,
+  black: {
+    ...THEME_TOKENS,
+    bg0: black,
+    bg1: black,
+    bg2: raised,
+    bg3: raised,
+    border: blackBorder,
+    "text-dim": lightGrey,
+    accent: blue,
+    ok: green,
+    warn: "#ffc247",
+    err: red,
+    danger: red,
+    "bg-glow": black,
+    "offset-fill": raised,
+    "hint-fill": raised,
+    "label-fill": raised,
+    "entry-fill": raised,
+    "viewport-bg": black,
+    "sketch-dimmed": blackBorder,
+    "viewcube-face": raised,
+    "viewcube-border": blackBorder,
+    "viewcube-edge": blackBorder,
+  },
+};
+
 let currentTokens: ThemeTokens = THEME_TOKENS;
 const listeners = new Set<(tokens: ThemeTokens) => void>();
 
@@ -138,8 +170,19 @@ export function applyTheme(
   for (const listener of listeners) listener(tokens);
 }
 
-export function followPreviewTint(): () => void {
-  return subscribe("appearance.previewTintStrength", (strength) =>
-    applyTheme({ ...currentTokens, ...previewTints(strength) }),
-  );
+function applyAppearance(): void {
+  applyTheme({
+    ...THEMES[getSetting("appearance.theme")],
+    ...previewTints(getSetting("appearance.previewTintStrength")),
+  });
+}
+
+export function followAppearance(): () => void {
+  const stops = [
+    subscribe("appearance.theme", applyAppearance),
+    subscribe("appearance.previewTintStrength", applyAppearance),
+  ];
+  return () => {
+    for (const stop of stops) stop();
+  };
 }

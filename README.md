@@ -79,6 +79,7 @@ everything downstream against persistent topology references.
 
 - **Accounts**: admin setup, sign in by username or email, TOTP codes, password changes, sign out, user emails and Cloudflare Access sign-in.
 - **Settings**: the panel edits app, personal and project preferences, such as sign-in length; imports keep unknown plugin values.
+- **Theme**: pick grey or black in Settings; the app and the viewport recolour at once.
 - **Display units**: sketch dimensions, measurements and feature lengths follow the selected unit; typed lengths accept unit suffixes while models remain in millimetres.
 - **Friend requests and notices**: request by email, accept or reject in the user menu, and open newly shared projects.
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, camera preferences, pick tolerance; projects reopen at your last camera.

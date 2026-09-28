@@ -43,7 +43,7 @@ client/src/three/CadViewport.ts 1253
 client/src/three/CadViewport.ts addHighlight 85
 client/src/three/CadViewport.ts buildBody 88
 client/src/three/CadViewport.ts pick 205
-client/src/three/ViewCube.ts constructor 96
+client/src/three/ViewCube.ts constructor 83
 client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
 client/src/three/toolPreview.ts updateToolPreview 158
