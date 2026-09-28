@@ -518,14 +518,23 @@ export interface Preview {
   document: CadDocument;
 }
 
+interface Held {
+  preview: Preview;
+  bytes: number;
+  touched: number;
+}
+
 export class Previews {
-  private readonly open = new Map<string, Preview & { touched: number }>();
+  private readonly open = new Map<string, Held>();
+  private bytes = 0;
+
+  constructor(private readonly budget: number = PREVIEW_LIMITS.bytes) {}
 
   find(project: string, tx: string, owner: string): Preview | undefined {
     const now = Date.now();
-    for (const [key, preview] of this.open)
-      if (now - preview.touched >= TIMING_MS.previewIdle) this.open.delete(key);
-    const found = this.open.get(`${project}/${tx}`);
+    for (const [key, held] of this.open)
+      if (now - held.touched >= TIMING_MS.previewIdle) this.drop(key);
+    const found = this.open.get(`${project}/${tx}`)?.preview;
     if (found && found.owner !== owner)
       throw new StoreError(
         "This preview belongs to another user or session.",
@@ -536,15 +545,26 @@ export class Previews {
 
   keep(project: string, tx: string, preview: Preview): void {
     const key = `${project}/${tx}`;
-    this.open.delete(key);
-    this.open.set(key, { ...preview, touched: Date.now() });
+    const held = this.open.get(key);
+    const bytes =
+      held?.preview.document === preview.document
+        ? held.bytes
+        : Buffer.byteLength(JSON.stringify(preview.document));
+    this.drop(key);
+    this.open.set(key, { preview, bytes, touched: Date.now() });
+    this.bytes += bytes;
     for (const oldest of this.open.keys()) {
-      if (this.open.size <= PREVIEW_LIMITS.open) break;
-      this.open.delete(oldest);
+      if (this.bytes <= this.budget) break;
+      this.drop(oldest);
     }
   }
 
   end(project: string, tx: string): void {
-    this.open.delete(`${project}/${tx}`);
+    this.drop(`${project}/${tx}`);
+  }
+
+  private drop(key: string): void {
+    this.bytes -= this.open.get(key)?.bytes ?? 0;
+    this.open.delete(key);
   }
 }

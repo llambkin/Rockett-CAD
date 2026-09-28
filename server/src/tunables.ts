@@ -1,4 +1,4 @@
-import { DAY, HOUR, MINUTE } from "@rockett/shared";
+import { DAY, HOUR, MB, MINUTE } from "@rockett/shared";
 
 export const TIMING_MS = {
   temporaryProjectLifetime: DAY,
@@ -25,7 +25,7 @@ export const TRIAL_BUDGET = {
 } as const;
 
 export const PREVIEW_LIMITS = {
-  open: 16,
+  bytes: 256 * MB,
 } as const;
 
 export const JOB_LIMITS = {

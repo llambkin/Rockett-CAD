@@ -282,10 +282,10 @@ not hold and history does not name is 404 `not_found`.
 answers the saved document and its evaluation; it never writes the document,
 so another user's edit made meanwhile stays. A repeat answers the same.
 
-Both take the optional `?position=`. The server holds at most 16 open
-transactions and drops the least recently used past that; one left idle for an
-hour expires. A restart drops them all. Nothing staged reaches the saved
-document without a commit.
+Both take the optional `?position=`. Open transactions share a 256 MB budget,
+counted as the serialized size of each staged document; past it the server
+drops the least recently used. One left idle for an hour expires. A restart
+drops them all. Nothing staged reaches the saved document without a commit.
 
 ## Projects
 
