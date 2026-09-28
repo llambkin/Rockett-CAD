@@ -1349,13 +1349,29 @@ a.btn {
   padding: 3px 7px;
 }
 
-.version-label {
+.version-label,
+.pick-readout {
   position: absolute;
-  right: 8px;
   bottom: 6px;
-  z-index: 1;
   font-size: 10px;
+}
+
+.version-label {
+  right: 8px;
+  z-index: 1;
   color: var(--text-dim);
   opacity: 0.6;
   cursor: default;
+}
+
+.pick-readout {
+  left: 8px;
+  z-index: 5;
+  color: var(--text);
+  text-shadow:
+    0 0 1px var(--shadow-strong),
+    0 0 2px var(--shadow-strong),
+    0 0 3px var(--shadow-strong);
+  white-space: nowrap;
+  pointer-events: none;
 }

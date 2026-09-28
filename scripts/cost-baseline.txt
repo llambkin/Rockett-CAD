@@ -21,8 +21,8 @@ client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3209
-client/src/components/ViewportView.tsx ViewportHud 95
+client/src/components/ViewportView.tsx 3211
+client/src/components/ViewportView.tsx ViewportHud 96
 client/src/components/ViewportView.tsx ViewportView 2954
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 81
 client/src/components/ViewportView.tsx handleHover 138

@@ -79,6 +79,7 @@ import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { repick } from "./RefRepair";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
+import { PickReadout } from "./PickReadout";
 
 interface DimEditField {
   constraintId: string;
@@ -3154,6 +3155,7 @@ function ViewportHud() {
           {sketchBadge.label}
         </div>
       )}
+      <PickReadout />
     </>
   );
 }

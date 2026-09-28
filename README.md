@@ -97,6 +97,7 @@ everything downstream against persistent topology references.
 - **Reload**: refreshing the page reopens the project you had open; Back returns to the list.
 - **Errors**: stay visible until dismissed, and their text can be copied.
 - **Version label**: the bottom-right corner shows the running build; hover for commit, version and schema.
+- **Pick readout**: the viewport's bottom-left corner names the hovered item and lists each selection in pick order.
 
 [docs/user/guide.md](docs/user/guide.md) explains how to use each one.
 
