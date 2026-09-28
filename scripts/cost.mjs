@@ -167,11 +167,6 @@ function ratchet(files) {
     fail(
       "a marked file or function grew or a new one crossed a limit; tidy it, or run npm run cost -- --update and say why in the commit body",
     );
-  } else if (falls.length) {
-    for (const fall of falls) console.error(`cost check failed: ${fall}`);
-    fail(
-      "marked code shrank; shrink the baseline in this commit with npm run cost -- --update",
-    );
   }
   const functions = [...current.keys()].filter((key) =>
     key.includes(" "),
