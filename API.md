@@ -117,8 +117,8 @@ labelled undo entry together; a failed edit writes nothing. Edits sharing an
 `X-Rockett-Tx` (`TX_HEADER`) fold into the latest entry. Undo, redo and
 restore are document edits; nothing to undo or redo is 409:
 `server/src/store/historyStore.ts`. Entries and checkpoints carry `by`, the
-signed-in user's id, and the history list adds `byName`; both are absent on
-older entries. Checkpoints keep their snapshots and blobs:
+signed-in user's id; the history list and a new checkpoint add `byName`. Both
+are absent on older entries. Checkpoints keep their snapshots and blobs:
 `server/src/store/blobGc.ts`.
 
 A feature add or edit with `X-Rockett-Preview` (`PREVIEW_HEADER`) and
