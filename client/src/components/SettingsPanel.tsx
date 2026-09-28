@@ -30,6 +30,7 @@ type FieldSchema = {
   minimum?: number;
   maximum?: number;
   pattern?: string;
+  items?: { type?: string };
 };
 
 function numberInputError(
@@ -43,6 +44,44 @@ function numberInputError(
   )
     return null;
   return `Enter a number from ${schema.minimum ?? "-∞"} to ${schema.maximum ?? "∞"}.`;
+}
+
+function NumberListField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const shown = Array.isArray(value) ? value.join(", ") : "";
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => setText(null), [shown]);
+  const commit = () => {
+    if (text !== null)
+      onChange(
+        text
+          .split(/[\s,]+/)
+          .filter(Boolean)
+          .map(Number),
+      );
+  };
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input
+        type="text"
+        value={text ?? shown}
+        aria-label={label}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") commit();
+        }}
+      />
+    </label>
+  );
 }
 
 function FieldControl({
@@ -85,6 +124,14 @@ function FieldControl({
         min={schema.minimum}
         max={schema.maximum}
         int={schema.type === "integer"}
+      />
+    );
+  if (schema.type === "array" && schema.items?.type === "number")
+    return (
+      <NumberListField
+        label={definition.label}
+        value={value}
+        onChange={onChange}
       />
     );
   return (
