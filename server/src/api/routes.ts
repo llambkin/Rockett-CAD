@@ -64,6 +64,7 @@ import {
   receiveImage,
   receiveImport,
   receiveProjectFile,
+  receiveThumbnail,
   type ImportLimits,
   type Upload,
 } from "./uploads.js";
@@ -847,6 +848,26 @@ export function createApiRouter(
       label: "Upgrade naming",
       ...(await acceptedNamingUpgrade(store, kernel, doc, req.body.accept)),
     })),
+  );
+
+  on(
+    ROUTES.getThumbnail,
+    wrap(async (req, res) => {
+      const { data, tag } = await store.thumbnails.read(req.params.id);
+      res
+        .set({ ETag: tag, "Cache-Control": "no-cache" })
+        .type("png")
+        .send(data);
+    }),
+  );
+
+  on(
+    ROUTES.putThumbnail,
+    receiveThumbnail,
+    wrap(async (req, res) => {
+      const tag = await store.thumbnails.write(req.params.id, req.body);
+      res.set("ETag", tag).json({ ok: true });
+    }),
   );
 
   on(

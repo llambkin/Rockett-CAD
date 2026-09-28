@@ -63,6 +63,11 @@ export interface NamingUpgradeResponse extends WireMutationResponse {
 export const PROJECT_FILE_FORMAT = "rockett-project";
 export const PROJECT_FILE_VERSION = 1;
 export const PROJECT_FILE_LIMIT_MB = 64;
+export const THUMBNAIL_LIMITS = {
+  width: 480,
+  height: 320,
+  bytes: 256 * 1024,
+} as const;
 export const DEFAULT_PORT = 8788;
 
 export interface ProjectFile {
@@ -479,6 +484,8 @@ export const ROUTES = {
     { accept?: NamingDecision[] } & HeldMeshes,
     NamingUpgradeResponse
   >()("POST", "/projects/:id/upgrade-naming/commit", namingUpgradeBody),
+  getThumbnail: route<never, Blob>()("GET", "/projects/:id/thumbnail"),
+  putThumbnail: route<Blob, { ok: true }>()("PUT", "/projects/:id/thumbnail"),
   getView: route<never, ProjectView>()("GET", "/projects/:id/view"),
   putView: route<ProjectViewBody, ProjectView>()(
     "PUT",

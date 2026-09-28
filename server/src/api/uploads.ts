@@ -1,11 +1,14 @@
+import { raw, type RequestHandler } from "express";
 import multer from "multer";
 import {
   MAX_IMPORT_BYTES,
   MB,
   PROJECT_FILE_LIMIT_MB,
+  THUMBNAIL_LIMITS,
   type ApiErrorBody,
 } from "@rockett/shared";
 import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
+import { THUMBNAIL_RULE } from "../store/thumbnailStore.js";
 import type { Staged, Uploads } from "../store/blobStore.js";
 
 const megabytes = (bytes: number) =>
@@ -61,6 +64,15 @@ export const receiveImage = multipart(
   IMAGE_LIMIT_MB * MB,
   `Upload one PNG, JPEG or WebP image, up to ${IMAGE_LIMIT_MB} MB.`,
 );
+
+const rawThumbnail = raw({ type: () => true, limit: THUMBNAIL_LIMITS.bytes });
+
+export const receiveThumbnail: RequestHandler = (req, res, next) =>
+  rawThumbnail(req, res, (err?: unknown) => {
+    if (!err) return next();
+    const body: ApiErrorBody = { error: THUMBNAIL_RULE, code: "validation" };
+    res.status(400).json(body);
+  });
 
 export const receiveProjectFile = multipart(
   "file",

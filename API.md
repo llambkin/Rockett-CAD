@@ -216,7 +216,7 @@ with the stored document:
   error body, nothing written.
 
 Creating, duplicating, uploading and deleting a project, placing it in a
-folder, saving its view state, uploading an image and retaining an export do
+folder, saving its view state or snapshot, uploading an image and retaining an export do
 not edit the document and take no revision `If-Match`; the view has its own
 tag (see View state). `client/src/api.ts` remembers
 the highest revision it has received per project and sends it on every
@@ -379,6 +379,20 @@ route that works on a project works on it. `GET /projects` leaves it out,
 removes it. Any request to `/projects/:id` or a path below it refreshes
 `touchedAt`, written at most once a minute. A sweep at startup and every hour
 deletes temporary projects untouched for 24 hours; a request after that gets 404. A temporary project is never backed up before a migration.
+
+### Snapshot
+
+A project keeps one picture of its model in `projects/<id>/thumbnail.png`,
+outside the document and its history. `PUT /projects/:id/thumbnail` takes the
+PNG bytes as the body, at most 480x320 pixels by its IHDR and 256 KB
+(`THUMBNAIL_LIMITS` in `shared/src/routes.ts`), replaces the stored one and
+returns `{ ok: true }` with its `ETag`. Any other body is 400. Only members who
+can edit may save it, so a view-only member gets 403 and the picture is always
+the last editor's. `GET /projects/:id/thumbnail` returns it as `image/png`
+with `ETag: "<sha256>"` and `Cache-Control: no-cache`, 304 for a matching
+`If-None-Match`, or 404 when none exists. It records no history and raises no
+revision. Deleting the project deletes it; duplicate, the project file and
+import leave it out.
 
 ## Folders
 

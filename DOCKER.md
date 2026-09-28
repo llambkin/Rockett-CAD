@@ -143,6 +143,7 @@ its environment as described under Security.
         ├── view.json       # the shared view from before per-user views; only read, never written
         ├── settings.json   # the project's setting values, copied by duplicate
         ├── temporary.json  # present only on a temporary copy of a browser project
+        ├── thumbnail.png   # the last editor's picture of the model, outside the document and its history
         ├── blobs/          # reference images and STEP, IGES and BREP sources, each named by its sha256
         ├── history/        # undo history: log.bin, an append-only log of records holding gzip snapshots
         └── exports/        # server-retained exports (opt-in per export)
@@ -196,7 +197,7 @@ Every project is validated when it is opened. One that fails, or one saved by
 a newer schema, stays in the project list with its reason and is never
 rewritten; opening an invalid one is refused with its first failure.
 
-Documents, blobs and retained exports are written atomically (temp file,
+Documents, blobs, snapshots and retained exports are written atomically (temp file,
 fsync, rename, directory fsync), so a crash or container kill never corrupts a
 project. **The container is
 stateless outside `/data`**. Recreating it (upgrades, host moves) loses

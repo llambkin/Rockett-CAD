@@ -24,6 +24,7 @@ import {
 import { documentMigrations, TooNewError } from "./migrations.js";
 import { SettingsStore } from "./settingsStore.js";
 import type { Storage } from "./storage.js";
+import { isPng, ThumbnailStore } from "./thumbnailStore.js";
 import { ViewStore } from "./viewStore.js";
 import { TIMING_MS } from "../tunables.js";
 
@@ -31,14 +32,13 @@ export { StoreError };
 
 const LEGACY = "document.json";
 const DOCUMENTS = "documents";
-const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
 export const IMAGE_LIMIT_MB = 25;
 
 const IMAGE_TYPES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
   {
     mime: "image/png",
-    test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
+    test: isPng,
   },
   {
     mime: "image/jpeg",
@@ -87,6 +87,7 @@ export class ProjectStore {
   private manifests: ManifestStore;
   readonly uploads: Uploads;
   readonly settings: SettingsStore;
+  readonly thumbnails: ThumbnailStore;
 
   constructor(
     private readonly storage: Storage,
@@ -95,6 +96,11 @@ export class ProjectStore {
   ) {
     this.uploads = new Uploads(storage);
     this.settings = new SettingsStore(storage);
+    this.thumbnails = new ThumbnailStore(
+      storage,
+      (id) => this.documents.dir(id),
+      (id, operation) => this.documents.exclusive(id, operation),
+    );
     this.views = new ViewStore(storage, (id) => this.documents.dir(id));
     this.users = new UserStore(storage);
     this.manifests = new ManifestStore(storage);
