@@ -107,7 +107,7 @@ async function main(allowedOrigins: string[], cookie: CookieConfig) {
     clientDir,
     allowedOrigins,
     users: new UserStore(storage),
-    sessions: new SessionStore(),
+    sessions: await SessionStore.open(storage),
     cookie,
   });
   if (clientDir) {

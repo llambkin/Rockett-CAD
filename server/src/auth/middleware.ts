@@ -50,10 +50,10 @@ export function requireSession(
     const token = readSessionCookie(req.headers.cookie, cookieName);
     let credential = token;
     try {
-      const session = token ? sessions.resolve(token) : undefined;
+      const session = token ? await sessions.resolve(token) : undefined;
       let record = session ? await users.get(session.userId) : undefined;
       let scope: SessionScope = session?.scope ?? "full";
-      if (record?.status !== "active" && token) sessions.revoke(token);
+      if (record?.status !== "active" && token) await sessions.revoke(token);
       if (record?.status !== "active" && access) {
         const jwt = req.get("Cf-Access-Jwt-Assertion");
         if (jwt) {

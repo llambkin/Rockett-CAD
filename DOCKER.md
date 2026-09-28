@@ -124,6 +124,8 @@ its environment as described under Security.
 │       └── history1-{hash}/    # the version 1 history files, copied before they moved into log.bin
 ├── folders/
 │   └── folders.json        # the shared folder tree and project placement
+├── sessions/
+│   └── sessions.json       # signed-in sessions, each the SHA-256 of its token with user, scope, created and last-used times
 ├── settings/
 │   └── app.json            # app-wide setting values
 ├── users/
@@ -245,6 +247,13 @@ exits 0 when every project is on version 2, and 1 otherwise.
   `docker compose -p <instance> exec rockett-cad sh -c 'test -z "$ROCKETT_SETUP_TOKEN"'`
   checks that without printing it. Remove any saved token value from the
   Unraid template too. A proxy can still provide network access controls.
+- Sessions survive restarts and redeploys. `/data/sessions/sessions.json`
+  stores the SHA-256 of each token, never the token. Startup drops expired
+  sessions; logout, a password change and disabling an account remove theirs
+  before the response. Last-used times are written at most once a minute. A
+  sign-in step (TOTP code or enrolment) keeps its 10-minute lifetime; the
+  enrolment secret stays in memory, so a restart mid-enrolment means starting
+  it again.
 - To use Cloudflare Access identity, set both `ROCKETT_CF_ACCESS_TEAM` and
   `ROCKETT_CF_ACCESS_AUD`. The app verifies the signed Access assertion against
   Cloudflare's public keys and maps its email to an existing active account.

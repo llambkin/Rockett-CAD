@@ -138,8 +138,8 @@ function registerPasswordChange(
         )
           return res.status(403).json({ error: "Incorrect current password." });
         limiter.success(username);
-        sessions.revokeUser(id);
-        const token = sessions.create(id);
+        await sessions.revokeUser(id);
+        const token = await sessions.create(id);
         res.set("Set-Cookie", sessionCookie(cookie, token));
         res.json({ ok: true });
       } catch (err) {
@@ -179,17 +179,17 @@ function registerLogin(
             ? await users.withActiveHash(
                 record.id,
                 record.passwordHash,
-                (current) => {
+                async (current) => {
                   const oldToken = readSessionCookie(
                     req.headers.cookie,
                     cookie.name,
                   );
-                  if (oldToken) sessions.revoke(oldToken);
+                  if (oldToken) await sessions.revoke(oldToken);
                   const scope = signInScope(current);
                   return {
                     current,
                     scope,
-                    token: sessions.create(current.id, scope),
+                    token: await sessions.create(current.id, scope),
                   };
                 },
               )
@@ -229,12 +229,16 @@ export function createAuthRouter(
   registerSetupGuard(router, limiter);
   registerBootstrapRoutes(router, users, setupToken, limiter);
   registerLogin(router, users, sessions, cookie, limiter, verify);
-  router.post(AUTH_ROUTES.logout.path, (req, res) => {
-    const token = readSessionCookie(req.headers.cookie, cookie.name);
-    if (token) sessions.revoke(token);
-    res.set("Set-Cookie", sessionCookie(cookie, "", 0));
-    res.set("Clear-Site-Data", '"cache"');
-    res.json({ ok: true });
+  router.post(AUTH_ROUTES.logout.path, async (req, res, next) => {
+    try {
+      const token = readSessionCookie(req.headers.cookie, cookie.name);
+      if (token) await sessions.revoke(token);
+      res.set("Set-Cookie", sessionCookie(cookie, "", 0));
+      res.set("Clear-Site-Data", '"cache"');
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
   });
   router.get(AUTH_ROUTES.me.path, (_req, res) => res.json(res.locals.user));
   registerPasswordChange(router, users, sessions, cookie, limiter, verify);

@@ -82,7 +82,7 @@ export function registerUserRoutes(
           ...(passwordHash !== undefined && { passwordHash }),
         });
         if (record.status === "disabled" || passwordHash !== undefined)
-          sessions.revokeUser(record.id);
+          await sessions.revokeUser(record.id);
         res.json(toPublicUser(record));
       } catch (err) {
         userError(err, res, next);
