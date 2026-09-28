@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { User } from "@rockett/shared";
-import { signOut, useSession } from "../session";
+import { openTotpScreen, signOut, useSession } from "../session";
 import { useStore } from "../store";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { useNoticeItems } from "./NoticeItems";
@@ -37,6 +37,12 @@ function SignedInUserMenu({
     ...noticeItems,
     { label: "Change password", action: () => setPasswordOpen(true) },
   ];
+  if (!(user.totp && user.role === "admin"))
+    items.push({
+      label: user.totp ? "Turn off TOTP" : "Turn on TOTP",
+      action: () =>
+        void openTotpScreen().catch((error) => setError(error.message)),
+    });
   if (user.role === "admin")
     items.push(
       onUsers

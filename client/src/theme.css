@@ -922,6 +922,11 @@ kbd {
   background: var(--bg2);
 }
 
+a.btn {
+  color: inherit;
+  text-decoration: none;
+}
+
 .btn.primary {
   background: var(--accent-dim);
   border-color: var(--accent-dim);

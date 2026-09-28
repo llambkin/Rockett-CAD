@@ -11,7 +11,7 @@ import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
-import { LoginScreen } from "./components/LoginScreen";
+import { AccountTotp, LoginScreen } from "./components/LoginScreen";
 import { UserMenu } from "./components/UserMenu";
 import { UsersPage } from "./components/UsersPage";
 import { bootSession, useSession } from "./session";
@@ -85,6 +85,7 @@ export function App() {
         retryBoot={retryBoot}
       />
     );
+  if (session.screen) return <AccountTotp screen={session.screen} />;
   if (usersOpen && session.user.role === "admin")
     return <UsersPage onClose={() => setUsersOpen(false)} />;
   return projectId ? (

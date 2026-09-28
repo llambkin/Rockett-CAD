@@ -34,6 +34,8 @@ function previewTints(strength: number) {
   };
 }
 
+export const QR_COLOURS = { light: "#ffffff", dark: "#000000" };
+
 export const THEME_TOKENS = {
   bg0,
   bg1,

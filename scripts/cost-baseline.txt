@@ -1,5 +1,5 @@
 client/src/App.tsx Workspace 137
-client/src/api.ts 579
+client/src/api.ts 582
 client/src/components/ControlsHelp.tsx ControlsHelp 121
 client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/FeatureDialog.tsx 904

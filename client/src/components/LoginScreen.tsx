@@ -1,41 +1,107 @@
-import { useState, type FormEvent } from "react";
+import {
+  useState,
+  type FormEvent,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { ApiError } from "../api";
-import { completeSetup, signIn, type Session } from "../session";
+import {
+  cancelTotp,
+  completeSetup,
+  signIn,
+  submitTotpCode,
+  type Session,
+  type TotpScreen,
+} from "../session";
+import { QrCode } from "./QrCode";
 
-function authError(failure: unknown, setup: boolean): string {
+interface WrongCredential {
+  status: number;
+  message: string;
+}
+
+const WRONG_PASSWORD: WrongCredential = {
+  status: 401,
+  message: "Incorrect username or password.",
+};
+const WRONG_CODE: WrongCredential = { status: 403, message: "Incorrect code." };
+
+function authError(failure: unknown, wrong: WrongCredential | null): string {
   if (failure instanceof ApiError && failure.status === 429)
     return failure.retryAfter
       ? `Too many attempts. Try again in ${failure.retryAfter} seconds.`
       : "Too many attempts. Try again later.";
-  if (!setup && failure instanceof ApiError && failure.status === 401)
-    return "Incorrect username or password.";
+  if (wrong && failure instanceof ApiError && failure.status === wrong.status)
+    return wrong.message;
   return failure instanceof Error ? failure.message : "Sign in failed.";
+}
+
+function useAuthSubmit(wrong: WrongCredential | null) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (work: () => Promise<void>) => {
+    if (busy) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await work();
+    } catch (failure) {
+      setError(authError(failure, wrong));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submit = (work: () => Promise<void>) => (event: FormEvent) => {
+    event.preventDefault();
+    void run(work);
+  };
+  return { error, busy, run, submit };
+}
+
+function AuthError({ message }: { message: string | null }) {
+  return (
+    message && (
+      <div className="error-banner" role="alert">
+        {message}
+      </div>
+    )
+  );
 }
 
 function AuthField({
   label,
-  value,
   onChange,
   type = "text",
-  autoComplete,
+  ...input
 }: {
   label: string;
-  value: string;
   onChange: (value: string) => void;
-  type?: string;
+  value: string;
   autoComplete: string;
-}) {
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "onChange">) {
   return (
     <label>
       {label}
       <input
         type={type}
-        autoComplete={autoComplete}
         required
-        value={value}
         onChange={(event) => onChange(event.target.value)}
+        {...input}
       />
     </label>
+  );
+}
+
+function AuthCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="project-list-page">
+      <div className="project-list-card">
+        <h1>
+          <span className="logo">⬢</span> Rockett CAD
+        </h1>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -45,27 +111,12 @@ function useAuthForm(setup: boolean) {
   const [confirm, setConfirm] = useState("");
   const [token, setToken] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (busy) return;
-    setError(null);
-    if (setup && password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
-    setBusy(true);
-    try {
-      if (setup) await completeSetup(token, username, displayName, password);
-      else await signIn(username, password);
-    } catch (failure) {
-      setError(authError(failure, setup));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { error, busy, submit } = useAuthSubmit(setup ? null : WRONG_PASSWORD);
+  const send = submit(async () => {
+    if (!setup) return signIn(username, password);
+    if (password !== confirm) throw new Error("Passwords do not match.");
+    await completeSetup(token, username, displayName, password);
+  });
   return {
     username,
     setUsername,
@@ -79,7 +130,7 @@ function useAuthForm(setup: boolean) {
     setDisplayName,
     error,
     busy,
-    submit,
+    send,
   };
 }
 
@@ -97,19 +148,15 @@ function AuthForm({ setup }: { setup: boolean }) {
     setDisplayName,
     error,
     busy,
-    submit,
+    send,
   } = useAuthForm(setup);
   return (
     <>
       <p className="tagline">
         {setup ? "Set up Rockett CAD" : "Sign in to continue"}
       </p>
-      {error && (
-        <div className="error-banner" role="alert">
-          {error}
-        </div>
-      )}
-      <form className="auth-form" onSubmit={(event) => void submit(event)}>
+      <AuthError message={error} />
+      <form className="auth-form" onSubmit={send}>
         {setup && (
           <AuthField
             label="Setup token"
@@ -157,6 +204,88 @@ function AuthForm({ setup }: { setup: boolean }) {
   );
 }
 
+function TotpForm({
+  screen,
+  tagline,
+  submitLabel,
+}: {
+  screen: TotpScreen;
+  tagline: string;
+  submitLabel: string;
+}) {
+  const [code, setCode] = useState("");
+  const { error, busy, run, submit } = useAuthSubmit(WRONG_CODE);
+  return (
+    <>
+      <p className="tagline">{tagline}</p>
+      <AuthError message={error} />
+      <form className="auth-form" onSubmit={submit(() => submitTotpCode(code))}>
+        {screen.kind === "enrol" && (
+          <>
+            <QrCode text={screen.enrolment.uri} label="TOTP setup QR code" />
+            <p>
+              Key: <code>{screen.enrolment.secret}</code>
+            </p>
+            <a className="btn" href={screen.enrolment.uri}>
+              Open in an authenticator app
+            </a>
+          </>
+        )}
+        <AuthField
+          label="Code"
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          value={code}
+          onChange={setCode}
+        />
+        <button className="btn primary" disabled={busy} type="submit">
+          {busy ? "Please wait…" : submitLabel}
+        </button>
+        <button
+          className="btn"
+          disabled={busy}
+          type="button"
+          onClick={() => void run(cancelTotp)}
+        >
+          Cancel
+        </button>
+      </form>
+    </>
+  );
+}
+
+const SCAN =
+  "Scan the code with an authenticator app, then enter the 6-digit code it shows.";
+
+const SIGN_IN_TEXT = {
+  code: {
+    tagline: "Enter the 6-digit code from your authenticator app.",
+    submitLabel: "Sign in",
+  },
+  enrol: {
+    tagline: `Admins sign in with TOTP. ${SCAN}`,
+    submitLabel: "Turn on TOTP",
+  },
+};
+
+const ACCOUNT_TEXT = {
+  code: {
+    tagline: "Enter a current code to turn TOTP off.",
+    submitLabel: "Turn off TOTP",
+  },
+  enrol: { tagline: SCAN, submitLabel: "Turn on TOTP" },
+};
+
+export function AccountTotp({ screen }: { screen: TotpScreen }) {
+  return (
+    <AuthCard>
+      <TotpForm screen={screen} {...ACCOUNT_TEXT[screen.kind]} />
+    </AuthCard>
+  );
+}
+
 export function LoginScreen({
   session,
   bootError,
@@ -167,30 +296,30 @@ export function LoginScreen({
   retryBoot: () => void;
 }) {
   return (
-    <div className="project-list-page">
-      <div className="project-list-card">
-        <h1>
-          <span className="logo">⬢</span> Rockett CAD
-        </h1>
-        {session.kind === "loading" ? (
-          bootError ? (
-            <div className="error-banner" role="alert">
-              {bootError}{" "}
-              <button className="btn" onClick={retryBoot}>
-                Retry
-              </button>
-            </div>
-          ) : (
-            <p>Checking session…</p>
-          )
-        ) : session.setup === "needs-token" ? (
+    <AuthCard>
+      {session.kind === "loading" ? (
+        bootError ? (
           <div className="error-banner" role="alert">
-            Setup token is not configured on the server.
+            {bootError}{" "}
+            <button className="btn" onClick={retryBoot}>
+              Retry
+            </button>
           </div>
         ) : (
-          <AuthForm setup={session.setup === "ready"} />
-        )}
-      </div>
-    </div>
+          <p>Checking session…</p>
+        )
+      ) : session.kind === "signing-in" ? (
+        <TotpForm
+          screen={session.screen}
+          {...SIGN_IN_TEXT[session.screen.kind]}
+        />
+      ) : session.setup === "needs-token" ? (
+        <div className="error-banner" role="alert">
+          Setup token is not configured on the server.
+        </div>
+      ) : (
+        <AuthForm setup={session.setup === "ready"} />
+      )}
+    </AuthCard>
   );
 }

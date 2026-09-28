@@ -416,6 +416,9 @@ export const api = {
       { body: { token, username, displayName, password } },
     ),
   logout: () => send(AUTH_ROUTES.logout, {}),
+  totpEnrol: () => send(AUTH_ROUTES.totpEnrol, {}),
+  totpCode: (route: "totp" | "totpConfirm" | "totpOff", code: string) =>
+    send(AUTH_ROUTES[route], {}, { body: { code } }),
   changePassword: (current: string, next: string) =>
     send(AUTH_ROUTES.passwordChange, {}, { body: { current, next } }),
   listUsers: () => send(AUTH_ROUTES.users, {}),
