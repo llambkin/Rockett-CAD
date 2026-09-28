@@ -1,3 +1,5 @@
 import { refsAt, registerCoreSpec } from "../featureSpec.js";
 
-registerCoreSpec("offsetFace", (f) => refsAt("face", "/faces", f.faces));
+registerCoreSpec("offsetFace", "OffsetFace", (f) =>
+  refsAt("face", "/faces", f.faces),
+);

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  FEATURE_LABELS,
   FEATURE_SCHEMAS,
   featureRefs,
   featureSpec,
@@ -734,13 +733,36 @@ const markedPaths = (v: unknown, at = ""): string[] =>
 const target = (ref: FeatureRef) =>
   (ref as unknown as Record<string, unknown>)[ref.kind];
 
+const LABELS: Record<Feature["type"], string> = {
+  importStep: "Import STEP",
+  importMesh: "Import mesh",
+  sketch: "Sketch",
+  extrude: "Extrude",
+  revolve: "Revolve",
+  sweep: "Sweep",
+  loft: "Loft",
+  fillet: "Fillet",
+  chamfer: "Chamfer",
+  shell: "Shell",
+  combine: "Combine",
+  splitBody: "SplitBody",
+  offsetFace: "OffsetFace",
+  mirror: "Mirror",
+  linearPattern: "LinearPattern",
+  circularPattern: "CircularPattern",
+  constructionPlane: "Plane",
+  referenceImage: "Canvas",
+  emboss: "Emboss",
+  move: "Move",
+};
+
 describe.each(Object.entries(cases))("%s feature spec", (type, specCase) => {
   const spec = featureSpec(type)!;
 
   it("is registered with its schema and label", () => {
     expect(spec).toMatchObject({
       type,
-      label: FEATURE_LABELS[type as Feature["type"]],
+      label: LABELS[type as Feature["type"]],
       producesGeometry: specCase.producesGeometry,
       version: 1,
       displayOnly: [],

@@ -1,3 +1,3 @@
 import { registerCoreSpec } from "../featureSpec.js";
 
-registerCoreSpec("importMesh", () => []);
+registerCoreSpec("importMesh", "Import mesh", () => []);

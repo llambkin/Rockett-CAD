@@ -1,3 +1,3 @@
 import { registerCoreSpec } from "../featureSpec.js";
 
-registerCoreSpec("importStep", () => []);
+registerCoreSpec("importStep", "Import STEP", () => []);

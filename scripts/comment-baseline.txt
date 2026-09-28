@@ -35,7 +35,7 @@ server/src/geometry/tessellate.ts 10
 server/src/index.ts 8
 server/src/store/projectQueue.ts 1
 shared/src/api.ts 16
-shared/src/model.ts 83
+shared/src/model.ts 81
 shared/src/projection.ts 1
 shared/src/sketchModify.ts 10
 shared/src/sketchOffsets.ts 3

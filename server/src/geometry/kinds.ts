@@ -12,6 +12,7 @@ import {
   evalEmboss,
   evalExtrude,
   evalFillet,
+  evalImportMesh,
   evalImportStep,
   evalLinearPattern,
   evalLoft,
@@ -55,6 +56,7 @@ const kinds = [
   kind("referenceImage", (ctx, f) => evalReferenceImage(ctx.state, f)),
   kind("sketch", (ctx, f) => evalSketch(ctx.state, f)),
   kind("importStep", evalImportStep),
+  kind("importMesh", (ctx, f) => evalImportMesh(ctx.state, f)),
 ];
 
 for (const k of kinds) registerFeatureKind(k);

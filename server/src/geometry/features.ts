@@ -26,6 +26,7 @@ import {
   type Feature,
   type FeatureStatus,
   type FilletFeature,
+  type ImportMeshFeature,
   type ImportStepFeature,
   type LinearPatternFeature,
   type LoftFeature,
@@ -153,15 +154,6 @@ export function emptyState(): EvalState {
 }
 
 export class NoCorner extends Error {}
-
-export class FeatureError extends Error {
-  constructor(
-    public featureId: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Reference resolution
@@ -2566,6 +2558,18 @@ export function evalEmboss(state: EvalState, f: EmbossFeature) {
   return evalExtrude(state, pseudo);
 }
 
+export function evalImportMesh(
+  state: EvalState,
+  feature: ImportMeshFeature,
+): FeatureOutcome | void {
+  const { shape, warning } = readMesh(feature),
+    bodyId = `b:${feature.id}`,
+    names = finalizeNames(shape, new ShapeMap(), feature.id);
+  if (!warning) return registerBodySolids(state, bodyId, shape, names);
+  state.bodies.set(bodyId, { bodyId, shape, names });
+  return { warning };
+}
+
 // ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
@@ -2577,21 +2581,9 @@ export function evaluateFeature(
   sources: Sources = new Map(),
 ): FeatureOutcome | void {
   const kind = featureKind(feature.type);
-  if (kind)
-    return kind.evaluate(
-      { state, earlier, index: earlier.length, sources },
-      feature,
-    );
-  switch (feature.type) {
-    case "importMesh": {
-      const { shape, warning } = readMesh(feature),
-        bodyId = `b:${feature.id}`,
-        names = finalizeNames(shape, new ShapeMap(), feature.id);
-      if (!warning) return registerBodySolids(state, bodyId, shape, names);
-      state.bodies.set(bodyId, { bodyId, shape, names });
-      return { warning };
-    }
-    default:
-      throw new Error(`unknown feature type ${feature.type}`);
-  }
+  if (!kind) throw new Error(`unknown feature type ${feature.type}`);
+  return kind.evaluate(
+    { state, earlier, index: earlier.length, sources },
+    feature,
+  );
 }

@@ -515,37 +515,6 @@ export function newId(prefix: string): string {
   return `${prefix}-${time}${count}${rand}`;
 }
 
-export const FEATURE_LABELS: Record<FeatureType, string> = {
-  importStep: "Import STEP",
-  importMesh: "Import mesh",
-  sketch: "Sketch",
-  extrude: "Extrude",
-  revolve: "Revolve",
-  sweep: "Sweep",
-  loft: "Loft",
-  fillet: "Fillet",
-  chamfer: "Chamfer",
-  shell: "Shell",
-  combine: "Combine",
-  splitBody: "SplitBody",
-  offsetFace: "OffsetFace",
-  mirror: "Mirror",
-  linearPattern: "LinearPattern",
-  circularPattern: "CircularPattern",
-  constructionPlane: "Plane",
-  referenceImage: "Canvas",
-  emboss: "Emboss",
-  move: "Move",
-};
-
-/** Allocate the default name for a new feature and bump the counter. */
-export function nextFeatureName(doc: CadDocument, type: FeatureType): string {
-  const label = FEATURE_LABELS[type];
-  const n = (doc.counters[type] ?? 0) + 1;
-  doc.counters[type] = n;
-  return `${label}${n}`;
-}
-
 export function createEmptyDocument(id: string, name: string): CadDocument {
   const now = new Date().toISOString();
   return {
@@ -589,13 +558,4 @@ export function createManifest(
     owner,
     members: [],
   };
-}
-
-/** Features that can produce/modify solid bodies (used for dependency logic). */
-export function featureProducesGeometry(f: Feature): boolean {
-  return (
-    f.type !== "sketch" &&
-    f.type !== "constructionPlane" &&
-    f.type !== "referenceImage"
-  );
 }

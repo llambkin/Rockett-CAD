@@ -45,6 +45,7 @@ function sketchReferences(f: SketchFeature): void {
 
 registerCoreSpec(
   "sketch",
+  "Sketch",
   (f) => [
     refAt("plane", "/plane", f.plane),
     ...f.entities.flatMap((e, i) =>

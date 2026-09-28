@@ -213,8 +213,9 @@ projects.
   400 with the failing JSON Pointer in `detail`: `parseBody` in
   `server/src/api/routes.ts`.
 - Features are checked by `validateFeature` in `server/src/api/validate.ts`
-  against `shared/src/schema/features.ts`; documents against `documentSchema`
-  there.
+  through their registered `FeatureSpec` (`shared/src/featureSpec.ts`); an
+  unregistered type is 400 `unknown feature type <type>`. Core schemas and
+  `documentSchema` live in `shared/src/schema/features.ts`.
 - Feature add and update fill a missing reference `sig` from the model
   (`server/src/geometry/signature.ts`). They also write `targets`, leaving
   out bodies the caller's view hides: `server/src/api/routes.ts`. See

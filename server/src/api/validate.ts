@@ -1,12 +1,10 @@
 import {
   documentSchema,
-  FEATURE_SCHEMAS,
   featureSpec,
   parse,
   ValidationError,
   type CadDocument,
   type Feature,
-  type FeatureType,
 } from "@rockett/shared";
 
 export function record(v: unknown, label: string): void {
@@ -15,14 +13,14 @@ export function record(v: unknown, label: string): void {
   }
 }
 
-function schemaFor(type: unknown) {
-  if (typeof type !== "string" || !Object.hasOwn(FEATURE_SCHEMAS, type))
-    throw new ValidationError(`unknown feature type ${String(type)}`);
-  return FEATURE_SCHEMAS[type as FeatureType];
+function specFor(type: unknown) {
+  const spec = typeof type === "string" ? featureSpec(type) : undefined;
+  if (!spec) throw new ValidationError(`unknown feature type ${String(type)}`);
+  return spec;
 }
 
 export function knownKeys(v: object, type: unknown): void {
-  const known = schemaFor(type).properties;
+  const known = specFor(type).paramsSchema.properties;
   const unknown = Object.keys(v).filter((key) => !Object.hasOwn(known, key));
   if (unknown.length)
     throw new ValidationError(
@@ -32,9 +30,7 @@ export function knownKeys(v: object, type: unknown): void {
 
 export function validateFeature(f: Feature): void {
   record(f, "feature");
-  const spec = featureSpec(f.type);
-  if (spec) return spec.validate(f);
-  parse(schemaFor(f.type), f);
+  specFor(f.type).validate(f);
 }
 
 export function validateBuilt(f: Feature): void {

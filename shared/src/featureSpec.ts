@@ -1,14 +1,14 @@
-import type { TSchema } from "typebox";
-import {
-  FEATURE_LABELS,
-  type AxisRef,
-  type EdgeRef,
-  type FaceRef,
-  type Feature,
-  type FeatureType,
-  type PlaneRef,
-  type PointRef,
-  type ProfileRef,
+import type { TProperties, TSchema } from "typebox";
+import type {
+  AxisRef,
+  CadDocument,
+  EdgeRef,
+  FaceRef,
+  Feature,
+  FeatureType,
+  PlaneRef,
+  PointRef,
+  ProfileRef,
 } from "./model.js";
 import { createRegistry } from "./registry.js";
 import { FEATURE_SCHEMAS } from "./schema/features.js";
@@ -36,7 +36,7 @@ export interface FeatureSpec<F extends Feature = Feature> {
   label: string;
   producesGeometry: boolean;
   version: number;
-  paramsSchema: TSchema;
+  paramsSchema: TSchema & { properties: TProperties };
   validate(f: F): void;
   refs(f: F): FeatureRef[];
   displayOnly: readonly string[];
@@ -51,10 +51,21 @@ export const featureSpecs = createRegistry<FeatureSpec>(
 export const registerFeatureSpec = featureSpecs.register;
 export const featureSpec = featureSpecs.get;
 
+function specOf(type: string): FeatureSpec {
+  const spec = featureSpec(type);
+  if (!spec) throw new Error(`no feature spec for ${type}`);
+  return spec;
+}
+
 export function featureRefs(f: Feature): FeatureRef[] {
-  const spec = featureSpec(f.type);
-  if (!spec) throw new Error(`no feature spec for ${f.type}`);
-  return spec.refs(f);
+  return specOf(f.type).refs(f);
+}
+
+export function nextFeatureName(doc: CadDocument, type: FeatureType): string {
+  const label = specOf(type).label;
+  const n = (doc.counters[type] ?? 0) + 1;
+  doc.counters[type] = n;
+  return `${label}${n}`;
 }
 
 export const refAt = <K extends RefKind>(
@@ -71,6 +82,7 @@ export const refsAt = <K extends RefKind>(
 
 export function registerCoreSpec<T extends FeatureType>(
   type: T,
+  label: string,
   refs: (f: Extract<Feature, { type: T }>) => FeatureRef[],
   {
     producesGeometry = true,
@@ -83,7 +95,7 @@ export function registerCoreSpec<T extends FeatureType>(
   const schema = FEATURE_SCHEMAS[type];
   const spec: FeatureSpec<Extract<Feature, { type: T }>> = {
     type,
-    label: FEATURE_LABELS[type],
+    label,
     producesGeometry,
     version: 1,
     paramsSchema: schema,

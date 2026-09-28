@@ -1,6 +1,6 @@
 import { refAt, refsAt, registerCoreSpec } from "../featureSpec.js";
 
-registerCoreSpec("loft", (f) => [
+registerCoreSpec("loft", "Loft", (f) => [
   ...f.sections.map((section, i) =>
     section.profileId
       ? refAt("profile", `/sections/${i}`, section)

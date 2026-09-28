@@ -1,5 +1,10 @@
 import { refAt, registerCoreSpec } from "../featureSpec.js";
 
-registerCoreSpec("referenceImage", (f) => [refAt("plane", "/plane", f.plane)], {
-  producesGeometry: false,
-});
+registerCoreSpec(
+  "referenceImage",
+  "Canvas",
+  (f) => [refAt("plane", "/plane", f.plane)],
+  {
+    producesGeometry: false,
+  },
+);

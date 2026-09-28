@@ -2,6 +2,7 @@ import { refAt, refsAt, registerCoreSpec } from "../featureSpec.js";
 
 registerCoreSpec(
   "constructionPlane",
+  "Plane",
   ({ method }) => {
     switch (method.kind) {
       case "offset":
