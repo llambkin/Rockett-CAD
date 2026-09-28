@@ -480,7 +480,8 @@ export function createApiRouter(
   on(
     ROUTES.getProject,
     wrap(async (req, res) => {
-      await send(res, await store.load(req.params.id));
+      const access = res.locals.projectRole;
+      await send(res, await store.load(req.params.id), undefined, { access });
     }),
   );
 

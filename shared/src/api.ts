@@ -371,3 +371,7 @@ export interface BlobCollection {
 export interface ProjectResponse {
   document: CadDocument;
 }
+
+export interface OpenedProject extends ProjectResponse {
+  access: ProjectMember["role"];
+}

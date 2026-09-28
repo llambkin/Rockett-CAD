@@ -14,6 +14,7 @@ import type {
   Feature,
   HistoryStatus,
   MeasureResult,
+  OpenedProject,
   OriginAxis,
   PlaneRef,
   ProjectView,
@@ -175,6 +176,7 @@ export function sketchEditingPosition(
 
 interface State {
   projectId: string | null;
+  access: OpenedProject["access"] | null;
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
   view: ProjectView;
@@ -592,6 +594,7 @@ async function moveHistory(way: "undo" | "redo"): Promise<void> {
 
 export const useStore = create<State>((set, get) => ({
   projectId: null,
+  access: null,
   document: null,
   evaluation: null,
   view: emptyView(),
@@ -618,13 +621,14 @@ export const useStore = create<State>((set, get) => ({
     api.forgetJob?.();
     set({ busy: true, error: null, job: null, jobStartedAt: null });
     try {
-      const [{ document }, view] = await Promise.all([
+      const [{ document, access }, view] = await Promise.all([
         api.getProject(id),
         api.getView(id),
       ]);
       const evaluation = await api.evaluate(id);
       set({
         projectId: id,
+        access,
         document,
         evaluation,
         view,
@@ -659,6 +663,7 @@ export const useStore = create<State>((set, get) => ({
       savedAt: null,
       error: null,
       projectId: null,
+      access: null,
       document: null,
       evaluation: null,
       view: emptyView(),

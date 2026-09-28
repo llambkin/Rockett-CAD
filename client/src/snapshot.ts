@@ -1,6 +1,6 @@
 import { THUMBNAIL_LIMITS } from "@rockett/shared";
 import { api } from "./api";
-import { browserKeyFromPath, projectIdFromPath } from "./paths";
+import { browserKeyFromPath, isBrowserPath, projectIdFromPath } from "./paths";
 import { useStore } from "./store";
 import { TIMING_MS } from "./tunables";
 
@@ -21,29 +21,30 @@ function capture(source: Source, projectId: string): void {
   }, "image/png");
 }
 
+const onServerList = (path: string) =>
+  projectIdFromPath(path) === null &&
+  browserKeyFromPath(path) === null &&
+  !isBrowserPath(path);
+
 export function watchSnapshots(source: Source): () => void {
-  let edited: string | null = null;
   let captured = -Infinity;
   return useStore.subscribe((s, prev) => {
     const path = window.location.pathname;
     if (s.projectId !== prev.projectId) {
-      const leaving = edited;
-      edited = null;
       captured = -Infinity;
       if (
-        leaving !== null &&
-        leaving === prev.projectId &&
+        prev.projectId !== null &&
+        prev.access === "edit" &&
         s.projectId === null &&
-        projectIdFromPath(path) === null
+        onServerList(path)
       )
-        capture(source, leaving);
+        capture(source, prev.projectId);
       return;
     }
     const { projectId, savedAt } = s;
-    if (projectId === null || savedAt === null || savedAt === prev.savedAt)
-      return;
+    if (projectId === null || s.access !== "edit") return;
+    if (savedAt === null || savedAt === prev.savedAt) return;
     if (browserKeyFromPath(path) !== null) return;
-    edited = projectId;
     if (savedAt - captured < TIMING_MS.snapshotInterval) return;
     captured = savedAt;
     setTimeout(() => {

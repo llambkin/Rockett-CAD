@@ -336,7 +336,7 @@ drops them all. Nothing staged reaches the saved document without a commit.
 | `GET /health`                  | none                   | `{ ok: true, version, schemaVersion, commit, describe, kernelVersion, kernel }` (`commit` from `ROCKETT_COMMIT`, `describe` from `ROCKETT_DESCRIBE`, each else `null`) |
 | `GET /projects`                | none                   | `ProjectSummary[]`                                                                                                                                                     |
 | `POST /projects`               | `{ name?, folderId? }` | `{ document }`                                                                                                                                                         |
-| `GET /projects/:id`            | none                   | `{ document }`                                                                                                                                                         |
+| `GET /projects/:id`            | none                   | `{ document, access }`, `access` is the caller's `"edit"` or `"view"`                                                                                                  |
 | `DELETE /projects/:id`         | none                   | `{ ok }`                                                                                                                                                               |
 | `POST /projects/:id/duplicate` | `{ name? }`            | `{ document }` (blobs copied)                                                                                                                                          |
 | `POST /projects/:id/rename`    | `{ name }`             | `{ document }`                                                                                                                                                         |
@@ -411,8 +411,9 @@ with `ETag: "<sha256>"` and `Cache-Control: no-cache`, 304 for a matching
 `If-None-Match`, or 404 when none exists. It records no history and raises no
 revision. Deleting the project deletes it; duplicate, the project file and
 import leave it out. The client captures the viewport after a model save, at
-most once a minute (`TIMING_MS.snapshotInterval`), and when a session with a
-save goes back to the list, so a view-only member never sends one.
+most once a minute (`TIMING_MS.snapshotInterval`), and whenever it goes back
+to the list, both only when the project's `access` is `"edit"`, so a
+view-only member never sends one.
 
 ## Folders
 

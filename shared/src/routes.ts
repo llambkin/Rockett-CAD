@@ -23,6 +23,7 @@ import type {
   NamingDecision,
   NamingMapping,
   NamingUpgradeProposal,
+  OpenedProject,
   ProjectResponse,
   ProjectSummary,
   ProjectView,
@@ -349,7 +350,7 @@ export const ROUTES = {
     "POST",
     "/projects/file",
   ),
-  getProject: route<never, ProjectResponse>()("GET", "/projects/:id"),
+  getProject: route<never, OpenedProject>()("GET", "/projects/:id"),
   getProjectMembers: route<never, ProjectMembersRoster>()(
     "GET",
     "/projects/:id/members",
