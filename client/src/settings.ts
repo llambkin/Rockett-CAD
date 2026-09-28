@@ -16,9 +16,7 @@ import { useSession } from "./session";
 import { useStore } from "./store";
 
 type Edit = {
-  key: string;
-  value: unknown;
-  reset: boolean;
+  patch: SettingsPatch;
   resolve: () => void;
   reject: (error: Error) => void;
 };
@@ -67,9 +65,9 @@ function patchLayer(
 
 function values(layer: Layer): LayerValues {
   const result = { ...layer.base };
-  for (const edit of layer.pending) {
-    if (edit.reset) delete result[edit.key];
-    else result[edit.key] = edit.value;
+  for (const { patch } of layer.pending) {
+    for (const key of patch.reset ?? []) delete result[key];
+    Object.assign(result, patch.set);
   }
   return result;
 }
@@ -228,10 +226,7 @@ async function drain(
       if (layers[scope] !== layer) break;
       const edit = layer.pending[0]!;
       try {
-        const patch = edit.reset
-          ? { reset: [edit.key] }
-          : { set: { [edit.key]: edit.value } };
-        const response = await patchLayer(scope, id, patch, layer.version);
+        const response = await patchLayer(scope, id, edit.patch, layer.version);
         if (layers[scope] !== layer) return;
         layer.base = response.values;
         layer.version = response.version;
@@ -284,12 +279,7 @@ function writable(scope: SettingScope): boolean {
   return scope === "user" || role.user.role === "admin";
 }
 
-function queueEdit(
-  scope: SettingScope,
-  key: string,
-  value: unknown,
-  reset: boolean,
-): Promise<void> {
+function queueEdit(scope: SettingScope, patch: SettingsPatch): Promise<void> {
   if (!writable(scope))
     return Promise.reject(
       new Error(`The ${scope} settings layer is not writable here.`),
@@ -300,7 +290,7 @@ function queueEdit(
       new Error(`The ${scope} settings layer is not loaded.`),
     );
   return new Promise<void>((resolve, reject) => {
-    layer.pending.push({ key, value, reset, resolve, reject });
+    layer.pending.push({ patch, resolve, reject });
     publish();
     void drain(scope, layer, projectId);
   });
@@ -322,15 +312,21 @@ export function setSetting<K extends string>(
     "user";
   const invalid = validateSettingValue(key, target, value);
   if (invalid) return Promise.reject(new SettingsError([invalid]));
-  return queueEdit(target, key, value, false);
+  return queueEdit(target, { set: { [key]: value } });
 }
 
-export function resetSetting(key: string, scope: SettingScope): Promise<void> {
-  if (!SETTINGS.get(key)?.scopes.includes(scope))
+export function resetSettings(
+  keys: string[],
+  scope: SettingScope,
+): Promise<void> {
+  const refused = keys.find(
+    (key) => !SETTINGS.get(key)?.scopes.includes(scope),
+  );
+  if (refused)
     return Promise.reject(
-      new Error(`${key} cannot be reset at the ${scope} layer.`),
+      new Error(`${refused} cannot be reset at the ${scope} layer.`),
     );
-  return queueEdit(scope, key, undefined, true);
+  return queueEdit(scope, { reset: keys });
 }
 
 export function retryPendingSettings(): void {

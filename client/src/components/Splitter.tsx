@@ -6,7 +6,7 @@ import {
   type PointerEvent,
 } from "react";
 import { PANEL_MIN_PX } from "@rockett/shared";
-import { resetSetting, setSetting, useSetting } from "../settings";
+import { resetSettings, setSetting, useSetting } from "../settings";
 import { useStore } from "../store";
 
 const VIEWPORT_MIN_PX = 320;
@@ -81,7 +81,7 @@ export function useSplitter(setting: PanelSetting, label: string) {
         e.preventDefault();
         save(width, clampPanel(width + step, room));
       }}
-      onDoubleClick={() => void resetSetting(setting, "user").catch(report)}
+      onDoubleClick={() => void resetSettings([setting], "user").catch(report)}
     />
   );
   return { width, splitter };

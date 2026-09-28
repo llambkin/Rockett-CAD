@@ -8,7 +8,7 @@ import {
   type SettingScope,
 } from "@rockett/shared";
 import {
-  resetSetting,
+  resetSettings,
   retrySettingsLoad,
   setSetting,
   useSettings,
@@ -264,8 +264,8 @@ function SettingField({
         {own && writable && (
           <button
             onClick={() =>
-              void resetSetting(definition.key, scope).catch((cause: Error) =>
-                setError(cause.message),
+              void resetSettings([definition.key], scope).catch(
+                (cause: Error) => setError(cause.message),
               )
             }
           >
@@ -283,6 +283,34 @@ function SettingField({
       />
     </div>
   );
+}
+
+function ResetSection({
+  section,
+  scope,
+  page,
+}: {
+  section: string;
+  scope: SettingScope;
+  page: SettingDefinition[];
+}) {
+  const loaded = useSettings((state) => state.loaded);
+  const keys = page
+    .filter((definition) => definition.scopes.includes(scope))
+    .map((definition) => definition.key);
+  if (!loaded.app || !loaded[scope] || keys.length === 0) return null;
+  const reset = () => {
+    if (
+      !window.confirm(
+        `Reset every ${label(section)} setting at the ${label(scope)} layer?`,
+      )
+    )
+      return;
+    void resetSettings(keys, scope).catch((error: Error) =>
+      useStore.getState().setError(error.message),
+    );
+  };
+  return <button onClick={reset}>Reset section</button>;
 }
 
 function PageContent({
@@ -318,6 +346,9 @@ function PageContent({
             ])}
             onChange={(next) => setScope(next as SettingScope)}
           />
+        )}
+        {available.includes(selected) && (
+          <ResetSection section={section} scope={selected} page={page} />
         )}
       </div>
       {section === "project" && !projectOpen ? (
