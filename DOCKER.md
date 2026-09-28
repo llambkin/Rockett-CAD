@@ -27,6 +27,11 @@ Behind a TLS reverse proxy, use the browser-facing origin, for example
 to the container over HTTP. Add the external port if the browser URL uses one.
 For a plain-HTTP instance, set `ROCKETT_COOKIE_SECURE=false` or the browser
 will not send the secure session cookie.
+Behind a reverse proxy, also set `ROCKETT_TRUST_PROXY` so sign-in rate limits
+count each client by its `X-Forwarded-For` address instead of counting every
+client as the proxy. Use `1` when the proxy is the only thing that can reach the
+container, or list the proxy's addresses, such as `loopback` or
+`10.0.0.0/8`. Leave it unset without a proxy: the header is then ignored.
 
 ### Several instances on one host
 
@@ -214,6 +219,7 @@ exits 0 when every project is on version 2, and 1 otherwise.
 | `ROCKETT_ALLOWED_ORIGINS` | required | Comma-separated bare origins, such as `https://cad.example.com`; writes to `/api` from any other origin get 403 |
 | `ROCKETT_SETUP_TOKEN`     | empty    | One-time token for creating the first admin; remove it after setup                                              |
 | `ROCKETT_COOKIE_SECURE`   | `true`   | Secure session cookie for HTTPS; set `false` for plain HTTP                                                     |
+| `ROCKETT_TRUST_PROXY`     | unset    | Proxy hop count, or comma-separated proxy addresses, whose `X-Forwarded-For` gives the client address           |
 | `ROCKETT_CF_ACCESS_TEAM`  | unset    | Cloudflare Access team name; with `ROCKETT_CF_ACCESS_AUD`, enables verified Access JWT sign-in                  |
 | `ROCKETT_CF_ACCESS_AUD`   | unset    | Cloudflare Access application audience; requires the team variable                                              |
 | `ROCKETT_PORT`            | `8788`   | HTTP port inside the container                                                                                  |

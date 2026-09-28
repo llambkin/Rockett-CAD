@@ -10,6 +10,7 @@ name: rockett-cad
 #   ROCKETT_ALLOWED_ORIGINS  comma-separated browser origins, such as https://cad.example.com (required)
 #   ROCKETT_SETUP_TOKEN      one-time first-admin setup token (unset after setup)
 #   ROCKETT_COOKIE_SECURE    true for HTTPS (default), false for plain HTTP
+#   ROCKETT_TRUST_PROXY      proxy hop count or proxy addresses whose X-Forwarded-For is trusted (default none)
 services:
   rockett-cad:
     build:
@@ -26,6 +27,7 @@ services:
       ROCKETT_ALLOWED_ORIGINS: ${ROCKETT_ALLOWED_ORIGINS:-}
       ROCKETT_SETUP_TOKEN: ${ROCKETT_SETUP_TOKEN:-}
       ROCKETT_COOKIE_SECURE: ${ROCKETT_COOKIE_SECURE:-}
+      ROCKETT_TRUST_PROXY: ${ROCKETT_TRUST_PROXY:-}
       ROCKETT_CF_ACCESS_TEAM: ${ROCKETT_CF_ACCESS_TEAM:-}
       ROCKETT_CF_ACCESS_AUD: ${ROCKETT_CF_ACCESS_AUD:-}
     labels:

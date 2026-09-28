@@ -87,6 +87,22 @@ function serveClient(clientDir: string): Router {
   return router;
 }
 
+export type TrustProxy = number | string | false;
+
+export function trustProxyConfig(value: string | undefined): TrustProxy {
+  const setting = value?.trim() ?? "";
+  if (setting === "") return false;
+  if (/^\d+$/.test(setting)) return Number(setting);
+  try {
+    express().set("trust proxy", setting);
+  } catch {
+    throw new Error(
+      "ROCKETT_TRUST_PROXY must be a hop count or a comma-separated list of proxy addresses",
+    );
+  }
+  return setting;
+}
+
 export interface AppDeps {
   store: ProjectStore;
   folders: FolderStore;
@@ -98,6 +114,7 @@ export interface AppDeps {
   cookie?: CookieConfig;
   setupToken?: string;
   access?: AccessIdentity;
+  trustProxy?: TrustProxy;
 }
 
 export function createApp({
@@ -111,12 +128,14 @@ export function createApp({
   cookie = cookieConfig(process.env.ROCKETT_COOKIE_SECURE),
   setupToken = process.env.ROCKETT_SETUP_TOKEN,
   access,
+  trustProxy = trustProxyConfig(process.env.ROCKETT_TRUST_PROXY),
 }: AppDeps): { app: Express; sweep: () => Promise<void> } {
   const app = express();
   const projects = new ProjectQueue();
   const notices = new NoticeStore(store.documents.options.storage);
   const friends = new FriendStore(store.documents.options.storage);
   app.disable("x-powered-by");
+  app.set("trust proxy", trustProxy);
   app.use("/api", requireAllowedOrigin(allowedOrigins));
   app.use("/api", gzipJson);
   const team = process.env.ROCKETT_CF_ACCESS_TEAM;
