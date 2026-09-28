@@ -265,12 +265,21 @@ A blend also must not change the number of shells: a fillet into the cavity of
 a closed shell can return the box with the cavity filled in. The pinned kernel
 binds neither `BOPAlgo_ArgumentAnalyzer` nor `BRepAlgoAPI_Check`. On the
 many-body fillet drag benchmark the check adds about 3 ms to a 19 ms median.
+A blend also must not run past the end of its edges. Where a contour ends at
+a vertex that no other blended edge reaches, and the faces there give the
+blend nothing to stop on, the kernel prolongs it to the next face it meets and
+generates a face from that vertex. On a stepped block with a chamfered corner
+this hangs a spike past the edge end at every radius, sometimes inside the
+body's bounding box, and the fuse finds no crossing in it after seconds of
+work. Fillet and Chamfer error when an open contour end that no other
+blended edge reaches generated a face, and keep the previous body. This runs
+before the fuse. Corner patches where several blended edges meet are allowed.
 Chamfer's envelope fallback is a boolean, so its faces cannot cross, but it can
 open a cavity: it gets the shell count check only. Shell gets no cut-through
 check: on the pinned kernel its offset fails rather than build a wall that
 crosses another face, and a closed shell's hollow is a boolean cut. Size hints
 build each trial through the feature, so they never offer a size that cuts
-through.
+through or runs past its edges.
 
 A shell must also leave a hollow. When the wall reaches half the body, or a
 fillet radius, the kernel can return the solid unshelled and report success.

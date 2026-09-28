@@ -1398,6 +1398,10 @@ function rejectBadBlend(
   advice: string,
 ): void {
   rejectInvalid(result, before, kind, size, advice);
+  if (op && runsPastEnd(op))
+    throw new Error(
+      `${kind} of ${size} runs past the end of its edges: ${advice}; the previous body has been kept`,
+    );
   const cut = cutsThrough(op, sourceEdges, result, before);
   if (cut === false) return;
   throw new Error(
@@ -1405,6 +1409,33 @@ function rejectBadBlend(
       ? `${kind} of ${size} cuts through the body: ${advice}; the previous body has been kept`
       : `${kind} of ${size} could not be checked for cutting through the body: ${advice}; the previous body has been kept`,
   );
+}
+
+function runsPastEnd(op: any): boolean {
+  const touches = new Map<number, number>();
+  const ends: Shape[] = [];
+  for (let c = 1; c <= op.NbContours(); c++) {
+    if (!op.Closed(c)) ends.push(op.FirstVertex(c), op.LastVertex(c));
+    for (let e = 1; e <= op.NbEdges(c); e++) {
+      const edge = op.Edge(c, e);
+      const vertices = verticesOf(edge);
+      for (const vertex of vertices) {
+        const hash = shapeHash(vertex);
+        touches.set(hash, (touches.get(hash) ?? 0) + 1);
+      }
+      release([edge, ...vertices]);
+    }
+  }
+  try {
+    return ends.some((end) => {
+      if (touches.get(shapeHash(end)) !== 1) return false;
+      const generated = listToArray(op.Generated(end));
+      release(generated);
+      return generated.length > 0;
+    });
+  } finally {
+    release(ends);
+  }
 }
 
 function shellCount(shape: Shape): number {
