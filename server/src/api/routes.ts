@@ -3,6 +3,7 @@ import {
   DOCUMENT_EDITS,
   lacksTargets,
   MB,
+  NAME_LENGTH,
   nextFeatureName,
   parse,
   pinTargets,
@@ -454,7 +455,7 @@ export function createApiRouter(
   on(
     ROUTES.createProject,
     wrap(async (req, res, ctx) => {
-      const name = (req.body.name ?? "Untitled").slice(0, 200);
+      const name = (req.body.name ?? "Untitled").slice(0, NAME_LENGTH);
       const { folderId } = req.body;
       if (folderId !== undefined)
         await requireFolderDestination(folders, ctx.user, folderId);
@@ -498,7 +499,7 @@ export function createApiRouter(
     wrap(async (req, res, ctx) => {
       const copy = await store.duplicate(
         req.params.id,
-        req.body.name ? req.body.name.slice(0, 200) : undefined,
+        req.body.name ? req.body.name.slice(0, NAME_LENGTH) : undefined,
         ctx.user.id,
       );
       res.json({ document: copy });
@@ -509,7 +510,7 @@ export function createApiRouter(
     ROUTES.renameProject,
     wrap(async (req, res, ctx) => {
       const doc = await editable(req, res);
-      doc.name = (req.body.name ?? doc.name).slice(0, 200);
+      doc.name = (req.body.name ?? doc.name).slice(0, NAME_LENGTH);
       await history.save(doc, undefined, undefined, ctx.user.id);
       await send(res, doc);
     }),
@@ -827,7 +828,8 @@ export function createApiRouter(
       const meta = doc.bodyMeta[req.params.bodyId];
       if (!meta) throw new StoreError("body not found", "not_found");
       const label = `Rename ${meta.name}`;
-      if (req.body.name !== undefined) meta.name = req.body.name.slice(0, 120);
+      if (req.body.name !== undefined)
+        meta.name = req.body.name.slice(0, NAME_LENGTH);
       return { label };
     }),
   );

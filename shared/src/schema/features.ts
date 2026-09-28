@@ -6,10 +6,12 @@ import { MB } from "../units.js";
 export const MAX_DIM = 100_000;
 export const MAX_IMPORT_BYTES = 10 * MB;
 export const MAX_TARGETS = 10_000;
+export const NAME_LENGTH = 200;
 
 const id = Type.String({ minLength: 1, maxLength: 100 });
 const bodyId = Type.String({ minLength: 1, maxLength: 200 });
 const topoName = Type.String({ minLength: 1, maxLength: 2000 });
+const name = Type.String({ minLength: 1, maxLength: NAME_LENGTH });
 const coordinate = Type.Number({ minimum: -MAX_DIM, maximum: MAX_DIM });
 const flag = Type.Optional(Type.Boolean());
 
@@ -86,7 +88,7 @@ const feature = <const T extends string, P extends TProperties>(
   Type.Object({
     id,
     type: Type.Literal(type),
-    name: Type.String({ minLength: 1, maxLength: 120 }),
+    name,
     suppressed: Type.Boolean(),
     ...properties,
   });
@@ -390,7 +392,7 @@ export const groupsSchema = Type.Refine(
   Type.Array(
     Type.Object({
       id,
-      name: text,
+      name,
       kind: Type.Enum(["body", "sketch"]),
       members: Type.Array(text),
     }),
@@ -419,7 +421,7 @@ export const documentSchema = Type.Refine(
       }),
     ]),
     id,
-    name: text,
+    name,
     createdAt: text,
     modifiedAt: text,
     modifiedBy: Type.Union([text, Type.Null()]),

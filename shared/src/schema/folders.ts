@@ -1,9 +1,13 @@
 import { Type, type Static } from "typebox";
+import { NAME_LENGTH } from "./features.js";
 
 export const FOLDERS_VERSION = 2;
 
 export const folderId = Type.String({ minLength: 1, maxLength: 100 });
-export const folderName = Type.String({ minLength: 1, maxLength: 200 });
+export const folderName = Type.String({
+  minLength: 1,
+  maxLength: NAME_LENGTH,
+});
 const parentId = Type.Union([folderId, Type.Null()]);
 export const folderMembers = Type.Object({
   owner: Type.Union([Type.String(), Type.Null()]),

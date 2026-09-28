@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import {
   LINEAR_TOL,
+  NAME_LENGTH,
   newId,
   ValidationError,
   type Feature,
@@ -298,7 +299,7 @@ function importer(format: Format, extensions: string[]) {
         feature: ImportStepFeature = {
           id: newId("import"),
           type: "importStep",
-          name: filename.slice(0, 120),
+          name: filename.slice(0, NAME_LENGTH),
           suppressed: false,
           filename,
           ...(format !== "step" && { format }),
@@ -325,7 +326,7 @@ function meshImporter(format: MeshFormat) {
           {
             id: newId("import"),
             type: "importMesh",
-            name: filename.slice(0, 120),
+            name: filename.slice(0, NAME_LENGTH),
             suppressed: false,
             filename,
             format,
