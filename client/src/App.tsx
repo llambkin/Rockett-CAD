@@ -126,8 +126,8 @@ function ProjectName({ name }: { name: string }) {
 }
 
 function UndoRedoButtons() {
-  const canUndo = useStore((s) => s.undoStack.length > 0);
-  const canRedo = useStore((s) => s.redoStack.length > 0);
+  const canUndo = useStore((s) => s.history?.canUndo ?? false);
+  const canRedo = useStore((s) => s.history?.canRedo ?? false);
   const busy = useStore((s) => s.busy);
   return (
     <span className="undo-redo">

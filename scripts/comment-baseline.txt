@@ -13,7 +13,7 @@ client/src/panelPlacement.ts 1
 client/src/shortcuts.ts 5
 client/src/sketchTools.ts 81
 client/src/sketchUsage.ts 8
-client/src/store.ts 31
+client/src/store.ts 21
 client/src/three/CadViewport.ts 42
 client/src/three/ExtrudeGizmo.ts 23
 client/src/three/MoveGizmo.ts 13

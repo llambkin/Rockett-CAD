@@ -431,7 +431,7 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 | Method & path                            | Body                    | Notes                                                                        |
 | ---------------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
 | `POST /projects/:id/evaluate`            | `{ held? }`             | Evaluate to the timeline marker; returns `WireEvaluateResult`                |
-| `PUT /projects/:id/document`             | `{ document }`          | Full replace (undo/redo restore); validated; 404 if project no longer exists |
+| `PUT /projects/:id/document`             | `{ document }`          | Full replace; validated; 404 if project no longer exists                     |
 | `POST /projects/:id/features`            | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
 | `PUT /projects/:id/features/:fid`        | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
 | `DELETE /projects/:id/features/:fid`     | `{ held? }`             | Marker adjusts if needed                                                     |
@@ -528,7 +528,7 @@ The commit needs If-Match. It is 409 `conflict`, with nothing saved, while
 any `candidate` or `ambiguous` mapping has no `to`. Otherwise it saves the
 upgraded document as one edit, with the pinned `targets` and signatures, and
 returns it with a fresh evaluation, the backup name and the mappings it
-applied. Undo sends the previous document back through `PUT /document`.
+applied. `POST /undo` reverses it like any other edit.
 
 ## Inspection & output
 

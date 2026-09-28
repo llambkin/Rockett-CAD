@@ -8,7 +8,7 @@ import {
 } from "@rockett/shared";
 import { api } from "../../api";
 import { PREVIEW_DEBOUNCE_MS } from "../../livePreview";
-import { useStore } from "../../store";
+import { dialogFeatureId, useStore } from "../../store";
 import { useSetting } from "../../settings";
 
 const SIZE_SCOPE = {
@@ -44,11 +44,11 @@ function sizePicks(draft: Feature | null): string | null {
 }
 
 function sizePosition(id: string): number {
-  const { document, previewBaseline } = useStore.getState();
-  const before = previewBaseline ?? document!;
-  const edited = before.features.findIndex((f) => f.id === id);
+  const { document: before, mode } = useStore.getState();
+  const own = dialogFeatureId(mode) ?? id;
+  const edited = before!.features.findIndex((f) => f.id === own);
   if (edited >= 0) return edited;
-  return Math.min(before.timelinePosition, before.features.length);
+  return Math.min(before!.timelinePosition, before!.features.length);
 }
 
 export function SizeLimitHint({ draft }: { draft: Feature | null }) {

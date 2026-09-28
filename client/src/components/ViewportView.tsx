@@ -125,7 +125,6 @@ export function ViewportView() {
   const peeked = usePeekedFeature();
   const draftSketch = useStore((s) => s.draftSketch);
   const dialogParams = useStore((s) => s.dialogParams);
-  const previewBaseline = useStore((s) => s.previewBaseline);
   const dialogOpen = mode.name === "dialog";
   const editFeatureId = dialogOpen ? mode.editFeatureId : undefined;
   const [baseLoads, setBaseLoads] = useState(0);
@@ -357,7 +356,6 @@ export function ViewportView() {
     evaluation,
     document_,
     hiddenBodies,
-    previewBaseline,
     dialogOpen,
     editFeatureId,
     baseLoads,

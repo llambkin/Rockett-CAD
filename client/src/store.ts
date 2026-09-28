@@ -1,10 +1,9 @@
 /**
  * Central client state (zustand).
  *
- * The server owns the document; every mutation goes through the API and the
- * store mirrors the returned document + evaluation. Undo/redo is a client
- * stack of document snapshots restored via full-document replace — it is
- * deliberately distinct from the CAD feature timeline.
+ * The server owns the document and its undo history; every mutation goes
+ * through the API and the store mirrors the returned document, evaluation
+ * and history status.
  */
 
 import { create } from "zustand";
@@ -13,6 +12,7 @@ import type {
   CadDocument,
   EvaluateResult,
   Feature,
+  HistoryStatus,
   MeasureResult,
   OriginAxis,
   PlaneRef,
@@ -183,6 +183,7 @@ interface State {
   notSaved: string | null;
   saveState: "saved" | "saving" | "unsaved";
   recovery: Recovery | null;
+  history: HistoryStatus | null;
 
   mode: Mode;
   dialogParams: Record<string, any>;
@@ -195,20 +196,11 @@ interface State {
 
   measureResult: MeasureResult | null;
 
-  undoStack: CadDocument[];
-  redoStack: CadDocument[];
-  /**
-   * Document snapshot taken before the first live dialog preview (e.g.
-   * dragging the extrude gizmo while editing). Cancel restores it; a commit
-   * uses it as the single undo entry for the whole interaction.
-   */
-  previewBaseline: CadDocument | null;
-
   // actions
   openProject: (id: string, path?: string) => Promise<void>;
   closeProject: () => void;
   applyMutation: (m: MutationResponse) => void;
-  mutate: (fn: () => Promise<MutationResponse>) => Promise<void>;
+  mutate: (fn: (tx: string) => Promise<MutationResponse>) => Promise<void>;
   recover: (choice: "reapply" | "discard") => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
@@ -253,10 +245,10 @@ interface State {
 
   addFeature: (feature: Feature) => Promise<void>;
   updateFeature: (fid: string, patch: Partial<Feature>) => Promise<void>;
-  /** Live-preview edit: updates the feature WITHOUT pushing an undo entry. */
+  /** Live-preview edit, staged by the server in the dialog's transaction. */
   updateFeaturePreview: (fid: string, patch: Partial<Feature>) => Promise<void>;
   previewNewFeature: (feature: Feature) => Promise<void>;
-  /** Revert any live-preview edits made since the dialog opened. */
+  /** Abort the dialog's preview transaction. */
   cancelPreview: () => Promise<void>;
   deleteFeature: (fid: string) => Promise<void>;
   suppressFeature: (fid: string, suppressed: boolean) => Promise<void>;
@@ -276,56 +268,80 @@ export function featurePatch(feature: Feature): Partial<Feature> {
   return patch;
 }
 
+interface Session {
+  tx: string;
+  fid: string;
+  fresh: boolean;
+  staged: number;
+}
+
 const preview: {
   seq: number;
   pending: { fid: string; patch: Partial<Feature> } | null;
   inFlight: Promise<void> | null;
-  provisional: { id: string; added: boolean } | null;
+  session: Session | null;
   base: {
     fid: string;
     bodies: BodyPayload[];
     after?: BodyPayload[] | undefined;
   } | null;
   error: string | null;
-  restore: Feature | null;
 } = {
   seq: 0,
   pending: null,
   inFlight: null,
-  provisional: null,
+  session: null,
   base: null,
   error: null,
-  restore: null,
 };
 
-function savedPreview(
-  baseline: CadDocument | null,
-  mine: CadDocument,
-  latest: CadDocument,
-): Feature | undefined {
-  const same = (a: unknown, b: unknown) =>
-    JSON.stringify(a) === JSON.stringify(b);
-  const byId = (d: CadDocument, id: string) =>
-    d.features.find((f) => f.id === id);
-  return baseline?.features.find(
-    (f) =>
-      !same(f, byId(mine, f.id)) && same(byId(mine, f.id), byId(latest, f.id)),
-  );
+function take(fresh: boolean, fid?: string): Session | null {
+  const session = preview.session;
+  if (!session || session.fresh !== fresh || (fid && session.fid !== fid))
+    return null;
+  preview.session = null;
+  return session;
 }
 
-function revert(
+function committing(
   id: string,
-  baseline: CadDocument | null,
-): Promise<MutationResponse | null> {
-  const restore = preview.restore;
-  preview.restore = null;
-  if (restore) return api.updateFeature(id, restore.id, featurePatch(restore));
-  return baseline ? api.replaceDocument(id, baseline) : Promise.resolve(null);
+  session: Session,
+  patch: Partial<Feature>,
+  plain: (tx: string) => Promise<MutationResponse>,
+): () => Promise<MutationResponse> {
+  let step: "stage" | "commit" | "plain" = "stage";
+  return async () => {
+    if (session.staged === 0) step = "plain";
+    try {
+      if (step === "stage") {
+        const seq = session.staged + 1;
+        await api.updateFeature(
+          id,
+          session.fid,
+          patch,
+          undefined,
+          session.tx,
+          seq,
+        );
+        session.staged = seq;
+        step = "commit";
+      }
+      if (step === "commit") return await api.commitPreview(id, session.tx);
+    } catch (e: any) {
+      if (e?.status !== 404 && e?.status !== 409) throw e;
+      step = "plain";
+      if (e.status === 409) throw e;
+    }
+    return plain(session.tx);
+  };
 }
 
 export function dialogFeatureId(mode: Mode): string | undefined {
   if (mode.name === "dialog")
-    return mode.editFeatureId ?? preview.provisional?.id;
+    return (
+      mode.editFeatureId ??
+      (preview.session?.fresh ? preview.session.fid : undefined)
+    );
 }
 
 export function previewedFeature(s: {
@@ -425,20 +441,27 @@ async function sendPreviews(): Promise<void> {
     preview.pending = null;
     const seq = preview.seq;
     const { document, recovery } = useStore.getState();
-    if (!document || recovery) break;
-    const provisional =
-      preview.provisional?.id === fid ? preview.provisional : null;
+    const session = preview.session;
+    if (!document || recovery || !session) break;
     try {
       const m = await inTurn(() =>
-        provisional && !provisional.added
-          ? api.addFeature(document.id, { ...patch, id: fid } as Feature)
+        session.fresh && session.staged === 0
+          ? api.addFeature(
+              document.id,
+              { ...patch, id: fid } as Feature,
+              session.tx,
+              1,
+            )
           : api.updateFeature(
               document.id,
               fid,
-              provisional ? featurePatch(patch as Feature) : patch,
+              session.fresh ? featurePatch(patch as Feature) : patch,
+              undefined,
+              session.tx,
+              session.staged + 1,
             ),
       );
-      if (provisional) provisional.added = true;
+      session.staged++;
       if (seq !== preview.seq) continue;
       const after = await bodiesAfter(m.document, fid);
       if (seq !== preview.seq) continue;
@@ -446,6 +469,7 @@ async function sendPreviews(): Promise<void> {
       useStore.setState((s) => ({
         document: m.document,
         evaluation: m.evaluation,
+        history: m.history ?? s.history,
         error: s.error === preview.error ? null : s.error,
       }));
     } catch (e: any) {
@@ -460,7 +484,7 @@ async function sendPreviews(): Promise<void> {
 }
 
 let writing = 0;
-let unsent: Array<() => Promise<MutationResponse>> = [];
+let unsent: Array<(tx: string) => Promise<MutationResponse>> = [];
 
 function saveState(s: State): Pick<State, "saveState"> {
   return {
@@ -498,6 +522,46 @@ export function followPath(): Promise<void> | void {
   if (id !== s.projectId) return s.openProject(id);
 }
 
+async function saveDialog(
+  session: Session | null,
+  commit: (session: Session) => () => Promise<MutationResponse>,
+  plain: (tx: string) => Promise<MutationResponse>,
+): Promise<void> {
+  const { mutate } = useStore.getState();
+  try {
+    await mutate(session ? commit(session) : plain);
+  } catch (e) {
+    if (session && !useStore.getState().recovery) preview.session ??= session;
+    throw e;
+  }
+}
+
+async function moveHistory(way: "undo" | "redo"): Promise<void> {
+  const { history, document, projectId, mode, busy, recovery } =
+    useStore.getState();
+  const able = way === "undo" ? history?.canUndo : history?.canRedo;
+  if (busy || recovery || !projectId || !document || !able) return;
+  useStore.setState({ busy: true });
+  const position = sketchEditingPosition(document, mode);
+  try {
+    const m = await inTurn(() =>
+      api[way](projectId, position).catch((e) => {
+        if (e?.status !== 400 || position === undefined) throw e;
+        return api[way](projectId);
+      }),
+    );
+    useStore.setState({
+      document: m.document,
+      evaluation: m.evaluation,
+      history: m.history ?? null,
+      busy: false,
+      ...historyEditingState(mode, m),
+    });
+  } catch (e: any) {
+    useStore.setState({ error: lost(e) ? null : e.message, busy: false });
+  }
+}
+
 export const useStore = create<State>((set, get) => ({
   projectId: null,
   document: null,
@@ -510,6 +574,7 @@ export const useStore = create<State>((set, get) => ({
   notSaved: null,
   saveState: "saved",
   recovery: null,
+  history: null,
   mode: { name: "idle" },
   dialogParams: {},
   pickInput: null,
@@ -517,9 +582,6 @@ export const useStore = create<State>((set, get) => ({
   hover: null,
   draftSketch: null,
   measureResult: null,
-  undoStack: [],
-  redoStack: [],
-  previewBaseline: null,
 
   async openProject(id, path = projectPath(id)) {
     void get().cancelPreview();
@@ -536,13 +598,11 @@ export const useStore = create<State>((set, get) => ({
         document,
         evaluation,
         view,
-        undoStack: [],
-        redoStack: [],
+        history: null,
         selection: [],
         mode: { name: "idle" },
         draftSketch: null,
         dialogParams: {},
-        previewBaseline: null,
         recovery: null,
         saveState: "saved",
         busy: false,
@@ -571,11 +631,9 @@ export const useStore = create<State>((set, get) => ({
       view: emptyView(),
       selection: [],
       mode: { name: "idle" },
-      undoStack: [],
-      redoStack: [],
+      history: null,
       draftSketch: null,
       dialogParams: {},
-      previewBaseline: null,
       busy: false,
       job: null,
       jobStartedAt: null,
@@ -589,31 +647,26 @@ export const useStore = create<State>((set, get) => ({
   async mutate(fn) {
     if (!get().document) return;
     await endPreviews();
+    const tx = crypto.randomUUID();
     return inTurn(async () => {
-      const { document, previewBaseline, recovery } = get();
+      const { document, recovery } = get();
       if (!document) return;
       if (recovery) {
         unsent.push(fn);
         throw new Error(recovery.message);
       }
-      // If live previews already changed the document, the undo entry for this
-      // commit is the state from before the previews started.
-      const snapshot = previewBaseline ?? JSON.parse(JSON.stringify(document));
       set({ busy: true, error: null });
       try {
-        const m = await fn();
+        const m = await fn(tx);
         preview.base = null;
-        preview.restore = null;
-        set((s) => ({
+        set({
           document: m.document,
           evaluation: m.evaluation,
-          undoStack: [...s.undoStack.slice(-49), snapshot],
-          redoStack: [],
-          previewBaseline: null,
+          history: m.history ?? null,
           busy: false,
-        }));
+        });
       } catch (e: any) {
-        if (lost(e)) unsent.push(fn);
+        if (lost(e)) unsent.push(() => fn(tx));
         set((s) => ({ error: s.recovery ? null : e.message, busy: false }));
         throw e;
       }
@@ -621,17 +674,15 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async recover(choice) {
-    const { document, recovery, previewBaseline } = get();
+    const { document, recovery } = get();
     if (!document || !recovery) return;
     endPreviews();
-    preview.provisional = null;
+    preview.session = null;
     preview.base = null;
     set({ busy: true, error: null });
     const reloaded = await inTurn(async () => {
       try {
         const latest = (await api.getProject(document.id)).document;
-        preview.restore ??=
-          savedPreview(previewBaseline, document, latest) ?? null;
         const mode = get().mode;
         const evaluation = await api.evaluate(
           document.id,
@@ -640,10 +691,8 @@ export const useStore = create<State>((set, get) => ({
         set({
           document: latest,
           evaluation,
-          previewBaseline: null,
           recovery: null,
-          undoStack: [],
-          redoStack: [],
+          history: null,
           busy: false,
           ...historyEditingState(mode, { document: latest, evaluation }),
         });
@@ -663,12 +712,15 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async updateFeaturePreview(fid, patch) {
-    const { document, evaluation, previewBaseline, recovery } = get();
+    const { document, evaluation, recovery } = get();
     if (!document || recovery) return;
-    if (!previewBaseline) {
-      preview.base ??= { fid, bodies: evaluation?.bodies ?? [] };
-      set({ previewBaseline: JSON.parse(JSON.stringify(document)) });
-    }
+    preview.base ??= { fid, bodies: evaluation?.bodies ?? [] };
+    preview.session ??= {
+      tx: crypto.randomUUID(),
+      fid,
+      fresh: false,
+      staged: 0,
+    };
     preview.seq++;
     const { targets: _replaced, ...queued }: Record<string, unknown> =
       preview.pending?.fid === fid ? preview.pending.patch : {};
@@ -679,84 +731,46 @@ export const useStore = create<State>((set, get) => ({
 
   async previewNewFeature(feature) {
     if (!get().document) return;
-    preview.provisional ??= { id: feature.id, added: false };
-    return get().updateFeaturePreview(preview.provisional.id, feature);
+    preview.session ??= {
+      tx: crypto.randomUUID(),
+      fid: feature.id,
+      fresh: true,
+      staged: 0,
+    };
+    return get().updateFeaturePreview(preview.session.fid, feature);
   },
 
   async cancelPreview() {
-    const { previewBaseline, document, recovery } = get();
+    const { document, recovery } = get();
     const settling = endPreviews();
-    preview.provisional = null;
+    const session = preview.session;
+    preview.session = null;
     preview.base = null;
-    if (recovery) preview.restore = null;
-    if (!document || (!previewBaseline && !preview.restore)) return;
-    if (recovery) return set({ previewBaseline: null });
+    if (!document || !session || recovery) return;
     const current = () => get().projectId === document.id;
     set({ busy: true });
     try {
       await settling;
-      const m = await inTurn(() => revert(document.id, previewBaseline));
+      const m =
+        session.staged > 0
+          ? await inTurn(() => api.abortPreview(document.id, session.tx))
+          : null;
       if (current())
         set({
-          ...(m && { document: m.document, evaluation: m.evaluation }),
-          previewBaseline: null,
+          ...(m && {
+            document: m.document,
+            evaluation: m.evaluation,
+            history: m.history ?? null,
+          }),
           busy: false,
         });
     } catch (e: any) {
-      if (current())
-        set({
-          error: lost(e) ? null : e.message,
-          previewBaseline: null,
-          busy: false,
-        });
+      if (current()) set({ error: lost(e) ? null : e.message, busy: false });
     }
   },
 
-  async undo() {
-    const { undoStack, document, projectId, mode, busy, recovery } = get();
-    if (busy || recovery || !projectId || !document || undoStack.length === 0)
-      return;
-    const prev = undoStack[undoStack.length - 1]!;
-    set({ busy: true });
-    try {
-      const m = await inTurn(() =>
-        api.replaceDocument(projectId, prev, sketchEditingPosition(prev, mode)),
-      );
-      set((s) => ({
-        document: m.document,
-        evaluation: m.evaluation,
-        undoStack: s.undoStack.slice(0, -1),
-        redoStack: [...s.redoStack, JSON.parse(JSON.stringify(document))],
-        busy: false,
-        ...historyEditingState(mode, m),
-      }));
-    } catch (e: any) {
-      set({ error: lost(e) ? null : e.message, busy: false });
-    }
-  },
-
-  async redo() {
-    const { redoStack, document, projectId, mode, busy, recovery } = get();
-    if (busy || recovery || !projectId || !document || redoStack.length === 0)
-      return;
-    const next = redoStack[redoStack.length - 1]!;
-    set({ busy: true });
-    try {
-      const m = await inTurn(() =>
-        api.replaceDocument(projectId, next, sketchEditingPosition(next, mode)),
-      );
-      set((s) => ({
-        document: m.document,
-        evaluation: m.evaluation,
-        redoStack: s.redoStack.slice(0, -1),
-        undoStack: [...s.undoStack, JSON.parse(JSON.stringify(document))],
-        busy: false,
-        ...historyEditingState(mode, m),
-      }));
-    } catch (e: any) {
-      set({ error: lost(e) ? null : e.message, busy: false });
-    }
-  },
+  undo: () => moveHistory("undo"),
+  redo: () => moveHistory("redo"),
 
   setError: (e) => set({ error: e }),
   async cancelJob() {
@@ -809,7 +823,7 @@ export const useStore = create<State>((set, get) => ({
       entities: [],
       constraints: [],
     };
-    await get().mutate(() => api.addFeature(document.id, feature));
+    await get().mutate((tx) => api.addFeature(document.id, feature, tx));
     const doc = get().document!;
     const created = doc.features.find(
       (f) => f.id === feature.id,
@@ -988,7 +1002,7 @@ export const useStore = create<State>((set, get) => ({
         ])
     )
       return;
-    await get().mutate(() =>
+    await get().mutate((tx) =>
       api.updateFeature(
         document.id,
         draftSketch.id,
@@ -998,6 +1012,7 @@ export const useStore = create<State>((set, get) => ({
           offsets: draftSketch.offsets,
         } as Partial<Feature>,
         sketchEditingPosition(document, get().mode),
+        tx,
       ),
     );
     // refresh draft from authoritative solve
@@ -1202,37 +1217,37 @@ export const useStore = create<State>((set, get) => ({
   async addFeature(feature) {
     const { document } = get();
     if (!document) return;
-    // name left empty → the server assigns Sketch1/Extrude2/… and persists
-    // the per-type counter.
-    await get().mutate(() =>
-      preview.provisional?.added
-        ? api.updateFeature(
-            document.id,
-            preview.provisional.id,
-            featurePatch(feature),
-          )
-        : api.addFeature(document.id, feature),
+    const plain = (tx: string) => api.addFeature(document.id, feature, tx);
+    await saveDialog(
+      take(true),
+      (session) =>
+        committing(document.id, session, featurePatch(feature), plain),
+      plain,
     );
-    preview.provisional = null;
   },
 
   async updateFeature(fid, patch) {
     const { document } = get();
     if (!document) return;
-    await get().mutate(() =>
+    const plain = (tx: string) =>
       api.updateFeature(
         document.id,
         fid,
         patch,
         sketchEditingPosition(document, get().mode),
-      ),
+        tx,
+      );
+    await saveDialog(
+      take(false, fid),
+      (session) => committing(document.id, session, patch, plain),
+      plain,
     );
   },
 
   async deleteFeature(fid) {
     const { document } = get();
     if (!document) return;
-    await get().mutate(() => api.deleteFeature(document.id, fid));
+    await get().mutate((tx) => api.deleteFeature(document.id, fid, tx));
     set({ selection: [] });
   },
 
@@ -1266,13 +1281,13 @@ export const useStore = create<State>((set, get) => ({
     if (get().mode.name === "sketch" || get().busy) return;
     const { document } = get();
     if (!document) return;
-    await get().mutate(() => api.setTimeline(document.id, position));
+    await get().mutate((tx) => api.setTimeline(document.id, position, tx));
   },
 
   async setBodyMeta(bodyId, patch) {
     const { document } = get();
     if (!document) return;
-    await get().mutate(() => api.updateBody(document.id, bodyId, patch));
+    await get().mutate((tx) => api.updateBody(document.id, bodyId, patch, tx));
   },
 
   async setVisible(shown) {

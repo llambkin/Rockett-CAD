@@ -74,14 +74,14 @@ export function treeClick(
 }
 
 function inOneStep(
-  steps: ((projectId: string) => Promise<MutationResponse>)[],
+  steps: ((projectId: string, tx: string) => Promise<MutationResponse>)[],
 ): Promise<void> {
   const s = useStore.getState();
   const id = s.document?.id;
   if (!id || steps.length === 0) return Promise.resolve();
-  return s.mutate(async () => {
+  return s.mutate(async (tx) => {
     let last: MutationResponse | undefined;
-    for (const step of steps) last = await step(id);
+    for (const step of steps) last = await step(id, tx);
     return last!;
   });
 }
@@ -96,12 +96,12 @@ export const setFeaturesVisible = (ids: string[], visible: boolean) =>
   });
 
 export async function deleteFeatures(ids: string[]) {
-  await inOneStep(ids.map((fid) => (id) => api.deleteFeature(id, fid)));
+  await inOneStep(ids.map((fid) => (id, tx) => api.deleteFeature(id, fid, tx)));
   useStore.getState().setSelection([]);
 }
 
 const saveGroups = (groups: TreeGroup[]) =>
-  inOneStep([(id) => api.updateGroups(id, groups)]);
+  inOneStep([(id, tx) => api.updateGroups(id, groups, tx)]);
 
 export async function groupItems(
   kind: TreeGroup["kind"],

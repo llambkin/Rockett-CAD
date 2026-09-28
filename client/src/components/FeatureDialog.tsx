@@ -128,6 +128,9 @@ function DialogBody({
   const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
   const document_ = useStore((s) => s.document);
+  const [stored] = useState(() =>
+    document_?.features.find((f) => f.id === editId),
+  );
   const [pending, setPending] = useState(false);
 
   const profiles = selection.filter((s) => s.kind === "profile") as Extract<
@@ -771,11 +774,7 @@ function DialogBody({
       return;
     }
     live.cancel();
-    const { previewBaseline, document: current } = useStore.getState();
-    const before = (previewBaseline ?? current)?.features.find(
-      (f) => f.id === editId,
-    );
-    if (editId && !changes(before, featurePatch(feature))) return close();
+    if (editId && !changes(stored, featurePatch(feature))) return close();
     setPending(true);
     try {
       if (editId) await updateFeature(editId, featurePatch(feature));

@@ -3,7 +3,9 @@ import {
   DOCUMENT_EDITS,
   AUTH_ROUTES,
   pathFor,
+  PREVIEW_HEADER,
   ROUTES,
+  TX_HEADER,
   type ApiErrorBody,
   type ApiErrorCode,
   type BodyPayload,
@@ -291,7 +293,11 @@ export async function request(
   if (response !== "blob") {
     const json = await res.json();
     received(json?.document);
-    if (method !== "GET" && json?.document?.id === watch?.id)
+    if (
+      method !== "GET" &&
+      !headers?.[PREVIEW_HEADER] &&
+      json?.document?.id === watch?.id
+    )
       watch?.onDocument(json.document);
     return json;
   }
@@ -313,6 +319,12 @@ export function saveDownload({ blob, fileName }: Download): void {
   URL.revokeObjectURL(a.href);
 }
 
+interface Stamp {
+  position?: number | undefined;
+  tx?: string | undefined;
+  seq?: number | undefined;
+}
+
 export function send<P extends string, Req, Res>(
   route: Route<P, Req, Res>,
   params: PathParams<P>,
@@ -320,11 +332,9 @@ export function send<P extends string, Req, Res>(
     body,
     signal,
     position,
-  }: {
-    body?: Req;
-    signal?: AbortSignal | undefined;
-    position?: number | undefined;
-  } = {},
+    tx,
+    seq,
+  }: { body?: Req; signal?: AbortSignal | undefined } & Stamp = {},
 ): Promise<Res> {
   const query = position === undefined ? "" : `?position=${position}`;
   const id: string | undefined = (params as Partial<Record<string, string>>).id;
@@ -338,9 +348,11 @@ export function send<P extends string, Req, Res>(
     ...((DOCUMENT_EDITS.has(route) || route === ROUTES.importStep) && {
       jobId: crypto.randomUUID(),
     }),
-    ...(revision !== undefined && {
-      headers: { "If-Match": `"${revision}"` },
-    }),
+    headers: {
+      ...(revision !== undefined && { "If-Match": `"${revision}"` }),
+      ...(tx !== undefined && { [TX_HEADER]: tx }),
+      ...(seq !== undefined && { [PREVIEW_HEADER]: String(seq) }),
+    },
   });
 }
 
@@ -370,12 +382,12 @@ async function sendHeld<P extends string, Req, Res>(
   route: Route<P, Req & HeldMeshes, Res>,
   params: PathParams<P>,
   body: Req,
-  position: number | undefined,
+  stamp: Stamp = {},
 ): Promise<[Res, ReadonlyMap<string, BodyPayload>]> {
   const held = meshes;
   const response = await send(route, params, {
     body: { ...body, held: [...held.keys()] },
-    position,
+    ...stamp,
   });
   return [response, held];
 }
@@ -384,9 +396,9 @@ async function holding<P extends string, Req, Res extends WireMutationResponse>(
   route: Route<P, Req & HeldMeshes, Res>,
   params: PathParams<P>,
   body: Req,
-  position?: number,
+  stamp?: Stamp,
 ): Promise<Omit<Res, "evaluation"> & MutationResponse> {
-  const [response, held] = await sendHeld(route, params, body, position);
+  const [response, held] = await sendHeld(route, params, body, stamp);
   return { ...response, evaluation: keep(refill(response.evaluation, held)) };
 }
 
@@ -503,7 +515,14 @@ export const api = {
     meshes = new Map();
   },
   evaluate: async (id: string, position?: number) => {
-    const [wire, held] = await sendHeld(ROUTES.evaluate, { id }, {}, position);
+    const [wire, held] = await sendHeld(
+      ROUTES.evaluate,
+      { id },
+      {},
+      {
+        position,
+      },
+    );
     const evaluation = refill(wire, held);
     return position === undefined ? keep(evaluation) : evaluation;
   },
@@ -514,30 +533,46 @@ export const api = {
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
     send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 
-  addFeature: (id: string, feature: Feature) =>
-    holding(ROUTES.addFeature, { id }, { feature }),
+  addFeature: (id: string, feature: Feature, tx?: string, seq?: number) =>
+    holding(ROUTES.addFeature, { id }, { feature }, { tx, seq }),
   updateFeature: (
     id: string,
     fid: string,
     feature: Partial<Feature>,
     position?: number,
-  ) => holding(ROUTES.updateFeature, { id, fid }, { feature }, position),
-  deleteFeature: (id: string, fid: string) =>
-    holding(ROUTES.deleteFeature, { id, fid }, {}),
-  setTimeline: (id: string, position: number) =>
-    holding(ROUTES.setTimeline, { id }, { position }),
+    tx?: string,
+    seq?: number,
+  ) =>
+    holding(
+      ROUTES.updateFeature,
+      { id, fid },
+      { feature },
+      { position, tx, seq },
+    ),
+  deleteFeature: (id: string, fid: string, tx?: string) =>
+    holding(ROUTES.deleteFeature, { id, fid }, {}, { tx }),
+  setTimeline: (id: string, position: number, tx?: string) =>
+    holding(ROUTES.setTimeline, { id }, { position }, { tx }),
   undo: (id: string, position?: number) =>
-    holding(ROUTES.undo, { id }, {}, position),
+    holding(ROUTES.undo, { id }, {}, { position }),
   redo: (id: string, position?: number) =>
-    holding(ROUTES.redo, { id }, {}, position),
+    holding(ROUTES.redo, { id }, {}, { position }),
+  commitPreview: (id: string, tx: string) =>
+    holding(ROUTES.commitPreview, { id, tx }, {}),
+  abortPreview: (id: string, tx: string) =>
+    holding(ROUTES.abortPreview, { id, tx }, {}),
   restoreHistory: (id: string, snapshot: string) =>
     holding(ROUTES.restoreHistory, { id }, { snapshot }),
   replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    holding(ROUTES.replaceDocument, { id }, { document }, position),
-  updateBody: (id: string, bodyId: string, patch: { name: string }) =>
-    holding(ROUTES.updateBody, { id, bodyId }, patch),
-  updateGroups: (id: string, groups: TreeGroup[]) =>
-    holding(ROUTES.updateGroups, { id }, { groups }),
+    holding(ROUTES.replaceDocument, { id }, { document }, { position }),
+  updateBody: (
+    id: string,
+    bodyId: string,
+    patch: { name: string },
+    tx?: string,
+  ) => holding(ROUTES.updateBody, { id, bodyId }, patch, { tx }),
+  updateGroups: (id: string, groups: TreeGroup[], tx?: string) =>
+    holding(ROUTES.updateGroups, { id }, { groups }, { tx }),
   stageNamingUpgrade: (id: string, accept: NamingDecision[] = []) =>
     send(ROUTES.stageNamingUpgrade, { id }, { body: { accept } }),
   commitNamingUpgrade: (id: string, accept: NamingDecision[] = []) =>
