@@ -20,12 +20,12 @@ import {
   evalOffsetFace,
   evalReferenceImage,
   evalRevolve,
-  evalShell,
   evalSketch,
   evalSplitBody,
   evalSweep,
   type FeatureOutcome,
 } from "./features.js";
+import { evalShell } from "./shell.js";
 
 const kind = <T extends FeatureType>(
   type: T,
@@ -36,7 +36,7 @@ const kind = <T extends FeatureType>(
 ): FeatureKind => ({ type, evaluate });
 
 const kinds = [
-  kind("shell", (ctx, f) => evalShell(ctx.state, f)),
+  kind("shell", evalShell),
   kind("extrude", (ctx, f) => evalExtrude(ctx.state, f)),
   kind("revolve", (ctx, f) => evalRevolve(ctx.state, f)),
   kind("emboss", (ctx, f) => evalEmboss(ctx.state, f)),

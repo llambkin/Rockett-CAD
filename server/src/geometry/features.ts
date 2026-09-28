@@ -39,7 +39,6 @@ import {
   type Profile,
   type ProfileRef,
   type RevolveFeature,
-  type ShellFeature,
   type SketchEntity,
   type SketchFeature,
   type SketchSolveStatus,
@@ -49,7 +48,6 @@ import {
   Placement,
 } from "@rockett/shared";
 import {
-  areaOf,
   bboxOf,
   dir,
   edgeCentroid,
@@ -299,7 +297,7 @@ function bboxOverlap(a: Shape, b: Shape): boolean {
   return true;
 }
 
-function registerBodySolids(
+export function registerBodySolids(
   state: EvalState,
   bodyId: string,
   shape: Shape,
@@ -394,7 +392,7 @@ function registerNewBodies(
 // Tool-solid creation (extrude / revolve / sweep / loft share this plumbing)
 // ---------------------------------------------------------------------------
 
-interface ToolResult {
+export interface ToolResult {
   shape: Shape;
   names: NameMap;
 }
@@ -495,7 +493,7 @@ function finishJoin(
   throw refusal;
 }
 
-function fuseNamed(
+export function fuseNamed(
   a: ToolResult,
   b: ToolResult,
   featureId: string,
@@ -1598,7 +1596,7 @@ function filletFailure(
     : `fillet of radius ${radius} failed: radius may be too large for the geometry`;
 }
 
-function rejectInvalid(
+export function rejectInvalid(
   result: Shape,
   before: Shape,
   kind: string,
@@ -2085,85 +2083,6 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
     if (!f.keepTools) {
       for (const tool of tools) state.bodies.delete(tool.bodyId);
     }
-  });
-}
-
-function hollowed(before: Shape, after: Shape): boolean {
-  const skin = LINEAR_TOL * areaOf(before);
-  const kept = volumeOf(after);
-  return kept > skin && volumeOf(before) - kept > skin;
-}
-
-export function evalShell(state: EvalState, f: ShellFeature): void {
-  if (f.thickness <= 0) throw new Error("shell thickness must be positive");
-  const bodyId = f.openFaces[0]?.bodyId ?? [...state.bodies.keys()][0];
-  const body = bodyId === undefined ? undefined : state.bodies.get(bodyId);
-  if (bodyId === undefined || !body) throw new Error("no body to shell");
-  const k = getKernel();
-  kernelCall("shell", () => {
-    const closing = shapeList(
-      f.openFaces.map((ref) => {
-        const face = findFace(body, ref.faceName);
-        if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
-        return face;
-      }),
-    );
-    const op = new k.BRepOffsetAPI_MakeThickSolid();
-    op.MakeThickSolidByJoin(
-      body.shape,
-      closing,
-      -f.thickness,
-      LINEAR_TOL,
-      k.BRepOffset_Mode.BRepOffset_Skin,
-      false,
-      false,
-      k.GeomAbs_JoinType.GeomAbs_Arc,
-      false,
-      progress(),
-    );
-    op.Build(progress());
-    if (!op.IsDone()) {
-      op.delete();
-      closing.delete();
-      throw new Error("shell failed: thickness may be too large");
-    }
-    const result = op.Shape();
-    const names = propagateNames(op, [body], result, f.id);
-    op.delete();
-    closing.delete();
-    const noHollow = `shell of ${f.thickness} mm left no hollow, so the wall is too thick for this body: try a thinner wall; the previous body has been kept`;
-    const publish = (shape: Shape, shapeNames: NameMap) => {
-      try {
-        rejectInvalid(
-          shape,
-          body.shape,
-          "shell",
-          `${f.thickness} mm`,
-          "try a different wall thickness",
-        );
-        if (!hollowed(body.shape, shape)) throw new Error(noHollow);
-      } catch (err) {
-        shape.delete();
-        throw err;
-      }
-      registerBodySolids(state, bodyId, shape, shapeNames);
-    };
-    if (f.openFaces.length > 0) return publish(result, names);
-    const cut = checkedCut(
-      body.shape,
-      result,
-      "shell failed: could not hollow the closed body",
-    );
-    if (!cut) throw new Error(noHollow);
-    const hollow = cut.Shape();
-    const hollowNames = propagateNames(
-      cut,
-      [body, { shape: result, names }],
-      hollow,
-      f.id,
-    );
-    cut.delete();
-    publish(hollow, hollowNames);
   });
 }
 

@@ -248,9 +248,7 @@ names the body when there is more than one.
 
 Fillet, Chamfer and Shell run the kernel validity check, `BRepCheck_Analyzer`,
 on their result, since the kernel can report success and still leave an invalid
-shape.
-A 0.8 mm shell of a 5 or 10 degree wedge with 1 mm top fillets leaves an
-invalid face near the rim. An invalid result is a feature error that names the
+shape. An invalid result is a feature error that names the
 kind of part the check rejects and keeps the previous body. When the body was
 already invalid before the feature, the error says the fault comes from an
 earlier feature.
@@ -308,7 +306,8 @@ only below about 0.0011 mm.
 Chamfer's envelope fallback is a boolean, so its faces cannot cross, but it can
 open a cavity: it gets the shell count check only. Shell gets no cut-through
 check: on the pinned kernel its offset fails rather than build a wall that
-crosses another face, and a closed shell's hollow is a boolean cut. Size hints
+crosses another face, and a closed shell's hollow and the opening route below
+are boolean cuts. Size hints
 build each trial through the feature, so they never offer a size that cuts
 through, runs past its edges or comes back loose.
 
@@ -316,6 +315,18 @@ A shell must also leave a hollow. When the wall reaches half the body, or a
 fillet radius, the kernel can return the solid unshelled and report success.
 Shell errors when the result keeps no volume, or removes no more than a
 skin of `LINEAR_TOL` times the body area, and keeps the previous body.
+
+Shell runs the kernel offset with its intersection option on: without it,
+opening a fillet face returns the body unshelled, and a closed body with joined
+blocks has no inner offset. The kernel still cannot open a face that a kept
+fillet runs into tangentially, since the fillet's inner wall never meets that
+face: it returns the body unshelled or throws. Shell then hollows the closed
+body and cuts, behind each opened planar face, the prism from that face's inner
+offset out to the face, so the fillet's wall ends square at the opening. The
+result gets the same validity and hollow checks. When an opened face is curved,
+or has no inner offset, the error names the fillet or chamfer that owns the
+face, or else those bordering it, and keeps the previous body. A wall too thick
+for the body keeps the kernel's error.
 
 A cut can also pass `BRepCheck_Analyzer` and be inside out. On a body with a
 fillet between a face and a curved wall, a face extrude cut whose straight

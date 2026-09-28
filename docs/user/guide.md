@@ -114,7 +114,9 @@ Modify covers fillet, chamfer, shell, boolean combine, split body, press/pull
 values or the arrow gizmo.
 
 Shell removes the faces you click and keeps the given wall thickness. With no
-face picked, it hollows the closed body into a sealed cavity.
+face picked, it hollows the closed body into a sealed cavity. A face a fillet
+runs into opens with the fillet's wall ending square at the opening. When a
+rounded face cannot open, the error names its fillet or chamfer.
 
 Fillet and Chamfer default to **Select tangent chain**. Clicking an edge
 selects smooth connected edges (including line/arc joins); sharp corners and
