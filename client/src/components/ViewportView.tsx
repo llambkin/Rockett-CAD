@@ -61,6 +61,7 @@ import {
 } from "../store";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { watchSnapshots } from "../snapshot";
 import * as tools from "../sketchTools";
 import { ANGLE_LOCK_KEY } from "../shortcuts";
 
@@ -295,6 +296,7 @@ export function ViewportView() {
       // console debugging handle (dev only)
       (window as any).__rockett = { vp, store: useStore };
     }
+    const stopSnapshots = watchSnapshots(vp);
     const cube = new ViewCube(cubeRef.current!, vp);
     viewCubeRef.current = cube;
     const onResize = () => vp.resize();
@@ -335,6 +337,7 @@ export function ViewportView() {
       window.removeEventListener("resize", onResize);
       observer.disconnect();
       unsubscribe();
+      stopSnapshots();
       for (const type of NUDGE_EVENTS) {
         container.removeEventListener(type, nudge);
       }

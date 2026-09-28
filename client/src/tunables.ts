@@ -8,6 +8,8 @@ export const TIMING_MS = {
   jobHintDelay: 500,
   jobTerminalWait: 5_000,
   viewSave: 1_000,
+  snapshotHoverDelay: 400,
+  snapshotInterval: 60_000,
 } as const;
 
 export const PREVIEW_APPEARANCE = {

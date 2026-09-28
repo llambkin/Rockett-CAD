@@ -184,6 +184,7 @@ interface State {
   error: string | null;
   notSaved: string | null;
   saveState: "saved" | "saving" | "unsaved";
+  savedAt: number | null;
   recovery: Recovery | null;
   history: HistoryStatus | null;
 
@@ -580,6 +581,7 @@ async function moveHistory(way: "undo" | "redo"): Promise<void> {
       document: m.document,
       evaluation: m.evaluation,
       history: m.history ?? null,
+      savedAt: Date.now(),
       busy: false,
       ...historyEditingState(mode, m),
     });
@@ -599,6 +601,7 @@ export const useStore = create<State>((set, get) => ({
   error: null,
   notSaved: null,
   saveState: "saved",
+  savedAt: null,
   recovery: null,
   history: null,
   mode: { name: "idle" },
@@ -632,6 +635,7 @@ export const useStore = create<State>((set, get) => ({
         dialogParams: {},
         recovery: null,
         saveState: "saved",
+        savedAt: null,
         busy: false,
       });
       unsent = [];
@@ -652,6 +656,7 @@ export const useStore = create<State>((set, get) => ({
     set({
       recovery: null,
       saveState: "saved",
+      savedAt: null,
       error: null,
       projectId: null,
       document: null,
@@ -693,6 +698,7 @@ export const useStore = create<State>((set, get) => ({
           document: m.document,
           evaluation: m.evaluation,
           history: m.history ?? null,
+          savedAt: Date.now(),
           busy: false,
         });
       } catch (e: any) {

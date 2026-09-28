@@ -267,17 +267,17 @@ export async function request(
     onEtag,
   }: RequestOptions & { response?: "blob" } = {},
 ): Promise<unknown> {
-  const form = body instanceof FormData;
+  const raw = body instanceof FormData || body instanceof Blob;
   const watch = watching(path);
   const sent = {
-    ...(body !== undefined && !form && { "Content-Type": "application/json" }),
+    ...(body !== undefined && !raw && { "Content-Type": "application/json" }),
     ...headers,
     ...(jobId && { "Rockett-Job": jobId }),
   };
   const pending = fetch(API + path, {
     method,
     ...(Object.keys(sent).length > 0 && { headers: sent }),
-    ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
+    ...(body !== undefined && { body: raw ? body : JSON.stringify(body) }),
     ...(signal && { signal }),
     ...(keepalive && { keepalive }),
   }).catch((e: unknown) => {
@@ -633,6 +633,13 @@ export const api = {
       { body: fileForm("image", file), signal },
     );
   },
+
+  getThumbnail: (id: string) =>
+    request(ROUTES.getThumbnail.method, pathFor(ROUTES.getThumbnail, { id }), {
+      response: "blob",
+    }).then((d) => d.blob),
+  putThumbnail: (id: string, png: Blob) =>
+    send(ROUTES.putThumbnail, { id }, { body: png }),
 
   readAsset: (id: string, assetId: string) =>
     request(ROUTES.asset.method, pathFor(ROUTES.asset, { id, assetId }), {

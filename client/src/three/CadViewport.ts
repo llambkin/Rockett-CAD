@@ -270,6 +270,36 @@ export class CadViewport {
     this.renderer.render(this.scene, this.camera);
   }
 
+  snapshot(width: number, height: number): HTMLCanvasElement | null {
+    const drawn =
+      [...this.bodies.values()].some((b) => b.group.visible) ||
+      this.sketches.group.children.length > 0;
+    if (!drawn) return null;
+    const frame = document.createElement("canvas");
+    frame.width = width;
+    frame.height = height;
+    const context = frame.getContext("2d");
+    if (!context) return null;
+    this.render();
+    const source = this.renderer.domElement;
+    const scale = Math.max(width / source.width, height / source.height);
+    const w = width / scale;
+    const h = height / scale;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      source,
+      (source.width - w) / 2,
+      (source.height - h) / 2,
+      w,
+      h,
+      0,
+      0,
+      width,
+      height,
+    );
+    return frame;
+  }
+
   setTheme(tokens: ThemeTokens): void {
     applyThemeToScene(this.scene, tokens, this.requestRender);
     this.renderer.setClearColor(tokens["viewport-bg"]);

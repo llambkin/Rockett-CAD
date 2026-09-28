@@ -27,6 +27,11 @@ import {
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { MoveDialog } from "./MoveDialog";
 import { RenameInput } from "./RenameInput";
+import {
+  editedAt,
+  useSnapshotPeek,
+  type SnapshotTarget,
+} from "./SnapshotPopover";
 import { BrowserShareDialog, ShareDialog } from "./ShareDialog";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
@@ -133,6 +138,7 @@ function ItemRow({
   onRename = () => {},
   onMenu,
   drag,
+  snapshot,
 }: {
   item: Item;
   meta: ReactNode;
@@ -145,8 +151,10 @@ function ItemRow({
   onRename?: (name: string | null) => void;
   onMenu: (menu: Menu) => void;
   drag?: ReturnType<ReturnType<typeof useDragMove>["source"]>;
+  snapshot?: SnapshotTarget | undefined;
 }) {
   const { active, ...dropHandlers } = drop;
+  const peek = useSnapshotPeek(snapshot);
   return (
     <div
       className={`project-row${active ? " drop-target" : ""}${dimmed ? " dimmed" : ""}`}
@@ -186,6 +194,7 @@ function ItemRow({
           disabled={!onOpen}
           onClick={onOpen}
           onDoubleClick={(e) => e.preventDefault()}
+          {...peek.handlers}
         >
           {glyph && (
             <span className="tree-icon" aria-hidden="true">
@@ -210,12 +219,13 @@ function ItemRow({
           {a.glyph}
         </button>
       ))}
+      {peek.popover}
     </div>
   );
 }
 
 const features = (p: Pick<ProjectSummary, "featureCount" | "modifiedAt">) =>
-  `${p.featureCount} features · ${new Date(p.modifiedAt).toLocaleString()}`;
+  `${p.featureCount} features · ${editedAt(p.modifiedAt)}`;
 
 const unreadable = (p: ProjectSummary) =>
   p.status === "tooNew"
@@ -325,7 +335,12 @@ export function ProjectItems({
         : api.renameFolder(item.id, name),
     );
   };
-  const row = (item: Item, meta: string, actions: RowAction[]) => (
+  const row = (
+    item: Item,
+    meta: string,
+    actions: RowAction[],
+    snapshot?: SnapshotTarget,
+  ) => (
     <ItemRow
       key={`${item.kind}:${item.id}`}
       item={item}
@@ -340,6 +355,7 @@ export function ProjectItems({
       onRename={rename(item)}
       onMenu={setMenu}
       drag={source(item)}
+      snapshot={snapshot}
     />
   );
   const folders = subfolders(tree, folderId);
@@ -394,6 +410,7 @@ export function ProjectItems({
               item={item}
               meta={`${reason} · Owner: ${p.ownerName ?? "Unclaimed"}`}
               dimmed
+              snapshot={p}
               actions={[
                 deleteAction(p.name, run, () => api.deleteProject(p.id)),
               ]}
@@ -419,6 +436,7 @@ export function ProjectItems({
               moveTo(item, setMoving),
             ],
           ),
+          p,
         );
       })}
       {folders.length + here.length + (pinned ?? 0) === 0 && (

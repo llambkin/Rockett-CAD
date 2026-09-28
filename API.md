@@ -392,7 +392,9 @@ the last editor's. `GET /projects/:id/thumbnail` returns it as `image/png`
 with `ETag: "<sha256>"` and `Cache-Control: no-cache`, 304 for a matching
 `If-None-Match`, or 404 when none exists. It records no history and raises no
 revision. Deleting the project deletes it; duplicate, the project file and
-import leave it out.
+import leave it out. The client captures the viewport after a model save, at
+most once a minute (`TIMING_MS.snapshotInterval`), and when a session with a
+save goes back to the list, so a view-only member never sends one.
 
 ## Folders
 

@@ -1268,6 +1268,41 @@ a.btn {
   font-size: 11px;
 }
 
+.snapshot-popover {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px var(--shadow-menu);
+  pointer-events: none;
+}
+
+.snapshot-popover img,
+.snapshot-empty {
+  display: block;
+  width: 240px;
+  height: 160px;
+  border-radius: 3px;
+}
+
+.snapshot-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.snapshot-popover span {
+  padding: 0 4px 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 .icon-btn {
   padding: 6px 8px;
   border-radius: 4px;
