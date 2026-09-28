@@ -2110,14 +2110,14 @@ export function ViewportView() {
 
     if (s.mode.name === "dialog") {
       const picks = DIALOG_PICKS[s.mode.dialog] ?? {};
-      // When a dialog takes both profiles and faces (extrude), clicks pick
-      // profiles; Shift picks faces instead (Ctrl/⌘ is reserved for multi-select).
       const both = !!picks.profiles && !!(picks.faces || picks.bodies);
       const wantFace = both && e.shiftKey;
       const r = vp.pick(e.clientX, e.clientY, {
         profiles: picks.profiles && !wantFace,
         edges: picks.edges,
-        faces: (picks.faces || picks.bodies) && (!both || wantFace),
+        faces:
+          (picks.faces || picks.bodies) &&
+          (!both || wantFace || s.mode.dialog === "loft"),
         bodies: picks.bodies && !picks.faces,
         originPlanes: picks.planes,
         constructionPlanes: picks.planes,
@@ -2167,10 +2167,12 @@ export function ViewportView() {
         }
         return;
       }
-      // profiles: plain click replaces, Ctrl/⌘/Shift adds or removes (as in
-      // idle mode); edges/faces/bodies keep accumulating without a modifier
       const multi = e.ctrlKey || e.metaKey || e.shiftKey;
-      if (sel) s.toggleSelection(sel, sel.kind !== "profile" || multi);
+      if (sel)
+        s.toggleSelection(
+          sel,
+          s.mode.dialog === "loft" || sel.kind !== "profile" || multi,
+        );
       return;
     }
 

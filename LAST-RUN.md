@@ -2,6 +2,16 @@
 
 ## Loft face selection
 
+CUST-038 follow-up fixes the viewport click filter, which still required
+Shift for faces even though the loft dialog accepted them. Plain clicks now
+add or remove both faces and profiles in section order. Shift still chooses
+a face beneath a sketch region. The DOM regression tests use real raycasts
+and pointer events, reproduced the failure before the fix, and pass after it.
+The focused suite passed 43 tests; typecheck and build passed. The full check
+passed lint and formatting before stopping at the missing masterrulez comment
+tool. The owner requested the fix for the development server; deployment is
+authorized by the ongoing request. No saved document shape changed.
+
 CUST-038 adds ordered planar-face and sketch-profile loft sections. Join
 combines the selected source bodies. Smooth interpolation is unchanged;
 an intermediate profile can shape a bend. Curved faces and faces with holes
@@ -16,7 +26,7 @@ also cannot invoke its extensionless oxlint command on Windows. The required
 complexity skill and masterrulez standards were not available in this checkout
 or the configured skills. CUST-038 remains in-flight pending the full gate.
 The repository owner authorized publication to main with these validation
-limitations. Deployment is not part of that request.
+limitations.
 
 ## Earlier handoff
 

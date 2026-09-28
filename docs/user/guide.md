@@ -77,7 +77,9 @@ Undo/redo stays inside an existing sketch and returns to Select.
 - Revolve, sweep, loft, emboss and deboss.
 
 For **Loft**, select two or more planar faces or sketch regions in the order
-the loft should pass through them. You can mix faces and regions. **Join**
+the loft should pass through them. Plain clicks add or remove sections;
+hold Shift to pick a face beneath an overlapping sketch region.
+You can mix faces and regions. **Join**
 connects the bodies whose faces you selected; **New body** keeps them separate.
 Faces need one outline without holes.
 
