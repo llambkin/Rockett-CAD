@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { formatProgram } from "../src/post/format.js";
-import { normalise } from "../src/post/normalise.js";
 import { validatePost } from "../src/post/schema.js";
-import { fixture, fixtures, golden, lines, loadPost } from "./goldens.js";
+import {
+  fixture,
+  fixtures,
+  format,
+  golden,
+  lines,
+  loadPost,
+} from "./goldens.js";
 
 const post = loadPost("grblhal");
 const files = (name: string, toolChange?: boolean) =>
-  formatProgram(
-    normalise(
-      fixture(name),
-      post,
-      toolChange === undefined ? { units: "mm" } : { units: "mm", toolChange },
-    ),
-    post,
-    {},
-  );
+  format(post, fixture(name), "mm", toolChange);
 
 describe("grblHAL post", () => {
   it("validates the dialect and matches four fixture goldens", () => {
@@ -58,9 +55,7 @@ describe("grblHAL post", () => {
     if (!first || first.kind !== "cycle")
       throw new Error("drill cycle missing");
     first.dwell = 0.5;
-    const dwelled = lines(
-      formatProgram(normalise(program, post, { units: "mm" }), post, {}),
-    );
+    const dwelled = lines(format(post, program));
     expect(dwelled).toContain("G82 X10 Y10 Z-1.5 R2 P0.5 F150");
   });
 });

@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { formatProgram } from "../src/post/format.js";
-import { normalise, type Units } from "../src/post/normalise.js";
+import {
+  normalise,
+  type NormaliseOptions,
+  type Units,
+} from "../src/post/normalise.js";
 import type { Post } from "../src/post/schema.js";
 import type { Program } from "../src/shared/ir.js";
 
@@ -15,8 +19,15 @@ export const loadPost = (id: string) =>
 export const fixture = (name: string) =>
   JSON.parse(read(`fixtures/ir/${name}.json`)) as Program;
 
-export function format(post: Post, program: Program, units: Units = "mm") {
-  return formatProgram(normalise(program, post, { units }), post, {});
+export function format(
+  post: Post,
+  program: Program,
+  units: Units = "mm",
+  toolChange?: boolean,
+) {
+  const options: NormaliseOptions =
+    toolChange === undefined ? { units } : { units, toolChange };
+  return formatProgram(normalise(program, post, options), post, {});
 }
 
 export function golden(post: Post, name: string, count: number) {
