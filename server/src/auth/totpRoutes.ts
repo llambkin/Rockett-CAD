@@ -22,6 +22,48 @@ export function signInScope(record: UserRecord): SessionScope {
 
 type CodeCheck = (code: string) => Promise<UserRecord | undefined>;
 
+interface TotpDeps {
+  users: UserStore;
+  sessions: SessionStore;
+  cookie: CookieConfig;
+  limiter: AuthRateLimiter;
+}
+
+const token = ({ cookie }: TotpDeps, req: Request) =>
+  readSessionCookie(req.headers.cookie, cookie.name);
+
+async function withCode(
+  { limiter }: TotpDeps,
+  req: Request,
+  res: Response,
+  check: CodeCheck,
+): Promise<UserRecord | undefined> {
+  const { code } = parse(totpCodeBody, req.body ?? {});
+  const { username } = res.locals.user;
+  const ip = req.ip ?? "";
+  const wait = limiter.check(username, ip);
+  if (wait !== null) {
+    refused(res, wait);
+    return undefined;
+  }
+  const record = await check(code);
+  if (!record) {
+    limiter.failure(username, ip);
+    res.status(403).json({ error: "Incorrect code." });
+  }
+  return record;
+}
+
+function signIn(
+  { limiter, cookie, sessions }: TotpDeps,
+  res: Response,
+  record: UserRecord,
+): void {
+  limiter.success(record.username);
+  res.set("Set-Cookie", sessionCookie(cookie, sessions.create(record.id)));
+  res.json(toPublicUser(record));
+}
+
 export function registerTotpRoutes(
   router: Router,
   users: UserStore,
@@ -29,36 +71,14 @@ export function registerTotpRoutes(
   cookie: CookieConfig,
   limiter: AuthRateLimiter,
 ): void {
-  const token = (req: Request) =>
-    readSessionCookie(req.headers.cookie, cookie.name);
+  const deps = { users, sessions, cookie, limiter };
+  registerCodeStep(router, deps);
+  registerEnrolRoutes(router, deps);
+  registerTotpOff(router, deps);
+}
 
-  async function withCode(
-    req: Request,
-    res: Response,
-    check: CodeCheck,
-  ): Promise<UserRecord | undefined> {
-    const { code } = parse(totpCodeBody, req.body ?? {});
-    const { username } = res.locals.user;
-    const ip = req.ip ?? "";
-    const wait = limiter.check(username, ip);
-    if (wait !== null) {
-      refused(res, wait);
-      return undefined;
-    }
-    const record = await check(code);
-    if (!record) {
-      limiter.failure(username, ip);
-      res.status(403).json({ error: "Incorrect code." });
-    }
-    return record;
-  }
-
-  function signIn(res: Response, record: UserRecord): void {
-    limiter.success(record.username);
-    res.set("Set-Cookie", sessionCookie(cookie, sessions.create(record.id)));
-    res.json(toPublicUser(record));
-  }
-
+function registerCodeStep(router: Router, deps: TotpDeps): void {
+  const { users, sessions } = deps;
   router.post(
     AUTH_ROUTES.totp.path,
     json({ limit: "1kb" }),
@@ -66,21 +86,24 @@ export function registerTotpRoutes(
       try {
         if (res.locals.scope !== "code")
           return res.status(409).json({ error: "No code is due." });
-        const record = await withCode(req, res, (code) =>
+        const record = await withCode(deps, req, res, (code) =>
           users.acceptTotp(res.locals.user.id, code),
         );
         if (!record) return;
-        sessions.revoke(token(req)!);
-        signIn(res, record);
+        sessions.revoke(token(deps, req)!);
+        signIn(deps, res, record);
       } catch (err) {
         next(err);
       }
     },
   );
+}
 
+function registerEnrolRoutes(router: Router, deps: TotpDeps): void {
+  const { users, sessions } = deps;
   router.post(AUTH_ROUTES.totpEnrol.path, async (req, res, next) => {
     try {
-      const current = token(req);
+      const current = token(deps, req);
       const record = await users.get(res.locals.user.id);
       if (!record || record.totp)
         return res.status(409).json({ error: "TOTP is already on." });
@@ -105,16 +128,16 @@ export function registerTotpRoutes(
     json({ limit: "1kb" }),
     async (req, res, next) => {
       try {
-        const current = token(req);
+        const current = token(deps, req);
         const secret = current && sessions.enrolment(current);
         if (!secret)
           return res.status(409).json({ error: "Start enrolment first." });
-        const record = await withCode(req, res, (code) =>
+        const record = await withCode(deps, req, res, (code) =>
           users.enableTotp(res.locals.user.id, secret, code),
         );
         if (!record) return;
         sessions.revokeUser(record.id);
-        signIn(res, record);
+        signIn(deps, res, record);
       } catch (err) {
         if (err instanceof StoreError && err.code === "conflict")
           return res.status(409).json({ error: "TOTP is already on." });
@@ -122,7 +145,10 @@ export function registerTotpRoutes(
       }
     },
   );
+}
 
+function registerTotpOff(router: Router, deps: TotpDeps): void {
+  const { users } = deps;
   router.delete(
     AUTH_ROUTES.totpOff.path,
     json({ limit: "1kb" }),
@@ -133,7 +159,7 @@ export function registerTotpRoutes(
           return res.status(409).json({ error: "Admins must keep TOTP." });
         if (!res.locals.user.totp)
           return res.status(409).json({ error: "TOTP is off." });
-        const accepted = await withCode(req, res, (code) =>
+        const accepted = await withCode(deps, req, res, (code) =>
           users.acceptTotp(res.locals.user.id, code),
         );
         if (accepted)
