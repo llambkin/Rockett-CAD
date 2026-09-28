@@ -89,7 +89,7 @@ everything downstream against persistent topology references.
 - **Pick fields**: each dialog pick input is a row; viewport and tree clicks fill only the active row.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.
 - **Tree selection**: Ctrl or Cmd+click adds bodies or sketches, Shift+click selects a range; right-click acts on all.
-- **Live preview**: feature dialogs keep the model before the feature pickable and ghost only that feature's result, green added, red removed.
+- **Live preview**: dialogs keep the prior model pickable and ghost only the result, green added, red removed, with adjustable tint and opacity.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions, sketch selections their relations; right-drag still orbits.
 - **Projects**: organise, create, move, share with friends or delete projects and folders; owners are shown.
 - **Project files**: download a project as one `.rockett` file, or open one as a new project, keeping what it hides.

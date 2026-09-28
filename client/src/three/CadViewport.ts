@@ -40,7 +40,6 @@ import {
   BODY_APPEARANCE,
   HIGHLIGHT_APPEARANCE,
   PLANE_APPEARANCE,
-  PREVIEW_APPEARANCE,
   TIMING_MS,
 } from "../tunables";
 
@@ -154,6 +153,7 @@ export class CadViewport {
   private stopTheme = () => {};
   private pickTolerancePx = getSetting("viewport.pickTolerancePx");
   private stopPickTolerance = () => {};
+  private stopGhostOpacity = () => {};
   private animating: null | {
     start: number;
     poseAt: (t: number) => CameraPose;
@@ -216,6 +216,14 @@ export class CadViewport {
     this.stopPickTolerance = subscribe("viewport.pickTolerancePx", (px) => {
       this.pickTolerancePx = px;
     });
+    this.stopGhostOpacity = subscribe(
+      "appearance.previewGhostOpacity",
+      (opacity) => {
+        for (const mesh of this.ghosts.values())
+          mesh.material.opacity = opacity;
+        this.requestRender();
+      },
+    );
     this.resize();
     window.addEventListener("scroll", this.forgetRect, true);
   }
@@ -223,6 +231,7 @@ export class CadViewport {
   dispose() {
     this.stopTheme();
     this.stopPickTolerance();
+    this.stopGhostOpacity();
     this.frames.dispose();
     window.removeEventListener("scroll", this.forgetRect, true);
     this.layers.dispose();
@@ -638,6 +647,7 @@ export class CadViewport {
       polygonOffsetFactor: 1,
       polygonOffsetUnits: 1,
     });
+    mat.userData.themeToken = "body";
     const mesh = new THREE.Mesh(geom, mat);
     mesh.userData.bodyId = p.bodyId;
     group.add(mesh);
@@ -774,7 +784,7 @@ export class CadViewport {
         metalness: BODY_APPEARANCE.metalness,
         roughness: BODY_APPEARANCE.roughness,
         transparent: true,
-        opacity: PREVIEW_APPEARANCE.ghostOpacity,
+        opacity: getSetting("appearance.previewGhostOpacity"),
         depthTest: false,
         depthWrite: false,
       }),

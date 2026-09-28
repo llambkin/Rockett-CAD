@@ -10,8 +10,6 @@ export const TIMING_MS = {
 } as const;
 
 export const PREVIEW_APPEARANCE = {
-  tintStrength: 0.4,
-  ghostOpacity: 0.45,
   gizmoCutOpacity: 0.3,
   gizmoAddOpacity: 0.22,
 } as const;

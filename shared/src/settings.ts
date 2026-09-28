@@ -34,6 +34,8 @@ export interface SettingTypes {
   "view.invertZoom": boolean;
   "sketch.angleStep": number;
   "sketch.angles": number[];
+  "appearance.previewTintStrength": number;
+  "appearance.previewGhostOpacity": number;
 }
 
 export type SettingOf<D extends SettingDefinition> = Static<D["schema"]>;
@@ -255,6 +257,24 @@ export const SKETCH_ANGLES = defineSetting({
   schema: Type.Array(Type.Number({ minimum: 0, exclusiveMaximum: 360 })),
 });
 
+export const PREVIEW_TINT_STRENGTH = defineSetting({
+  key: "appearance.previewTintStrength",
+  label: "Preview tint strength",
+  scopes: ["app", "user"],
+  section: "user",
+  default: 0.4,
+  schema: Type.Number({ minimum: 0, maximum: 1 }),
+});
+
+export const PREVIEW_GHOST_OPACITY = defineSetting({
+  key: "appearance.previewGhostOpacity",
+  label: "Preview ghost opacity",
+  scopes: ["app", "user"],
+  section: "user",
+  default: 0.45,
+  schema: Type.Number({ minimum: 0, maximum: 1 }),
+});
+
 registerSettings([
   UNITS_LENGTH,
   VIEWPORT_PICK_TOLERANCE,
@@ -264,4 +284,6 @@ registerSettings([
   VIEW_INVERT_ZOOM,
   SKETCH_ANGLE_STEP,
   SKETCH_ANGLES,
+  PREVIEW_TINT_STRENGTH,
+  PREVIEW_GHOST_OPACITY,
 ]);

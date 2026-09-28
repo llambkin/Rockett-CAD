@@ -1,4 +1,5 @@
-import { PREVIEW_APPEARANCE } from "../tunables";
+import { PREVIEW_TINT_STRENGTH } from "@rockett/shared";
+import { subscribe } from "../settings";
 import { rgb } from "./contrast";
 
 function blend(from: string, to: string, strength: number): string {
@@ -25,6 +26,13 @@ const blue = "#66b3ff";
 const red = "#ff8080";
 const green = "#4cc36a";
 const body = "#b7bcc1";
+
+function previewTints(strength: number) {
+  return {
+    "preview-add": blend(body, green, strength),
+    "preview-cut": blend(body, red, strength),
+  };
+}
 
 export const THEME_TOKENS = {
   bg0,
@@ -56,8 +64,7 @@ export const THEME_TOKENS = {
   "shadow-panel": "rgba(0, 0, 0, 0.4)",
   "viewport-bg": "#2a2d30",
   body,
-  "preview-add": blend(body, green, PREVIEW_APPEARANCE.tintStrength),
-  "preview-cut": blend(body, red, PREVIEW_APPEARANCE.tintStrength),
+  ...previewTints(PREVIEW_TINT_STRENGTH.default),
   edge: "#30343a",
   selection: blue,
   hover,
@@ -127,4 +134,10 @@ export function applyTheme(
     root.style.setProperty(`--${name}`, value);
   currentTokens = tokens;
   for (const listener of listeners) listener(tokens);
+}
+
+export function followPreviewTint(): () => void {
+  return subscribe("appearance.previewTintStrength", (strength) =>
+    applyTheme({ ...currentTokens, ...previewTints(strength) }),
+  );
 }
