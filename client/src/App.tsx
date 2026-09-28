@@ -10,6 +10,7 @@ import { FeatureDialog } from "./components/FeatureDialog";
 import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
+import { HistoryPanel } from "./components/HistoryPanel";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { AccountTotp, LoginScreen } from "./components/LoginScreen";
 import { UserMenu } from "./components/UserMenu";
@@ -126,16 +127,21 @@ function ProjectName({ name }: { name: string }) {
   );
 }
 
-function UndoRedoButtons() {
+const withLabel = (verb: string, label: string | null | undefined) =>
+  label ? `${verb} ${label}` : verb;
+
+export function UndoRedoButtons() {
   const canUndo = useStore((s) => s.history?.canUndo ?? false);
   const canRedo = useStore((s) => s.history?.canRedo ?? false);
+  const undoLabel = useStore((s) => s.history?.undoLabel);
+  const redoLabel = useStore((s) => s.history?.redoLabel);
   const busy = useStore((s) => s.busy);
   return (
     <span className="undo-redo">
       <button
         className="icon-btn"
         disabled={!canUndo || busy}
-        title="Undo (Ctrl+Z)"
+        title={`${withLabel("Undo", undoLabel)} (Ctrl+Z)`}
         aria-label="Undo"
         onClick={() => void useStore.getState().undo()}
       >
@@ -144,7 +150,7 @@ function UndoRedoButtons() {
       <button
         className="icon-btn"
         disabled={!canRedo || busy}
-        title="Redo (Ctrl+Y)"
+        title={`${withLabel("Redo", redoLabel)} (Ctrl+Y)`}
         aria-label="Redo"
         onClick={() => void useStore.getState().redo()}
       >
@@ -228,6 +234,7 @@ function SaveIndicator() {
 
 function Workspace({ onUsers }: { onUsers: () => void }) {
   const [showHelp, setShowHelp] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
   const busy = useStore((s) => s.busy);
@@ -323,6 +330,14 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
         <UserMenu onUsers={onUsers} />
         <button
           className="icon-btn"
+          title="Undo history and checkpoints"
+          aria-expanded={showHistory}
+          onClick={() => setShowHistory((v) => !v)}
+        >
+          History
+        </button>
+        <button
+          className="icon-btn"
           title="Keyboard and mouse controls (?)"
           aria-expanded={showHelp}
           onClick={() => setShowHelp((v) => !v)}
@@ -341,6 +356,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
         <MeasurePanel />
         <VersionLabel />
         {showHelp && <ControlsHelp onClose={() => setShowHelp(false)} />}
+        {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}
       </div>
       <Timeline />
       {error && (

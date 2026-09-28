@@ -85,7 +85,8 @@ everything downstream against persistent topology references.
 - **Viewport**: orbit, pan, zoom to cursor, named views, fit, ViewCube, camera preferences, pick tolerance; projects reopen at your last camera.
 - **Toolbar**: every tool shows an icon above its label; constraints show icons only; tooltips give the shortcut key.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.
-- **Undo and redo**: undo any edit, even inside a sketch, separately from the feature timeline; an unchanged OK adds nothing.
+- **Undo and redo**: undo any edit, even in a sketch, separately from the timeline; an unchanged OK adds nothing; tooltips name the step.
+- **History**: the History button lists edits and named checkpoints; restore any of them after a confirm, then undo it if needed.
 - **Tool panels**: open with the main number selected and list each pick to remove; Enter confirms, Escape reverts.
 - **Pick fields**: each dialog pick input is a row; viewport and tree clicks fill only the active row.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.

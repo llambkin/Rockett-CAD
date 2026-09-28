@@ -263,7 +263,15 @@ moving. A project you have not moved opens zoomed to fit.
 ### Undo and redo
 
 Undo/redo is application-level and separate from the CAD timeline. Hiding
-or showing something is not an undo step.
+or showing something is not an undo step. The Undo and Redo tooltips name the
+step each would reverse or restore.
+
+**History** in the top bar opens a panel listing the last 50 edits, oldest
+first, with their time; the current state is marked and undone edits are
+dimmed. Name the current state under Checkpoint name and Save checkpoint to
+keep it through any number of later edits. Restore on an edit or checkpoint
+asks first, then saves that state as a new step that Undo reverses. A
+view-only member sees the list without Save or Restore.
 
 ### Panels and errors
 

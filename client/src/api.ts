@@ -579,6 +579,9 @@ export const api = {
     holding(ROUTES.commitPreview, { id, tx }, {}),
   abortPreview: (id: string, tx: string) =>
     holding(ROUTES.abortPreview, { id, tx }, {}),
+  history: (id: string) => send(ROUTES.history, { id }),
+  createCheckpoint: (id: string, label: string) =>
+    send(ROUTES.createCheckpoint, { id }, { body: { label } }),
   restoreHistory: (id: string, snapshot: string) =>
     holding(ROUTES.restoreHistory, { id }, { snapshot }),
   updateBody: (

@@ -209,6 +209,7 @@ interface State {
   recover: (choice: "reapply" | "discard") => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
+  restore: (snapshot: string) => Promise<void>;
   setError: (e: string | null) => void;
   cancelJob: () => Promise<void>;
 
@@ -565,18 +566,19 @@ async function saveDialog(
   }
 }
 
-async function moveHistory(way: "undo" | "redo"): Promise<void> {
-  const { history, document, projectId, mode, busy, recovery } =
-    useStore.getState();
-  const able = way === "undo" ? history?.canUndo : history?.canRedo;
+async function moveHistory(
+  able: boolean | undefined,
+  move: (projectId: string, position?: number) => Promise<MutationResponse>,
+): Promise<void> {
+  const { document, projectId, mode, busy, recovery } = useStore.getState();
   if (busy || recovery || !projectId || !document || !able) return;
   useStore.setState({ busy: true });
   const position = sketchEditingPosition(document, mode);
   try {
     const m = await inTurn(() =>
-      api[way](projectId, position).catch((e) => {
+      move(projectId, position).catch((e) => {
         if (e?.status !== 400 || position === undefined) throw e;
-        return api[way](projectId);
+        return move(projectId);
       }),
     );
     useStore.setState({
@@ -810,8 +812,10 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  undo: () => moveHistory("undo"),
-  redo: () => moveHistory("redo"),
+  undo: () => moveHistory(get().history?.canUndo, api.undo),
+  redo: () => moveHistory(get().history?.canRedo, api.redo),
+  restore: (snapshot) =>
+    moveHistory(true, (projectId) => api.restoreHistory(projectId, snapshot)),
 
   setError: (e) => set({ error: e }),
   async cancelJob() {
