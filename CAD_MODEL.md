@@ -271,9 +271,23 @@ blend nothing to stop on, the kernel prolongs it to the next face it meets and
 generates a face from that vertex. On a stepped block with a chamfered corner
 this hangs a spike past the edge end at every radius, sometimes inside the
 body's bounding box, and the fuse finds no crossing in it after seconds of
-work. Fillet and Chamfer error when an open contour end that no other
-blended edge reaches generated a face, and keep the previous body. This runs
-before the fuse. Corner patches where several blended edges meet are allowed.
+work. Such an end counts as run past when it generated a face that does not
+lie in the plane through the end normal to the edge. A face in that plane
+closes the end and is allowed, as are corner patches where several blended
+edges meet. When a fillet runs past an end or the kernel fails, Fillet closes
+the ends itself: each end of the selected edges that ran past, or where the
+kernel's contour runs on into a tangent edge that was not selected, which it
+does even with Tangent chain off. At each such end
+the body is split by the plane normal to the edge there, the kernel fillets
+the part holding the edges, where the cut face gives the fillet a face to end
+on, and the two parts are fused back and their split faces merged. The fillet
+stops at the end vertex, its end closed flat in that plane: a small cap on a
+concave fillet, a small step on a convex one. The filleted part gets every
+blend check and the fused body the validity and shell checks. The stepped
+block builds this way at 2 mm in 0.5 to 2 s, most of it in the cut-through
+fuse. Chamfer, and a split that cannot keep every selected edge whole, still
+error when an end runs past, and keep the previous body. The check runs
+before the fuse.
 Chamfer's envelope fallback is a boolean, so its faces cannot cross, but it can
 open a cavity: it gets the shell count check only. Shell gets no cut-through
 check: on the pinned kernel its offset fails rather than build a wall that
@@ -870,4 +884,7 @@ smooth continuations within 1 degree and `LINEAR_TOL`; branching matches stop tr
 The chain is resolved again at the feature position during regeneration. Native
 OCCT contours are added only once to prevent duplicate contour definitions when
 several selected edges already belong to the same contour. The selection toggle
-controls explicit chain expansion, not native kernel propagation.
+controls explicit chain expansion. Native kernel propagation still applies
+when off, except where a fillet's propagated contour fails or runs past its
+end: then the fillet covers the selected edges only and ends at the tangent
+junction.
