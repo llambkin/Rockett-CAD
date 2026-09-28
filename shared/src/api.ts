@@ -144,6 +144,7 @@ export interface FeatureStatus {
   warning?: string;
   targets?: string[];
   refs?: UnresolvedRef[];
+  modified?: Record<string, string[]>;
 }
 
 export interface SketchPayload {

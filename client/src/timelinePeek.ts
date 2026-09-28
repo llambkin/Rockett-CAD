@@ -22,13 +22,19 @@ export function peekHighlight(
     return [
       { kind: "plane", ref: { kind: "construction", featureId }, label: "" },
     ];
-  const made = (name: string) => {
+  const modified = evaluation.featureStatuses.find(
+    (s) => s.featureId === featureId,
+  )?.modified;
+  const made = (bodyId: string, name: string) => {
     const head = NAMER.exec(name)?.[0];
-    return !!head && name.startsWith(`${featureId}:`, head.length);
+    return (
+      (!!head && name.startsWith(`${featureId}:`, head.length)) ||
+      !!modified?.[bodyId]?.includes(name)
+    );
   };
   return evaluation.bodies.flatMap((b) =>
     b.faces
-      .filter((f) => made(f.name))
+      .filter((f) => made(b.bodyId, f.name))
       .map((f) => ({
         kind: "face" as const,
         bodyId: b.bodyId,

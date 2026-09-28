@@ -33,6 +33,7 @@ import "./kinds.js";
 import type { Sources } from "./importers.js";
 import { movePayload, tessellateBody } from "./tessellate.js";
 import { withNamingVersion, type NamedBody } from "./naming.js";
+import { modifiedFaces } from "./modified.js";
 import { cancellable, shapeHash, type Shape } from "./kernel.js";
 import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
 import {
@@ -181,10 +182,12 @@ function evaluateStep(
       namingVersion,
       shouldStop,
     );
+    const modified = modifiedFaces(state.bodies, next.bodies);
     return {
       featureId: feature.id,
       status: outcome?.warning ? "warning" : "ok",
       ...outcome,
+      ...(modified && { modified }),
     };
   } catch (err: any) {
     releaseSnapshots([{ state: next }], snapshots);
@@ -322,17 +325,9 @@ class DocumentEngine {
       bodies.push({ ...this.tessellated(body, name), name });
     }
 
-    const sketches: SketchPayload[] = [];
-    for (const sk of state.sketches.values()) {
-      sketches.push({
-        featureId: sk.featureId,
-        frame: sk.frame,
-        entities: sk.entities,
-        solveStatus: sk.solveStatus,
-        dof: sk.dof,
-        profiles: sk.profiles,
-      });
-    }
+    const sketches: SketchPayload[] = [...state.sketches.values()].map(
+      (sk) => ({ ...sk }),
+    );
 
     const planes: ConstructionPlanePayload[] = [];
     for (const [featureId, p] of state.planes) {

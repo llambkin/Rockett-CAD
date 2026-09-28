@@ -38,6 +38,16 @@ Nothing uses a proposed candidate until the user accepts it:
 `client/src/components/RefRepair.tsx`. API.md, Naming upgrade, owns the upgrade
 contract.
 
+## Peek highlight
+
+Resting on a chip evaluates up to that feature and lights what it did: the
+faces it named, its sketch or its plane, and the faces it modified. Each
+feature status carries `modified`, face names by body id. A face counts when
+it kept an earlier name through the kernel history but is a new kernel face
+with a different area or centre, so Move, Combine, Press/Pull and blends
+light the faces they reshaped: `server/src/geometry/modified.ts`,
+`client/src/timelinePeek.ts`.
+
 ## Kernel memory
 
 The kernel never frees a shape by itself.
