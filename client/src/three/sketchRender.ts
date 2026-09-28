@@ -269,7 +269,7 @@ function buildSketch(
   return group;
 }
 
-function hoverPiece(frame: PlaneFrame, piece: number[]): THREE.Line {
+export function hoverPiece(frame: PlaneFrame, piece: number[]): THREE.Line {
   const positions: THREE.Vector3[] = [];
   for (let i = 0; i + 1 < piece.length; i += 2)
     positions.push(uv3(frame, piece[i]!, piece[i + 1]!));

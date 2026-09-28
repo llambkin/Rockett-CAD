@@ -12,6 +12,7 @@ import type {
   SketchConstraint,
   SketchEntity,
   SketchSolveStatus,
+  TrimPiece,
   ViewCamera,
 } from "@rockett/shared";
 import {
@@ -23,6 +24,7 @@ import {
   newId,
   extendSketch,
   trimPiece,
+  trimPieces,
   ORIGIN_AXES,
   type Units,
 } from "@rockett/shared";
@@ -32,7 +34,11 @@ import { ViewCube } from "../three/ViewCube";
 import type { LayerHandle } from "../three/sceneLayers";
 import { worldToClient } from "../three/screen";
 import { syncReferenceImages } from "../three/referenceImages";
-import { renderSketches, type SketchRenderInput } from "../three/sketchRender";
+import {
+  hoverPiece,
+  renderSketches,
+  type SketchRenderInput,
+} from "../three/sketchRender";
 import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
 import { themeColor } from "../theme/tokens";
@@ -224,6 +230,7 @@ export function ViewportView() {
     downUV: tools.UV | null;
     /** last sketch-plane cursor position (Enter places typed sizes here) */
     lastCursor: tools.UV | null;
+    trimDrag: { pieces: TrimPiece[]; x: number; y: number } | null;
   }>({
     clicks: [],
     dragPointId: null,
@@ -233,7 +240,9 @@ export function ViewportView() {
     lastPickPos: { x: -1, y: -1 },
     downUV: null,
     lastCursor: null,
+    trimDrag: null,
   });
+  const trimLayerRef = useRef<LayerHandle | null>(null);
 
   const DRAW_TOOLS = [
     "line",
@@ -1307,7 +1316,7 @@ export function ViewportView() {
     };
   }
 
-  function trimTarget(e: PointerEvent) {
+  function trimTarget(e: { clientX: number; clientY: number }) {
     const draft = useStore.getState().draftSketch;
     const picked = viewportRef.current?.pick(e.clientX, e.clientY, {
       sketchEntities: true,
@@ -1319,6 +1328,59 @@ export function ViewportView() {
     const curve = draft.entities.find((x) => x.id === picked.entityId);
     if (!at || !curve || curve.kind === "point") return null;
     return { selection: picked, entities: draft.entities, at, curve };
+  }
+
+  function trimAlong(e: PointerEvent) {
+    const drag = toolState.current.trimDrag;
+    const draft = useStore.getState().draftSketch;
+    if (!drag || !draft) return;
+    const [dx, dy] = [e.clientX - drag.x, e.clientY - drag.y];
+    const steps = Math.max(
+      1,
+      Math.ceil(Math.hypot(dx, dy) / getSetting("viewport.pickTolerancePx")),
+    );
+    const crossed = Array.from({ length: steps }, (_, i) =>
+      trimTarget({
+        clientX: drag.x + (dx * (i + 1)) / steps,
+        clientY: drag.y + (dy * (i + 1)) / steps,
+      }),
+    ).flatMap((t) => (t ? [{ entityId: t.selection.entityId, at: t.at }] : []));
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    drag.pieces = trimPieces(draft.entities, [...drag.pieces, ...crossed]);
+    showTrimPieces(drag.pieces);
+  }
+
+  async function finishTrimDrag(e: PointerEvent) {
+    const drag = toolState.current.trimDrag!;
+    trimAlong(e);
+    toolState.current.trimDrag = null;
+    showTrimPieces([]);
+    const clicked = trimTarget(e);
+    const s = useStore.getState();
+    try {
+      await s.trimSketchPieces(
+        drag.pieces.length || !clicked
+          ? drag.pieces
+          : [{ entityId: clicked.curve.id, at: clicked.at }],
+      );
+    } catch (error) {
+      s.setError((error as Error).message);
+    }
+  }
+
+  function showTrimPieces(pieces: TrimPiece[]) {
+    const vp = viewportRef.current;
+    const frame = activeSketchFrame();
+    if (!vp) return;
+    if (trimLayerRef.current?.group.parent !== vp.scene)
+      trimLayerRef.current = vp.addLayer("trimPieces");
+    const layer = trimLayerRef.current;
+    layer.clear();
+    if (frame)
+      for (const piece of pieces)
+        layer.group.add(hoverPiece(frame, piece.samples));
+    vp.requestRender();
   }
 
   function pointerToSketchUV(
@@ -1703,6 +1765,13 @@ export function ViewportView() {
       ) {
         // press-drag-release drawing
         toolState.current.downUV = pointerToSketchUV(e);
+      } else if (t === "trim") {
+        toolState.current.trimDrag = {
+          pieces: [],
+          x: e.clientX,
+          y: e.clientY,
+        };
+        trimAlong(e);
       }
     }
   }
@@ -1710,6 +1779,10 @@ export function ViewportView() {
   function handlePrimaryDrag(e: PointerEvent) {
     const s = useStore.getState();
     if (s.mode.name !== "sketch") return;
+    if (toolState.current.trimDrag) {
+      trimAlong(e);
+      return;
+    }
     if (toolState.current.dragPointId) {
       const uv = pointerToSketchUV(e);
       if (uv) {
@@ -2028,6 +2101,8 @@ export function ViewportView() {
     const s = useStore.getState();
     const vp = viewportRef.current!;
 
+    if (toolState.current.trimDrag) return finishTrimDrag(e);
+
     if (s.mode.name === "sketch" && toolState.current.dragPointId) {
       const wasDrag = dragMoved;
       toolState.current.dragPointId = null;
@@ -2226,16 +2301,6 @@ export function ViewportView() {
       } catch (error) {
         if (useStore.getState().draftSketch?.id === draft.id)
           useStore.setState({ draftSketch: draft });
-        s.setError((error as Error).message);
-      }
-      return;
-    }
-    if (tool === "trim") {
-      const target = trimTarget(e);
-      if (!target) return;
-      try {
-        await s.trimSketchCurve(target.selection.entityId, target.at);
-      } catch (error) {
         s.setError((error as Error).message);
       }
       return;
@@ -3122,7 +3187,7 @@ function ViewportHud() {
         "Click an entity or two points · Ctrl-click a line, then a line or point · right-click a dimension to change its kind",
       project:
         "Click a model edge to create a linked purple reference · source must precede this sketch",
-      trim: "Click the section between intersections to remove · Esc cancels",
+      trim: "Click a section between intersections, or drag across sections, to remove · Esc cancels",
       extend:
         "Click near the endpoint to extend to the next boundary · Esc cancels",
       offset:

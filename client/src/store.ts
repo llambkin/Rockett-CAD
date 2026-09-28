@@ -24,6 +24,7 @@ import type {
   SketchFeature,
   SketchImport,
   TopoRef,
+  TrimTarget,
   ViewCamera,
   Visibility,
 } from "@rockett/shared";
@@ -36,7 +37,7 @@ import {
   createSketchOffset,
   editSketchOffset,
   constraintEntityRefs,
-  trimSketch,
+  trimSketchPieces,
   withShown,
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
@@ -228,10 +229,7 @@ interface State {
   deleteSketchEntities: (entityIds: string[]) => Promise<void>;
   /** Toggle the construction flag on draft sketch curves. */
   toggleSketchConstruction: (entityIds: string[]) => Promise<void>;
-  trimSketchCurve: (
-    entityId: string,
-    at: { x: number; y: number },
-  ) => Promise<void>;
+  trimSketchPieces: (targets: TrimTarget[]) => Promise<void>;
   insertSketchImport: (format: string, imported: SketchImport) => Promise<void>;
 
   addFeature: (feature: Feature) => Promise<void>;
@@ -1197,14 +1195,13 @@ export const useStore = create<State>((set, get) => ({
     set({ selection: [] });
   },
 
-  async trimSketchCurve(entityId, at) {
+  async trimSketchPieces(targets) {
     const { draftSketch, busy } = get();
-    if (!draftSketch || busy) return;
-    const result = trimSketch(
+    if (!draftSketch || busy || !targets.length) return;
+    const result = trimSketchPieces(
       draftSketch.entities,
       draftSketch.constraints,
-      entityId,
-      at,
+      targets,
     );
     get().updateDraftSketch(result.entities, result.constraints);
     try {

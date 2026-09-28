@@ -13,8 +13,12 @@ import {
 type XY = { x: number; y: number };
 type Curve = Exclude<SketchEntity, SketchPoint>;
 
-export interface TrimPiece {
+export interface TrimTarget {
   entityId: string;
+  at: XY;
+}
+
+export interface TrimPiece extends TrimTarget {
   from: CurveHit | null;
   to: CurveHit | null;
   samples: number[];
@@ -138,7 +142,21 @@ export function trimPiece(
       : hits.length < 2
         ? [null, null]
         : [before ?? hits.at(-1)!, after ?? hits[0]!];
-  return { entityId, from, to, samples: g.samples(from, to) };
+  return { entityId, at, from, to, samples: g.samples(from, to) };
+}
+
+export function trimPieces(
+  entities: SketchEntity[],
+  targets: TrimTarget[],
+): TrimPiece[] {
+  const pieces = new Map<string, TrimPiece>();
+  for (const { entityId, at } of targets) {
+    if (curveIn(entities, entityId).external) continue;
+    const piece = trimPiece(entities, entityId, at);
+    const key = `${entityId} ${piece.from?.t} ${piece.to?.t}`;
+    if (!pieces.has(key)) pieces.set(key, piece);
+  }
+  return [...pieces.values()];
 }
 
 function onCutter(
@@ -219,18 +237,82 @@ function survivingConstraints(
   });
 }
 
+function middle({ samples }: TrimPiece): XY {
+  const i = (samples.length / 2 - 1) / 2;
+  const [a, b] = [Math.floor(i) * 2, Math.ceil(i) * 2];
+  return {
+    x: (samples[a]! + samples[b]!) / 2,
+    y: (samples[a + 1]! + samples[b + 1]!) / 2,
+  };
+}
+
+function cutNow(
+  entities: SketchEntity[],
+  curve: Curve,
+  hit: CurveHit | null,
+  end: string | undefined,
+): CurveHit | null {
+  if (!hit) return null;
+  const near = (q: XY) => Math.hypot(q.x - hit.x, q.y - hit.y) < ON_POINT;
+  if (end && near(pointIn(entities, end))) return null;
+  return hitsOn(entities, curve).find(near) ?? { ...hit, by: [] };
+}
+
+export function trimSketchPieces(
+  entities: SketchEntity[],
+  constraints: SketchConstraint[],
+  targets: TrimTarget[],
+): SketchModification {
+  let rest = trimPieces(entities, targets);
+  if (targets.length && !rest.length)
+    throw new Error(
+      "Projected references cannot be trimmed. Draw a curve constrained to the reference instead.",
+    );
+  let sketch = { entities, constraints };
+  while (rest.length) {
+    const curve = curveIn(sketch.entities, rest[0]!.entityId);
+    const { param } = shape(sketch.entities, curve);
+    const piece = rest
+      .filter((p) => p.entityId === curve.id)
+      .reduce((a, b) => (param(middle(b)) > param(middle(a)) ? b : a));
+    rest = rest.filter((p) => p !== piece);
+    const [first, last] =
+      curve.kind === "line"
+        ? [curve.p1, curve.p2]
+        : curve.kind === "arc"
+          ? [curve.start, curve.end]
+          : [];
+    sketch = cut(
+      sketch.entities,
+      sketch.constraints,
+      curve,
+      cutNow(sketch.entities, curve, piece.from, first),
+      cutNow(sketch.entities, curve, piece.to, last),
+    );
+  }
+  const kept = new Set(sketch.constraints.map((c) => c.id));
+  return {
+    ...sketch,
+    removedConstraints: constraints.filter((c) => !kept.has(c.id)).length,
+  };
+}
+
 export function trimSketch(
   entities: SketchEntity[],
   constraints: SketchConstraint[],
   entityId: string,
   at: XY,
 ): SketchModification {
-  const curve = curveIn(entities, entityId);
-  if (curve.external)
-    throw new Error(
-      "Projected references cannot be trimmed. Draw a curve constrained to the reference instead.",
-    );
-  const { from, to } = trimPiece(entities, entityId, at);
+  return trimSketchPieces(entities, constraints, [{ entityId, at }]);
+}
+
+function cut(
+  entities: SketchEntity[],
+  constraints: SketchConstraint[],
+  curve: Curve,
+  from: CurveHit | null,
+  to: CurveHit | null,
+): { entities: SketchEntity[]; constraints: SketchConstraint[] } {
   const points: SketchEntity[] = [];
   const added: SketchConstraint[] = [];
   const end = (hit: CurveHit) => {
@@ -261,10 +343,11 @@ export function trimSketch(
   const gone = new Set(pointsOf(curve).filter((id) => !used.has(id)));
   if (!pieces.length) gone.add(curve.id);
   const shortened = pieces.length > 0 && curve.kind === "line";
-  const kept = survivingConstraints(constraints, curve, gone, shortened);
   return {
     entities: next.filter((e) => !gone.has(e.id)),
-    constraints: [...kept, ...added],
-    removedConstraints: constraints.length - kept.length,
+    constraints: [
+      ...survivingConstraints(constraints, curve, gone, shortened),
+      ...added,
+    ],
   };
 }

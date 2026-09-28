@@ -18,13 +18,13 @@ client/src/components/Toolbar.tsx SketchToolbar 104
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3243
+client/src/components/ViewportView.tsx 3308
 client/src/components/ViewportView.tsx ViewportHud 96
-client/src/components/ViewportView.tsx ViewportView 2971
+client/src/components/ViewportView.tsx ViewportView 3030
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 82
 client/src/components/ViewportView.tsx handleHover 138
-client/src/components/ViewportView.tsx handlePrimaryUp 138
-client/src/components/ViewportView.tsx handleSketchClick 233
+client/src/components/ViewportView.tsx handlePrimaryUp 140
+client/src/components/ViewportView.tsx handleSketchClick 223
 client/src/components/ViewportView.tsx onPointerMove 119
 client/src/components/ViewportView.tsx onPointerUp 86
 client/src/components/ViewportView.tsx pointerToSketchUV 221
@@ -34,9 +34,9 @@ client/src/components/form/fields.tsx 557
 client/src/features/constructionPlane.tsx PlaneForm 108
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
 client/src/sketchTools.ts 1048
-client/src/store.ts 1392
+client/src/store.ts 1389
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 791
+client/src/store.ts useStore 790
 client/src/three/CadViewport.ts 1250
 client/src/three/CadViewport.ts addHighlight 85
 client/src/three/CadViewport.ts buildBody 88
