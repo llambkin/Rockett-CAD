@@ -1,6 +1,5 @@
 import { filterSelectionFor } from "../dialogPicks";
 import type { IconId } from "../icons";
-import { idleKeys } from "../shortcuts";
 import { useStore, type DialogType } from "../store";
 import { alignCameraToActiveSketch, viewportHandle } from "../viewportRef";
 import { NamedViewSelect } from "../components/NamedViewSelect";
@@ -81,11 +80,18 @@ registerCommand({
   icon: "sketch",
   group: "design.group.sketch",
   tooltip: "Create Sketch on a plane or planar face",
-  keys: idleKeys("sketch"),
+  keys: ["S"],
+  keyContext: "design",
   primary: true,
   enabled: idle,
   run: createSketch,
 });
+
+const DIALOG_KEYS: Partial<Record<DialogType, string>> = {
+  extrude: "E",
+  fillet: "F",
+  move: "M",
+};
 
 const DIALOGS: Array<
   [DialogType & IconId, string, string, (typeof GROUPS)[number][0]]
@@ -123,24 +129,27 @@ const DIALOGS: Array<
   ],
 ];
 
-for (const [type, label, tooltip, group] of DIALOGS)
+for (const [type, label, tooltip, group] of DIALOGS) {
+  const key = DIALOG_KEYS[type];
   registerCommand({
     id: `design.${type}`,
     label,
     icon: type,
     group: `design.group.${group}`,
     tooltip,
-    keys: idleKeys(type),
+    ...(key ? { keys: [key], keyContext: "design" } : {}),
     enabled: idle,
     run: () => openDialog(type),
   });
+}
 
 registerCommand({
   id: "inspect.measure",
   label: "Measure",
   icon: "measure",
   group: "design.group.inspect",
-  keys: idleKeys("measure"),
+  keys: ["I"],
+  keyContext: "design",
   active: (s) => s.mode.name === "measure",
   run: (s) =>
     s.setMode({ name: s.mode.name === "measure" ? "idle" : "measure" }),
@@ -187,7 +196,24 @@ registerCommand({
   group: "design.group.view",
   tooltip: "Zoom to fit",
   keys: ["Shift+F"],
+  keyContext: "global",
   run: () => viewportHandle.current?.zoomToFit(),
+});
+
+registerCommand({
+  id: "design.undo",
+  label: "Undo",
+  keys: ["Ctrl+Z"],
+  keyContext: "global",
+  run: (s) => s.undo(),
+});
+
+registerCommand({
+  id: "design.redo",
+  label: "Redo",
+  keys: ["Ctrl+Y", "Ctrl+Shift+Z"],
+  keyContext: "global",
+  run: (s) => s.redo(),
 });
 
 registerCommand({

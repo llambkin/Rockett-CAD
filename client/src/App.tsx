@@ -3,7 +3,9 @@ import { useStore } from "./store";
 import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
 import { Toolbar } from "./components/Toolbar";
-import { openDialog } from "./commands/design";
+import "./commands/design";
+import { installKeymap } from "./commands/keymap";
+import { registerCommand } from "./commands/registry";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
@@ -21,8 +23,6 @@ import { UsersPage } from "./components/UsersPage";
 import { bootSession, useSession } from "./session";
 import { RenameInput } from "./components/RenameInput";
 import { VersionLabel } from "./components/VersionLabel";
-import { viewportHandle } from "./viewportRef";
-import { idleActionFor, sketchToolFor } from "./shortcuts";
 import { browserKeyFromPath } from "./paths";
 import {
   closeProjectSettings,
@@ -252,79 +252,20 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
   const setError = useStore((s) => s.setError);
   const busy = useStore((s) => s.busy);
   const projectName = useStore((s) => s.document?.name ?? "");
-  const undo = useStore((s) => s.undo);
-  const redo = useStore((s) => s.redo);
   const mode = useStore((s) => s.mode);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
-        target.isContentEditable
-      )
-        return;
-      const s = useStore.getState();
-      if (e.key === "?") {
-        e.preventDefault();
-        setShowHelp((v) => !v);
-        return;
-      }
-      if (s.busy || e.repeat) return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        if (e.shiftKey) void redo();
-        else void undo();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        void redo();
-        return;
-      }
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.shiftKey && e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        viewportHandle.current?.zoomToFit();
-        return;
-      }
-      if (e.shiftKey) return;
-      if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        s.mode.name === "sketch"
-      ) {
-        const ids = s.selection
-          .filter((x) => x.kind === "sketchEntity" || x.kind === "sketchPoint")
-          .map((x: any) => x.entityId);
-        if (ids.length > 0) {
-          e.preventDefault();
-          void s.deleteSketchEntities(ids);
-        }
-        return;
-      }
-      const k = e.key.toLowerCase();
-      if (s.mode.name === "sketch") {
-        const tool = sketchToolFor(k);
-        if (tool) s.setSketchTool(tool);
-        if (k === "x") {
-          s.setMode({
-            ...(s.mode as any),
-            constructionMode: !(s.mode as any).constructionMode,
-          });
-        }
-        return;
-      }
-      if (s.mode.name === "idle") {
-        const action = idleActionFor(k);
-        if (action?.kind === "sketch")
-          s.setMode({ name: "pickPlane", purpose: "sketch" });
-        if (action?.kind === "measure") s.setMode({ name: "measure" });
-        if (action?.kind === "dialog") openDialog(action.dialog);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  useEffect(installKeymap, []);
+  useEffect(
+    () =>
+      registerCommand({
+        id: "design.help",
+        label: "Controls",
+        keys: ["?"],
+        keyContext: "global",
+        run: () => setShowHelp((v) => !v),
+      }),
+    [],
+  );
 
   return (
     <div className="workspace">

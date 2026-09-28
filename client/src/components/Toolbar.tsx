@@ -6,12 +6,12 @@ import {
   toolbarFor,
   tooltipOf,
   useRegistrations,
-  type Command,
   type CommandContext,
+  type ToolbarCommand,
   type ToolbarGroup,
 } from "../commands/registry";
 import { SketchInsertButtons } from "./SketchInsertButtons";
-import { withKey } from "../shortcuts";
+import { SKETCH_SHORTCUTS } from "../shortcuts";
 import { ToolButton } from "./ToolButton";
 import { NumField } from "./form/fields";
 import {
@@ -37,6 +37,12 @@ const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
   { id: "extend", label: "Extend" },
   { id: "offset", label: "Offset" },
 ];
+
+const sketchTitle = (t: (typeof SKETCH_TOOLS)[number]) =>
+  tooltipOf({
+    label: t.label,
+    keys: SKETCH_SHORTCUTS.filter((k) => k.tool === t.id).map((k) => k.key),
+  });
 
 export async function addSketchConstraints(constraints: SketchConstraint[]) {
   const s = useStore.getState();
@@ -76,7 +82,7 @@ function DesignGroup({
   ctx,
 }: {
   group: ToolbarGroup;
-  commands: Command[];
+  commands: ToolbarCommand[];
   ctx: CommandContext;
 }) {
   return (
@@ -199,7 +205,7 @@ function SketchToolbar() {
             icon={t.id}
             label={t.label}
             className={tool === t.id ? "active" : ""}
-            title={withKey(t.label, t.id)}
+            title={sketchTitle(t)}
             onClick={() => setSketchTool(t.id)}
           />
         ))}

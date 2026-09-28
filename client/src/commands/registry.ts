@@ -13,13 +13,16 @@ interface Anchored {
 
 interface CommandBase extends Anchored {
   label: string;
-  group: string;
-  keys?: readonly string[];
   when?(ctx: CommandContext): boolean;
   enabled?(ctx: CommandContext): true | string;
 }
 
+type Keyed =
+  | { keys?: never; keyContext?: never }
+  | { keys: readonly string[]; keyContext: string };
+
 interface CommandButton {
+  group: string;
   icon: IconId;
   tooltip?: string;
   primary?: true;
@@ -29,11 +32,25 @@ interface CommandButton {
 }
 
 interface CommandControl {
+  group: string;
   Control: ComponentType;
   run?: never;
+  icon?: never;
 }
 
-export type Command = CommandBase & (CommandButton | CommandControl);
+interface CommandAction {
+  group?: never;
+  icon?: never;
+  Control?: never;
+  run(ctx: CommandContext): unknown;
+}
+
+export type Command = CommandBase &
+  Keyed &
+  (CommandButton | CommandControl | CommandAction);
+export type ToolbarCommand = CommandBase &
+  Keyed &
+  (CommandButton | CommandControl);
 
 export interface ToolbarGroup extends Anchored {
   label: string;
@@ -52,15 +69,23 @@ export const registerToolbarGroup = groupRegistry.register;
 export const commands = commandRegistry.list;
 export const toolbarGroups = groupRegistry.list;
 
+export function runnable(command: Command, ctx: CommandContext): boolean {
+  if (!command.run || command.when?.(ctx) === false) return false;
+  return (command.enabled?.(ctx) ?? true) === true;
+}
+
 export function runCommand(id: string): unknown {
   const command = commandRegistry.get(id);
   const ctx = useStore.getState();
-  if (!command?.run || command.when?.(ctx) === false) return;
-  if ((command.enabled?.(ctx) ?? true) !== true) return;
+  if (!command?.run || !runnable(command, ctx)) return;
   return command.run(ctx);
 }
 
-export function tooltipOf(command: CommandBase & CommandButton): string {
+export function tooltipOf(command: {
+  label: string;
+  tooltip?: string | undefined;
+  keys?: readonly string[] | undefined;
+}): string {
   const text = command.tooltip ?? command.label;
   const key = command.keys?.[0];
   return key ? `${text} (${key})` : text;
@@ -83,7 +108,9 @@ function placed<T extends Anchored>(items: readonly T[]): T[] {
 }
 
 export function toolbarFor(context: string, ctx: CommandContext) {
-  const shown = commandRegistry.list().filter((c) => c.when?.(ctx) !== false);
+  const shown = commandRegistry
+    .list()
+    .filter((c): c is ToolbarCommand => !!c.group && c.when?.(ctx) !== false);
   return placed(groupRegistry.list().filter((g) => g.context === context)).map(
     (group) => ({
       group,
