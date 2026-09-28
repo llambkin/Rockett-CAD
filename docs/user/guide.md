@@ -19,7 +19,8 @@ Constraints: horizontal, vertical, parallel, perpendicular, tangent,
 coincident, concentric, equal, midpoint, collinear and fix. Dimensions:
 length, distance, radius, diameter and angle, all editable. The sketch shows
 its degrees of freedom live. Right-click with sketch geometry selected to list
-the relations that fit the whole selection.
+the relations that fit the whole selection. Deleting a dimension, relation or
+trimmed piece moves no other point.
 
 ### Sketch offsets
 

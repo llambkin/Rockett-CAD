@@ -7,6 +7,7 @@ import {
   detectProfiles,
   findProfile,
   solveSketch,
+  settledEntities,
   projectEdge,
   bodyMadeBy,
   derivedBodyId,
@@ -694,6 +695,12 @@ function applyToolOperation(
 export function evalSketch(state: EvalState, f: SketchFeature): void {
   const frame = resolvePlaneFrame(state, f.plane);
   let entities = f.entities.map((e) => ({ ...e }));
+  const place = (e: SketchEntity) =>
+    JSON.stringify(
+      e.kind === "point" ? [e.x, e.y] : e.kind === "circle" ? e.radius : e.kind,
+    );
+  const stored = new Map(f.entities.map((e) => [e.id, place(e)]));
+  let moved = false;
   for (const entity of f.entities) {
     if (entity.kind === "point" || !entity.projection) continue;
     const ref = entity.projection;
@@ -714,20 +721,21 @@ export function evalSketch(state: EvalState, f: SketchFeature): void {
       throw new Error(
         `Projected edge ${ref.edgeName} changed curve type. Re-project this reference.`,
       );
+    moved ||= projected.some((e) => stored.get(e.id) !== place(e));
     const replacements = new Map(projected.map((e) => [e.id, e]));
     entities = entities.map((e) => replacements.get(e.id) ?? e);
     for (const e of projected)
       if (!entities.some((old) => old.id === e.id)) entities.push(e);
   }
   const solved = solveSketch({ entities, constraints: f.constraints });
-  const profiles = detectProfiles(solved.entities);
+  const placed = moved ? settledEntities(solved, entities) : entities;
   state.sketches.set(f.id, {
     featureId: f.id,
     frame,
-    entities: solved.entities,
+    entities: placed,
     solveStatus: solved.status,
     dof: solved.dof,
-    profiles,
+    profiles: detectProfiles(placed),
   });
 }
 

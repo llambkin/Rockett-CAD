@@ -131,6 +131,10 @@ previews: `Previews` in `server/src/api/routes.ts`.
 - Mutations answer `WireMutationResponse` (`shared/src/routes.ts`).
 - A request may send `held` (`HeldMeshes`); a body whose `meshKey` is held
   comes back as `HeldBodyPayload`: `server/src/api/heldMeshes.ts`.
+- Stored sketch points are the model. A feature add or edit solves a sketch
+  once when it adds or changes a constraint its points do not meet, and
+  otherwise stores the points as sent. Evaluation re-solves a sketch only when
+  a projected source moves: `editedEntities` in `shared/src/solver.ts`.
 - `?position=N` evaluates the first N features without moving the saved
   marker: `evaluationPosition` in `server/src/api/routes.ts`.
 - Mesh bytes come from the mesh route only for a hash in the project's current

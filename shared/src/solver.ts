@@ -639,3 +639,31 @@ export function solveSketch(input: SolveInput): SolveResult {
 
   return { entities, status, dof, converged, maxResidual };
 }
+
+export const settledEntities = (
+  result: SolveResult,
+  stored: SketchEntity[],
+): SketchEntity[] => (result.converged ? result.entities : stored);
+
+const holds = (input: SolveInput): boolean => {
+  const { residuals, x0 } = buildProblem(input);
+  return residuals.every((r) => Math.abs(r(x0)) < CONFLICT_TOL);
+};
+
+export function editedEntities(
+  before: SketchConstraint[],
+  after: { entities: SketchEntity[]; constraints: SketchConstraint[] },
+): SketchEntity[] {
+  const had = new Set(before.map((c) => JSON.stringify(c)));
+  const constraints = after.constraints.filter(
+    (c) => !had.has(JSON.stringify(c)),
+  );
+  try {
+    return holds({ entities: after.entities, constraints })
+      ? after.entities
+      : settledEntities(solveSketch(after), after.entities);
+  } catch (e) {
+    if (e instanceof SolverModelError) return after.entities;
+    throw e;
+  }
+}

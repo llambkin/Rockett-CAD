@@ -100,4 +100,5 @@ router checks project access first (`server/src/api/projectAccess.ts`).
   bounds live in code: `MAX_ENGINES` in `server/src/geometry/engine.ts` and
   the mesh limit in `server/src/kernel/meshCache.ts`.
 - Viewport work never calls the kernel.
-- Sketch drags solve in the browser; the server solves once on commit.
+- Sketch drags solve in the browser; API.md, Evaluation, says when a sketch
+  write or evaluation solves.

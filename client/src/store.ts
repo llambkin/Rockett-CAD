@@ -31,6 +31,7 @@ import {
   emptyView,
   newId,
   solveSketch,
+  editedEntities,
   createSketchOffset,
   editSketchOffset,
   constraintEntityRefs,
@@ -1000,12 +1001,16 @@ export const useStore = create<State>((set, get) => ({
   updateDraftSketch(entities, constraints) {
     const { draftSketch } = get();
     if (!draftSketch) return;
-    const updated = { ...draftSketch, entities, constraints };
-    const solved = solveSketch({ entities, constraints });
-    if (solved.converged) {
-      updated.entities = solved.entities;
-    }
-    set({ draftSketch: updated });
+    set({
+      draftSketch: {
+        ...draftSketch,
+        entities: editedEntities(draftSketch.constraints, {
+          entities,
+          constraints,
+        }),
+        constraints,
+      },
+    });
   },
 
   solveDraft(drag) {

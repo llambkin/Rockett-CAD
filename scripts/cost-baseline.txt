@@ -34,9 +34,9 @@ client/src/components/form/fields.tsx 557
 client/src/features/constructionPlane.tsx PlaneForm 108
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
 client/src/sketchTools.ts 1048
-client/src/store.ts 1379
+client/src/store.ts 1384
 client/src/store.ts deleteSketchEntities 94
-client/src/store.ts useStore 780
+client/src/store.ts useStore 784
 client/src/three/CadViewport.ts 1250
 client/src/three/CadViewport.ts addHighlight 85
 client/src/three/CadViewport.ts buildBody 88
@@ -46,9 +46,9 @@ client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
 client/src/three/toolPreview.ts updateToolPreview 153
 server/src/api/jobRoutes.ts createJobRoutes 119
-server/src/api/routes.ts 976
-server/src/api/routes.ts createApiRouter 776
-server/src/geometry/features.ts 2589
+server/src/api/routes.ts 981
+server/src/api/routes.ts createApiRouter 780
+server/src/geometry/features.ts 2597
 server/src/geometry/features.ts buildPrism 86
 server/src/geometry/features.ts built 242
 server/src/geometry/features.ts chamferByEnvelope 256
@@ -65,5 +65,5 @@ shared/src/sketchModify.ts 741
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts offsetRoundedChain 124
 shared/src/sketchModify.ts offsetSketch 159
-shared/src/solver.ts 641
+shared/src/solver.ts 669
 shared/src/solver.ts buildProblem 359

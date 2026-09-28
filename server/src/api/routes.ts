@@ -1,6 +1,7 @@
 import { Router, json, type Request, type RequestHandler } from "express";
 import {
   DOCUMENT_EDITS,
+  editedEntities,
   lacksTargets,
   MB,
   NAME_LENGTH,
@@ -628,6 +629,8 @@ export function createApiRouter(
       knownKeys(feature, feature.type);
       feature.name ||= nextFeatureName(doc, feature.type);
       validateFeature(feature);
+      if (feature.type === "sketch")
+        feature.entities = editedEntities([], feature);
       if (doc.features.some((f) => f.id === feature.id))
         throw new ValidationError("duplicate feature id");
       const at = Math.min(doc.timelinePosition, doc.features.length);
@@ -666,6 +669,8 @@ export function createApiRouter(
       const updated = { ...current, ...patch, id: current.id } as Feature;
       if (retargets(patch)) Reflect.deleteProperty(updated, "targets");
       validateFeature(updated);
+      if (updated.type === "sketch" && current.type === "sketch")
+        updated.entities = editedEntities(current.constraints, updated);
       await signed(doc, idx, updated, current);
       doc.features[idx] = updated;
       await (keepsTargets(patch)
