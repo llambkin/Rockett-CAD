@@ -54,8 +54,8 @@ feature is retried. Worker restarts use three attempts in five minutes with
 **Server owns the document.** Clients send feature-level operations
 (`add/edit/delete feature`, `set timeline position`, …); the server validates,
 persists (autosave on every mutation) and responds with the updated document
-plus a freshly evaluated model. Undo/redo is a client-side stack of document
-snapshots restored through a full-document endpoint, deliberately distinct
+plus a freshly evaluated model. Undo/redo is server history (API.md, History),
+deliberately distinct
 from the CAD timeline (see FEATURE_TIMELINE.md). What is hidden is view state,
 not document: the client keeps it, with the camera, in a `view` slice and
 saves it with `PUT /view` and the view's last `ETag`, outside undo and

@@ -58,11 +58,3 @@ export async function acceptedNamingUpgrade(
     );
   return plan;
 }
-
-export async function namingUpgraded(
-  store: ProjectStore,
-  id: string,
-): Promise<boolean> {
-  const names = await backupOf(store, id).names();
-  return names.some((name) => name.startsWith(`${BACKUP}-`));
-}

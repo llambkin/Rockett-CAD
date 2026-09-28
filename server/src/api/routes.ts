@@ -28,7 +28,6 @@ import {
 import { build } from "../build.js";
 import type { NoticeStore } from "../auth/noticeStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
-import { splitView } from "../store/migrations.js";
 import type { FolderStore } from "../store/folderStore.js";
 import { StoreError } from "../store/projectStore.js";
 import { etag } from "../store/jsonStore.js";
@@ -38,7 +37,6 @@ import { collectBlobs } from "../store/blobGc.js";
 import { requireAdmin } from "../auth/users.js";
 import {
   acceptedNamingUpgrade,
-  namingUpgraded,
   stageNamingUpgrade,
 } from "../store/namingUpgrade.js";
 import { InProcessKernel, type KernelClient } from "../kernel/client.js";
@@ -73,7 +71,6 @@ import {
 import {
   checkRevision,
   ifMatchRevision,
-  keepNamingVersion,
   previewSequence,
   reply,
   RevisionConflict,
@@ -544,21 +541,6 @@ export function createApiRouter(
         position === undefined || position === doc.timelinePosition,
       );
       res.json(result);
-    }),
-  );
-
-  on(
-    ROUTES.replaceDocument,
-    mutateProject(async (stored, req) => {
-      const sent = req.body?.document;
-      if (!sent || sent.id !== req.params.id)
-        throw new ValidationError("document id mismatch");
-      validateDocument(sent);
-      const document = splitView(sent).doc as unknown as CadDocument;
-      const position = evaluationPosition(req, document);
-      if (!(await namingUpgraded(store, stored.id)))
-        keepNamingVersion(stored, document);
-      return { label: "Replace document", document, position };
     }),
   );
 

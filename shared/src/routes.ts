@@ -383,10 +383,6 @@ export const ROUTES = {
   ),
   jobEvents: route<never, never>()("GET", "/jobs/:jobId/events"),
   cancelJob: route<never, { ok: true }>()("DELETE", "/jobs/:jobId"),
-  replaceDocument: route<
-    { document: CadDocument } & HeldMeshes,
-    WireMutationResponse
-  >()("PUT", "/projects/:id/document"),
   importStepInto: route<FormData, MutationResponse>()(
     "POST",
     "/projects/:id/import-step",
@@ -551,7 +547,6 @@ export const PREVIEW_HEADER = "X-Rockett-Preview";
 
 export const DOCUMENT_EDITS: ReadonlySet<Route> = new Set<Route>([
   ROUTES.renameProject,
-  ROUTES.replaceDocument,
   ROUTES.importStepInto,
   ROUTES.addFeature,
   ROUTES.updateFeature,

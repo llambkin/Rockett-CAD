@@ -581,8 +581,6 @@ export const api = {
     holding(ROUTES.abortPreview, { id, tx }, {}),
   restoreHistory: (id: string, snapshot: string) =>
     holding(ROUTES.restoreHistory, { id }, { snapshot }),
-  replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    holding(ROUTES.replaceDocument, { id }, { document }, { position }),
   updateBody: (
     id: string,
     bodyId: string,

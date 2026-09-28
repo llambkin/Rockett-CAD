@@ -134,8 +134,8 @@ characters, about 65 KB, exceed Node's 16 KB request header limit in a URL.
 Feature delete stays `DELETE` and sends `{ held }` as its JSON body.
 
 `POST /projects/:id/evaluate`, `PUT /projects/:id/features/:fid`,
-`PUT /projects/:id/document`, `POST /projects/:id/undo` and
-`POST /projects/:id/redo` accept an optional `?position=N` for the returned
+`POST /projects/:id/undo` and `POST /projects/:id/redo` accept an optional
+`?position=N` for the returned
 evaluation. This temporarily evaluates the first N features without moving the
 document's saved timeline marker, for sketch editing and undo/redo in a sketch.
 
@@ -205,7 +205,7 @@ The document and project summary carry `modifiedBy`, the ID of the user who
 last saved it, or `null` for a project last saved before attribution existed.
 
 The document edits, listed in `DOCUMENT_EDITS` in `shared/src/routes.ts`, are
-rename, `PUT /document`, import into a project, the feature, timeline,
+rename, import into a project, the feature, timeline,
 body and group routes, undo, redo, history restore and the naming upgrade commit. Each needs `If-Match: "<revision>"` with the revision
 the caller last received. Inside the project queue the server compares it
 with the stored document:
@@ -367,7 +367,7 @@ project: an ASCII `filename` plus a UTF-8 `filename*`.
 `POST /projects/file` takes multipart field `file`, up to 64 MB, and returns
 `{ document }` for a new project with a new id. An older document schema is
 migrated as a saved project is on load, then the document is validated as
-`PUT /projects/:id/document` validates it. Every asset must be referenced by
+described under Validation. Every asset must be referenced by
 the document and decode from base64, and its bytes must hash to its key. An
 image asset also passes the image upload rules. Every referenced asset must be
 present. A file from before schema 9 may key its images by their old
@@ -471,7 +471,6 @@ the document, and uploads that take the document beyond 40 MB are rejected.
 | Method & path                            | Body                    | Notes                                                                        |
 | ---------------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
 | `POST /projects/:id/evaluate`            | `{ held? }`             | Evaluate to the timeline marker; returns `WireEvaluateResult`                |
-| `PUT /projects/:id/document`             | `{ document }`          | Full replace; validated; 404 if project no longer exists                     |
 | `POST /projects/:id/features`            | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
 | `PUT /projects/:id/features/:fid`        | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
 | `DELETE /projects/:id/features/:fid`     | `{ held? }`             | Marker adjusts if needed                                                     |
@@ -523,8 +522,6 @@ user's view of it.
 
 Visibility lives only in the view. Documents and evaluations carry no
 `visible`. A body PUT or a feature add or patch that carries `visible` is 400.
-`PUT /projects/:id/document` drops any `visible` it carries and leaves the
-view unchanged.
 
 ### Settings layers
 
@@ -685,7 +682,7 @@ suppressed, or whose ids pass the limit, is saved without `targets`. A Join
 from a face that add or such an update writes stores its face's body first. See
 [CAD_MODEL.md](CAD_MODEL.md), Tool targets.
 
-`PUT /projects/:id/document` also parses the document against
+`POST /projects/file` also parses the document against
 `documentSchema` in the same file: `schemaVersion` equals the current version,
 `namingVersion` is 1 or 2,
 `revision` is a non-negative integer, `savedWith` is `null` or
@@ -702,13 +699,6 @@ integer no greater than the feature count. Loading a saved project migrates
 it and then applies the same checks; a failure is 422 `unprocessable`.
 
 Every validation failure returns 400 and nothing is saved.
-
-`PUT /projects/:id/document` keeps the stored `namingVersion`. A document with
-a different value gets 409 `conflict` naming the field, without `revision`,
-and nothing is saved. The client sends back documents it received, so they
-carry the stored value. A project that holds a naming upgrade backup is the
-exception: its replace may change `namingVersion`, so undo and redo of the
-upgrade work like any other edit.
 
 ## WebSockets
 

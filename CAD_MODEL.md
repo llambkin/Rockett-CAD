@@ -701,9 +701,9 @@ projects, after backing up the complete project generation.
 module id such as `acme.gears` that matches
 `^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$`. Each value is `{ version, data }`.
 The server checks that envelope and never reads `data`, so it survives load,
-migration, feature edits and `PUT /document` as an equal JSON value. The 9 to
-10 migration adds `extensions: {}`. A server older than schema 10 refuses the
-file instead of saving it without the extension data.
+migration, feature edits and a project file upload as an equal JSON value.
+The 9 to 10 migration adds `extensions: {}`. A server older than schema 10
+refuses the file instead of saving it without the extension data.
 
 ## Naming version (schema 12)
 
@@ -713,9 +713,8 @@ name map, so edge and vertex names computed later for tessellation,
 measurement or projection follow the same rules. The 11 to 12 migration sets
 `namingVersion: 1` on every existing document, backed up with the rest of
 the project before its first save, so saved references keep resolving as
-before. New projects get 2. Only the naming upgrade below changes a stored
-`namingVersion`; `PUT /document` answers 409 to a different value unless the
-project holds a naming upgrade backup. The engine drops its cached timeline
+before. New projects get 2. Only the naming upgrade below and its undo change a
+stored `namingVersion`. The engine drops its cached timeline
 when the version changes.
 
 ### Naming upgrade
