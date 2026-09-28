@@ -161,7 +161,8 @@ function scale(move: Move, divisor: number): Move {
 function expand(move: Move, at: Xyz | undefined, post: Target, path: string) {
   if (move.kind === "raw" && move.post !== post.id)
     throw new Error(`${path} raw is for post ${move.post}, not ${post.id}`);
-  if (move.kind === "arc" && !post.capabilities.arcs && at)
+  const { arcs } = post.capabilities;
+  if (move.kind === "arc" && at && arcs !== true && move.plane !== arcs)
     return expandArc(at, move);
   if (move.kind === "cycle" && !post.capabilities.cycles)
     return expandCycle(at, move);

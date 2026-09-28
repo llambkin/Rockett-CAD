@@ -263,6 +263,30 @@ describe("normalise arcs", () => {
       normalised(program([{ kind: "rapid", to: [10, 0, 0] }, arc]), full),
     ).toEqual([{ kind: "rapid", to: [10, 0, 0] }, arc]);
   });
+
+  it("keeps only xy arcs for a post with xy arcs", () => {
+    const xyOnly: Target = {
+      id: "xy",
+      capabilities: { arcs: "xy", cycles: false, toolChange: false },
+    };
+    const arc = (plane: "xy" | "zx"): Move => ({
+      kind: "arc",
+      to: plane === "xy" ? [0, 10, 0] : [0, 0, -10],
+      centre: [0, 0, 0],
+      dir: "ccw",
+      plane,
+      feed: 600,
+      role: "cut",
+    });
+    const start: Move = { kind: "rapid", to: [10, 0, 0] };
+    expect(normalised(program([start, arc("xy")]), xyOnly)).toEqual([
+      start,
+      arc("xy"),
+    ]);
+    const out = normalised(program([start, arc("zx")]), xyOnly);
+    expect(out.slice(1).every((m) => m.kind === "feed")).toBe(true);
+    expect(points(out).at(-1)).toEqual([0, 0, -10]);
+  });
 });
 
 describe("normalise cycles", () => {

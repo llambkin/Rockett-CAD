@@ -1,7 +1,7 @@
 export type NumberFormat = { decimals: number; trim: boolean };
 
 export type Capabilities = {
-  arcs: boolean;
+  arcs: boolean | "xy";
   cycles: boolean;
   toolChange: boolean;
 };
@@ -14,6 +14,7 @@ type Spec = {
 
 export const AXES = new Set(["x", "y", "z"]);
 const CYCLE = ["x", "y", "clear", "top", "bottom", "feed", "dwell"];
+const PLANE_ONLY = new Set(["k", "plane"]);
 
 const TEMPLATES = {
   header: { needs: ["units", "offset"] },
@@ -134,7 +135,9 @@ function scalars(post: Json): string[] {
   problems.push(
     ...unknownKeys(caps, ["arcs", "cycles", "toolChange"], "capabilities."),
   );
-  for (const key of ["arcs", "cycles", "toolChange"])
+  if (typeof caps.arcs !== "boolean" && caps.arcs !== "xy")
+    problems.push('capabilities.arcs: must be a boolean or "xy"');
+  for (const key of ["cycles", "toolChange"])
     if (typeof caps[key] !== "boolean")
       problems.push(`capabilities.${key}: must be a boolean`);
   return problems;
@@ -217,7 +220,10 @@ function template(post: Post, name: TemplateName): string[] {
   const path = `templates.${name}`;
   const lines = post.templates[name];
   if (!isStrings(lines)) return [`${path}: must be a list of lines`];
-  const { needs, unless }: Spec = TEMPLATES[name];
+  const { unless }: Spec = TEMPLATES[name];
+  const needs = TEMPLATES[name].needs.filter(
+    (need) => post.capabilities.arcs !== "xy" || !PLANE_ONLY.has(need),
+  );
   if (!lines.length) {
     if (unless === "always" || (unless && !post.capabilities[unless]))
       return [];
@@ -255,12 +261,10 @@ function templates(post: Post): string[] {
     problems.push(
       "templates.comment: must be a line with one {text} after a ( or ; opener",
     );
-  const needed = [
-    ...Object.values(UNITS),
-    ...(post.templates.arcCw?.length || post.templates.arcCcw?.length
-      ? Object.values(PLANES)
-      : []),
-  ];
+  const planes =
+    post.capabilities.arcs !== "xy" &&
+    (post.templates.arcCw?.length || post.templates.arcCcw?.length);
+  const needed = [UNITS.mm, ...(planes ? Object.values(PLANES) : [])];
   for (const word of needed.filter((w) => !post.words.includes(w)))
     problems.push(`words: needs ${word}`);
   return problems;

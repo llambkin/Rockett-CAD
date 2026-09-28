@@ -375,7 +375,7 @@ describe("post schema", () => {
     };
     expect(validatePost(bad)).toEqual([
       "extra: unknown key",
-      "capabilities.arcs: must be a boolean",
+      'capabilities.arcs: must be a boolean or "xy"',
       "formats.G: must be an address letter other than G, M, N or O",
       "modal[11]: A has no number format",
       "modal[12]: G0 is already in a modal group",
@@ -390,6 +390,64 @@ describe("post schema", () => {
       "templates.comment: must be a line with one {text} after a ( or ; opener",
     ]);
     expect(validatePost(null)).toEqual(["post: must be an object"]);
+  });
+});
+
+describe("post dialect limits", () => {
+  const arcs = { needs: "X{x} Y{y} Z{z} I{i} J{j} F{feed}" };
+  const xyOnly: Post = {
+    ...fake,
+    id: "xyonly",
+    capabilities: { ...fake.capabilities, arcs: "xy" },
+    words: fake.words.filter((w) => !["G17", "G18", "G19", "G20"].includes(w)),
+    modal: fake.modal.filter((entry) => !entry.includes("G17")),
+    templates: {
+      ...fake.templates,
+      header: ["G90 {units}", "{offset}"],
+      arcCw: [`G2 ${arcs.needs}`],
+      arcCcw: [`G3 ${arcs.needs}`],
+    },
+  };
+
+  it("writes xy arcs with no plane word or K", () => {
+    expect(validatePost(xyOnly)).toEqual([]);
+    const text = format(
+      program([
+        section([
+          { kind: "rapid", to: [10, 0, 0] },
+          {
+            kind: "arc",
+            to: [0, 10, -1],
+            centre: [0, 0, 0],
+            dir: "ccw",
+            plane: "xy",
+            feed: 600,
+            role: "cut",
+          },
+        ]),
+      ]),
+      xyOnly,
+    )[0]!;
+    expect(lines(text)).toContain("G3 X0 Y10 Z-1 I-10 J0 F600");
+    expect(
+      validatePost({ ...xyOnly, capabilities: fake.capabilities }),
+    ).toEqual([
+      "templates.arcCw: needs {k}",
+      "templates.arcCw: needs {plane}",
+      "templates.arcCcw: needs {k}",
+      "templates.arcCcw: needs {plane}",
+      "words: needs G17",
+      "words: needs G18",
+      "words: needs G19",
+    ]);
+  });
+
+  it("rejects inch output on a post without G20", () => {
+    const p = program([section([{ kind: "rapid", to: [25.4, 0, 5] }])]);
+    expect(lines(format(p, xyOnly)[0]!)[0]).toBe("G90 G21");
+    expect(() => format(p, xyOnly, "inch")).toThrow(
+      "line 1 is not in the xyonly dialect: G90 G20",
+    );
   });
 });
 
