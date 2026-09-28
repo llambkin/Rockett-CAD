@@ -944,10 +944,47 @@ function revolveSources(state: EvalState, f: RevolveFeature) {
   ];
 }
 
+const REVOLVE_CROSSES_AXIS =
+  "revolve profile crosses the axis of revolution: keep the profile on one side of the axis; the previous state has been kept";
+
+function crossesAxis(
+  face: Shape,
+  axis: { origin: Vec3; direction: Vec3 },
+): boolean {
+  const plane = planarFacePlane(face);
+  if (!plane) return false;
+  const d = axis.direction;
+  const across = V.cross(d, plane.normal);
+  if (V.norm(across) < UNIT_DOT_TOL) return false;
+  const u = V.normalize(across);
+  const w = V.cross(u, d);
+  const o = axis.origin;
+  const k = getKernel();
+  return scoped((own) => {
+    const trsf = own(new k.gp_Trsf_1());
+    trsf.SetValues(...u, -V.dot(u, o), ...d, -V.dot(d, o), ...w, -V.dot(w, o));
+    const box = own(new k.Bnd_Box_1());
+    const moved = own(face.Moved(own(new k.TopLoc_Location_4(trsf)), false));
+    k.BRepBndLib.AddOptimal(moved, box, false, false);
+    const tolerance = Math.max(
+      LINEAR_TOL,
+      k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum.TopAbs_VERTEX),
+    );
+    return (
+      own(box.CornerMin()).X() < -tolerance &&
+      own(box.CornerMax()).X() > tolerance
+    );
+  });
+}
+
 export function evalRevolve(state: EvalState, f: RevolveFeature) {
   const sources = revolveSources(state, f);
   const profileFaces = sources.map((s) => s.pf);
   const axis = resolveAxis(state, f.axis);
+  if (profileFaces.some((pf) => crossesAxis(pf.face, axis))) {
+    release(profileFaces.map((pf) => pf.face));
+    throw new Error(REVOLVE_CROSSES_AXIS);
+  }
   const k = getKernel();
   const angleRad = (Math.min(Math.abs(f.angle), 360) * Math.PI) / 180;
   const full = Math.abs(f.angle) >= 360 - ANGULAR_TOL_DEG;
@@ -975,9 +1012,7 @@ export function evalRevolve(state: EvalState, f: RevolveFeature) {
       revol.Build(progress());
       if (!revol.IsDone()) {
         revol.delete();
-        throw new Error(
-          "revolve failed: the profile may cross the axis of revolution",
-        );
+        throw new Error("the kernel could not revolve the profile");
       }
       const shape = revol.Shape();
       const names = sweptNames(
