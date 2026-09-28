@@ -93,7 +93,7 @@ import {
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { leavesToolOutside, TOOL_OUTSIDE } from "./cutCheck.js";
+import { checkedCut } from "./cutCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -634,16 +634,7 @@ function applyToolOperation(
     if (bodies.length === 0)
       throw new Error("cut tool does not intersect any body");
     for (const body of bodies) {
-      const op = new k.BRepAlgoAPI_Cut_3(body.shape, tool.shape, progress());
-      op.Build(progress());
-      if (!op.IsDone()) {
-        op.delete();
-        throw new Error("boolean cut failed");
-      }
-      if (leavesToolOutside(op, tool.shape, body.shape)) {
-        op.delete();
-        throw new Error(TOOL_OUTSIDE);
-      }
+      const op = checkedCut(body.shape, tool.shape, "boolean cut failed");
       const result = op.Shape();
       const names = propagateNames(
         op,
@@ -2082,11 +2073,10 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
       if (f.operation === "join") {
         op = new k.BRepAlgoAPI_Fuse_3(current.shape, tool.shape, progress());
       } else if (f.operation === "cut") {
-        op = new k.BRepAlgoAPI_Cut_3(current.shape, tool.shape, progress());
+        op = checkedCut(current.shape, tool.shape, "boolean cut failed");
       } else {
         op = new k.BRepAlgoAPI_Common_3(current.shape, tool.shape, progress());
       }
-      op.Build(progress());
       if (!op.IsDone()) {
         op.delete();
         throw new Error(`boolean ${f.operation} failed`);
@@ -2167,12 +2157,11 @@ export function evalShell(state: EvalState, f: ShellFeature): void {
       registerBodySolids(state, bodyId, shape, shapeNames);
     };
     if (f.openFaces.length > 0) return publish(result, names);
-    const cut = new k.BRepAlgoAPI_Cut_3(body.shape, result, progress());
-    cut.Build(progress());
-    if (!cut.IsDone()) {
-      cut.delete();
-      throw new Error("shell failed: could not hollow the closed body");
-    }
+    const cut = checkedCut(
+      body.shape,
+      result,
+      "shell failed: could not hollow the closed body",
+    );
     const hollow = cut.Shape();
     const hollowNames = propagateNames(
       cut,
@@ -2228,8 +2217,7 @@ export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
 
       const op = outward
         ? new k.BRepAlgoAPI_Fuse_3(current.shape, toolShape, progress())
-        : new k.BRepAlgoAPI_Cut_3(current.shape, toolShape, progress());
-      op.Build(progress());
+        : checkedCut(current.shape, toolShape, "offset face boolean failed");
       if (!op.IsDone()) {
         op.delete();
         throw new Error("offset face boolean failed");

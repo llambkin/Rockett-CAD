@@ -1,15 +1,21 @@
 import { LINEAR_TOL } from "@rockett/shared";
 import {
+  areaOf,
   faces,
   getKernel,
   listToArray,
   progress,
   scoped,
+  volumeOf,
   type Shape,
 } from "./kernel.js";
 
 export const TOOL_OUTSIDE =
   "cut left the body inside out: the kernel kept faces of the cut outside the body; the previous body has been kept";
+export const CUT_EMPTY =
+  "cut removed the whole body: the kernel returned no solid; the previous body has been kept";
+export const CUT_OVERREACH =
+  "cut removed more than its tool holds: the kernel dropped part of the body; the previous body has been kept";
 
 const SPREAD = [0.5, 0.25, 0.75, 0.1, 0.9];
 
@@ -66,7 +72,7 @@ function outside(solid: Shape, face: Shape): boolean {
   });
 }
 
-export function leavesToolOutside(op: any, tool: Shape, body: Shape): boolean {
+function leavesToolOutside(op: any, tool: Shape, body: Shape): boolean {
   const k = getKernel();
   return scoped((own) =>
     faces(tool)
@@ -80,4 +86,25 @@ export function leavesToolOutside(op: any, tool: Shape, body: Shape): boolean {
       })
       .some((face) => outside(body, face)),
   );
+}
+
+function rejectCut(op: any, body: Shape, tool: Shape, result: Shape): void {
+  if (leavesToolOutside(op, tool, body)) throw new Error(TOOL_OUTSIDE);
+  const skin = LINEAR_TOL * (areaOf(body) + areaOf(tool));
+  const kept = volumeOf(result);
+  if (kept <= skin) throw new Error(CUT_EMPTY);
+  if (volumeOf(body) - kept > Math.abs(volumeOf(tool)) + skin)
+    throw new Error(CUT_OVERREACH);
+}
+
+export function checkedCut(body: Shape, tool: Shape, failed: string): any {
+  const op = new (getKernel().BRepAlgoAPI_Cut_3)(body, tool, progress());
+  try {
+    if (!op.IsDone()) throw new Error(failed);
+    scoped((own) => rejectCut(op, body, tool, own(op.Shape())));
+    return op;
+  } catch (err) {
+    op.delete();
+    throw err;
+  }
 }
