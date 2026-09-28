@@ -152,7 +152,6 @@ function QuickField({
       label={count ? value.label : `${value.label} (°)`}
       int={count}
       min={count ? 2 : undefined}
-      max={count ? 500 : undefined}
       value={value.read(draft)}
       autoFocus={autoFocus}
       onChange={onChange}

@@ -63,7 +63,7 @@ server/src/store/historyStore.ts 511
 server/src/store/projectStore.ts 525
 shared/src/model.ts 601
 shared/src/profiles.ts 589
-shared/src/routes.ts 531
+shared/src/routes.ts 528
 shared/src/sketchModify.ts 741
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts offsetRoundedChain 124

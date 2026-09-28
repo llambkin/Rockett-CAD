@@ -796,7 +796,7 @@ naming upgrade commits the pinned document; see Naming upgrade.
 Revolve may carry `faces`, planar body faces used as profiles as Extrude uses
 its `faces`: sketch regions drawn strictly inside a face are cut out of it, and
 each face revolves about the axis beside any `profiles`. `profiles` may then be
-empty; together they hold 1 to 64 sources. A face that is gone or not planar
+empty; together they hold at least one source. A face that is gone or not planar
 fails the feature with an error naming it. A revolve without `faces` evaluates
 as before. The 15 to 16 migration changes nothing but the version, and the
 project is backed up before its first save.

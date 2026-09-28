@@ -456,7 +456,7 @@ or accepted. Each candidate and suggestion is a `NamingTarget` with `basis`
 `lineage` or `signature`.
 
 `accept` is a list of `NamingDecision`s, `{ featureId, path, to }`, each
-choosing the identity for one mapping, up to 100,000. A choice must name a
+choosing the identity for one mapping. A choice must name a
 body, and for a reference a face or edge of that body, in the version 2 model
 before that feature; otherwise, or when it matches no mapping, the call is
 400 `validation` with detail `/accept/{index}`. The stage call applies

@@ -71,14 +71,13 @@ const profileRef = Type.Object({
 const operation = Type.Enum(["newBody", "join", "cut", "intersect"]);
 const positive = Type.Number({ minimum: LINEAR_TOL, maximum: MAX_DIM });
 const degrees = Type.Number({ minimum: -360, maximum: 360 });
-const bodies = Type.Array(bodyId, { minItems: 1, maxItems: 64 });
+const bodies = Type.Array(bodyId, { minItems: 1 });
 const targets = Type.Optional(
   Type.Array(bodyId, { maxItems: MAX_TARGETS, uniqueItems: true }),
 );
-const edges = Type.Array(edgeRef, { minItems: 1, maxItems: 256 });
-const profiles = (minItems: number) =>
-  Type.Array(profileRef, { minItems, maxItems: 64 });
-const patternCount = Type.Number({ minimum: 2, maximum: 500 });
+const edges = Type.Array(edgeRef, { minItems: 1 });
+const profiles = (minItems: number) => Type.Array(profileRef, { minItems });
+const patternCount = Type.Number({ minimum: 2 });
 
 const feature = <const T extends string, P extends TProperties>(
   type: T,
@@ -254,16 +253,14 @@ const emboss = feature("emboss", {
   targets,
 });
 
-const profileFaces = Type.Optional(Type.Array(faceRef, { maxItems: 64 }));
+const profileFaces = Type.Optional(Type.Array(faceRef));
 
 const profilesOrFaces = <T extends TSchema>(schema: T) =>
   Type.Refine(
     schema,
-    (f: { profiles: unknown[]; faces?: unknown[] }) => {
-      const sources = f.profiles.length + (f.faces?.length ?? 0);
-      return sources >= 1 && sources <= 64;
-    },
-    () => "needs 1 to 64 profiles or faces",
+    (f: { profiles: unknown[]; faces?: unknown[] }) =>
+      f.profiles.length + (f.faces?.length ?? 0) >= 1,
+    () => "needs a profile or face",
   );
 
 const extrude = profilesOrFaces(
@@ -316,7 +313,7 @@ const chamfer = feature("chamfer", {
 });
 
 const shell = feature("shell", {
-  openFaces: Type.Array(faceRef, { maxItems: 256 }),
+  openFaces: Type.Array(faceRef),
   thickness: positive,
 });
 
@@ -330,7 +327,7 @@ const combine = feature("combine", {
 const splitBody = feature("splitBody", { body: bodyId, tool: planeRef });
 
 const offsetFace = feature("offsetFace", {
-  faces: Type.Array(faceRef, { minItems: 1, maxItems: 256 }),
+  faces: Type.Array(faceRef, { minItems: 1 }),
   distance: coordinate,
 });
 
@@ -395,9 +392,8 @@ export const groupsSchema = Type.Refine(
       id,
       name: text,
       kind: Type.Enum(["body", "sketch"]),
-      members: Type.Array(text, { maxItems: 10000 }),
+      members: Type.Array(text),
     }),
-    { maxItems: 2000 },
   ),
   (groups) => {
     const ids = groups.map((g) => g.id);
