@@ -21,7 +21,7 @@ client/src/components/Toolbar.tsx Toolbar 92
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 3210
+client/src/components/ViewportView.tsx 3211
 client/src/components/ViewportView.tsx ViewportHud 95
 client/src/components/ViewportView.tsx ViewportView 2956
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 81
@@ -37,7 +37,7 @@ client/src/components/form/fields.tsx 543
 client/src/features/constructionPlane.tsx PlaneForm 112
 client/src/features/referenceImage.tsx ReferenceImagePanel 194
 client/src/sketchTools.ts 999
-client/src/store.ts 1322
+client/src/store.ts 1326
 client/src/store.ts deleteSketchEntities 94
 client/src/store.ts useStore 805
 client/src/three/CadViewport.ts 1200
@@ -49,8 +49,8 @@ client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/jobRoutes.ts createJobRoutes 119
-server/src/api/routes.ts 945
-server/src/api/routes.ts createApiRouter 750
+server/src/api/routes.ts 941
+server/src/api/routes.ts createApiRouter 746
 server/src/geometry/features.ts 2721
 server/src/geometry/features.ts applyToolOperation 84
 server/src/geometry/features.ts buildPrism 86

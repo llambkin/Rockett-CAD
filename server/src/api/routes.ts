@@ -799,15 +799,11 @@ export function createApiRouter(
     wrap(async (req, res) => {
       const doc = await store.load(req.params.id);
       const { edge, beforeFeatureId } = req.body;
-      const index =
-        beforeFeatureId === undefined
-          ? undefined
-          : doc.features.findIndex((f) => f.id === beforeFeatureId);
-      if (index === -1) throw new ValidationError("Feature not found");
+      const index = doc.features.findIndex((f) => f.id === beforeFeatureId);
       res.json({
         edges: await kernel.stateQuery(doc, {
           kind: "tangentEdges",
-          position: index,
+          position: index === -1 ? undefined : index,
           edge,
         }),
       });

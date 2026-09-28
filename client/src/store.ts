@@ -323,12 +323,16 @@ function revert(
   return baseline ? api.replaceDocument(id, baseline) : Promise.resolve(null);
 }
 
+export function dialogFeatureId(mode: Mode): string | undefined {
+  if (mode.name === "dialog")
+    return mode.editFeatureId ?? preview.provisional?.id;
+}
+
 export function previewedFeature(s: {
   mode: Mode;
   document: CadDocument | null;
 }): Feature | undefined {
-  if (s.mode.name !== "dialog") return undefined;
-  const id = s.mode.editFeatureId ?? preview.provisional?.id;
+  const id = dialogFeatureId(s.mode);
   return s.document?.features.find((f) => f.id === id);
 }
 

@@ -651,8 +651,10 @@ update endpoint, which also provides undo/redo integration in the client.
 ### POST /api/projects/:id/tangent-edges
 
 Read-only chain query: { edge: EdgeRef, beforeFeatureId?: string } returns
-{ edges: EdgeRef[] }. An edit supplies beforeFeatureId to resolve its inputs
-before the feature. Source errors return 400; no document changes are persisted.
+{ edges: EdgeRef[] }. A dialog supplies its feature's id as beforeFeatureId to
+resolve its inputs before the feature. An id the document does not hold yet, such
+as a new feature whose first preview has not landed, resolves at the timeline
+position. Source errors return 400; no document changes are persisted.
 
 ### POST /api/projects/:id/size-limit
 

@@ -53,6 +53,7 @@ import {
   loadPreviewBase,
   previewBodies,
   previewScene,
+  dialogFeatureId,
   previewedFeature,
   useStore,
   type Selection,
@@ -2100,7 +2101,7 @@ export function ViewportView() {
           const response = await api.tangentEdges(
             s.projectId,
             sel,
-            previewedFeature(s)?.id,
+            dialogFeatureId(s.mode),
           );
           const current = useStore.getState();
           if (
