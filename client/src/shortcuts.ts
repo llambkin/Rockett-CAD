@@ -3,7 +3,6 @@
  * tooltips and the Controls panel read the same lists so labels cannot drift.
  */
 
-import { ANGLE_SNAP_STEP } from "./sketchTools";
 import type { DialogType, SketchTool } from "./store";
 
 export type IdleAction =
@@ -40,10 +39,7 @@ export const SKETCH_SHORTCUTS: Array<{
 export const ANGLE_LOCK_KEY = "A";
 
 export const LINE_SHORTCUTS: Array<{ key: string; label: string }> = [
-  {
-    key: "Shift",
-    label: `hold to snap the angle to ${ANGLE_SNAP_STEP}° steps`,
-  },
+  { key: "Shift", label: "hold to snap the angle to your snap angles" },
   { key: ANGLE_LOCK_KEY, label: "lock or unlock the angle" },
 ];
 

@@ -840,19 +840,32 @@ function pointAtAngle(a: UV, length: number, deg: number): UV {
   return { x: a.x + length * Math.cos(rad), y: a.y + length * Math.sin(rad) };
 }
 
-export const ANGLE_SNAP_STEP = 15;
-
-export function snapAngle(deg: number, step: number): number {
-  return Math.round(deg / step) * step;
+export function snapAngle(
+  deg: number,
+  step: number,
+  angles: readonly number[],
+): number {
+  let best = Math.round(deg / step) * step;
+  for (const angle of angles)
+    for (const target of [angle, angle + 180]) {
+      const near = target + Math.round((deg - target) / 360) * 360;
+      if (Math.abs(near - deg) < Math.abs(best - deg)) best = near;
+    }
+  return best;
 }
 
-export function snapLineEnd(a: UV, c: UV): UV {
+export function snapLineEnd(
+  a: UV,
+  c: UV,
+  step: number,
+  angles: readonly number[],
+): UV {
   const dx = c.x - a.x;
   const dy = c.y - a.y;
   const length = Math.hypot(dx, dy);
   if (length < 1e-9) return { x: c.x, y: c.y };
   const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  return pointAtAngle(a, length, snapAngle(deg, ANGLE_SNAP_STEP));
+  return pointAtAngle(a, length, snapAngle(deg, step, angles));
 }
 
 export function toggleAngleLock(fields: DimField[], live: number): void {

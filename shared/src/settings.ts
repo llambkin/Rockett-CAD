@@ -32,6 +32,8 @@ export interface SettingTypes {
   "view.orbit": "trackball" | "turntable";
   "view.zoomStep": number;
   "view.invertZoom": boolean;
+  "sketch.angleStep": number;
+  "sketch.angles": number[];
 }
 
 export type SettingOf<D extends SettingDefinition> = Static<D["schema"]>;
@@ -235,6 +237,24 @@ export const VIEW_INVERT_ZOOM = defineSetting({
   schema: Type.Boolean(),
 });
 
+export const SKETCH_ANGLE_STEP = defineSetting({
+  key: "sketch.angleStep",
+  label: "Shift snap angle step (degrees)",
+  scopes: ["app", "user"],
+  section: "user",
+  default: 15,
+  schema: Type.Number({ minimum: 1, maximum: 90 }),
+});
+
+export const SKETCH_ANGLES = defineSetting({
+  key: "sketch.angles",
+  label: "Shift snap angles (degrees)",
+  scopes: ["app", "user"],
+  section: "user",
+  default: [],
+  schema: Type.Array(Type.Number({ minimum: 0, exclusiveMaximum: 360 })),
+});
+
 registerSettings([
   UNITS_LENGTH,
   VIEWPORT_PICK_TOLERANCE,
@@ -242,4 +262,6 @@ registerSettings([
   VIEW_ORBIT,
   VIEW_ZOOM_STEP,
   VIEW_INVERT_ZOOM,
+  SKETCH_ANGLE_STEP,
+  SKETCH_ANGLES,
 ]);

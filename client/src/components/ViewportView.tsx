@@ -24,7 +24,7 @@ import {
   ORIGIN_AXES,
   type Units,
 } from "@rockett/shared";
-import { useSetting } from "../settings";
+import { getSetting, useSetting } from "../settings";
 import { CadViewport, uv3 } from "../three/CadViewport";
 import { ViewCube } from "../three/ViewCube";
 import type { LayerHandle } from "../three/sceneLayers";
@@ -3196,7 +3196,12 @@ function angleSnapped(
   uv: tools.UV | null,
 ): tools.UV | null {
   return uv && from && tool === "line" && e.shiftKey
-    ? tools.snapLineEnd(from, uv)
+    ? tools.snapLineEnd(
+        from,
+        uv,
+        getSetting("sketch.angleStep"),
+        getSetting("sketch.angles"),
+      )
     : uv;
 }
 

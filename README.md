@@ -40,7 +40,7 @@ everything downstream against persistent topology references.
 - **Dimension kinds**: point to line, parallel lines, line to line or axis angles; right-click a dimension for horizontal, vertical or radius.
 - **Line angles**: a typed angle is kept; double-click a line to edit its length and angle.
 - **Regions**: crossing curves and linked planar face boundaries split sketches into selectable regions.
-- **Angle snap**: hold Shift to snap a line to 15 degree steps; press A to lock its angle.
+- **Angle snap**: hold Shift to snap a line to 15 degree steps or your own step and angles; A locks its angle.
 - **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
 - **Project, trim and extend**: link earlier model edges into a sketch, trim the highlighted piece of a curve (T), extend curves to boundaries.
 - **Insert DXF and SVG**: bring DXF lines, arcs, circles and points, or SVG paths and shapes, into the open sketch as editable geometry.
