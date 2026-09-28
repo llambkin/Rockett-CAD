@@ -16,7 +16,7 @@ import {
 import { dropEngine, engineFor } from "./engine.js";
 import type { Sources } from "./importers.js";
 import { faces, getKernel, release, scoped, type Shape } from "./kernel.js";
-import { computeEdgeNames, type NamedBody } from "./naming.js";
+import { computeEdgeNames, instanceName, type NamedBody } from "./naming.js";
 import { pinRefs } from "./pinRefs.js";
 import { BODY_FIELDS, signatureCandidates } from "./resolve.js";
 import { signRefs } from "./signature.js";
@@ -36,22 +36,34 @@ type Decide = (
 const SUFFIX = /~\??\d+/g;
 const FALLBACK = /:x\d+$/;
 const EDGE = /^e\[(.*)\]$/;
+const COPY = /^((?:p\d+|m):[^:]+):(.+)$/;
+const KEY = /^[0-9a-f]{16}$/;
 
 const nameOf = (ref: Ref) =>
   ref.kind === "face" ? ref.faceName : ref.edgeName;
 
-function parts(kind: Kind, name: string): string[] {
+function split(kind: Kind, name: string): string[] {
   const plain = name.replace(SUFFIX, "");
   if (kind !== "edge") return [plain];
-  const sides = EDGE.exec(plain)?.[1]?.split("|") ?? [plain];
-  sides.sort();
-  return sides;
+  return EDGE.exec(plain)?.[1]?.split("|") ?? [plain];
+}
+
+function copyKey(name: string): string {
+  const copy = COPY.exec(name);
+  if (!copy || KEY.test(copy[2]!)) return name;
+  return instanceName(copy[1]!, copyKey(copy[2]!), 2);
+}
+
+function parts(kind: Kind, name: string): string[] {
+  const keys = split(kind, name).map(copyKey);
+  keys.sort();
+  return keys;
 }
 
 const keyOf = (kind: Kind, name: string) => parts(kind, name).join("|");
 
 const proof = (kind: Kind, name: string) =>
-  parts(kind, name).every((part) => part !== "?" && !FALLBACK.test(part));
+  split(kind, name).every((part) => part !== "?" && !FALLBACK.test(part));
 
 const pointer = (id: string) => id.replace(/~/g, "~0").replace(/\//g, "~1");
 

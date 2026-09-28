@@ -82,22 +82,26 @@ only the Naming upgrade changes a stored version.
 
 ### Face names
 
-| Origin                                      | Name                                               |
-| ------------------------------------------- | -------------------------------------------------- |
-| Extrude or revolve side from a sketch curve | `f:{featureId}:s:{sketchEntityId}`                 |
-| Extrude or revolve cap                      | `f:{featureId}:cap:start`, `f:{featureId}:cap:end` |
-| Sweep and loft side and cap, version 2      | as extrude                                         |
-| Fillet or chamfer face from an edge         | `f:{featureId}:fe:{n}`                             |
-| Press/pull moved face, version 2            | the source face's name                             |
-| Mirror or pattern copy                      | `m:{featureId}:{name}`, `p{i}:{featureId}:{name}`  |
-| STEP, IGES or BREP import face, version 2   | `f:{featureId}:g:{surface}:{key}`                  |
-| Anything the history cannot attribute       | `f:{featureId}:x{n}`                               |
+| Origin                                      | Name                                                    |
+| ------------------------------------------- | ------------------------------------------------------- |
+| Extrude or revolve side from a sketch curve | `f:{featureId}:s:{sketchEntityId}`                      |
+| Extrude or revolve cap                      | `f:{featureId}:cap:start`, `f:{featureId}:cap:end`      |
+| Sweep and loft side and cap, version 2      | as extrude                                              |
+| Fillet or chamfer face from an edge         | `f:{featureId}:fe:{n}`                                  |
+| Press/pull moved face, version 2            | the source face's name                                  |
+| Mirror or pattern copy, version 1           | `m:{featureId}:{name}`, `p{i}:{featureId}:{name}`       |
+| Mirror or pattern copy, version 2           | `m:{featureId}:{key}{~n}`, `p{i}:{featureId}:{key}{~n}` |
+| STEP, IGES or BREP import face, version 2   | `f:{featureId}:g:{surface}:{key}`                       |
+| Anything the history cannot attribute       | `f:{featureId}:x{n}`                                    |
 
 - Names follow the kernel history (`propagateNames`, `historyNames`).
 - A name map is a `ShapeMap` (`server/src/geometry/shapeMap.ts`) matched by
   `IsSame`, so hash collisions keep names.
 - Duplicates get `~n` in centroid order x, y, z (`suffixDuplicates`).
   Version 2 rounds to `LINEAR_TOL` first and marks equal cells `~?n`.
+- Version 2 `key` is the first 16 hex digits of the SHA-256 of the source
+  name without its `~n` or `~?n` suffix, so a copy name keeps one length at
+  any mirror or pattern depth.
 - A face merged by unify takes its inputs' shared base name. Version 1 keeps
   the seams it always had.
 
@@ -106,11 +110,12 @@ only the Naming upgrade changes a stored version.
 ```
 e[{faceA}|{faceB}]          edge bounded by two faces (names sorted)
 e[{faceA}|seam]             seam edge
-v[{faceA}|{faceB}|{faceC}]  vertex named by its adjacent faces
+v[{faceA}|{faceB}|{faceC}]  vertex named by its adjacent faces, version 1
+v[{key}]                    vertex, version 2: key of the sorted face names
 ```
 
 `computeEdgeNames` and `computeVertexNames` own them. Duplicates take `~n` as
-faces do.
+faces do. Stored names are bounded only by the request size.
 
 ### Signatures
 
@@ -226,7 +231,9 @@ only when the user asks, after a `naming1-{hash}` backup of the complete
 project. `planNamingUpgrade` in `server/src/geometry/upgradeNaming.ts` proves
 a mapping by provenance only, never by an `x{n}` or `~n` name. The commit
 refuses while a `candidate` or `ambiguous` mapping lacks a choice, and writes
-one save. Vertex references are not mapped.
+one save. Vertex references are not mapped. A version 1 copy name compares
+by its version 2 form, each `m:` or `p{i}:` prefix applied as a key from
+the inside out.
 
 ## Reference signatures
 

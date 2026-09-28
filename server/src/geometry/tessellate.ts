@@ -28,7 +28,12 @@ import { meshShape } from "./mesh.js";
 import {
   computeEdgeNames,
   computeVertexNames,
+  edgeName,
+  instanceName,
+  nameVertices,
+  vertexFaces,
   type NamedBody,
+  type VertexFaces,
 } from "./naming.js";
 
 export interface TessellationOptions {
@@ -143,11 +148,26 @@ export function tessellateBody(
   };
 }
 
+const sourceVertices = new WeakMap<NamedBody, VertexFaces[]>();
+
+function vertexFacesOf(body: NamedBody): VertexFaces[] {
+  const known = sourceVertices.get(body);
+  if (known) return known;
+  const entries = vertexFaces(body);
+  release(entries.map((e) => e.vertex));
+  const found = entries.map(({ faces, position }) => ({ faces, position }));
+  sourceVertices.set(body, found);
+  return found;
+}
+
 export function movePayload(
   source: BodyPayload,
   bodyId: string,
-  offset: Vec3,
-  prefix: string,
+  {
+    offset,
+    prefix,
+    source: from,
+  }: { offset: Vec3; prefix: string; source: NamedBody },
 ): BodyPayload | undefined {
   const faceNames = source.faces.map((f) => f.name);
   if (
@@ -161,15 +181,20 @@ export function movePayload(
     p[2] + offset[2],
   ];
   const along = (xs: number[]) => xs.map((x, i) => x + offset[i % 3]!);
-  const named = (n: string) => `${prefix}:${n}`;
+  const version = from.names.version;
+  const renamed = new Map(
+    faceNames.map((n) => [n, instanceName(prefix, n, version)]),
+  );
+  const named = (n: string) =>
+    renamed.get(n) ?? instanceName(prefix, n, version);
   const adjacent = (n: string) =>
-    n.replace(
-      /^([ev])\[(.*)\]/,
-      (_, kind: string, inner: string) =>
-        `${kind}[${inner
+    n.replace(/^e\[(.*)\]/, (_, inner: string) =>
+      edgeName(
+        inner
           .split("|")
-          .map((f) => (f === "seam" || f === "?" ? f : named(f)))
-          .join("|")}]`,
+          .filter((f) => f !== "seam")
+          .map(named),
+      ),
     );
   return {
     ...source,
@@ -192,10 +217,13 @@ export function movePayload(
       polyline: along(e.polyline),
       curve: movedCurve(e.curve, at),
     })),
-    vertices: source.vertices.map((v) => ({
-      name: adjacent(v.name),
-      position: at(v.position),
-    })),
+    vertices: nameVertices(
+      vertexFacesOf(from).map((v) => ({
+        faces: v.faces.map(named),
+        position: at(v.position),
+      })),
+      version,
+    ).map(([v, name]) => ({ name, position: v.position })),
     bbox: { min: at(source.bbox.min), max: at(source.bbox.max) },
   };
 }

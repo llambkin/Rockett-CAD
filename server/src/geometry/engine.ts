@@ -437,7 +437,7 @@ class DocumentEngine {
 
   private moved({ bodyId, copyOf }: StateBody): BodyPayload | undefined {
     const source = copyOf && cached(copyOf.source);
-    return source && movePayload(source, bodyId, copyOf.offset, copyOf.prefix);
+    return source && movePayload(source, bodyId, copyOf);
   }
 
   visibleTargets(

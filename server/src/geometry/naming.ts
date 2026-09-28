@@ -1,3 +1,4 @@
+import { hash } from "node:crypto";
 import {
   compareNames,
   LINEAR_TOL,
@@ -332,6 +333,26 @@ export function historyNames(
   return finalizeNames(resultShape, provisional, featureId);
 }
 
+const nameKey = (name: string) => hash("sha256", name).slice(0, 16);
+
+export function instanceName(
+  prefix: string,
+  name: string,
+  version: NamingVersion,
+): string {
+  if (!prefix) return name;
+  if (version === 1) return `${prefix}:${name}`;
+  const suffix = /(?:~\??\d+)*$/.exec(name)![0];
+  return `${prefix}:${nameKey(name.slice(0, name.length - suffix.length))}${suffix}`;
+}
+
+export function edgeName(faceNames: string[]): string {
+  const sorted = [...new Set(faceNames)].sort();
+  return sorted.length >= 2
+    ? `e[${sorted.join("|")}]`
+    : `e[${sorted[0] ?? "?"}|seam]`;
+}
+
 /** Copy names through a BRepBuilderAPI_Transform (ModifiedShape API). */
 export function transformNames(
   transformOp: any,
@@ -344,7 +365,7 @@ export function transformNames(
     try {
       if (name) {
         const mf = transformOp.ModifiedShape(f);
-        out.set(mf, prefix ? `${prefix}:${name}` : name);
+        out.set(mf, instanceName(prefix, name, out.version));
         mf.delete();
       }
     } catch {
@@ -388,14 +409,8 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
     const edge = k.TopoDS.Edge_1(key);
     key.delete();
     const faceList = listToArray(map.FindFromIndex_2(i));
-    const faceNames = [
-      ...new Set(faceList.map((f: Shape) => body.names.get(f) ?? "?")),
-    ].sort();
+    const base = edgeName(faceList.map((f: Shape) => body.names.get(f) ?? "?"));
     release(faceList);
-    const base =
-      faceNames.length >= 2
-        ? `e[${faceNames.join("|")}]`
-        : `e[${faceNames[0] ?? "?"}|seam]`;
     entries.push({ edge, base });
   }
   map.delete();
@@ -424,7 +439,9 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
   return { byName };
 }
 
-export function computeVertexNames(body: NamedBody): VertexNames {
+export type VertexFaces = { faces: string[]; position: Vec3 };
+
+export function vertexFaces(body: NamedBody) {
   const k = getKernel();
   const map = new k.TopTools_IndexedDataMapOfShapeListOfShape_1();
   k.TopExp.MapShapesAndAncestors(
@@ -433,43 +450,41 @@ export function computeVertexNames(body: NamedBody): VertexNames {
     k.TopAbs_ShapeEnum.TopAbs_FACE,
     map,
   );
-  interface Entry {
-    vertex: Shape;
-    base: string;
-    pos: [number, number, number];
-  }
-  const entries: Entry[] = [];
+  const entries: Array<VertexFaces & { vertex: Shape }> = [];
   const n = map.Extent();
   for (let i = 1; i <= n; i++) {
     const key = map.FindKey_2(i);
     const vertex = k.TopoDS.Vertex_1(key);
     key.delete();
     const faceList = listToArray(map.FindFromIndex_2(i));
-    const faceNames = [
-      ...new Set(faceList.map((f: Shape) => body.names.get(f) ?? "?")),
-    ].sort();
+    const names = faceList.map((f: Shape) => body.names.get(f) ?? "?");
     release(faceList);
     const p = k.BRep_Tool.Pnt(vertex);
-    const pos: [number, number, number] = [p.X(), p.Y(), p.Z()];
+    const position: Vec3 = [p.X(), p.Y(), p.Z()];
     p.delete();
-    entries.push({ vertex, base: `v[${faceNames.join("|")}]`, pos });
+    entries.push({ vertex, faces: names, position });
   }
   map.delete();
+  return entries;
+}
 
-  const groups = new Map<string, Entry[]>();
+export function nameVertices<T extends VertexFaces>(
+  entries: T[],
+  version: NamingVersion,
+): Array<[T, string]> {
+  const groups = new Map<string, T[]>();
   for (const e of entries) {
-    const arr = groups.get(e.base) ?? [];
-    arr.push(e);
-    groups.set(e.base, arr);
+    const joined = [...new Set(e.faces)].sort().join("|");
+    const base = `v[${version === 1 ? joined : nameKey(joined)}]`;
+    groups.set(base, [...(groups.get(base) ?? []), e]);
   }
+  return suffixDuplicates(groups, (e) => e.position, version);
+}
+
+export function computeVertexNames(body: NamedBody): VertexNames {
   const byName = new Map<string, Shape>();
-  for (const [e, name] of suffixDuplicates(
-    groups,
-    (entry) => entry.pos,
-    body.names.version,
-  )) {
+  for (const [e, name] of nameVertices(vertexFaces(body), body.names.version))
     byName.set(name, e.vertex);
-  }
   return { byName };
 }
 

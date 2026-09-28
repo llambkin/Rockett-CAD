@@ -10,7 +10,7 @@ export const NAME_LENGTH = 200;
 
 const id = Type.String({ minLength: 1, maxLength: 100 });
 const bodyId = Type.String({ minLength: 1 });
-const topoName = Type.String({ minLength: 1, maxLength: 2000 });
+const topoName = Type.String({ minLength: 1 });
 const name = Type.String({ minLength: 1, maxLength: NAME_LENGTH });
 const coordinate = Type.Number({ minimum: -MAX_DIM, maximum: MAX_DIM });
 const flag = Type.Optional(Type.Boolean());
