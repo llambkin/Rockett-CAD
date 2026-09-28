@@ -471,7 +471,8 @@ its new `ETag`. With `If-Match`, a tag other than the current view's is 409
 is validated, with unknown fields rejected, and a bad one is 400 with nothing
 written. The PUT never edits the document, never evaluates and never raises
 the revision. Both routes sit behind the project access guard: no access or a
-missing project is 404, and a viewer's PUT is 403. Once a user's view exists,
+missing project is 404, and any member who can open the project, view-only
+members included, reads and saves their own view. Once a user's view exists,
 the GET and PUT read only that file and never the document.
 
 A project's older, shared `projects/<id>/view.json` is only ever read. The

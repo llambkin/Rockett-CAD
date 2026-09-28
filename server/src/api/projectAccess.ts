@@ -10,14 +10,17 @@ import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
 import type { Folder } from "@rockett/shared";
 
-const READ_POSTS = new Set([
-  ROUTES.evaluate.path,
-  ROUTES.projectEdge.path,
-  ROUTES.tangentEdges.path,
-  ROUTES.sizeLimit.path,
-  ROUTES.measure.path,
-  ROUTES.exportModel.path,
-]);
+const VIEWER_WRITES = new Set(
+  [
+    ROUTES.evaluate,
+    ROUTES.projectEdge,
+    ROUTES.tangentEdges,
+    ROUTES.sizeLimit,
+    ROUTES.measure,
+    ROUTES.exportModel,
+    ROUTES.putView,
+  ].map((route) => `${route.method} ${route.path}`),
+);
 
 export function projectRole(
   user: User,
@@ -102,10 +105,8 @@ export function projectAccessGuard(store: ProjectStore, folders: FolderStore) {
         res.locals.projectRole = access;
         if (
           access === "view" &&
-          (req.method === "PUT" ||
-            req.method === "PATCH" ||
-            req.method === "DELETE" ||
-            (req.method === "POST" && !READ_POSTS.has(req.route.path)))
+          ["PUT", "PATCH", "DELETE", "POST"].includes(req.method) &&
+          !VIEWER_WRITES.has(`${req.method} ${req.route.path}`)
         )
           return res.status(403).json({ error: "forbidden" });
         next();
