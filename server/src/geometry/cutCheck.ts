@@ -111,22 +111,30 @@ function vertexMean(shape: Shape): [number, number, number] {
   return [sum[0] / n, sum[1] / n, sum[2] / n];
 }
 
-function rejectCut(op: any, body: Shape, tool: Shape, result: Shape): void {
+function removesVolume(
+  op: any,
+  body: Shape,
+  tool: Shape,
+  result: Shape,
+): boolean {
   if (leavesToolOutside(op, tool, body)) throw new Error(TOOL_OUTSIDE);
   const skin = LINEAR_TOL * (areaOf(body) + areaOf(tool));
   const at = vertexMean(body);
   const kept = volumeAbout(result, at);
   if (kept <= skin) throw new Error(CUT_EMPTY);
-  if (volumeAbout(body, at) - kept > Math.abs(volumeOf(tool)) + skin)
-    throw new Error(CUT_OVERREACH);
+  const removed = volumeAbout(body, at) - kept;
+  if (removed > Math.abs(volumeOf(tool)) + skin) throw new Error(CUT_OVERREACH);
+  return removed > skin;
 }
 
 export function checkedCut(body: Shape, tool: Shape, failed: string): any {
   const op = new (getKernel().BRepAlgoAPI_Cut_3)(body, tool, progress());
   try {
     if (!op.IsDone()) throw new Error(failed);
-    scoped((own) => rejectCut(op, body, tool, own(op.Shape())));
-    return op;
+    if (scoped((own) => removesVolume(op, body, tool, own(op.Shape()))))
+      return op;
+    op.delete();
+    return null;
   } catch (err) {
     op.delete();
     throw err;

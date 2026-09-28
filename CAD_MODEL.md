@@ -326,7 +326,10 @@ no volume, or removes more than its tool holds, both beyond a skin of
 `LINEAR_TOL` times the body and tool area. The body and the result are both
 measured about a plane through the body's vertex mean, so faces the cut
 leaves alone cancel even when they do not close exactly. A cut that would
-remove a whole body is refused rather than deleting the body.
+remove a whole body is refused rather than deleting the body. A cut that
+removes no more than that skin leaves the body as it was, with the same
+shape, names and mesh: a tool that only touches a sphere along its seam
+rebuilt the sphere face, which then meshed to a fraction of its area.
 
 Sketch-curve attribution deserves a note: wire construction can rebuild edge
 shapes (vertex merging), so after building a profile face we re-derive the

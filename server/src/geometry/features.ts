@@ -634,6 +634,7 @@ function applyToolOperation(
       throw new Error("cut tool does not intersect any body");
     for (const body of bodies) {
       const op = checkedCut(body.shape, tool.shape, "boolean cut failed");
+      if (!op) continue;
       const result = op.Shape();
       const names = propagateNames(
         op,
@@ -2053,6 +2054,7 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
       } else {
         op = new k.BRepAlgoAPI_Common_3(current.shape, tool.shape, progress());
       }
+      if (!op) continue;
       if (!op.IsDone()) {
         op.delete();
         throw new Error(`boolean ${f.operation} failed`);
@@ -2113,6 +2115,7 @@ export function evalShell(state: EvalState, f: ShellFeature): void {
     const names = propagateNames(op, [body], result, f.id);
     op.delete();
     closing.delete();
+    const noHollow = `shell of ${f.thickness} mm left no hollow, so the wall is too thick for this body: try a thinner wall; the previous body has been kept`;
     const publish = (shape: Shape, shapeNames: NameMap) => {
       try {
         rejectInvalid(
@@ -2122,10 +2125,7 @@ export function evalShell(state: EvalState, f: ShellFeature): void {
           `${f.thickness} mm`,
           "try a different wall thickness",
         );
-        if (!hollowed(body.shape, shape))
-          throw new Error(
-            `shell of ${f.thickness} mm left no hollow, so the wall is too thick for this body: try a thinner wall; the previous body has been kept`,
-          );
+        if (!hollowed(body.shape, shape)) throw new Error(noHollow);
       } catch (err) {
         shape.delete();
         throw err;
@@ -2138,6 +2138,7 @@ export function evalShell(state: EvalState, f: ShellFeature): void {
       result,
       "shell failed: could not hollow the closed body",
     );
+    if (!cut) throw new Error(noHollow);
     const hollow = cut.Shape();
     const hollowNames = propagateNames(
       cut,
@@ -2194,6 +2195,7 @@ export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
       const op = outward
         ? new k.BRepAlgoAPI_Fuse_3(current.shape, toolShape, progress())
         : checkedCut(current.shape, toolShape, "offset face boolean failed");
+      if (!op) continue;
       if (!op.IsDone()) {
         op.delete();
         throw new Error("offset face boolean failed");
