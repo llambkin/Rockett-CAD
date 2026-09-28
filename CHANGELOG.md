@@ -80,7 +80,8 @@ change gets a `Schema N` line in the section that ships it.
   with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
 - `npm run check` is the ship command.
 - Docker: base image pinned by digest; build and runtime installs use `npm ci`
-  from the lockfile. `docker/runtime-package.json` is removed.
+  from the lockfile. The separate runtime package file under `docker/` is
+  removed.
 - Dependencies at their latest releases, pinned exactly: Express 5, multer 2,
   React 19, three 0.186, Vite 8, Vitest 5, TypeScript 7, esbuild 0.28.
   `npm audit` reports 0 vulnerabilities, down from 8 (1 critical, 1 high).

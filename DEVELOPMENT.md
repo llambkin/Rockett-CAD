@@ -17,7 +17,7 @@ npm run dev            # API on :8788, Vite client on :5173
 ```
 
 The server will not start without `ROCKETT_ALLOWED_ORIGINS`. Every write to
-`/api` needs an allowed `Origin`: `server/test/csrf.test.ts`.
+`/api` needs an allowed `Origin`: `server/src/auth/origin.ts`.
 
 The OCCT kernel takes a few seconds to load after each server restart. Dev
 data goes to `./data/` (gitignored).
@@ -55,27 +55,25 @@ rely on a picture.
 ## Geometry layer
 
 - Raw kernel access stays in `server/src/geometry/`. The API reaches it only
-  through `KernelClient` in `server/src/kernel/client.ts`.
-  `server/test/kernelSeam.test.ts` keeps `server/src/api/` free of geometry
-  imports.
+  through `KernelClient` in `server/src/kernel/client.ts`, so
+  `server/src/api/` imports no geometry.
 - The OCCT binding is typed loosely. Check signatures against
   `node_modules/opencascade.js/dist/opencascade.rockett.d.ts` and
   `dist/rockett-helpers.d.ts`. Emscripten overloads carry `_1`, `_2`
   suffixes. Int64 values are BigInt; `Standard_Size` is a number.
-- Wrap kernel calls in `kernelCall()` so aborts become readable errors:
-  `server/test/kernelCall.test.ts`.
+- Wrap kernel calls in `kernelCall()` (`server/src/geometry/kernel.ts`) so
+  aborts become readable errors.
 - A feature type registers through `shared/src/featureSpec.ts` and
-  `server/src/geometry/kinds.ts`. `shared/test/featureSpec.test.ts` and
-  `server/test/featureKinds.test.ts` fail on a missing registration.
+  `server/src/geometry/kinds.ts`. `shared/test/featureSpec.test.ts` fails on
+  a missing registration.
 - A schema change bumps `SCHEMA_VERSION` and adds a step, keyed by the old
   version, to `documentMigrations` in `server/src/store/migrations.ts`.
-  `server/test/schemaFixtures.test.ts` loads the previous schema.
 
 ## Conventions
 
 - Stored geometry is millimetres; convert only at display.
 - Never reference topology by index. Use persistent names (CAD_MODEL.md).
 - A failed feature records an error and the engine carries on with the
-  pre-failure state: `server/test/geometry.test.ts`.
+  pre-failure state: `server/src/geometry/engine.ts`.
 - Before merging geometry changes, run a sketch, extrude, fillet loop in the
   UI.

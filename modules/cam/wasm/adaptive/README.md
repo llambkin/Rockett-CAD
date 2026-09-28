@@ -8,11 +8,8 @@ rebuilding Rockett CAD.
 
 ## Licence
 
-`adaptive.wasm` is LGPL-2.1-or-later, with the text in `freecad/LICENSE`.
-The Clipper and Clipper2 libraries inside it are BSL-1.0, with the text in
-`freecad/src/3rdParty/Clipper2/LICENSE`. Each source file carries its own
-licence header. `entry.cpp`, the glue this repository adds, is offered under
-LGPL-2.1-or-later as part of the same work.
+`THIRD-PARTY-NOTICES.md` at the repository root owns the licences,
+copyright holders and source obligations of `adaptive.wasm`.
 
 ## Source
 
@@ -31,10 +28,3 @@ Emscripten image in a container with no network, and checks the new
 The build targets wasm64 (`-m64`). The engine stores scaled coordinates in C
 `long`, which is 32 bits in wasm32 and overflows on parts a few hundred
 millimetres from the origin at fine tolerance.
-
-## Source offer
-
-The corresponding source of `adaptive.wasm` is this directory at the Rockett
-CAD commit that ships it. Rockett CAD is for intranet use only and is not
-distributed. Before distribution, accompany `adaptive.wasm` with this
-directory or a written offer of it, as LGPL-2.1 section 6 requires.

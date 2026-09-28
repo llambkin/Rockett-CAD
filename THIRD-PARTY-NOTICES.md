@@ -4,8 +4,8 @@ Rockett CAD ships third-party code in two artefacts: the Docker image and the
 client bundle the image serves. The table lists each package with its exact
 version, the licence its installed `package.json` states, where it ships and
 its upstream. `scripts/check-notices.sh` compares the table with
-`npm ls --omit=dev --all --parseable` and the installed packages, and
-`npm run check` runs it.
+`npm ls --omit=dev --all --parseable` and the installed packages, fails when
+a `.wasm` under `modules/` has no section here, and `npm run check` runs it.
 
 This file covers third-party code only. Rockett CAD's own licence is not set
 yet.
@@ -28,12 +28,39 @@ https://github.com/msegec/opencascade.js.
   library without rebuilding Rockett CAD.
 - Rockett CAD is for intranet use only and is not distributed.
 
+## adaptive.wasm
+
+`modules/cam/wasm/adaptive/adaptive.wasm` is FreeCAD's adaptive clearing
+engine built to WebAssembly. As a whole it is LGPL-2.1-or-later. It links:
+
+- FreeCAD `src/Mod/CAM/libarea/Adaptive.cpp`, LGPL-2.1-or-later, Copyright
+  2018 Kresimir Tusek. https://github.com/FreeCAD/FreeCAD at commit
+  `c1d008a9fcf4fd66644852c5d334d22aedd62921`.
+- Clipper 6.4.2 from the same FreeCAD path, BSL-1.0, Copyright 2010-2017
+  Angus Johnson. http://www.angusj.com
+- Clipper2 2.0.1 as FreeCAD vendors it in `src/3rdParty/Clipper2` at the same
+  commit, BSL-1.0, Copyright 2010-2025 Angus Johnson.
+  https://github.com/AngusJohnson/Clipper2
+- `entry.cpp`, the glue this repository adds, offered under
+  LGPL-2.1-or-later.
+
+The licence texts ship beside it in `freecad/LICENSE` and
+`freecad/src/3rdParty/Clipper2/LICENSE`.
+
+- The corresponding source is `modules/cam/wasm/adaptive/` at the commit that
+  ships the file. Its `README.md` and `build.sh` rebuild it, and
+  `SHA256SUMS` ties every upstream file and the built file to the commit
+  above. The README also says what a replacement build must keep.
+- This public repository carries the file with its source. The image and the
+  client bundle do not carry it yet.
+
 ## Before distribution
 
 Distribution is not approved. Confirm these obligations first:
 
 - LGPL-2.1 section 6: accompany the image with the corresponding source of
-  the exact `opencascade.js` build, or a written offer of it.
+  the exact `opencascade.js` build, or a written offer of it. An artefact
+  that carries `adaptive.wasm` does the same with its directory.
 - The client and CAM bundles are minified without licence comments, and the
   image carries neither this file nor the licence texts of the bundled
   packages. Copy both into the image. Each image package keeps its own
@@ -44,7 +71,7 @@ Distribution is not approved. Confirm these obligations first:
 ## Packages
 
 `image` means the runtime `npm ci --omit=dev --workspace server` installs it.
-`client bundle` means Vite bundles its code into `client/dist`. A
+`client bundle` means Vite bundles its code into the client build output. A
 `build helper` is Vite or Rolldown runtime code that the build emits into the
 bundle. `CAM bundles` means only the bundles built from `modules/cam` carry
 its code; the image's `npm ci` does not install it, and nothing builds those

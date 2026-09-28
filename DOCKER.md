@@ -119,20 +119,18 @@ docker run -d --name rockett-cad \
     └── exports/                # retained exports (opt-in)
 ```
 
-Rules the code keeps, with their proof:
+Rules the code keeps, with their owner:
 
-- Writes are atomic: `server/test/storage.test.ts`.
+- Writes are atomic: `server/src/store/storage.ts`.
 - A migration backs up the whole project before its first write, and a crash
-  mid-migration restores from that backup:
-  `server/test/migrateBackup.test.ts`, `server/test/projectContainer.test.ts`.
-- Other namespaces back up the same way:
-  `server/test/namespaceBackup.test.ts`.
+  mid-migration restores from that backup. Other namespaces back up the same
+  way: `backupNamespace` in `server/src/store/jsonStore.ts`.
 - A crash mid-save leaves the old or the new generation:
-  `server/test/historyStore.test.ts`.
+  `server/src/store/historyStore.ts`.
 - An invalid project, or one from a newer schema, stays listed and is never
-  rewritten: `server/test/store.test.ts`.
+  rewritten: `server/src/store/projectStore.ts`.
 - Temporary projects get no backup and are swept after 24 hours idle:
-  `server/test/temporaryProjects.test.ts`.
+  `server/src/store/projectStore.ts`.
 - Backups are never pruned.
 
 Treat every `/data` backup as credential material: `/data/users` holds
@@ -161,8 +159,7 @@ node scripts/naming-report.mjs <copy-of-data>
 
 Lists projects still on naming version 1 and the mappings an upgrade would
 stage (API.md, Naming upgrade). Run it from a checkout after `npm ci`. It
-never writes. Exit 0 when all projects are on version 2, else 1:
-`server/test/namingReport.test.ts`.
+never writes. Exit 0 when all projects are on version 2, else 1.
 
 ## Environment
 
@@ -193,19 +190,19 @@ never writes. Exit 0 when all projects are on version 2, else 1:
   `docker compose -p <instance> exec rockett-cad sh -c 'test -z "$ROCKETT_SETUP_TOKEN"'`.
   Clear it from the Unraid template too.
 - Sessions survive restarts; the store keeps only token hashes:
-  `server/test/sessionRestart.test.ts`. A restart mid-TOTP-enrolment means
+  `server/src/auth/sessions.ts`. A restart mid-TOTP-enrolment means
   starting enrolment again.
 - Cloudflare Access: set both `ROCKETT_CF_ACCESS_TEAM` and
   `ROCKETT_CF_ACCESS_AUD`, and set the user's email on the Users page first.
   The Access email maps to an existing active account; the login form stays
-  available. Proof: `server/test/cfAccess.test.ts`.
+  available: `server/src/auth/cfAccess.ts`.
 - Forgotten password: stop the instance, then run
   `docker compose -p <instance> run --rm --no-deps -T rockett-cad node server.mjs reset-password <username>`.
   Send the new password on standard input, never as an argument. The reset
   turns off the account's TOTP. Restart afterward.
-  Proof: `server/test/resetPassword.test.ts`.
+  Code: `server/src/auth/resetPassword.ts`.
 - Healthcheck hits `/api/health` (30 s start period, above the kernel
   worker's boot time). The worker keeps health answering during a long
-  regeneration (`server/test/health.test.ts`). The container turns unhealthy
-  after about five minutes of failed probes; the Dockerfile `HEALTHCHECK`
-  owns the numbers.
+  regeneration (`server/src/kernel/workerKernel.ts`). The container turns
+  unhealthy after about five minutes of failed probes; the Dockerfile
+  `HEALTHCHECK` owns the numbers.

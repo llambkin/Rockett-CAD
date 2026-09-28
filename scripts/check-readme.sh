@@ -40,3 +40,37 @@ END {
     exit bad
 }
 ' "$readme" >&2
+
+cd "$root"
+top=$(git ls-files | cut -d/ -f1 | sort -u | tr '\n' ' ')
+dead=$(awk -v top="$top" '
+BEGIN { n = split(top, t, " "); for (i = 1; i <= n; i++) tops[t[i]] = 1 }
+FNR == 1 { fence = 0; dir = FILENAME; sub(/[^\/]*$/, "", dir) }
+/^[ \t]*(```|~~~)/ { fence = !fence; next }
+fence { next }
+{
+    line = $0
+    while (match(line, /`[^` ]+`|\]\([^) ]+\)/)) {
+        tok = substr(line, RSTART, RLENGTH)
+        line = substr(line, RSTART + RLENGTH)
+        p = substr(tok, 2, length(tok) - 2)
+        if (tok ~ /^\]/) {
+            p = substr(p, 2)
+            sub(/#.*/, "", p)
+            if (p != "" && p !~ /^[a-z]+:/) print FILENAME ":" FNR, dir p
+            continue
+        }
+        if (p ~ /[{}<>*:$@~]|^[.\/]/) continue
+        seg = p
+        sub(/\/.*/, "", seg)
+        if (seg in tops || p ~ /\.md$|\.test\.[a-z]+$/) print FILENAME ":" FNR, p
+    }
+}
+' $(git ls-files '*.md') | while read -r where path; do
+    git --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1 ||
+        printf '%s: %s is not tracked\n' "$where" "$path"
+done)
+[ -z "$dead" ] || {
+    printf '%s\n' "$dead" >&2
+    exit 1
+}

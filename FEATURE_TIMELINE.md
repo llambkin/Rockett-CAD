@@ -20,14 +20,13 @@ At marker _k_ the model is exactly as it was after feature _k_. You can pick
 its faces, sketch on them, add features there and edit earlier ones. Later
 features then rebuild through their persistent references.
 
-Proof: `client/test/browser/coreModelling.test.ts` (plate, hole, fillet,
-roll back, widen, insert, roll forward) and `server/test/geometry.test.ts`.
+Code: `server/src/geometry/engine.ts`.
 
 ## Dependencies and failures
 
 References form the dependency graph. The engine evaluates in order, so an
 edit invalidates exactly the downstream suffix:
-`server/test/engineCache.test.ts`. CAD_MODEL.md, Regeneration engine.
+`server/src/geometry/engine.ts`. CAD_MODEL.md, Regeneration engine.
 
 A feature whose reference is gone fails, is marked, and contributes nothing;
 the pre-failure state carries forward. Its error names the reference. Under
@@ -36,7 +35,7 @@ the pre-failure state carries forward. Its error names the reference. Under
 without an error; see CAD_MODEL.md, Known limitations.
 
 Nothing uses a proposed candidate until the user accepts it:
-`client/test/refRepair.test.tsx`. API.md, Naming upgrade, owns the upgrade
+`client/src/components/RefRepair.tsx`. API.md, Naming upgrade, owns the upgrade
 contract.
 
 ## Kernel memory
@@ -51,11 +50,8 @@ The kernel never frees a shape by itself.
 - Nobody deletes the shared `progress()` range.
 - Read what you need from a shape before its engine is dropped.
 
-Proof: `server/test/engineCache.test.ts`, `server/test/memorySoak.test.ts`.
-
 ## Undo is not the timeline
 
 Undo restores whole document snapshots and walks your editing actions. The
 timeline is part of the document. Undo moves through editing history; the
-marker moves through modelling history. Proof:
-`server/test/historyRoutes.test.ts`.
+marker moves through modelling history: `server/src/store/historyStore.ts`.

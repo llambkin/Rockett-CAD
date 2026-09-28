@@ -35,23 +35,24 @@ only through `KernelClient` (`server/src/kernel/client.ts`).
 `WorkerKernel` runs it in one worker thread so health and requests stay
 responsive during a long regeneration; `ROCKETT_KERNEL=inprocess` runs it on
 the main thread. A worker crash quarantines the running feature, blocks its
-dependents and exports, and restarts with a bounded backoff. Proof:
-`server/test/workerKernel.test.ts`, `server/test/health.test.ts`.
+dependents and exports, and restarts with a bounded backoff:
+`server/src/kernel/workerKernel.ts`.
 
 **Server owns the document.** Clients send feature-level edits; the server
 validates, evaluates, saves and returns the document with the model. Every
 document edit except a project rename goes through `mutateProject` in
 `server/src/api/routes.ts`. A stale revision gets 409 and writes nothing:
-`server/test/revisionConflict.test.ts`. Undo is server history, separate
+`server/src/api/revision.ts`. Undo is server history, separate
 from the timeline (FEATURE_TIMELINE.md). Hidden items and the camera are
 per-user view state, outside the document and undo:
-`client/test/viewSaveRoute.test.ts`. API.md owns the routes, revisions and
+`server/src/store/viewStore.ts`. API.md owns the routes, revisions and
 history contracts.
 
 **Storage.** `server/src/store/` owns persistence. Writes are atomic
-(`server/test/storage.test.ts`). A migration backs up the whole project
-before its first write (`server/test/migrateBackup.test.ts`). The history
-log survives a crash mid-save (`server/test/historyStore.test.ts`).
+(`server/src/store/storage.ts`). A migration backs up the whole project
+before its first write (`backupNamespace` in `server/src/store/jsonStore.ts`).
+The history log survives a crash mid-save
+(`server/src/store/historyStore.ts`).
 DOCKER.md owns the disk layout and the backup and restore steps.
 
 **Shared parametric code.** The solver and profile detection run in the
@@ -60,7 +61,7 @@ implementation, so they cannot drift.
 
 **Two tiers.** Drag solving, profile highlight and selection stay in the
 browser; committed operations run through the kernel. An edit to feature _k_
-re-evaluates only _k..end_: `server/test/engineCache.test.ts`. CAD_MODEL.md,
+re-evaluates only _k..end_: `server/src/geometry/engine.ts`. CAD_MODEL.md,
 Regeneration engine, has the detail.
 
 **Units.** Stored geometry is millimetres. The `units.length` setting in
@@ -70,34 +71,33 @@ conversion and parsing (`shared/test/units.test.ts`).
 **Dialog form kit.** `client/src/components/form/` holds every dialog field
 and the one OK and Cancel footer. No other component renders a raw number
 input. An empty or partial box never writes 0 or NaN:
-`client/test/dom/formFields.test.tsx`.
+`client/src/components/form/fields.tsx`.
 
 ## Identity
 
 Middleware order in `server/src/app.ts`: origin check, session, router. A
 state-changing request without an allowed `Origin` fails before
-authentication (`server/test/csrf.test.ts`). Only health, setup, status and
-login pass without a session (`server/test/authMiddleware.test.ts`). The CAD
-router checks project access first (`server/test/projectAccess.test.ts`).
+authentication (`server/src/auth/origin.ts`). Only health, setup, status and
+login pass without a session (`server/src/auth/middleware.ts`). The CAD
+router checks project access first (`server/src/api/projectAccess.ts`).
 
 ## Security posture
 
 - The API exposes modelling operations only, no command execution.
-- `server/src/api/validate.ts` checks every parameter before the kernel:
-  `server/test/validate.test.ts`.
+- `server/src/api/validate.ts` checks every parameter before the kernel.
 - Ids are validated on every path access; traversal is refused:
-  `server/test/storage.test.ts`, `server/test/store.test.ts`.
-- Images are checked by magic bytes and size capped:
-  `server/test/api.test.ts`.
+  `storagePath` in `server/src/store/storage.ts`.
+- Images are checked by magic bytes and size capped: `imageMime` in
+  `server/src/store/projectStore.ts`.
 - The container runs as a non-root user and writes only `/data`.
-- Passwords are scrypt hashes (`server/test/password.test.ts`); sessions use
+- Passwords are scrypt hashes (`server/src/auth/password.ts`); sessions use
   HttpOnly cookies. Project owners and members decide access.
 
 ## Performance
 
 - Regeneration is incremental, cached per feature.
 - Engines, tessellations and encoded meshes sit in bounded LRU caches. The
-  bounds live in code: `server/test/engineCache.test.ts` proves the engine
-  cap and `server/src/kernel/meshCache.ts` holds the mesh limit.
+  bounds live in code: `MAX_ENGINES` in `server/src/geometry/engine.ts` and
+  the mesh limit in `server/src/kernel/meshCache.ts`.
 - Viewport work never calls the kernel.
 - Sketch drags solve in the browser; the server solves once on commit.

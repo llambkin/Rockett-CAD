@@ -133,7 +133,7 @@ npm run dev            # server on :8788 + Vite client on :5173
 npm test               # typecheck, then shared, server and client tests
 npm run lint           # oxlint
 npm run format:check   # Prettier
-npm run lint:readme    # README feature items stay within 20 words
+npm run lint:readme    # README features within 20 words; docs cite tracked paths
 npm run lint:comments  # comment ratchet: no file may gain a comment
 npm run lint:writing   # writing lint over tracked markdown
 ```

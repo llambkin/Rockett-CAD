@@ -10,6 +10,11 @@ fail() {
 }
 
 [ -f "$notices" ] || fail "THIRD-PARTY-NOTICES.md is missing"
+find "$root/modules" -name node_modules -prune -o -name '*.wasm' -print |
+    while IFS= read -r wasm; do
+        grep -qx "## $(basename "$wasm")" "$notices" ||
+            fail "no section '## $(basename "$wasm")' for ${wasm#"$root"/}"
+    done
 shipped=$(cd "$root" && npm ls --omit=dev --all --parseable 2>/dev/null) ||
     fail "npm ls --omit=dev failed; run npm ci --ignore-scripts"
 
