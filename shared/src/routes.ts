@@ -134,7 +134,7 @@ export const route =
 
 export const loginBody = Type.Object(
   {
-    username: Type.String({ minLength: 1, maxLength: 32 }),
+    username: Type.String({ minLength: 1, maxLength: 254 }),
     password: Type.String({ minLength: 1, maxLength: 256 }),
   },
   { additionalProperties: false },

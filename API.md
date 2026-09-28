@@ -83,6 +83,10 @@ signed-in non-admin gets 403 `forbidden` on user routes. A member who is not
 the owner gets 403 on either members route; a user with no access to the
 project gets 404. Login, setup, password change and the TOTP code routes can return 429 `rate limited`
 with `Retry-After` in seconds. Passwords must be 12 to 256 characters.
+Login's `username` takes a username or, when it holds `@`, the account's
+email in any letter case, up to 254 characters. An unknown email gets the same
+401 as a wrong password, and login failures count against the account, so
+failures under either name share one limit.
 
 Mutating endpoints return `{ document, evaluation, history }`: the updated
 document, a fresh incremental evaluation (bodies with tagged tessellation,

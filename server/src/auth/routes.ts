@@ -67,7 +67,7 @@ function registerSignInLog(router: Router): void {
       if (req.method === route.method && req.path === "/")
         res.once("finish", () =>
           console.log(
-            `[rockett] auth ${event} ${signInResult(res, code)} user=${logField(res.locals.user?.username ?? req.body?.username)} ip=${logField(req.ip)} at ${new Date().toISOString()}`,
+            `[rockett] auth ${event} ${signInResult(res, code)} user=${logField(res.locals.user?.username ?? res.locals.account ?? req.body?.username)} ip=${logField(req.ip)} at ${new Date().toISOString()}`,
           ),
         );
       next();
@@ -162,18 +162,18 @@ function registerLogin(
     json({ limit: "1kb" }),
     async (req, res, next) => {
       try {
-        const { username, password } = parse(loginBody, req.body ?? {});
+        const { username: name, password } = parse(loginBody, req.body ?? {});
+        const record = await (name.includes("@")
+          ? users.findByEmail(name)
+          : users.findByUsername(name));
+        res.locals.account = record?.username;
+        const username = record?.username ?? name;
         const ip = req.ip ?? "";
         const wait = limiter.check(username, ip);
         if (wait !== null) return refused(res, wait);
-        const { record, matches } = await limiter.hash(async () => {
-          const record = await users.findByUsername(username);
-          const matches = await verify(
-            password,
-            record?.passwordHash ?? DUMMY_HASH,
-          );
-          return { record, matches };
-        });
+        const matches = await limiter.hash(() =>
+          verify(password, record?.passwordHash ?? DUMMY_HASH),
+        );
         const login =
           record && matches
             ? await users.withActiveHash(

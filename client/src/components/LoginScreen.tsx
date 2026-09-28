@@ -167,7 +167,7 @@ function AuthForm({ setup }: { setup: boolean }) {
           />
         )}
         <AuthField
-          label="Username"
+          label={setup ? "Username" : "Username or email"}
           autoComplete="username"
           value={username}
           onChange={setUsername}
