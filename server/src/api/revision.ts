@@ -1,4 +1,5 @@
 import {
+  PREVIEW_HEADER,
   TX_HEADER,
   TX_ID,
   type CadDocument,
@@ -8,7 +9,10 @@ import {
 import { StoreError } from "../store/projectStore.js";
 
 export class RevisionConflict extends StoreError {
-  constructor(readonly revision: number) {
+  constructor(
+    readonly revision: number,
+    readonly draft?: CadDocument,
+  ) {
     super(
       "This project changed since you last loaded it. Reload to continue.",
       "conflict",
@@ -34,6 +38,13 @@ export function transactionId(header: string | undefined): string | undefined {
   if (header === undefined || TX_ID.test(header)) return header;
   throw new StoreError(
     `${TX_HEADER} must be 1 to 64 letters, digits, underscores or dashes.`,
+  );
+}
+
+export function previewSequence(header: string): number {
+  if (/^[1-9]\d{0,8}$/.test(header)) return Number(header);
+  throw new StoreError(
+    `${PREVIEW_HEADER} must be a whole number from 1 to 999999999.`,
   );
 }
 

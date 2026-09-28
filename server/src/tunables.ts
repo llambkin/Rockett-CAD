@@ -17,10 +17,15 @@ export const TIMING_MS = {
   accessKeyCache: HOUR,
   accessJwtSkew: MINUTE,
   accessKeyFetch: 10_000,
+  previewIdle: HOUR,
 } as const;
 
 export const TRIAL_BUDGET = {
   sizeLimitBuilds: 8,
+} as const;
+
+export const PREVIEW_LIMITS = {
+  open: 16,
 } as const;
 
 export const JOB_LIMITS = {

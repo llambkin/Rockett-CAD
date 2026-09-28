@@ -6,6 +6,7 @@ import {
   nextFeatureName,
   parse,
   pinTargets,
+  PREVIEW_HEADER,
   ROUTES,
   SCHEMA_VERSION,
   startFirst,
@@ -30,7 +31,7 @@ import { splitView } from "../store/migrations.js";
 import type { FolderStore } from "../store/folderStore.js";
 import { StoreError } from "../store/projectStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
-import { HistoryStore } from "../store/historyStore.js";
+import { HistoryStore, Previews } from "../store/historyStore.js";
 import {
   acceptedNamingUpgrade,
   namingUpgraded,
@@ -68,6 +69,7 @@ import {
   checkRevision,
   ifMatchRevision,
   keepNamingVersion,
+  previewSequence,
   reply,
   RevisionConflict,
   transactionId,
@@ -81,6 +83,7 @@ import type { FriendStore } from "../auth/friendStore.js";
 
 const STATUS: Record<ApiErrorCode, number> = {
   validation: 400,
+  forbidden: 403,
   not_found: 404,
   too_large: 413,
   conflict: 409,
@@ -104,7 +107,10 @@ function fail(req: Request, res: any, err: any) {
       error: err.message,
       code,
       ...(err.detail !== undefined && { detail: err.detail }),
-      ...(err instanceof RevisionConflict && { revision: err.revision }),
+      ...(err instanceof RevisionConflict && {
+        revision: err.revision,
+        ...(err.draft && { draft: err.draft }),
+      }),
     });
   console.error(`[rockett] 500 ${req.route?.path}: Internal server error`);
   sendError(res, { error: "Internal server error", code });
@@ -199,6 +205,7 @@ export function createApiRouter(
   const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
   const history = new HistoryStore(store.documents.options.storage, store);
+  const previews = new Previews();
   const meshCache = new MeshCache();
   const jobs = createJobRoutes(store, kernel, fail);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
@@ -316,10 +323,63 @@ export function createApiRouter(
     return evaluation;
   }
 
-  const mutateProject = (edit: Edit) =>
+  const previewOwner = (res: any, user: User): string => {
+    const session: string | undefined = res.locals.session;
+    if (!session) throw new Error("auth middleware missing");
+    return `${user.id}/${session}`;
+  };
+
+  const ended = () =>
+    new StoreError("This preview has ended. Start it again.", "not_found");
+
+  async function stage(
+    req: any,
+    res: any,
+    user: User,
+    tx: string,
+    seq: number,
+    edit: Edit,
+  ) {
+    const { id } = req.params;
+    const owner = previewOwner(res, user);
+    const open = previews.find(id, tx, owner);
+    if (!open && seq !== 1) throw ended();
+    let staged = open;
+    if (!staged || seq > staged.seq) {
+      const loaded = staged
+        ? structuredClone(staged.document)
+        : await editable(req, res);
+      const { label, document = loaded } = await edit(loaded, req);
+      staged = { owner, seq, label: staged?.label ?? label!, document };
+    }
+    const { document } = staged;
+    const evaluation = await evaluateAndSync(
+      document,
+      evaluationPosition(req, document),
+    );
+    previews.keep(id, tx, staged);
+    meshCache.publish(id, document.revision, evaluation.bodies, false);
+    reply(res, { document, evaluation, history: await history.status(id) });
+  }
+
+  async function sendStored(req: any, res: any) {
+    const doc = await store.load(req.params.id);
+    const position = evaluationPosition(req, doc);
+    await send(res, doc, await evaluate(doc, position), undefined, position);
+  }
+
+  const mutateProject = (edit: Edit, previewable = false) =>
     wrap(
       discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
         const tx = transactionId(req.get(TX_HEADER));
+        const seq = req.get(PREVIEW_HEADER);
+        if (seq !== undefined) {
+          if (!previewable || tx === undefined)
+            throw new ValidationError(
+              `A preview needs ${TX_HEADER} on a feature add or edit.`,
+            );
+          return stage(req, res, ctx.user, tx, previewSequence(seq), edit);
+        }
         const loaded = await editable(req, res);
         const {
           label,
@@ -597,7 +657,7 @@ export function createApiRouter(
       doc.timelinePosition = at + 1;
       await written(doc, at);
       return { label: `Add ${feature.name}` };
-    }),
+    }, true),
   );
 
   on(
@@ -619,7 +679,7 @@ export function createApiRouter(
       doc.features[idx] = updated;
       await (keepsTargets(patch) ? pinned(doc, idx) : written(doc, idx));
       return { label: `Edit ${updated.name}`, position };
-    }),
+    }, true),
   );
 
   // Resolve against geometry BEFORE the sketch, so projections cannot depend
@@ -675,6 +735,42 @@ export function createApiRouter(
     });
   on(ROUTES.undo, moveCursor(-1));
   on(ROUTES.redo, moveCursor(1));
+
+  on(
+    ROUTES.commitPreview,
+    wrap(async (req, res, ctx) => {
+      const { id, tx } = req.params;
+      transactionId(tx);
+      const open = previews.find(id, tx, previewOwner(res, ctx.user));
+      if (!open) {
+        const done = (await history.read(id))?.entries.some(
+          (entry) => entry.tx === tx,
+        );
+        if (!done) throw ended();
+        return sendStored(req, res);
+      }
+      const { document, label } = open;
+      const stored = await store.load(id);
+      if (stored.revision !== document.revision)
+        throw new RevisionConflict(stored.revision, document);
+      const position = evaluationPosition(req, document);
+      const evaluation = await evaluateAndSync(document, position);
+      await history.save(document, label, tx, ctx.user.id);
+      previews.end(id, tx);
+      jobs.committed();
+      await send(res, document, evaluation, undefined, position);
+    }),
+  );
+  on(
+    ROUTES.abortPreview,
+    wrap(async (req, res, ctx) => {
+      const { id, tx } = req.params;
+      transactionId(tx);
+      previews.find(id, tx, previewOwner(res, ctx.user));
+      previews.end(id, tx);
+      await sendStored(req, res);
+    }),
+  );
 
   on(
     ROUTES.history,

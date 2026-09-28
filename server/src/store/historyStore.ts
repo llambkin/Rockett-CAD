@@ -21,6 +21,7 @@ import { ID_RE } from "./manifestStore.js";
 import { documentMigrations, migrate } from "./migrations.js";
 import type { ProjectStore } from "./projectStore.js";
 import type { Storage } from "./storage.js";
+import { PREVIEW_LIMITS, TIMING_MS } from "../tunables.js";
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -507,5 +508,43 @@ export class HistoryStore {
       return;
     await this.storage.remove(this.path(id, LEGACY_SNAPSHOTS));
     await this.storage.remove(this.path(id, LEGACY_LOG));
+  }
+}
+
+export interface Preview {
+  owner: string;
+  seq: number;
+  label: string;
+  document: CadDocument;
+}
+
+export class Previews {
+  private readonly open = new Map<string, Preview & { touched: number }>();
+
+  find(project: string, tx: string, owner: string): Preview | undefined {
+    const now = Date.now();
+    for (const [key, preview] of this.open)
+      if (now - preview.touched >= TIMING_MS.previewIdle) this.open.delete(key);
+    const found = this.open.get(`${project}/${tx}`);
+    if (found && found.owner !== owner)
+      throw new StoreError(
+        "This preview belongs to another user or session.",
+        "forbidden",
+      );
+    return found;
+  }
+
+  keep(project: string, tx: string, preview: Preview): void {
+    const key = `${project}/${tx}`;
+    this.open.delete(key);
+    this.open.set(key, { ...preview, touched: Date.now() });
+    for (const oldest of this.open.keys()) {
+      if (this.open.size <= PREVIEW_LIMITS.open) break;
+      this.open.delete(oldest);
+    }
+  }
+
+  end(project: string, tx: string): void {
+    this.open.delete(`${project}/${tx}`);
   }
 }

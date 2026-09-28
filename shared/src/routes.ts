@@ -399,6 +399,14 @@ export const ROUTES = {
   ),
   undo: route<HeldMeshes, WireMutationResponse>()("POST", "/projects/:id/undo"),
   redo: route<HeldMeshes, WireMutationResponse>()("POST", "/projects/:id/redo"),
+  commitPreview: route<HeldMeshes, WireMutationResponse>()(
+    "POST",
+    "/projects/:id/previews/:tx/commit",
+  ),
+  abortPreview: route<HeldMeshes, WireMutationResponse>()(
+    "DELETE",
+    "/projects/:id/previews/:tx",
+  ),
   history: route<never, HistoryList>()("GET", "/projects/:id/history"),
   createCheckpoint: route<{ label: string }, { checkpoint: HistoryMark }>()(
     "POST",
@@ -498,6 +506,8 @@ export const ROUTES = {
     folderMembers,
   ),
 };
+
+export const PREVIEW_HEADER = "X-Rockett-Preview";
 
 export const DOCUMENT_EDITS: ReadonlySet<Route> = new Set<Route>([
   ROUTES.renameProject,

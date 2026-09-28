@@ -17,6 +17,7 @@ status:
 | Code                    | Status | Meaning                                                   |
 | ----------------------- | ------ | --------------------------------------------------------- |
 | `validation`            | 400    | The request, upload or feature is invalid.                |
+| `forbidden`             | 403    | The request touches another user's or session's preview.  |
 | `not_found`             | 404    | The project, folder, feature, body or asset is missing.   |
 | `too_large`             | 413    | An upload is over its limit.                              |
 | `conflict`              | 409    | The request conflicts with current state.                 |
@@ -246,6 +247,46 @@ checkpoint's label when both hold the snapshot. Undo reverses it like any
 other edit. The project keeps its current name, and any other snapshot is
 404 `not_found`.
 
+### Preview transactions
+
+A feature add or edit with `X-Rockett-Preview: <seq>` and `X-Rockett-Tx: <tx>`
+stages the edit instead of saving it. `seq` is a whole number from 1 that
+rises with each preview of the transaction. The server keeps the staged
+document in memory, owned by the project, the transaction id, the signed-in
+user and the session, and answers with the staged document, its evaluation
+and the saved `history`. The staged document keeps the revision it started
+from, and the saved document, revision and history do not change. A preview
+header on any other route, or without `X-Rockett-Tx`, is 400.
+
+- The first preview must have `seq` 1 and checks `If-Match` against the saved
+  revision, which becomes the transaction's base. A later preview edits the
+  staged document on that base.
+- A `seq` at or below the last staged one applies nothing and answers the
+  staged state, so a repeated or late preview is harmless.
+- A `seq` above 1 for a transaction the server does not hold is 404
+  `not_found`: the transaction expired, ended or was lost in a restart.
+- Another user or session gets 403 for the transaction's previews, commit
+  and abort, and the transaction is kept.
+
+`POST /projects/:id/previews/:tx/commit` with `{ held? }` saves the staged
+document as the next revision with one undo entry, labelled by the
+transaction's first edit, and answers like any document edit. It takes no
+`If-Match`: it checks the base instead. When the project has changed since
+the base, it is 409 `conflict` with the saved `revision` and the staged
+document as `draft`, nothing is saved, and the transaction stays open, so a
+repeat answers the same. A commit of a transaction already committed saves
+nothing again and answers the saved document. A transaction the server does
+not hold and history does not name is 404 `not_found`.
+
+`DELETE /projects/:id/previews/:tx` with `{ held? }` drops the transaction and
+answers the saved document and its evaluation; it never writes the document,
+so another user's edit made meanwhile stays. A repeat answers the same.
+
+Both take the optional `?position=`. The server holds at most 16 open
+transactions and drops the least recently used past that; one left idle for an
+hour expires. A restart drops them all. Nothing staged reaches the saved
+document without a commit.
+
 ## Projects
 
 | Method & path                  | Body                   | Returns                                                                                                                                                                |
@@ -369,21 +410,23 @@ project is kept. A STEP, IGES or BREP source is stored in the project's blob
 store and the feature names its sha256 in `blob`; a mesh source is embedded in
 the document, and uploads that take the document beyond 40 MB are rejected.
 
-| Method & path                        | Body                    | Notes                                                                        |
-| ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |
-| `POST /projects/:id/evaluate`        | `{ held? }`             | Evaluate to the timeline marker; returns `WireEvaluateResult`                |
-| `PUT /projects/:id/document`         | `{ document }`          | Full replace (undo/redo restore); validated; 404 if project no longer exists |
-| `POST /projects/:id/features`        | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
-| `PUT /projects/:id/features/:fid`    | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
-| `DELETE /projects/:id/features/:fid` | `{ held? }`             | Marker adjusts if needed                                                     |
-| `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
-| `POST /projects/:id/undo`            | `{ held? }`             | Restore the snapshot before the latest entry; see History                    |
-| `POST /projects/:id/redo`            | `{ held? }`             | Restore the snapshot of the next undone entry; see History                   |
-| `GET /projects/:id/history`          | none                    | `HistoryList`: entries, position and checkpoints; see History                |
-| `POST /projects/:id/checkpoints`     | `{ label }`             | Name the current state; returns `{ checkpoint }`; see History                |
-| `POST /projects/:id/history/restore` | `{ snapshot, held? }`   | Restore a listed checkpoint or entry as a new, undoable entry                |
-| `PUT /projects/:id/bodies/:bodyId`   | `{ name? }`             | Rename a body; any other field is 400                                        |
-| `PUT /projects/:id/groups`           | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
+| Method & path                            | Body                    | Notes                                                                        |
+| ---------------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
+| `POST /projects/:id/evaluate`            | `{ held? }`             | Evaluate to the timeline marker; returns `WireEvaluateResult`                |
+| `PUT /projects/:id/document`             | `{ document }`          | Full replace (undo/redo restore); validated; 404 if project no longer exists |
+| `POST /projects/:id/features`            | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
+| `PUT /projects/:id/features/:fid`        | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
+| `DELETE /projects/:id/features/:fid`     | `{ held? }`             | Marker adjusts if needed                                                     |
+| `POST /projects/:id/timeline`            | `{ position }`          | Move the rollback marker                                                     |
+| `POST /projects/:id/undo`                | `{ held? }`             | Restore the snapshot before the latest entry; see History                    |
+| `POST /projects/:id/redo`                | `{ held? }`             | Restore the snapshot of the next undone entry; see History                   |
+| `POST /projects/:id/previews/:tx/commit` | `{ held? }`             | Save a staged preview as one entry; see Preview transactions                 |
+| `DELETE /projects/:id/previews/:tx`      | `{ held? }`             | Drop a staged preview; see Preview transactions                              |
+| `GET /projects/:id/history`              | none                    | `HistoryList`: entries, position and checkpoints; see History                |
+| `POST /projects/:id/checkpoints`         | `{ label }`             | Name the current state; returns `{ checkpoint }`; see History                |
+| `POST /projects/:id/history/restore`     | `{ snapshot, held? }`   | Restore a listed checkpoint or entry as a new, undoable entry                |
+| `PUT /projects/:id/bodies/:bodyId`       | `{ name? }`             | Rename a body; any other field is 400                                        |
+| `PUT /projects/:id/groups`               | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
 
 ### View state
 

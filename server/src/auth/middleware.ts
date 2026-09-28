@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { RequestHandler } from "express";
 import { AUTH_ROUTES } from "@rockett/shared";
 import { readSessionCookie, SESSION_COOKIE_NAME } from "./cookie.js";
@@ -29,6 +30,7 @@ export function requireSession(
     if (PUBLIC_ROUTES.has(`${req.method} ${req.baseUrl}${req.path}`))
       return next();
     const token = readSessionCookie(req.headers.cookie, cookieName);
+    let credential = token;
     try {
       const userId = token && sessions.resolve(token);
       let record = userId ? await users.get(userId) : undefined;
@@ -36,6 +38,7 @@ export function requireSession(
       if (record?.status !== "active" && access) {
         const jwt = req.get("Cf-Access-Jwt-Assertion");
         if (jwt) {
+          credential = jwt;
           try {
             const claims = verifyAccessJwt(jwt, await access.keys.keys(), {
               team: access.team,
@@ -52,6 +55,9 @@ export function requireSession(
         return res.status(401).json({ error: "unauthenticated" });
       }
       res.locals.user = toPublicUser(record);
+      res.locals.session = createHash("sha256")
+        .update(credential ?? "")
+        .digest("base64url");
       next();
     } catch (err) {
       next(err);

@@ -311,6 +311,7 @@ export interface ExportRequest {
 
 export type ApiErrorCode =
   | "validation"
+  | "forbidden"
   | "not_found"
   | "too_large"
   | "conflict"
@@ -324,6 +325,7 @@ export interface ApiErrorBody {
   code: ApiErrorCode;
   detail?: string;
   revision?: number;
+  draft?: CadDocument;
 }
 
 export interface HistoryStatus {
