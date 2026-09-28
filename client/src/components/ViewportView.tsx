@@ -54,7 +54,6 @@ import {
   loadPreviewBase,
   previewBodies,
   previewScene,
-  dialogFeatureId,
   previewedFeature,
   useStore,
   type Selection,
@@ -79,6 +78,7 @@ import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { repick } from "./RefRepair";
+import { featureUI } from "../features/registry";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
 import { PickReadout } from "./PickReadout";
@@ -2116,48 +2116,8 @@ export function ViewportView() {
       });
       if (repick(r?.selection ?? null)) return;
       const sel = accepted(activeInput(s), r?.selection ?? null, s)[0] ?? null;
-      if (
-        sel?.kind === "edge" &&
-        ["fillet", "chamfer"].includes(s.mode.dialog) &&
-        s.dialogParams.tangentChain !== false &&
-        s.projectId
-      ) {
-        try {
-          const response = await api.tangentEdges(
-            s.projectId,
-            sel,
-            dialogFeatureId(s.mode),
-          );
-          const current = useStore.getState();
-          if (
-            current.mode !== s.mode ||
-            current.selection !== s.selection ||
-            current.dialogParams.tangentChain === false
-          )
-            return;
-          const names = new Set(response.edges.map((e) => e.edgeName));
-          const remove = response.edges.every((edge) =>
-            s.selection.some(
-              (selected) =>
-                selected.kind === "edge" &&
-                selected.bodyId === edge.bodyId &&
-                selected.edgeName === edge.edgeName,
-            ),
-          );
-          const remaining = s.selection.filter(
-            (selected) =>
-              selected.kind !== "edge" ||
-              selected.bodyId !== sel.bodyId ||
-              !names.has(selected.edgeName),
-          );
-          s.setSelection(
-            remove ? remaining : [...remaining, ...response.edges],
-          );
-        } catch (error) {
-          s.setError((error as Error).message);
-        }
-        return;
-      }
+      const taken = sel && featureUI(s.mode.dialog)?.onPick?.(sel, s);
+      if (taken) return taken;
       if (sel) pickInto([sel], e.ctrlKey || e.metaKey || e.shiftKey);
       return;
     }

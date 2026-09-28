@@ -54,7 +54,7 @@ export const targets = input("targets", ["body"], {
 });
 
 export const bodies = input("bodies", ["body"]);
-const edges = input("edges", ["edge"]);
+export const edges = input("edges", ["edge"]);
 const line = { one: true, straight: true } as const;
 export const axis = input("axis", ["edge", "sketchEntity", "axis"], line);
 export const planar = (key: string, one: boolean) =>
@@ -63,8 +63,6 @@ export const planar = (key: string, one: boolean) =>
 const DIALOG_INPUTS: Partial<Record<DialogType, readonly PickInput[]>> = {
   extrude: [profilesOrFaces, targets],
   revolve: [profilesOrFaces, axis, targets],
-  fillet: [edges],
-  chamfer: [edges],
   combine: [bodies],
   splitBody: [input("body", ["body"], { one: true }), planar("tool", true)],
   offsetFace: [input("faces", ["face"], { planar: true })],

@@ -1,6 +1,7 @@
 import type {
   AxisRef,
   CadDocument,
+  EdgeRef,
   PlaneRef,
   ProfileRef,
 } from "@rockett/shared";
@@ -30,6 +31,16 @@ export const profilePicks = (refs: ProfileRef[]): Selection[] =>
     sketchId: r.sketchId,
     profileId: r.profileId,
   }));
+
+export const edgeRefs = (selection: Selection[]): EdgeRef[] =>
+  selection.flatMap((x) =>
+    x.kind === "edge"
+      ? [{ kind: "edge", bodyId: x.bodyId, edgeName: x.edgeName }]
+      : [],
+  );
+
+export const edgePicks = (edges: EdgeRef[]): Selection[] =>
+  edges.map((x) => ({ kind: "edge", bodyId: x.bodyId, edgeName: x.edgeName }));
 
 export const bodyTargets = (operation: string, params: DialogParams) =>
   toolTargets(

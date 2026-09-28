@@ -29,8 +29,6 @@ const TYPE_ICONS: Record<string, string> = {
   sketch: "✏",
   extrude: "⬆",
   revolve: "↻",
-  fillet: "◠",
-  chamfer: "◣",
   combine: "∪",
   splitBody: "∤",
   offsetFace: "⇱",
@@ -345,18 +343,6 @@ export async function openFeatureEditor(f: Feature): Promise<void> {
         ...axisParams(anyF.axis),
       });
       pushAxis(anyF.axis);
-      break;
-    case "fillet":
-      Object.assign(params, {
-        radius: anyF.radius,
-        tangentChain: anyF.tangentChain ?? false,
-      });
-      break;
-    case "chamfer":
-      Object.assign(params, {
-        distance: anyF.distance,
-        tangentChain: anyF.tangentChain ?? false,
-      });
       break;
     case "combine":
       Object.assign(params, {

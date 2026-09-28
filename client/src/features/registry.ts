@@ -1,9 +1,10 @@
 import type { ComponentType } from "react";
 import { createRegistry, type Feature } from "@rockett/shared";
 import type { PickInput } from "../dialogPicks";
-import type { Selection } from "../store";
+import type { Selection, useStore } from "../store";
 
 export type DialogParams = Record<string, any>;
+export type PickState = ReturnType<typeof useStore.getState>;
 
 export interface FeatureFormProps {
   params: DialogParams;
@@ -29,6 +30,7 @@ interface FeatureUIBase<F extends Feature> {
   picks: readonly PickInput[];
   picksFor?: (params: DialogParams) => readonly PickInput[];
   prefill(f: F): { params: DialogParams; selection: Selection[] };
+  onPick?(pick: Selection, s: PickState): Promise<void> | undefined;
 }
 
 export type FeatureUI<F extends Feature = Feature> = FeatureUIBase<F> &

@@ -51,6 +51,8 @@ import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI } from "../features/registry";
 import { selectedPlane } from "../features/inputs";
 import "../features/shell";
+import "../features/fillet";
+import "../features/chamfer";
 import { useSetting } from "../settings";
 
 function need(cond: unknown, message: string): asserts cond {
@@ -409,84 +411,6 @@ function DialogBody({
           angle: num("angle", 360),
           operation: p("operation", "join"),
           ...targets(p("operation", "join")),
-        };
-      };
-      break;
-    }
-    case "fillet": {
-      title = "Fillet";
-      body = (
-        <>
-          <SelInfo label="Edges" input="edges" hint="click model edges" />
-          <label>
-            <input
-              type="checkbox"
-              checked={p("tangentChain", true)}
-              onChange={(e) => setParams({ tangentChain: e.target.checked })}
-            />{" "}
-            Select tangent chain
-          </label>
-          <small>
-            Smooth curves chain together; sharp corners stop the selection.
-          </small>
-          <LengthField
-            label="Radius"
-            units={units}
-            autoFocus
-            value={p("radius", main("fillet"))}
-            onChange={(v) => setParams({ radius: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(edges.length > 0, "Select at least one edge");
-        return {
-          id: editId ?? newId("fillet"),
-          type: "fillet",
-          name: p("name", ""),
-          suppressed: false,
-          edges: edgeRefs(),
-          radius: main("fillet"),
-          tangentChain: p("tangentChain", true),
-        };
-      };
-      break;
-    }
-    case "chamfer": {
-      title = "Chamfer";
-      body = (
-        <>
-          <SelInfo label="Edges" input="edges" hint="click model edges" />
-          <label>
-            <input
-              type="checkbox"
-              checked={p("tangentChain", true)}
-              onChange={(e) => setParams({ tangentChain: e.target.checked })}
-            />{" "}
-            Select tangent chain
-          </label>
-          <small>
-            Smooth curves chain together; sharp corners stop the selection.
-          </small>
-          <LengthField
-            label="Distance"
-            units={units}
-            autoFocus
-            value={p("distance", main("chamfer"))}
-            onChange={(v) => setParams({ distance: v })}
-          />
-        </>
-      );
-      build = () => {
-        need(edges.length > 0, "Select at least one edge");
-        return {
-          id: editId ?? newId("chamfer"),
-          type: "chamfer",
-          name: p("name", ""),
-          suppressed: false,
-          edges: edgeRefs(),
-          distance: main("chamfer"),
-          tangentChain: p("tangentChain", true),
         };
       };
       break;
