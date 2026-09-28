@@ -94,7 +94,7 @@ import {
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { checkedCut, cutsThrough, looseBlend } from "./cutCheck.js";
-import { zeroThicknessRefusal } from "./joinCheck.js";
+import { zeroThicknessWarning } from "./joinCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -471,20 +471,25 @@ function unifyTool(tool: ToolResult, featureId: string): ToolResult {
   }
 }
 
+type JoinResult = ToolResult & { warning?: string | undefined };
+
 function finishJoin(
   fused: ToolResult,
   featureId: string,
   parts: { shape: Shape }[],
   unify = fused.names.version === 2,
-): ToolResult {
+): JoinResult {
   const joined = unify ? unifyTool(fused, featureId) : fused;
-  const refusal = zeroThicknessRefusal(
+  const warning = zeroThicknessWarning(
     joined.shape,
     parts.map((p) => p.shape),
   );
-  if (!refusal) return joined;
-  joined.shape.delete();
-  throw refusal;
+  return { ...joined, warning };
+}
+
+function warned(warnings: (string | undefined)[]): FeatureOutcome | undefined {
+  const found = warnings.filter((w) => w !== undefined);
+  return found.length > 0 ? { warning: found.join("; ") } : undefined;
 }
 
 export function fuseNamed(
@@ -560,7 +565,7 @@ function joinEvery(
   featureId: string,
   tool: ToolResult,
   targets?: string[],
-): string[] {
+): FeatureOutcome {
   const bodies = targets
     ? targets.map((id) => targetBody(state, "join", id, tool.shape))
     : overlapping(state, tool.shape).sort((a, b) =>
@@ -596,6 +601,7 @@ function joinEvery(
   }
   if (loose.length > 0)
     registerSolids(state, `b:${featureId}`, loose, tool.names);
+  const warnings: (string | undefined)[] = [];
   for (const {
     bodies: [first, ...rest],
     pieces,
@@ -606,9 +612,10 @@ function joinEvery(
     );
     for (const b of rest) state.bodies.delete(b.bodyId);
     const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
+    warnings.push(joined.warning);
     registerBodySolids(state, first!.bodyId, joined.shape, joined.names);
   }
-  return used;
+  return { targets: used, ...warned(warnings) };
 }
 
 function applyToolOperation(
@@ -629,7 +636,7 @@ function applyToolOperation(
   }
 
   if (operation === "join" && tool.names.version === 2)
-    return { targets: joinEvery(state, featureId, tool, targets) };
+    return joinEvery(state, featureId, tool, targets);
 
   if (operation === "cut") {
     const bodies = targets
@@ -666,7 +673,7 @@ function applyToolOperation(
     const fused = fuseNamed(target, tool, featureId, "boolean join failed");
     const joined = finishJoin(fused, featureId, [target, tool], true);
     registerBodySolids(state, target.bodyId, joined.shape, joined.names);
-    return { targets: [target.bodyId] };
+    return { targets: [target.bodyId], ...warned([joined.warning]) };
   }
 
   if (!target) throw new Error("intersect tool does not overlap any body");
@@ -2035,7 +2042,7 @@ function chamferBody(
   });
 }
 
-export function evalCombine(state: EvalState, f: CombineFeature): void {
+export function evalCombine(state: EvalState, f: CombineFeature) {
   const target = state.bodies.get(f.targetBody);
   if (!target) throw new Error(`target body ${f.targetBody} not found`);
   const tools = f.toolBodies.map((id) => {
@@ -2045,7 +2052,7 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
   });
   if (tools.length === 0) throw new Error("no tool bodies selected");
   const k = getKernel();
-  kernelCall("combine", () => {
+  return kernelCall("combine", () => {
     let current: NamedBody = target;
     for (const tool of tools) {
       let op: any;
@@ -2066,7 +2073,7 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
       op.delete();
       current = { bodyId: target.bodyId, shape: result, names };
     }
-    const joined =
+    const joined: JoinResult =
       f.operation === "join"
         ? finishJoin(current, f.id, [target, ...tools])
         : current;
@@ -2074,17 +2081,18 @@ export function evalCombine(state: EvalState, f: CombineFeature): void {
     if (!f.keepTools) {
       for (const tool of tools) state.bodies.delete(tool.bodyId);
     }
+    return warned([joined.warning]);
   });
 }
 
-export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
+export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature) {
   if (f.faces.length === 0) throw new Error("no faces selected");
   if (f.distance === 0) throw new Error("offset distance must be non-zero");
   const bodyId = f.faces[0]!.bodyId;
   const body = state.bodies.get(bodyId);
   if (!body) throw new Error(`body ${bodyId} not found`);
   const k = getKernel();
-  kernelCall("offsetFace", () => {
+  return kernelCall("offsetFace", () => {
     let current = body;
     for (const ref of f.faces) {
       const face = findFace(current, ref.faceName);
@@ -2136,8 +2144,10 @@ export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature): void {
       op.delete();
       current = { bodyId, shape: result, names };
     }
-    const joined = f.distance > 0 ? finishJoin(current, f.id, [body]) : current;
+    const joined: JoinResult =
+      f.distance > 0 ? finishJoin(current, f.id, [body]) : current;
     registerBodySolids(state, bodyId, joined.shape, joined.names);
+    return warned([joined.warning]);
   });
 }
 
@@ -2210,10 +2220,11 @@ function mirrorTrsfFor(frame: PlaneFrame): any {
   return trsf;
 }
 
-export function evalMirror(state: EvalState, f: MirrorFeature): void {
+export function evalMirror(state: EvalState, f: MirrorFeature) {
   const frame = resolvePlaneFrame(state, f.plane);
-  kernelCall("mirror", () => {
+  return kernelCall("mirror", () => {
     const trsf = mirrorTrsfFor(frame);
+    const warnings: (string | undefined)[] = [];
     for (const [j, bodyId] of f.bodies.entries()) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
@@ -2229,6 +2240,7 @@ export function evalMirror(state: EvalState, f: MirrorFeature): void {
           "mirror join failed",
         );
         const joined = finishJoin(fused, f.id, [body, { shape: mirrored }]);
+        warnings.push(joined.warning);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       } else {
         const newId = derivedBodyId(f.id, j + 1);
@@ -2237,6 +2249,7 @@ export function evalMirror(state: EvalState, f: MirrorFeature): void {
       }
     }
     trsf.delete();
+    return warned(warnings);
   });
 }
 
@@ -2298,10 +2311,7 @@ export function evalMove(
 const patternCopyId = (id: string, sources: number, i: number, j: number) =>
   derivedBodyId(id, (i - 1) * sources + j + 1);
 
-export function evalLinearPattern(
-  state: EvalState,
-  f: LinearPatternFeature,
-): void {
+export function evalLinearPattern(state: EvalState, f: LinearPatternFeature) {
   if (f.count < 2) throw new Error("pattern count must be ≥ 2");
   let direction: Vec3;
   if (f.direction.kind === "axis") {
@@ -2315,7 +2325,8 @@ export function evalLinearPattern(
     const axis = resolveAxis(state, { kind: "edge", edge: f.direction.edge });
     direction = axis.direction;
   }
-  kernelCall("linearPattern", () => {
+  return kernelCall("linearPattern", () => {
+    const warnings: (string | undefined)[] = [];
     for (const [j, bodyId] of f.bodies.entries()) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
@@ -2356,22 +2367,25 @@ export function evalLinearPattern(
       }
       if (f.combine) {
         const joined = finishJoin(combined, f.id, copies);
+        warnings.push(joined.warning);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       }
     }
+    return warned(warnings);
   });
 }
 
 export function evalCircularPattern(
   state: EvalState,
   f: CircularPatternFeature,
-): void {
+) {
   if (f.count < 2) throw new Error("pattern count must be ≥ 2");
   const axis = resolveAxis(state, f.axis);
   const total = ((f.totalAngle || 360) * Math.PI) / 180;
   const fullCircle = Math.abs((f.totalAngle || 360) - 360) < ANGULAR_TOL_DEG;
   const step = fullCircle ? total / f.count : total / (f.count - 1);
-  kernelCall("circularPattern", () => {
+  return kernelCall("circularPattern", () => {
+    const warnings: (string | undefined)[] = [];
     for (const [j, bodyId] of f.bodies.entries()) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
@@ -2409,9 +2423,11 @@ export function evalCircularPattern(
       }
       if (f.combine) {
         const joined = finishJoin(combined, f.id, copies);
+        warnings.push(joined.warning);
         registerBodySolids(state, bodyId, joined.shape, joined.names);
       }
     }
+    return warned(warnings);
   });
 }
 

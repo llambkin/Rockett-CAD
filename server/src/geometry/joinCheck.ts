@@ -38,10 +38,10 @@ function zeroThicknessEdges(shape: Shape): ThinEdge[] {
   );
 }
 
-export function zeroThicknessRefusal(
+export function zeroThicknessWarning(
   joined: Shape,
   inputs: Shape[],
-): Error | undefined {
+): string | undefined {
   const made = zeroThicknessEdges(joined);
   if (made.length === 0) return undefined;
   const had = inputs.flatMap(zeroThicknessEdges);
@@ -57,7 +57,5 @@ export function zeroThicknessRefusal(
   const lengths = fresh.map((e) => `${Number(e.length.toFixed(3))} mm`);
   const what =
     fresh.length === 1 ? "a zero-thickness edge" : "zero-thickness edges";
-  return new Error(
-    `join would leave ${what} (${lengths.join(", ")}); the previous body has been kept`,
-  );
+  return `join left ${what} (${lengths.join(", ")})`;
 }
