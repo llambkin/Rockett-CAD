@@ -223,6 +223,29 @@ export function volumeOf(shape: Shape): number {
   return v;
 }
 
+export function volumeAbout(
+  shape: Shape,
+  at: [number, number, number],
+): number {
+  const k = getKernel();
+  return scoped((own) => {
+    const props = own(new k.GProp_GProps_1());
+    const plane = own(new k.gp_Pln_3(own(pnt(...at)), own(dir(0, 0, 1))));
+    k.BRepGProp.VolumePropertiesGK_2(
+      shape,
+      props,
+      plane,
+      1e-6,
+      false,
+      true,
+      false,
+      false,
+      false,
+    );
+    return props.Mass();
+  });
+}
+
 /** Surface area in mm². */
 export function areaOf(shape: Shape): number {
   const k = getKernel();

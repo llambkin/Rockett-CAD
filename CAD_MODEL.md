@@ -322,8 +322,10 @@ Every cut runs through `checkedCut` in `cutCheck.ts`: extrude, revolve, sweep,
 loft, Press/Pull, Combine and the hollow of a closed Shell. Besides
 the inside-out check, a cut errors and keeps the previous body when it leaves
 no volume, or removes more than its tool holds, both beyond a skin of
-`LINEAR_TOL` times the body and tool area. A cut that would remove a whole
-body is refused rather than deleting the body.
+`LINEAR_TOL` times the body and tool area. The body and the result are both
+measured about a plane through the body's vertex mean, so faces the cut
+leaves alone cancel even when they do not close exactly. A cut that would
+remove a whole body is refused rather than deleting the body.
 
 Sketch-curve attribution deserves a note: wire construction can rebuild edge
 shapes (vertex merging), so after building a profile face we re-derive the

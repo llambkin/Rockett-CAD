@@ -12,6 +12,7 @@ import {
   shapeHash,
   shapeList,
   vertices,
+  volumeAbout,
   volumeOf,
   type Shape,
 } from "./kernel.js";
@@ -94,12 +95,29 @@ function leavesToolOutside(op: any, tool: Shape, body: Shape): boolean {
   );
 }
 
+function vertexMean(shape: Shape): [number, number, number] {
+  const k = getKernel();
+  const all = vertices(shape);
+  const sum: [number, number, number] = [0, 0, 0];
+  for (const vertex of all)
+    scoped((own) => {
+      const p = own(k.BRep_Tool.Pnt(vertex));
+      sum[0] += p.X();
+      sum[1] += p.Y();
+      sum[2] += p.Z();
+    });
+  release(all);
+  const n = all.length;
+  return [sum[0] / n, sum[1] / n, sum[2] / n];
+}
+
 function rejectCut(op: any, body: Shape, tool: Shape, result: Shape): void {
   if (leavesToolOutside(op, tool, body)) throw new Error(TOOL_OUTSIDE);
   const skin = LINEAR_TOL * (areaOf(body) + areaOf(tool));
-  const kept = volumeOf(result);
+  const at = vertexMean(body);
+  const kept = volumeAbout(result, at);
   if (kept <= skin) throw new Error(CUT_EMPTY);
-  if (volumeOf(body) - kept > Math.abs(volumeOf(tool)) + skin)
+  if (volumeAbout(body, at) - kept > Math.abs(volumeOf(tool)) + skin)
     throw new Error(CUT_OVERREACH);
 }
 
