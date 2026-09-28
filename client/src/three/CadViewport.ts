@@ -1031,8 +1031,9 @@ export class CadViewport {
     names: ReadonlySet<string> | null,
     kind: "select" | "hover",
   ) {
-    const src = this.bodies.get(bodyId)?.payload;
-    if (!src) return;
+    const body = this.bodies.get(bodyId);
+    if (!body) return;
+    const src = body.payload;
     const index = names
       ? src.faces
           .filter((f) => names.has(f.name))
@@ -1041,15 +1042,13 @@ export class CadViewport {
     if (index.length === 0) return;
     const token = kind === "select" ? "selection" : "hover";
     const geom = new THREE.BufferGeometry();
-    geom.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(src.positions, 3),
-    );
-    geom.setAttribute(
-      "normal",
-      new THREE.Float32BufferAttribute(src.normals, 3),
-    );
+    geom.setAttribute("position", body.mesh.geometry.getAttribute("position"));
+    geom.setAttribute("normal", body.mesh.geometry.getAttribute("normal"));
     geom.setIndex(index);
+    geom.addEventListener("dispose", () => {
+      geom.deleteAttribute("position");
+      geom.deleteAttribute("normal");
+    });
     const mesh = new THREE.Mesh(
       geom,
       new THREE.MeshBasicMaterial({
