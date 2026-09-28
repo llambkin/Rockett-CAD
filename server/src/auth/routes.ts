@@ -30,6 +30,39 @@ function refused(res: Response, seconds: number) {
     .json({ error: "rate limited" });
 }
 
+type SignInResult =
+  "ok" | "bad-credentials" | "rate-limited" | "rejected" | "error";
+
+function signInResult(status: number): SignInResult {
+  if (status < 300) return "ok";
+  if (status === 401 || status === 403) return "bad-credentials";
+  if (status === 429) return "rate-limited";
+  return status < 500 ? "rejected" : "error";
+}
+
+function logField(value: unknown): string {
+  return JSON.stringify(
+    typeof value === "string" ? value.replace(/[\p{C}\p{Zl}\p{Zp}]/gu, "") : "",
+  );
+}
+
+function registerSignInLog(router: Router): void {
+  for (const [event, path] of [
+    ["login", AUTH_ROUTES.login.path],
+    ["setup", AUTH_ROUTES.setup.path],
+    ["password-change", AUTH_ROUTES.passwordChange.path],
+  ] as const)
+    router.use(path, (req, res, next) => {
+      if (req.method === "POST")
+        res.once("finish", () =>
+          console.log(
+            `[rockett] auth ${event} ${signInResult(res.statusCode)} user=${logField(res.locals.user?.username ?? req.body?.username)} ip=${logField(req.ip)} at ${new Date().toISOString()}`,
+          ),
+        );
+      next();
+    });
+}
+
 function registerSetupGuard(router: Router, limiter: AuthRateLimiter): void {
   router.use(
     AUTH_ROUTES.setup.path,
@@ -114,6 +147,7 @@ export function createAuthRouter(
   verify: typeof verifyPassword = verifyPassword,
 ): Router {
   const router = Router();
+  registerSignInLog(router);
   registerSetupGuard(router, limiter);
   registerBootstrapRoutes(router, users, setupToken, limiter);
   router.post(
