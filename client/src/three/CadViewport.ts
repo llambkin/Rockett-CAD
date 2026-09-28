@@ -19,7 +19,7 @@ import {
 } from "@rockett/shared";
 import type { Selection } from "../store";
 import type { PreviewGhost, PreviewTint } from "../livePreview";
-import { clientToNdc } from "./screen";
+import { clientRay } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 import { type LayerHandle, sceneLayers } from "./sceneLayers";
 import {
@@ -468,11 +468,8 @@ export class CadViewport {
   }
 
   rayFromClient(clientX: number, clientY: number): THREE.Ray {
-    this.raycaster.setFromCamera(
-      clientToNdc(this.canvasRect(), clientX, clientY),
-      this.camera,
-    );
-    return this.raycaster.ray;
+    const rect = this.canvasRect();
+    return clientRay(this.raycaster, rect, this.camera, clientX, clientY);
   }
 
   setView(direction: Vec3, up: Vec3, animate = true) {
