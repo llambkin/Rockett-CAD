@@ -142,6 +142,7 @@ export function checkedCut(body: Shape, tool: Shape, failed: string): any {
 }
 
 const CONTACT = 0.01;
+const LOOSE = 1e-3;
 
 interface Patch {
   face: Shape;
@@ -170,13 +171,32 @@ function generatedBy(op: any, sourceEdges: { edge: Shape }[]): Set<number> {
   return made;
 }
 
-function patch(face: Shape, box: any): Patch {
+function toleranceOf(face: Shape): number {
   const k = getKernel();
-  const tolerance = Math.max(
+  return Math.max(
     ...["VERTEX", "EDGE", "FACE"].map((type) =>
       k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum[`TopAbs_${type}`]),
     ),
   );
+}
+
+export function looseBlend(
+  op: any,
+  sourceEdges: { edge: Shape }[],
+  result: Shape,
+): boolean {
+  const made = generatedBy(op, sourceEdges);
+  const all = faces(result);
+  const loose = all.some(
+    (face) => made.has(shapeHash(face)) && toleranceOf(face) > LOOSE,
+  );
+  release(all);
+  return loose;
+}
+
+function patch(face: Shape, box: any): Patch {
+  const k = getKernel();
+  const tolerance = toleranceOf(face);
   if (tolerance > CONTACT) k.BRepBndLib.AddOptimal(face, box, false, false);
   else k.BRepBndLib.Add(face, box, true);
   box.Enlarge(CONTACT);

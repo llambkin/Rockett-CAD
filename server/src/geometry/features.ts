@@ -92,7 +92,7 @@ import {
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { checkedCut, cutsThrough } from "./cutCheck.js";
+import { checkedCut, cutsThrough, looseBlend } from "./cutCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -1607,12 +1607,16 @@ function rejectBadBlend(
   sourceEdges: { edge: Shape }[],
   result: Shape,
   before: Shape,
-  kind: string,
+  kind: "fillet" | "chamfer",
   size: string,
   advice: string,
 ): void {
   rejectInvalid(result, before, kind, size, advice);
-  if (op && runsPastEnd(op))
+  if (op && looseBlend(op, sourceEdges, result))
+    throw new Error(
+      `${kind} could not be built cleanly at this ${kind === "fillet" ? "radius" : "distance"}; try a smaller one`,
+    );
+  if (op && spilledEnds(op).size > 0)
     throw new Error(
       `${kind} of ${size} runs past the end of its edges: ${advice}; the previous body has been kept`,
     );
@@ -1656,10 +1660,6 @@ function spilledEnds(op: any): Set<number> {
   }
   release(ends.flatMap(({ vertex, edge }) => [vertex, edge]));
   return spilled;
-}
-
-function runsPastEnd(op: any): boolean {
-  return spilledEnds(op).size > 0;
 }
 
 export function invalidPart(shape: Shape): string | null {

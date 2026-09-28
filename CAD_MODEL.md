@@ -297,12 +297,20 @@ blend check and the fused body the validity and shell checks. The stepped
 block builds this way at 2 mm in about 0.45 s. Chamfer, and a split that
 cannot keep every selected edge whole, still error when an end runs past, and
 keep the previous body. The check runs before the fuse.
+A blend's new faces must also come back tight. When any face generated from
+the selected edges has a vertex, edge or face tolerance over 1e-3 mm, Fillet
+and Chamfer error that the blend could not be built cleanly at this radius or
+distance, and keep the previous body; they do not rebuild it another way.
+Valid blends in the tests stay at or below 1.5e-4 mm. On the stepped block
+with a chamfered corner, the kernel's corner patch comes back with a tolerance
+of about 0.77 times a small radius and 4.06 mm at 2 mm, so that fillet builds
+only below about 0.0011 mm.
 Chamfer's envelope fallback is a boolean, so its faces cannot cross, but it can
 open a cavity: it gets the shell count check only. Shell gets no cut-through
 check: on the pinned kernel its offset fails rather than build a wall that
 crosses another face, and a closed shell's hollow is a boolean cut. Size hints
 build each trial through the feature, so they never offer a size that cuts
-through or runs past its edges.
+through, runs past its edges or comes back loose.
 
 A shell must also leave a hollow. When the wall reaches half the body, or a
 fillet radius, the kernel can return the solid unshelled and report success.
