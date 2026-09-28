@@ -37,6 +37,18 @@ export function validateFeature(f: Feature): void {
   parse(schemaFor(f.type), f);
 }
 
+export function validateBuilt(f: Feature): void {
+  try {
+    validateFeature(f);
+  } catch (err) {
+    if (!(err instanceof ValidationError)) throw err;
+    console.error(
+      `[rockett] server-built ${f.type} fails the schema at ${err.detail ?? "an unnamed path"}`,
+    );
+    throw new Error("server-built feature fails the schema", { cause: err });
+  }
+}
+
 export function validateDocument(doc: CadDocument): void {
   parse(documentSchema, doc);
   const ids = new Set<string>();

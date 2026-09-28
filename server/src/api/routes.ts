@@ -42,6 +42,7 @@ import { meshRoute } from "./meshRoute.js";
 import {
   knownKeys,
   record,
+  validateBuilt,
   validateDocument,
   validateFeature,
 } from "./validate.js";
@@ -589,7 +590,7 @@ export function createApiRouter(
           position: at,
           face: feature.plane.face,
         });
-        validateFeature(feature);
+        validateBuilt(feature);
       }
       await signed(doc, at, feature);
       doc.features.splice(at, 0, feature);

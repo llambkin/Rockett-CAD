@@ -49,7 +49,7 @@ client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
 client/src/three/toolPreview.ts updateToolPreview 158
 server/src/api/jobRoutes.ts createJobRoutes 119
-server/src/api/routes.ts 846
+server/src/api/routes.ts 847
 server/src/api/routes.ts createApiRouter 659
 server/src/geometry/features.ts 2516
 server/src/geometry/features.ts applyToolOperation 84
