@@ -203,7 +203,8 @@ Undo and redo are separate from the feature timeline. Hiding or showing
 something is not an undo step. The tooltips name the step each would undo or
 redo.
 
-**History** in the top bar lists the last 50 edits. Save checkpoint keeps the
+**History** in the top bar lists the last 50 edits with their time and who
+made them. Save checkpoint keeps the
 current state through any number of later edits. Restore saves an earlier
 state as a new step that Undo reverses.
 

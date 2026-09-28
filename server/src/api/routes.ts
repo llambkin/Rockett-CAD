@@ -19,6 +19,7 @@ import {
   type EvaluateResult,
   type ExportRequest,
   type Feature,
+  type HistoryMark,
   type Method,
   type Route,
   type SizedFeature,
@@ -184,6 +185,17 @@ function pruneGroups(
     group.members = kept;
   }
   return changed;
+}
+
+const userNames = async (users?: UserStore) =>
+  new Map(
+    (await users?.list())?.map((user) => [user.id, user.displayName]) ?? [],
+  );
+
+async function markNames(users?: UserStore) {
+  const named = await userNames(users);
+  return (mark: HistoryMark) =>
+    mark.by ? { ...mark, byName: named.get(mark.by) ?? mark.by } : mark;
 }
 
 export function createApiRouter(
@@ -413,9 +425,7 @@ export function createApiRouter(
   on(
     ROUTES.listProjects,
     wrap(async (_req, res, ctx) => {
-      const named = new Map(
-        (await users?.list())?.map((user) => [user.id, user.displayName]) ?? [],
-      );
+      const named = await userNames(users);
       const listed = await visibleProjects(store, folders, ctx.user);
       res.json(
         await Promise.all(
@@ -757,15 +767,23 @@ export function createApiRouter(
 
   on(
     ROUTES.history,
-    wrap(async (req, res) => res.json(await history.list(req.params.id))),
+    wrap(async (req, res) => {
+      const list = await history.list(req.params.id);
+      const name = await markNames(users);
+      res.json({
+        ...list,
+        entries: list.entries.map(name),
+        checkpoints: list.checkpoints.map(name),
+      });
+    }),
   );
   on(
     ROUTES.createCheckpoint,
-    wrap(async (req, res) =>
-      res.json({
-        checkpoint: await history.checkpoint(req.params.id, req.body.label),
-      }),
-    ),
+    wrap(async (req, res, ctx) => {
+      const { id } = req.params;
+      const mark = await history.checkpoint(id, req.body.label, ctx.user.id);
+      res.json({ checkpoint: (await markNames(users))(mark) });
+    }),
   );
   on(
     ROUTES.restoreHistory,

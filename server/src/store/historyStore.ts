@@ -226,6 +226,7 @@ export class HistoryStore {
             snapshot: sha256(body),
             revision,
             ...(tx !== undefined && { tx }),
+            ...(actor !== null && { by: actor }),
           },
           body,
         ),
@@ -319,7 +320,11 @@ export class HistoryStore {
         );
   }
 
-  checkpoint(id: string, label: string): Promise<HistoryMark> {
+  checkpoint(
+    id: string,
+    label: string,
+    actor: string | null = null,
+  ): Promise<HistoryMark> {
     return this.store.exclusive(id, async () => {
       const opened = await this.open(id, () => this.revision(id));
       if (!opened) {
@@ -331,6 +336,7 @@ export class HistoryStore {
         label: label.slice(0, LABEL_LIMIT),
         at: new Date().toISOString(),
         snapshot: entries[position - 1]?.snapshot ?? base,
+        ...(actor !== null && { by: actor }),
       };
       await this.append(id, opened, [frame({ kind: "checkpoint", ...mark })]);
       return mark;
@@ -344,11 +350,9 @@ export class HistoryStore {
       position = 0,
       checkpoints = [],
     } = (await this.read(id)) ?? {};
-    const marks = entries.map(({ label, at, snapshot }) => ({
-      label,
-      at,
-      snapshot,
-    }));
+    const marks = entries.map(
+      ({ tx: _tx, revision: _revision, ...mark }) => mark,
+    );
     return { entries: marks, position, checkpoints };
   }
 

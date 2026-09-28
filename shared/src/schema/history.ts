@@ -10,7 +10,12 @@ const txId = Type.String({ pattern: TX_ID.source });
 
 export const snapshotHash = Type.String({ pattern: "^[0-9a-f]{64}$" });
 const label = Type.String({ minLength: 1, maxLength: LABEL_LIMIT });
-const markFields = { label, at: Type.String(), snapshot: snapshotHash };
+const markFields = {
+  label,
+  at: Type.String(),
+  snapshot: snapshotHash,
+  by: Type.Optional(Type.String({ minLength: 1 })),
+};
 const mark = Type.Object(markFields);
 const entryFields = {
   ...markFields,

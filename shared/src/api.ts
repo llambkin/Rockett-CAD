@@ -358,6 +358,8 @@ export interface HistoryMark {
   label: string;
   at: string;
   snapshot: string;
+  by?: string;
+  byName?: string;
 }
 
 export interface HistoryList {

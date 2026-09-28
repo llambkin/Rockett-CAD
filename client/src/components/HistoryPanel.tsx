@@ -154,7 +154,10 @@ function MarkRow({
   return (
     <div className={undone ? "measure-row dimmed" : "measure-row"}>
       <b>{mark.label}</b>
-      <span>{editedAt(mark.at)}</span>
+      <span>
+        {editedAt(mark.at)}
+        {mark.byName && ` · ${mark.byName}`}
+      </span>
       {current ? (
         <span>current</span>
       ) : (
