@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  APPEARANCE_ACCENT,
   SETTINGS,
   resolveSettings,
   validateSettingValue,
@@ -15,8 +14,12 @@ import {
 } from "../settings";
 import { useSession } from "../session";
 import { useStore } from "../store";
-import { AccentPicker } from "./AccentPicker";
-import { CheckField, NumField, SelectField } from "./form/fields";
+import { SelectField } from "./form/fields";
+import {
+  FieldControl,
+  numberInputError,
+  type FieldSchema,
+} from "./SettingControl";
 import { SettingsTransfer } from "./SettingsTransfer";
 
 const scopes: SettingScope[] = ["app", "user", "project"];
@@ -25,145 +28,6 @@ function label(section: string): string {
   return section.startsWith("plugin:")
     ? section.slice(7).replace(/^./, (first) => first.toUpperCase())
     : section.replace(/^./, (first) => first.toUpperCase());
-}
-
-type FieldSchema = {
-  type?: string;
-  enum?: unknown[];
-  minimum?: number;
-  maximum?: number;
-  pattern?: string;
-  items?: { type?: string };
-};
-
-function numberInputError(
-  schema: FieldSchema,
-  target: EventTarget,
-): string | null {
-  if (
-    !(target instanceof HTMLInputElement) ||
-    target.type !== "number" ||
-    (target.validity.valid && target.value !== "")
-  )
-    return null;
-  return `Enter a number from ${schema.minimum ?? "-∞"} to ${schema.maximum ?? "∞"}.`;
-}
-
-function NumberListField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: unknown;
-  onChange: (value: unknown) => void;
-}) {
-  const shown = Array.isArray(value) ? value.join(", ") : "";
-  const [text, setText] = useState<string | null>(null);
-  useEffect(() => setText(null), [shown]);
-  const commit = () => {
-    if (text !== null)
-      onChange(
-        text
-          .split(/[\s,]+/)
-          .filter(Boolean)
-          .map(Number),
-      );
-  };
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        type="text"
-        value={text ?? shown}
-        aria-label={label}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
-        }}
-      />
-    </label>
-  );
-}
-
-function FieldControl({
-  definition,
-  value,
-  schema,
-  onChange,
-}: {
-  definition: SettingDefinition;
-  value: unknown;
-  schema: FieldSchema;
-  onChange: (value: unknown) => void;
-}) {
-  if (definition.key === APPEARANCE_ACCENT.key)
-    return (
-      <AccentPicker
-        label={definition.label}
-        value={String(value)}
-        onChange={onChange}
-      />
-    );
-  const choices = schema.enum?.filter(
-    (item): item is string => typeof item === "string",
-  );
-  if (choices)
-    return (
-      <SelectField
-        label={definition.label}
-        value={String(value)}
-        options={choices.map((choice) => [choice, choice])}
-        onChange={onChange}
-      />
-    );
-  if (schema.type === "boolean")
-    return (
-      <CheckField
-        label={definition.label}
-        value={Boolean(value)}
-        onChange={onChange}
-      />
-    );
-  if (schema.type === "number" || schema.type === "integer")
-    return (
-      <NumField
-        label={definition.label}
-        value={Number(value)}
-        onChange={onChange}
-        min={schema.minimum}
-        max={schema.maximum}
-        int={schema.type === "integer"}
-      />
-    );
-  if (schema.type === "array" && schema.items?.type === "number")
-    return (
-      <NumberListField
-        label={definition.label}
-        value={value}
-        onChange={onChange}
-      />
-    );
-  return (
-    <label className="field">
-      <span>{definition.label}</span>
-      {schema.pattern?.includes("#") && (
-        <input
-          type="color"
-          value={String(value)}
-          aria-label={`${definition.label} swatch`}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      )}
-      <input
-        type="text"
-        value={String(value)}
-        aria-label={definition.label}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
 }
 
 function FieldMessages({
@@ -269,7 +133,12 @@ function SettingField({
               )
             }
           >
-            Reset
+            {scope === "project" ? "Clear override" : "Reset"}
+          </button>
+        )}
+        {!own && writable && inScope && scope === "project" && (
+          <button onClick={() => set(visible.value)}>
+            Override for this project
           </button>
         )}
       </div>
@@ -394,16 +263,25 @@ function PageContent({
   );
 }
 
+function pageOf(section: string): SettingDefinition[] {
+  return [...SETTINGS.values()].filter((definition) =>
+    section === "project"
+      ? definition.scopes.includes("project")
+      : definition.section === section,
+  );
+}
+
 function writableScopes(
-  definitions: SettingDefinition[],
+  section: string,
   projectOpen: boolean,
   admin: boolean,
 ): SettingScope[] {
   return scopes.filter(
     (scope) =>
-      definitions.some((definition) => definition.scopes.includes(scope)) &&
+      pageOf(section).some((definition) => definition.scopes.includes(scope)) &&
       (scope !== "project" || projectOpen) &&
-      (scope !== "app" || admin),
+      (scope !== "app" || admin) &&
+      (section !== "project" || scope === "project"),
   );
 }
 
@@ -421,20 +299,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [scope, setScope] = useState<SettingScope>("app");
   const session = useSession();
   const projectOpen = useSettings((state) => state.projectOpen);
-  const page = definitions.filter(
-    (definition) => definition.section === section,
-  );
+  const page = pageOf(section);
   const admin = session.kind === "signed-in" && session.user.role === "admin";
-  const available = writableScopes(page, projectOpen, admin);
+  const available = writableScopes(section, projectOpen, admin);
   const selected = available.includes(scope)
     ? scope
     : (available.at(-1) ?? "app");
   const choose = (next: string) => {
     setSection(next);
-    const nextPage = definitions.filter(
-      (definition) => definition.section === next,
-    );
-    setScope(writableScopes(nextPage, projectOpen, admin).at(-1) ?? "app");
+    setScope(writableScopes(next, projectOpen, admin).at(-1) ?? "app");
   };
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
