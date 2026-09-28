@@ -129,7 +129,7 @@ type Arc = {
 type Circle = { id: string; kind: "circle"; cx: number; cy: number; r: number };
 type Curve = Line | Arc | Circle;
 type Round = Arc | Circle;
-type Detection = "current" | "legacy";
+type Detection = "current" | "legacy" | "trim";
 
 const interior = (t: number) => t > 0 && t < 1;
 
@@ -140,11 +140,15 @@ function onRound(c: Round, x: number, y: number): boolean {
   return ang < c.a1;
 }
 
-function lineLine(a: Line, b: Line): XY[] {
+function lineLine(a: Line, b: Line, mode: Detection): XY[] {
   const d1x = a.x2 - a.x1;
   const d1y = a.y2 - a.y1;
   const d2x = b.x2 - b.x1;
   const d2y = b.y2 - b.y1;
+  const off = (x: number, y: number) =>
+    Math.abs((x - a.x1) * d1y - (y - a.y1) * d1x) / Math.hypot(d1x, d1y);
+  if (mode === "trim" && Math.max(off(b.x1, b.y1), off(b.x2, b.y2)) < SPLIT_TOL)
+    return [];
   const den = d1x * d2y - d1y * d2x;
   if (Math.abs(den) < 1e-12) return [];
   const t = ((b.x1 - a.x1) * d2y - (b.y1 - a.y1) * d2x) / den;
@@ -163,7 +167,7 @@ function lineRound(l: Line, c: Round, mode: Detection): XY[] {
   const fy = l.y1 + t0 * dy;
   const h = Math.hypot(c.cx - fx, c.cy - fy);
   const out: XY[] = [];
-  if (mode === "current" && Math.abs(h - c.r) <= LINEAR_TOL) {
+  if (mode !== "legacy" && Math.abs(h - c.r) <= LINEAR_TOL) {
     if (interior(t0)) out.push([fx, fy]);
   } else if (h < c.r) {
     const half = Math.sqrt(c.r * c.r - h * h) / Math.sqrt(len2);
@@ -180,7 +184,7 @@ function roundRound(a: Round, b: Round, mode: Detection): XY[] {
   if (d < 1e-12) return [];
   const ux = dx / d;
   const uy = dy / d;
-  const touch = mode === "current";
+  const touch = mode !== "legacy";
   let out: XY[] = [];
   if (touch && Math.abs(d - (a.r + b.r)) <= LINEAR_TOL) {
     out = [[a.cx + ux * a.r, a.cy + uy * a.r]];
@@ -201,7 +205,7 @@ function roundRound(a: Round, b: Round, mode: Detection): XY[] {
 }
 
 function meet(a: Curve, b: Curve, mode: Detection): XY[] {
-  if (a.kind === "line" && b.kind === "line") return lineLine(a, b);
+  if (a.kind === "line" && b.kind === "line") return lineLine(a, b, mode);
   if (a.kind === "line") return lineRound(a, b as Round, mode);
   if (b.kind === "line") return lineRound(b, a, mode);
   return roundRound(a, b, mode);
@@ -310,7 +314,11 @@ function cutsOn(c: Curve, nodes: XY[], [from, to]: [number, number]): Cut[] {
   return cuts.sort((a, b) => a.t - b.t);
 }
 
-function arrange(entities: SketchEntity[], mode: Detection): Arrangement {
+function arrange(
+  entities: SketchEntity[],
+  mode: Detection,
+  points: SketchPoint[] = [],
+): Arrangement {
   const nodes: XY[] = [];
   const nodeFor = (x: number, y: number, tol: number): number => {
     const i = nodes.findIndex(([nx, ny]) => Math.hypot(nx - x, ny - y) < tol);
@@ -337,13 +345,23 @@ function arrange(entities: SketchEntity[], mode: Detection): Arrangement {
     for (let j = i + 1; j < curves.length; j++)
       for (const [x, y] of meet(curves[i]!, curves[j]!, mode))
         nodeFor(x, y, SPLIT_TOL);
+  for (const p of points) nodeFor(p.x, p.y, SPLIT_TOL);
   const cuts = curves.map((c, i) => cutsOn(c, nodes, ends[i]!));
   return { nodes, curves, ends, cuts };
 }
 
-export function curveHits(entities: SketchEntity[]): Map<string, CurveHit[]> {
-  const { nodes, curves, ends, cuts } = arrange(entities, "current");
+export function curveHits(
+  entities: SketchEntity[],
+  points: SketchPoint[] = [],
+): Map<string, CurveHit[]> {
+  const { nodes, curves, ends, cuts } = arrange(entities, "trim", points);
   const through = new Map<number, string[]>();
+  for (const p of points) {
+    const n = nodes.findIndex(
+      ([x, y]) => Math.hypot(x - p.x, y - p.y) < SPLIT_TOL,
+    );
+    through.set(n, [...(through.get(n) ?? []), p.id]);
+  }
   curves.forEach((c, i) => {
     for (const n of [...ends[i]!, ...cuts[i]!.map((cut) => cut.n)]) {
       if (n < 0) continue;

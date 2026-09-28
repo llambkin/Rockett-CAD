@@ -25,10 +25,23 @@ const ON_POINT = 1e-4;
 const SEGMENTS = 32;
 const hitCache = new WeakMap<SketchEntity[], Map<string, CurveHit[]>>();
 
+const pointsOf = (e: SketchEntity): string[] =>
+  e.kind === "line"
+    ? [e.p1, e.p2]
+    : e.kind === "arc"
+      ? [e.center, e.start, e.end]
+      : e.kind === "circle"
+        ? [e.center]
+        : [];
+
 function hitsOn(entities: SketchEntity[], curve: Curve): CurveHit[] {
+  const owned = new Set(entities.flatMap(pointsOf));
+  const loose = entities.filter(
+    (e): e is SketchPoint => e.kind === "point" && !owned.has(e.id),
+  );
   let hits = hitCache.get(entities);
   if (!hits) {
-    hits = curveHits(entities);
+    hits = curveHits(entities, loose);
     hitCache.set(entities, hits);
   }
   let on = hits.get(curve.id);
@@ -36,7 +49,7 @@ function hitsOn(entities: SketchEntity[], curve: Curve): CurveHit[] {
     const cut = entities.map((e) =>
       e.id === curve.id ? { ...curve, construction: false } : e,
     );
-    on = curve.construction ? (curveHits(cut).get(curve.id) ?? []) : [];
+    on = curve.construction ? (curveHits(cut, loose).get(curve.id) ?? []) : [];
     hits.set(curve.id, on);
   }
   return on;
@@ -139,32 +152,20 @@ function onCutter(
   hit: CurveHit,
   cutterId: string,
 ): SketchConstraint {
-  const cutter = curveIn(entities, cutterId);
-  const ends =
-    cutter.kind === "line"
-      ? [cutter.p1, cutter.p2]
-      : cutter.kind === "arc"
-        ? [cutter.start, cutter.end]
-        : [];
-  const meet = ends.find((id) => {
-    const p = pointIn(entities, id);
+  const cutter = entities.find((e) => e.id === cutterId);
+  if (!cutter) throw new Error("Sketch cutter is missing.");
+  const id = newId("c");
+  if (cutter.kind === "point")
+    return { id, type: "coincident", a: point, b: cutter.id };
+  const meet = pointsOf(cutter).find((end) => {
+    const p = pointIn(entities, end);
     return Math.hypot(p.x - hit.x, p.y - hit.y) < ON_POINT;
   });
-  const id = newId("c");
   if (meet) return { id, type: "coincident", a: point, b: meet };
   return cutter.kind === "line"
     ? { id, type: "pointOnLine", point, line: cutter.id }
     : { id, type: "pointOnCircle", point, circle: cutter.id };
 }
-
-const pointsOf = (e: SketchEntity): string[] =>
-  e.kind === "line"
-    ? [e.p1, e.p2]
-    : e.kind === "arc"
-      ? [e.center, e.start, e.end]
-      : e.kind === "circle"
-        ? [e.center]
-        : [];
 
 function keptPieces(
   curve: Curve,
