@@ -16,6 +16,7 @@ import {
   checkPasswordPolicy,
   DUMMY_HASH,
   hashPassword,
+  PASSWORD_POLICY_MESSAGE,
   verifyPassword,
 } from "./password.js";
 import { AuthRateLimiter, HashCapacityError, refused } from "./rateLimit.js";
@@ -127,9 +128,7 @@ function registerPasswordChange(
           return res.status(403).json({ error: "Incorrect current password." });
         }
         if (!checkPasswordPolicy(nextPassword))
-          return res
-            .status(400)
-            .json({ error: "Password must be 12 to 256 characters." });
+          return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
         const passwordHash = await limiter.hash(() =>
           hashPassword(nextPassword),
         );

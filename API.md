@@ -94,7 +94,7 @@ notice routes.
   (`shared/src/settings.ts`): `server/src/auth/sessions.ts`.
 - Login takes a username or an email in any case; both names share one
   failure limit: `server/src/auth/userStore.ts`, `server/src/auth/rateLimit.ts`.
-- Password length: `server/src/auth/password.ts`.
+- Password policy: `server/src/auth/password.ts`.
 - A public `User` never carries a password hash or TOTP secret:
   `toPublicUser` in `server/src/auth/userStore.ts`.
 - User routes and blob collection are admin only. Project members routes need

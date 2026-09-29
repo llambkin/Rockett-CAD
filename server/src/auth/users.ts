@@ -7,7 +7,11 @@ import {
   ValidationError,
 } from "@rockett/shared";
 import { StoreError } from "../store/jsonStore.js";
-import { checkPasswordPolicy, hashPassword } from "./password.js";
+import {
+  checkPasswordPolicy,
+  hashPassword,
+  PASSWORD_POLICY_MESSAGE,
+} from "./password.js";
 import { AuthRateLimiter } from "./rateLimit.js";
 import type { SessionStore } from "./sessions.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
@@ -42,9 +46,7 @@ export function registerUserRoutes(
           req.body ?? {},
         );
         if (!checkPasswordPolicy(password))
-          return res
-            .status(400)
-            .json({ error: "Password must be 12 to 256 characters." });
+          return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
         const passwordHash = await limiter.hash(() => hashPassword(password));
         const record = await users.create({
           username,
@@ -70,9 +72,7 @@ export function registerUserRoutes(
         if (typeof id !== "string")
           return res.status(404).json({ error: "user not found" });
         if (password !== undefined && !checkPasswordPolicy(password))
-          return res
-            .status(400)
-            .json({ error: "Password must be 12 to 256 characters." });
+          return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
         const passwordHash =
           password === undefined
             ? undefined

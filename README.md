@@ -60,7 +60,7 @@ everything downstream against persistent topology references.
 
 ### Workspace
 
-- **Accounts**: admin setup, sign in by username or email, TOTP codes, password changes, sign out, user emails and Cloudflare Access sign-in.
+- **Accounts**: admin setup, username or email sign-in, TOTP, password changes, common-password refusal, sign out, user emails and Cloudflare Access.
 - **Settings**: the panel edits and resets app, personal and project preferences; Export and Import carry personal settings, keeping unknown plugin values.
 - **Theme**: pick grey or black and an accent colour in Settings; the app and viewport recolour at once.
 - **Display units**: sketch dimensions, measurements and feature lengths follow the selected unit; typed lengths accept unit suffixes while models remain in millimetres.

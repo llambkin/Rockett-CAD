@@ -14,8 +14,8 @@ bundle to `/app/licences/<name>@<version>/`, and writes
 base image with its version and the path of its licence text, or `none`.
 `scripts/check-notices.sh IMAGE` checks all three in a locally built image.
 
-This file covers third-party code only. Rockett CAD's own licence is not set
-yet.
+This file covers third-party code and bundled data. Rockett CAD's own licence
+is not set yet.
 
 ## opencascade.js
 
@@ -191,3 +191,21 @@ peers but ship in no artefact.
 startup and stack helpers into the module, under Emscripten's MIT or
 University of Illinois/NCSA licence, Copyright 2010-2014 Emscripten authors.
 https://github.com/emscripten-core/emscripten
+
+## Common-password data
+
+`server/src/auth/common-passwords.json` is adapted from berzerk0's
+[Probable-Wordlists](https://github.com/berzerk0/Probable-Wordlists) under
+[CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+The adaptation remains under CC-BY-SA-4.0: keep only entries of 12 to 256
+Unicode characters, lowercase them, remove duplicates, sort, and encode as
+JSON. The server bundles this data. This small list is not exhaustive.
+[Upstream](https://github.com/berzerk0/Probable-Wordlists/blob/2df55facf06c7742f2038a8f6607ea9071596128/README.md#disclaimer-and-license)
+supplies these lists "as is" without warranty, support or guarantee of effectiveness.
+
+- Source: `Real-Passwords/Top12Thousand-probable-v2.txt` at commit
+  `2df55facf06c7742f2038a8f6607ea9071596128`.
+- Source SHA-256: `ea4c906ebb0b26790c549a047962573f72ccc26f42212b83d70165d9c03fb72b`.
+- Bundled JSON SHA-256: `4826d48f70408bab841e8d0e69cca4583e8484fe1fdea9f7475f403d541199fb`.
+- [Upstream licence](https://github.com/berzerk0/Probable-Wordlists/blob/2df55facf06c7742f2038a8f6607ea9071596128/License.txt)
+  SHA-256: `fee9065c98956a1b3a60e7566d55ec0d2491ceac480e9835a30330f9602be26d`.

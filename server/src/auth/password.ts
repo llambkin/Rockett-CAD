@@ -5,6 +5,12 @@ import {
   type ScryptOptions,
 } from "node:crypto";
 
+import commonPasswords from "./common-passwords.json";
+
+export const PASSWORD_POLICY_MESSAGE =
+  "Password must be 12 to 256 characters and must not be a common password.";
+
+const COMMON_PASSWORDS = new Set(commonPasswords);
 const N = 32768;
 const R = 8;
 const P = 1;
@@ -87,5 +93,9 @@ export async function verifyPassword(
 
 export function checkPasswordPolicy(plain: string): boolean {
   const length = [...plain].length;
-  return length >= MIN_LENGTH && length <= MAX_LENGTH;
+  return (
+    length >= MIN_LENGTH &&
+    length <= MAX_LENGTH &&
+    !COMMON_PASSWORDS.has(plain.toLowerCase())
+  );
 }

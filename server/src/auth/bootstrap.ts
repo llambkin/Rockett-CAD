@@ -7,7 +7,11 @@ import {
   ValidationError,
 } from "@rockett/shared";
 import { StoreError } from "../store/jsonStore.js";
-import { checkPasswordPolicy, hashPassword } from "./password.js";
+import {
+  checkPasswordPolicy,
+  hashPassword,
+  PASSWORD_POLICY_MESSAGE,
+} from "./password.js";
 import { AuthRateLimiter } from "./rateLimit.js";
 import { toPublicUser, type UserStore } from "./userStore.js";
 
@@ -26,7 +30,7 @@ export async function createFirstAdmin(
   limiter: AuthRateLimiter,
 ) {
   if (!checkPasswordPolicy(input.password))
-    throw new Error("Password does not meet policy");
+    throw new Error(PASSWORD_POLICY_MESSAGE);
   return users.createFirstAdmin({
     username: input.username,
     displayName: input.displayName,
@@ -72,10 +76,7 @@ export function registerBootstrapRoutes(
           return res.status(400).json({ error: "invalid setup input" });
         if (err instanceof StoreError && err.code === "conflict")
           return res.status(409).json({ error: "setup is complete" });
-        if (
-          err instanceof Error &&
-          err.message === "Password does not meet policy"
-        )
+        if (err instanceof Error && err.message === PASSWORD_POLICY_MESSAGE)
           return res.status(400).json({ error: err.message });
         next(err);
       }
