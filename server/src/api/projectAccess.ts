@@ -96,6 +96,12 @@ export function projectAccessGuard(store: ProjectStore, folders: FolderStore) {
     if (!isProjectRoute(req)) return next();
     const user: User | undefined = res.locals.user;
     if (!user) return next(new Error("auth middleware missing"));
+    if (
+      user.role === "admin" &&
+      req.method === ROUTES.collectBlobs.method &&
+      req.route.path === ROUTES.collectBlobs.path
+    )
+      return next();
     projectAccess(store, folders, user, id)
       .then((access) => {
         if (!access)

@@ -7,8 +7,12 @@ import {
   type MigrationContext,
   type Migrations,
 } from "./migrations.js";
+import { BACKUP_LIMITS, TIMING_MS } from "../tunables.js";
 import { ProjectQueue } from "./projectQueue.js";
 import { storagePath, type Storage } from "./storage.js";
+
+export const BACKUP_RECORD = "migrating.json";
+export const BACKUP_DELETED = "deleted.json";
 
 export class StoreError extends Error {
   constructor(
@@ -71,7 +75,7 @@ export class NamespaceBackup {
   ) {
     this.dir = storagePath(namespace);
     this.root = path.posix.join("backups", this.dir);
-    this.record = path.posix.join(this.root, "migrating.json");
+    this.record = path.posix.join(this.root, BACKUP_RECORD);
   }
 
   async backup(version: string, names?: string[]): Promise<string> {
@@ -82,6 +86,59 @@ export class NamespaceBackup {
 
   names(): Promise<string[]> {
     return this.storage.list(this.root);
+  }
+
+  async deleted(now: number): Promise<void> {
+    if (!(await this.names()).length) return;
+    await this.storage.writeAtomic(
+      path.posix.join(this.root, BACKUP_DELETED),
+      JSON.stringify(now),
+    );
+  }
+
+  async prune(live: boolean, now: number): Promise<void> {
+    const names = await this.names();
+    if (!names.length) return;
+    if (!live) {
+      if (names.includes(BACKUP_RECORD)) return;
+      if (!names.includes(BACKUP_DELETED)) return this.deleted(now);
+      const raw = await this.storage.read(
+        path.posix.join(this.root, BACKUP_DELETED),
+      );
+      const deletedAt: unknown = JSON.parse(raw.toString("utf8"));
+      if (typeof deletedAt !== "number" || !Number.isFinite(deletedAt))
+        throw new StoreError("invalid backup deletion timestamp");
+      if (now - deletedAt >= TIMING_MS.deletedProjectBackupAge)
+        await this.storage.remove(this.root);
+      return;
+    }
+    let pending: unknown;
+    if (names.includes(BACKUP_RECORD)) {
+      pending = JSON.parse(
+        (await this.storage.read(this.record)).toString("utf8"),
+      ).backup;
+      if (typeof pending !== "string" || !names.includes(pending))
+        throw new StoreError("invalid pending backup");
+    }
+    const backups = [];
+    for (const name of names.filter(
+      (candidate) =>
+        candidate !== BACKUP_RECORD && candidate !== BACKUP_DELETED,
+    ))
+      backups.push({
+        name,
+        modified: await this.storage.modified(
+          path.posix.join(this.root, name, "SHA256SUMS"),
+        ),
+      });
+    backups.sort(
+      (a, b) => b.modified - a.modified || a.name.localeCompare(b.name),
+    );
+    for (const { name } of backups.slice(BACKUP_LIMITS.live))
+      if (name !== pending)
+        await this.storage.remove(path.posix.join(this.root, name));
+    if (names.includes(BACKUP_DELETED))
+      await this.storage.remove(path.posix.join(this.root, BACKUP_DELETED));
   }
 
   migrate(
@@ -427,9 +484,13 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     return out;
   }
 
-  async remove(key: string): Promise<void> {
-    this.known.delete(key);
-    await this.options.storage.remove(this.dir(key));
+  async remove(key: string, now = Date.now()): Promise<void> {
+    await this.exclusive(key, async () => {
+      if (this.options.root === "projects")
+        await backupNamespace(this.options.storage, this.dir(key)).deleted(now);
+      this.known.delete(key);
+      await this.options.storage.remove(this.dir(key));
+    });
   }
 
   async keys(): Promise<string[]> {

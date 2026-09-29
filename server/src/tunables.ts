@@ -28,6 +28,7 @@ export const TIMING_MS = {
   accessKeyFetch: 10_000,
   previewIdle: HOUR,
   orphanBlobAge: DAY,
+  deletedProjectBackupAge: 30 * DAY,
   shutdownGrace: 8000,
 } as const;
 
@@ -48,4 +49,8 @@ export const JOB_LIMITS = {
   finished: 100,
   events: 64,
   subscribers: 8,
+} as const;
+
+export const BACKUP_LIMITS = {
+  live: 20,
 } as const;

@@ -9,7 +9,12 @@ import {
 } from "@rockett/shared";
 import { HASH_RE } from "./blobStore.js";
 import { snapshotBodies } from "./historyLog.js";
-import { backupNamespace, sha256 } from "./jsonStore.js";
+import {
+  BACKUP_RECORD as RECORD,
+  BACKUP_DELETED,
+  backupNamespace,
+  sha256,
+} from "./jsonStore.js";
 import {
   documentMigrations,
   migrate,
@@ -19,7 +24,6 @@ import type { ProjectStore } from "./projectStore.js";
 import { TIMING_MS } from "../tunables.js";
 
 const gunzip = promisify(zlib.gunzip);
-const RECORD = "migrating.json";
 const DOCUMENT = /^(document\.json|documents\/[^/]+\.json)$/;
 const SNAPSHOT = /^history\/snapshots\/[0-9a-f]{64}$/;
 
@@ -41,6 +45,32 @@ export async function collectBlobs(
   dryRun: boolean,
   now = Date.now(),
 ): Promise<BlobCollection> {
+  const result = await store.documents.exclusive(id, () =>
+    collect(store, id, previews, dryRun, now),
+  );
+  if (!dryRun) {
+    const { storage, root: projectRoot, key } = store.documents.options;
+    for (const deletedId of await storage.list(
+      path.posix.join("backups", projectRoot),
+    )) {
+      if (!key.test(deletedId)) continue;
+      const dir = store.documents.dir(deletedId);
+      await store.documents.exclusive(deletedId, async () => {
+        if (await storage.stamp(dir)) return;
+        await backupNamespace(storage, dir).prune(false, now);
+      });
+    }
+  }
+  return result;
+}
+
+async function collect(
+  store: ProjectStore,
+  id: string,
+  previews: CadDocument[],
+  dryRun: boolean,
+  now: number,
+): Promise<BlobCollection> {
   const blobs = store.blobs(id);
   const all = await blobs.list();
   let kept: Set<string>;
@@ -57,7 +87,11 @@ export async function collectBlobs(
       now - (await blobs.modified(hash)) >= TIMING_MS.orphanBlobAge
     )
       orphans.push(hash);
-  if (!dryRun) for (const hash of orphans) await blobs.remove(hash);
+  if (!dryRun) {
+    const { storage } = store.documents.options;
+    await backupNamespace(storage, store.documents.dir(id)).prune(true, now);
+    for (const hash of orphans) await blobs.remove(hash);
+  }
   return { dryRun, skipped: null, kept: all.length - orphans.length, orphans };
 }
 
@@ -111,7 +145,7 @@ async function roots(
     for (const doc of previews) named("preview", doc);
   });
   const names = await root("backups", () => backups.names());
-  for (const name of names.filter((n) => n !== RECORD))
+  for (const name of names.filter((n) => n !== RECORD && n !== BACKUP_DELETED))
     await root(`backup ${name}`, async () => {
       const sums = new Map(await backups.verify(name));
       await files(`backup ${name}`, [...sums.keys()], (file) =>
