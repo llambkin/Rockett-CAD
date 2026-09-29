@@ -2876,9 +2876,6 @@ export function ViewportView() {
   }
 
   return (
-    // suppress the browser context menu everywhere in the viewport — the
-    // canvas listener alone missed overlays (our own ctx-menu backdrop mounts
-    // before the native contextmenu event fires, so both menus appeared)
     <div
       className="viewport-container"
       ref={containerRef}

@@ -1146,12 +1146,6 @@ a.btn {
   background: transparent;
 }
 
-.ctx-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-}
-
 /* ---------- error toast ---------- */
 
 .error-toast {
