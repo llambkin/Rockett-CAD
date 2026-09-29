@@ -99,7 +99,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   internal: 500,
 };
 
-function sendError(res: any, body: ApiErrorBody) {
+export function sendError(res: any, body: ApiErrorBody) {
   res.status(STATUS[body.code]).json(body);
 }
 

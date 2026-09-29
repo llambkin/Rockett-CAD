@@ -1,12 +1,16 @@
-import express, { type Express, type Router } from "express";
+import express, {
+  type ErrorRequestHandler,
+  type Express,
+  type Router,
+} from "express";
 import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import path from "node:path";
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
-import { createApiRouter } from "./api/routes.js";
-import { ValidationError } from "@rockett/shared";
+import { createApiRouter, sendError } from "./api/routes.js";
+import { ValidationError, type ApiErrorCode } from "@rockett/shared";
 import { gzipJson } from "./api/gzipJson.js";
 import { requireAllowedOrigin } from "./auth/origin.js";
 import { requireSession } from "./auth/middleware.js";
@@ -88,6 +92,30 @@ function serveClient(clientDir: string): Router {
   return router;
 }
 
+const answerError: ErrorRequestHandler = (err: unknown, req, res, _next) => {
+  const status =
+    typeof err === "object" &&
+    err !== null &&
+    "status" in err &&
+    typeof err.status === "number"
+      ? err.status
+      : 500;
+  const code: ApiErrorCode =
+    err instanceof ValidationError
+      ? err.code
+      : status === 413
+        ? "too_large"
+        : status >= 400 && status < 500
+          ? "validation"
+          : "internal";
+  const error =
+    code === "internal" ? "Internal server error" : "Request failed";
+  sendError(res, { error, code });
+  console.error(
+    `[rockett] ${res.statusCode} ${req.route?.path ?? "unmatched"}: ${error}`,
+  );
+};
+
 export type TrustProxy = number | string | false;
 
 export function trustProxyConfig(value: string | undefined): TrustProxy {
@@ -163,35 +191,10 @@ export function createApp({
     ),
   );
   app.use("/api", (_req, res) => {
-    res.status(404).json({ error: "Not found" });
+    sendError(res, { error: "Not found", code: "not_found" });
   });
   if (clientDir) app.use(serveClient(clientDir));
-  app.use(
-    (
-      err: unknown,
-      req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction,
-    ) => {
-      const status =
-        err instanceof ValidationError
-          ? 400
-          : typeof err === "object" &&
-              err !== null &&
-              "status" in err &&
-              typeof err.status === "number" &&
-              err.status >= 400 &&
-              err.status < 500
-            ? err.status
-            : 500;
-      console.error(
-        `[rockett] ${status} ${req.route?.path ?? "unmatched"}: ${status === 500 ? "Internal server error" : "Request failed"}`,
-      );
-      res.status(status).json({
-        error: status === 500 ? "Internal server error" : "Request failed",
-      });
-    },
-  );
+  app.use(answerError);
   const sweep = async () => {
     for (const id of await store.temporaryIds())
       if (await projects.run(id, () => store.expire(id))) kernel.drop(id);

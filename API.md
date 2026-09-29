@@ -69,6 +69,9 @@ the detail. A 409 on a document edit carries the stored `revision`, and on a
 preview commit also the staged `draft`. `client/src/api.ts` turns any error
 into `ApiError`; a body without `code` becomes `internal`.
 
+An unknown `/api` path answers 404 `not_found`, malformed JSON 400
+`validation` and a body over its size limit 413 `too_large`.
+
 These answer `{ "error": string }` without `code`: the origin check, the
 session guard (401 `unauthenticated`), the 403 `forbidden` from the project
 access guard, `requireAdmin` and the members routes, the rate limiter (429
