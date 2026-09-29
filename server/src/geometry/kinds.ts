@@ -5,13 +5,11 @@ import {
   type FeatureKind,
 } from "./featureKinds.js";
 import {
-  evalChamfer,
   evalCircularPattern,
   evalCombine,
   evalConstructionPlane,
   evalEmboss,
   evalExtrude,
-  evalFillet,
   evalImportMesh,
   evalImportStep,
   evalLinearPattern,
@@ -26,6 +24,7 @@ import {
   evalSweep,
   type FeatureOutcome,
 } from "./features.js";
+import { evalChamfer, evalFillet } from "./blend.js";
 import { evalShell } from "./shell.js";
 
 const kind = <T extends FeatureType>(
