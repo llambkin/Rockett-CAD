@@ -67,6 +67,7 @@ import {
 } from "../store";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { registerHoldKey } from "../commands/keymap";
 import { watchSnapshots } from "../snapshot";
 import * as tools from "../sketchTools";
 import { ANGLE_LOCK_KEY } from "../shortcuts";
@@ -244,7 +245,7 @@ export function ViewportView() {
   });
   const trimLayerRef = useRef<LayerHandle | null>(null);
 
-  const DRAW_TOOLS = [
+  const DRAW_TOOLS = new Set([
     "line",
     "rect",
     "centerRect",
@@ -252,9 +253,15 @@ export function ViewportView() {
     "arc3",
     "polygon",
     "slot",
-  ];
+  ]);
   /** tools completed by exactly two inputs — eligible for drag-to-draw */
-  const TWO_POINT_TOOLS = ["line", "rect", "centerRect", "circle", "polygon"];
+  const TWO_POINT_TOOLS = new Set([
+    "line",
+    "rect",
+    "centerRect",
+    "circle",
+    "polygon",
+  ]);
 
   const dimLabelsRef = useRef<DimLabel[]>([]);
   const leaderLayerRef = useRef<LayerHandle | null>(null);
@@ -901,6 +908,7 @@ export function ViewportView() {
     toolState.current.dimTargets = [];
     clearToolPreview(viewportRef.current);
     setToolLabel(null);
+    clearDimEntry();
     setSnapMarker(null);
   }, [sketchTool, mode.name]);
 
@@ -1657,7 +1665,7 @@ export function ViewportView() {
           profiles: false,
         });
         picked = r?.selection ?? null;
-      } else if (DRAW_TOOLS.includes(tool) || tool === "point") {
+      } else if (DRAW_TOOLS.has(tool) || tool === "point") {
         // rubber-band preview + snap glyph while drawing
         const ts = toolState.current;
         const last =
@@ -1759,10 +1767,7 @@ export function ViewportView() {
         if (r?.selection.kind === "sketchPoint") {
           toolState.current.dragPointId = (r.selection as any).entityId;
         }
-      } else if (
-        DRAW_TOOLS.includes(t) &&
-        toolState.current.clicks.length === 0
-      ) {
+      } else if (DRAW_TOOLS.has(t) && toolState.current.clicks.length === 0) {
         // press-drag-release drawing
         toolState.current.downUV = pointerToSketchUV(e);
       } else if (t === "trim") {
@@ -1796,7 +1801,7 @@ export function ViewportView() {
     }
     const down = toolState.current.downUV;
     const tool = (s.mode as any).tool as string;
-    if (down && DRAW_TOOLS.includes(tool)) {
+    if (down && DRAW_TOOLS.has(tool)) {
       const vp = viewportRef.current;
       const frame = activeSketchFrame();
       const uv = angleSnapped(
@@ -2118,7 +2123,7 @@ export function ViewportView() {
       const down = ts.downUV;
       ts.downUV = null;
       const tool = (s.mode as any).tool as string;
-      if (down && DRAW_TOOLS.includes(tool) && ts.clicks.length === 0) {
+      if (down && DRAW_TOOLS.has(tool) && ts.clicks.length === 0) {
         const upUV = angleSnapped(
           e,
           tool,
@@ -2134,7 +2139,7 @@ export function ViewportView() {
           upUV &&
           Math.hypot(upUV.x - down.x, upUV.y - down.y) > vp.worldPerPixel() * 4
         ) {
-          if (TWO_POINT_TOOLS.includes(tool)) {
+          if (TWO_POINT_TOOLS.has(tool)) {
             const result = buildFromClicks(
               tool,
               [down, upUV],
@@ -2361,7 +2366,7 @@ export function ViewportView() {
       return;
     }
 
-    if (DRAW_TOOLS.includes(tool)) {
+    if (DRAW_TOOLS.has(tool)) {
       // a typed (locked) size wins over where the second click landed
       const d = dimRef.current;
       if (ts.clicks.length === 1 && d && d.fields.some((f) => f.locked)) {
@@ -2718,70 +2723,32 @@ export function ViewportView() {
     void previewEdit(editId, { ...refs, suppressed: false });
   }, [selection, editingProfiles]);
 
-  // Hold Ctrl/⌘ while editing to see the model WITHOUT this feature — its
-  // regions come back into view for picking — and release to see it with the
-  // current selection. `suppressed` rides the preview channel, so Cancel still
-  // restores the baseline and OK writes suppressed:false explicitly.
   useEffect(() => {
     if (!editingProfiles) return;
-    const onDown = (e: KeyboardEvent) => {
-      if (e.repeat || peekRef.current) return;
-      if (e.key !== "Control" && e.key !== "Meta") return;
-      const s = useStore.getState();
-      if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
-      peekRef.current = true;
-      void s.updateFeaturePreview(s.mode.editFeatureId, {
-        suppressed: true,
-      } as any);
-    };
-    const release = (e?: KeyboardEvent) => {
-      if (e && e.key !== "Control" && e.key !== "Meta") return;
-      if (!peekRef.current) return;
-      peekRef.current = false;
-      const s = useStore.getState();
-      if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
-      const refs = selectionRefs(s.mode.dialog, s.selection);
-      // nothing selected: stays hidden until a region is picked
-      if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
-      void previewEdit(s.mode.editFeatureId, { ...refs, suppressed: false });
-    };
-    const onBlur = () => release();
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", release);
-    window.addEventListener("blur", onBlur);
+    const dispose = registerHoldKey({
+      id: "design.editPeek",
+      keys: ["Control", "Meta"],
+      press: (s) => {
+        if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
+        peekRef.current = true;
+        void s.updateFeaturePreview(s.mode.editFeatureId, {
+          suppressed: true,
+        } as any);
+      },
+      release: (s) => {
+        if (!peekRef.current) return;
+        peekRef.current = false;
+        if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
+        const refs = selectionRefs(s.mode.dialog, s.selection);
+        if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
+        void previewEdit(s.mode.editFeatureId, { ...refs, suppressed: false });
+      },
+    });
     return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", release);
-      window.removeEventListener("blur", onBlur);
+      dispose();
       peekRef.current = false;
     };
   }, [editingProfiles]);
-
-  // escape key handling
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const s = useStore.getState();
-      if (e.key === "Escape") {
-        toolState.current.clicks = [];
-        toolState.current.dimTargets = [];
-        toolState.current.downUV = null;
-        clearToolPreview(viewportRef.current);
-        setToolLabel(null);
-        clearDimEntry();
-        setSnapMarker(null);
-        if (s.mode.name === "sketch" && (s.mode as any).tool !== "select") {
-          s.setSketchTool("select");
-        } else if (s.mode.name === "pickPlane") {
-          s.setMode({ name: "idle" });
-        } else {
-          s.setSelection([]);
-        }
-        setDimEdit(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   // dimension label click → edit
   async function commitDimEdit() {

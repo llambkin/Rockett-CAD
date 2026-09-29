@@ -50,6 +50,15 @@ async function createSketch(s: CommandContext) {
 
 const idle = (s: CommandContext) => !s.busy || "Wait for the current job";
 
+function cancel(s: CommandContext) {
+  const { mode } = s;
+  if (mode.name === "sketch" && mode.tool !== "select")
+    return s.setSketchTool("select");
+  if (mode.name === "pickPlane") return s.setMode({ name: "idle" });
+  if (mode.name === "dialog") return s.cancelDialog();
+  s.setSelection([]);
+}
+
 const GROUPS = [
   ["sketch", "SKETCH"],
   ["create", "CREATE"],
@@ -198,6 +207,15 @@ registerCommand({
   keys: ["Shift+F"],
   keyContext: "global",
   run: () => viewportHandle.current?.zoomToFit(),
+});
+
+registerCommand({
+  id: "design.cancel",
+  label: "Cancel",
+  keys: ["Escape"],
+  keyContext: "global",
+  enabled: (s) => s.mode.name !== "dialog" || idle(s),
+  run: cancel,
 });
 
 registerCommand({

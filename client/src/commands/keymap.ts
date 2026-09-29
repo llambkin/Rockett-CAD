@@ -1,3 +1,4 @@
+import { createRegistry } from "@rockett/shared";
 import { sketchToolFor } from "../shortcuts";
 import { useStore } from "../store";
 import {
@@ -19,6 +20,39 @@ export type KeyEvent = Pick<
   | "target"
   | "preventDefault"
 >;
+
+export interface HoldKey {
+  id: string;
+  keys: readonly string[];
+  press(ctx: CommandContext): unknown;
+  release(ctx: CommandContext): unknown;
+}
+
+const holdKeys = createRegistry<HoldKey>("hold key", (h) => h.id);
+export const registerHoldKey = holdKeys.register;
+const held = new Set<HoldKey>();
+
+function pressHold(e: KeyEvent): boolean {
+  const hold = holdKeys.list().find((h) => h.keys.includes(e.key));
+  if (!hold) return false;
+  if (!held.has(hold)) {
+    held.add(hold);
+    hold.press(useStore.getState());
+  }
+  return true;
+}
+
+export function releaseHolds(key?: string): void {
+  for (const hold of held) {
+    if (key !== undefined && !hold.keys.includes(key)) continue;
+    held.delete(hold);
+    if (holdKeys.get(hold.id) === hold) hold.release(useStore.getState());
+  }
+}
+
+export function handleKeyUp(e: Pick<KeyboardEvent, "key">): void {
+  releaseHolds(e.key);
+}
 
 type Bound = Command & { keys: readonly string[]; keyContext: string };
 
@@ -77,28 +111,32 @@ function inText(target: EventTarget | null): boolean {
   );
 }
 
-function sketchKey(e: KeyEvent, s: CommandContext): void {
-  if (s.mode.name !== "sketch") return;
+function sketchKey(e: KeyEvent, s: CommandContext): boolean {
+  if (s.mode.name !== "sketch") return false;
   if (e.key === "Delete" || e.key === "Backspace") {
     const ids = s.selection.flatMap((x) =>
       x.kind === "sketchEntity" || x.kind === "sketchPoint" ? [x.entityId] : [],
     );
-    if (ids.length === 0) return;
+    if (ids.length === 0) return false;
     e.preventDefault();
     void s.deleteSketchEntities(ids);
-    return;
+    return true;
   }
   const tool = sketchToolFor(e.key);
-  if (tool) s.setSketchTool(tool);
-  if (e.key.toLowerCase() === "x")
-    s.setMode({ ...s.mode, constructionMode: !s.mode.constructionMode });
+  if (tool) {
+    s.setSketchTool(tool);
+    return true;
+  }
+  if (e.key.toLowerCase() !== "x") return false;
+  s.setMode({ ...s.mode, constructionMode: !s.mode.constructionMode });
+  return true;
 }
 
 export function handleKey(e: KeyEvent): void {
-  if (e.repeat || inText(e.target)) return;
+  if (e.repeat || pressHold(e) || inText(e.target)) return;
   const s = useStore.getState();
   const plain = !(e.ctrlKey || e.metaKey || e.altKey || e.shiftKey);
-  if (s.mode.name === "sketch" && plain && !s.busy) return sketchKey(e, s);
+  if (s.mode.name === "sketch" && plain && !s.busy && sketchKey(e, s)) return;
   const chord = chordOf(e);
   for (const context of keyContexts(s)) {
     const command = bound().find(
@@ -112,7 +150,16 @@ export function handleKey(e: KeyEvent): void {
   }
 }
 
+const releaseAll = () => releaseHolds();
+
 export function installKeymap(): () => void {
   document.addEventListener("keydown", handleKey, true);
-  return () => document.removeEventListener("keydown", handleKey, true);
+  document.addEventListener("keyup", handleKeyUp, true);
+  window.addEventListener("blur", releaseAll);
+  return () => {
+    document.removeEventListener("keydown", handleKey, true);
+    document.removeEventListener("keyup", handleKeyUp, true);
+    window.removeEventListener("blur", releaseAll);
+    releaseAll();
+  };
 }
