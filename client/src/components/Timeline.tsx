@@ -35,6 +35,7 @@ function chipTitle(
     `${f.name} (${f.type})`,
     ...notes.map((n) => `⚠ ${n}`),
     ...(f.suppressed ? ["(suppressed)"] : []),
+    ...(st?.status === "cancelled" ? ["(cancelled)"] : []),
   ].join("\n");
 }
 
@@ -48,7 +49,9 @@ function chipClass(
     st?.status === "error" ? "error" : "",
     f.suppressed ? "suppressed" : "",
     selected ? "selected" : "",
-    st?.status === "rolledBack" ? "rolledback" : "",
+    st?.status === "rolledBack" || st?.status === "cancelled"
+      ? "rolledback"
+      : "",
   ]
     .filter(Boolean)
     .join(" ");
