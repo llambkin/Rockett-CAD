@@ -168,8 +168,7 @@ export class NamespaceBackup {
 
   private async write(version: string, only?: string[]): Promise<string> {
     const { storage, dir } = this;
-    const names = only ?? (await storage.files(dir));
-    names.sort();
+    const names = (only ?? (await storage.files(dir))).toSorted();
     const sums = new Map<string, string>();
     for (const name of names)
       sums.set(name, sha256(await storage.read(path.posix.join(dir, name))));
