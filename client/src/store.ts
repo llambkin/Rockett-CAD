@@ -459,6 +459,7 @@ async function sendPreviews(): Promise<void> {
 let selectionBeforeDialog: Selection[] = [];
 let writing = 0;
 let unsent: Array<(tx: string) => Promise<MutationResponse>> = [];
+let abandoned: string[] = [];
 
 function saveState(s: State): Pick<State, "saveState"> {
   return {
@@ -542,15 +543,17 @@ export function followPath(): Promise<void> | void {
 }
 
 async function saveDialog(
+  id: string,
   session: Session | null,
-  commit: (session: Session) => () => Promise<MutationResponse>,
+  patch: Partial<Feature>,
   plain: (tx: string) => Promise<MutationResponse>,
 ): Promise<void> {
   const { mutate } = useStore.getState();
   try {
-    await mutate(session ? commit(session) : plain);
+    await mutate(session ? committing(id, session, patch, plain) : plain);
   } catch (e) {
-    if (session && !useStore.getState().recovery) preview.session ??= session;
+    if (!useStore.getState().recovery) preview.session ??= session;
+    else if (session?.staged) abandoned.push(session.tx);
     throw e;
   }
 }
@@ -631,7 +634,7 @@ export const useStore = create<State>((set, get) => ({
         savedAt: null,
         busy: false,
       });
-      unsent = [];
+      [unsent, abandoned] = [[], []];
       showPath(path);
       void loadHistory(document);
     } catch (e: any) {
@@ -645,7 +648,7 @@ export const useStore = create<State>((set, get) => ({
     clearTimeout(cameraSave);
     void get().cancelPreview();
     api.forgetJob?.();
-    unsent = [];
+    [unsent, abandoned] = [[], []];
     api.forgetMeshes();
     set({
       recovery: null,
@@ -707,6 +710,8 @@ export const useStore = create<State>((set, get) => ({
     set({ busy: true, error: null });
     const reloaded = await inTurn(async () => {
       try {
+        for (const tx of abandoned.splice(0))
+          await api.abortPreview(document.id, tx).catch(() => null);
         const latest = (await api.getProject(document.id)).document;
         const mode = get().mode;
         const evaluation = await api.evaluate(
@@ -1255,12 +1260,7 @@ export const useStore = create<State>((set, get) => ({
     const { document } = get();
     if (!document) return;
     const plain = (tx: string) => api.addFeature(document.id, feature, tx);
-    await saveDialog(
-      take(true),
-      (session) =>
-        committing(document.id, session, featurePatch(feature), plain),
-      plain,
-    );
+    await saveDialog(document.id, take(true), featurePatch(feature), plain);
   },
 
   async updateFeature(fid, patch) {
@@ -1274,11 +1274,7 @@ export const useStore = create<State>((set, get) => ({
         sketchEditingPosition(document, get().mode),
         tx,
       );
-    await saveDialog(
-      take(false, fid),
-      (session) => committing(document.id, session, patch, plain),
-      plain,
-    );
+    await saveDialog(document.id, take(false, fid), patch, plain);
   },
 
   async deleteFeature(fid) {
