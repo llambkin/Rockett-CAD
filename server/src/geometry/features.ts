@@ -466,6 +466,7 @@ function finishJoin(
 ): JoinResult {
   const joined = unify ? unifyTool(fused, featureId) : fused;
   const warning = zeroThicknessWarning(
+    "join",
     joined.shape,
     parts.map((p) => p.shape),
   );
@@ -605,21 +606,19 @@ function applyToolOperation(
       : overlapping(state, tool.shape);
     if (bodies.length === 0)
       throw new Error("cut tool does not intersect any body");
-    for (const body of bodies) {
+    const warnings = bodies.map((body) => {
       const op = checkedCut(body.shape, tool.shape, "boolean cut failed");
-      if (!op) continue;
+      if (!op) return undefined;
       const result = op.Shape();
-      const names = propagateNames(
-        op,
-        [body, { shape: tool.shape, names: tool.names }],
-        result,
-        featureId,
-      );
+      const names = propagateNames(op, [body, tool], result, featureId);
       op.delete();
+      const inputs = [body.shape, tool.shape];
+      const warning = zeroThicknessWarning("cut", result, inputs);
       registerBodySolids(state, body.bodyId, result, names);
       result.delete();
-    }
-    return { targets: bodies.map((b) => b.bodyId) };
+      return warning;
+    });
+    return { targets: bodies.map((b) => b.bodyId), ...warned(warnings) };
   }
 
   const target = targets

@@ -183,9 +183,10 @@ body.
 
 - Every cut runs through `checkedCut` in `server/src/geometry/cutCheck.ts`.
 - Every join ends in `finishJoin` in `server/src/geometry/features.ts`. The
-  one guard that warns instead: a join that leaves a zero-thickness edge its
-  inputs lacked (`server/src/geometry/joinCheck.ts`) builds, and the feature
-  status is `warning` naming the edge length.
+  one guard that warns instead: a join, or an extrude, revolve, sweep, loft or
+  emboss cut, that leaves a zero-thickness edge its inputs lacked
+  (`server/src/geometry/joinCheck.ts`) builds, and the feature status is
+  `warning` naming the edge length.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
 - Shell must leave a hollow (`server/src/geometry/shell.ts`).

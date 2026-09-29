@@ -32,7 +32,7 @@ function zeroThicknessEdges(shape: Shape): ThinEdge[] {
       );
       const found: ThinEdge[] = [];
       for (let i = 1; i <= map.Extent(); i++) {
-        if (map.FindFromIndex_2(i).Size() <= 2) continue;
+        if (own(map.FindFromIndex_2(i)).Size() <= 2) continue;
         const edge = own(map.FindKey_2(i));
         found.push({ length: lengthOf(edge), at: edgeCentroid(edge) });
       }
@@ -42,10 +42,11 @@ function zeroThicknessEdges(shape: Shape): ThinEdge[] {
 }
 
 export function zeroThicknessWarning(
-  joined: Shape,
+  operation: "join" | "cut",
+  result: Shape,
   inputs: Shape[],
 ): string | undefined {
-  const made = zeroThicknessEdges(joined);
+  const made = zeroThicknessEdges(result);
   if (made.length === 0) return undefined;
   const had = inputs.flatMap(zeroThicknessEdges);
   const fresh = made.filter(
@@ -60,7 +61,7 @@ export function zeroThicknessWarning(
   const lengths = fresh.map((e) => `${Number(e.length.toFixed(3))} mm`);
   const what =
     fresh.length === 1 ? "a zero-thickness edge" : "zero-thickness edges";
-  return `join left ${what} (${lengths.join(", ")})`;
+  return `${operation} left ${what} (${lengths.join(", ")})`;
 }
 
 export function bboxOverlap(a: Shape, b: Shape): boolean {
