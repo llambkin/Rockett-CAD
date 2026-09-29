@@ -125,10 +125,11 @@ function DialogBody({
     },
     [],
   );
-  if (ui.Panel)
-    return (
-      <ui.Panel editId={editId} onClose={close} cancelPreview={live.cancel} />
-    );
+  const update = async (patch: Partial<Feature>) => {
+    if (changes(stored, patch)) await updateFeature(editId!, patch);
+  };
+  const props = { editId, onClose: close, cancelPreview: live.cancel, update };
+  if (ui.Panel) return <ui.Panel {...props} />;
 
   const ok = async () => {
     let feature: Feature;
@@ -139,10 +140,9 @@ function DialogBody({
       return;
     }
     live.cancel();
-    if (editId && !changes(stored, featurePatch(feature))) return close();
     setPending(true);
     try {
-      if (editId) await updateFeature(editId, featurePatch(feature));
+      if (editId) await update(featurePatch(feature));
       else await addFeature(feature);
       close();
     } catch {

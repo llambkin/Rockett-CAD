@@ -19,6 +19,7 @@ export interface FeaturePanelProps {
   editId?: string | undefined;
   onClose: () => void;
   cancelPreview: () => void;
+  update: (patch: Partial<Feature>) => Promise<void>;
 }
 
 type Build<F extends Feature> = (

@@ -69,12 +69,12 @@ function ReferenceImagePanel({
   editId,
   onClose,
   cancelPreview,
+  update,
 }: FeaturePanelProps) {
   const doc = useStore((s) => s.document);
   const params = useStore((s) => s.dialogParams);
   const setParams = useStore((s) => s.setDialogParams);
   const addFeature = useStore((s) => s.addFeature);
-  const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
   const cancel = useStore((s) => s.cancelDialog);
   const [file, setFile] = useState<File | null>(null);
@@ -100,7 +100,7 @@ function ReferenceImagePanel({
     setPending(true);
     try {
       if (existing) {
-        await updateFeature(editId!, {
+        await update({
           opacity,
           transform: { u, v, rotation, scale },
         } as any);
