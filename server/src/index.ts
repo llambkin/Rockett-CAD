@@ -24,6 +24,7 @@ import { SessionStore } from "./auth/sessions.js";
 import { UserStore } from "./auth/userStore.js";
 import { cookieConfig, type CookieConfig } from "./auth/cookie.js";
 import { resetPassword } from "./auth/resetPassword.js";
+import { TIMING_MS } from "./tunables.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -124,6 +125,17 @@ async function main(allowedOrigins: string[], cookie: CookieConfig) {
     console.log(`[rockett] listening on http://0.0.0.0:${port}`);
   });
   scheduleSweep(server, sweep);
+  server.on("request", (_req, res) =>
+    res.once("close", () => {
+      if (!server.listening) server.closeIdleConnections();
+    }),
+  );
+  const stop = () => {
+    setTimeout(() => process.exit(1), TIMING_MS.shutdownGrace).unref();
+    server.close(() => process.exit(0));
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
 }
 
 run().catch((err) => {

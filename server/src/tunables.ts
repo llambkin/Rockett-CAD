@@ -21,6 +21,7 @@ export const TIMING_MS = {
   accessKeyFetch: 10_000,
   previewIdle: HOUR,
   orphanBlobAge: DAY,
+  shutdownGrace: 8000,
 } as const;
 
 export const TRIAL_BUDGET = {
