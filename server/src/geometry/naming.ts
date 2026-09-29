@@ -14,6 +14,7 @@ import {
   progress,
   release,
   scoped,
+  volumeOf,
   type Shape,
 } from "./kernel.js";
 import { ShapeMap } from "./shapeMap.js";
@@ -99,11 +100,16 @@ export interface BodyPiece {
   region?: string;
 }
 
-export function assignBodyIds<T extends BodyPiece>(
+export function orderBodyPieces<T extends BodyPiece>(
   parentId: string,
   pieces: T[],
-): Array<[string, T]> {
-  if (pieces.length === 1) return [[parentId, pieces[0]!]];
+): T[] {
+  if (pieces.length === 1) return pieces;
+  if (pieces[0]!.names.version === 1)
+    return pieces
+      .map((piece) => ({ piece, v: volumeOf(piece.shape) }))
+      .sort((a, b) => b.v - a.v)
+      .map(({ piece }) => piece);
   const owned = pieces.map((piece) => {
     const pieceFaces = faces(piece.shape);
     const names = new Set(pieceFaces.map((f) => piece.names.get(f)));
@@ -128,10 +134,7 @@ export function assignBodyIds<T extends BodyPiece>(
       };
     })
     .sort((a, b) => compareNames(a.key, b.key))
-    .map(({ piece }, i) => [
-      i === 0 ? parentId : `${parentId}:${i + 1}`,
-      piece,
-    ]);
+    .map(({ piece }) => piece);
 }
 
 export function nameFromEdges(

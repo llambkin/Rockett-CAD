@@ -67,12 +67,11 @@ import {
   transformOp,
   vec,
   vertices as verticesOf,
-  volumeOf,
   wires as wiresOf,
   type Shape,
 } from "./kernel.js";
 import {
-  assignBodyIds,
+  orderBodyPieces,
   computeEdgeNames,
   computeVertexNames,
   finalizeNames,
@@ -281,8 +280,9 @@ export function registerBodySolids(
   bodyId: string,
   shape: Shape,
   names: NameMap,
+  madeBy?: string,
 ): void {
-  registerSolids(state, bodyId, solids(shape), names);
+  registerSolids(state, bodyId, solids(shape), names, madeBy);
 }
 
 function registerSolids(
@@ -290,46 +290,41 @@ function registerSolids(
   bodyId: string,
   sols: Shape[],
   names: NameMap,
+  madeBy?: string,
 ): void {
-  if (sols.length === 0) {
-    state.bodies.delete(bodyId);
-    return;
-  }
-  if (sols.length === 1) {
-    state.bodies.set(bodyId, { bodyId, shape: sols[0], names });
-    return;
-  }
-  if (names.version === 2) {
+  if (sols.length === 0) state.bodies.delete(bodyId);
+  else
     registerPieces(
       state,
       bodyId,
       sols.map((shape) => ({ shape, names })),
+      names.version === 2 ? madeBy : undefined,
     );
-    return;
-  }
-  const sorted = sols
-    .map((s) => ({ s, v: volumeOf(s) }))
-    .sort((a, b) => b.v - a.v);
-  sorted.forEach((item, i) => {
-    const id = i === 0 ? bodyId : `${bodyId}:${i + 1}`;
-    state.bodies.set(id, { bodyId: id, shape: item.s, names });
-  });
 }
 
 function registerPieces(
   state: EvalState,
   bodyId: string,
   pieces: BodyPiece[],
+  madeBy?: string,
 ): void {
-  let named: [string, BodyPiece][];
+  let ordered: BodyPiece[];
   try {
-    named = assignBodyIds(bodyId, pieces);
+    ordered = orderBodyPieces(bodyId, pieces);
   } catch (err) {
     release(pieces.map((p) => p.shape));
     throw err;
   }
-  for (const [id, { shape, names }] of named)
+  let n = 2;
+  const extraId = (i: number) => {
+    if (!madeBy) return `${bodyId}:${i + 1}`;
+    while (state.bodies.has(derivedBodyId(madeBy, n))) n++;
+    return derivedBodyId(madeBy, n);
+  };
+  ordered.forEach(({ shape, names }, i) => {
+    const id = i === 0 ? bodyId : extraId(i);
     state.bodies.set(id, { bodyId: id, shape, names });
+  });
 }
 
 function registerNewBodies(
@@ -572,7 +567,8 @@ function joinEvery(
       for (const b of rest) state.bodies.delete(b.bodyId);
       const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
       warnings.push(joined.warning);
-      registerBodySolids(state, first!.bodyId, joined.shape, joined.names);
+      const { shape, names } = joined;
+      registerBodySolids(state, first!.bodyId, shape, names, featureId);
     }
     return { targets: used, ...warned(warnings) };
   } finally {
@@ -614,7 +610,7 @@ function applyToolOperation(
       op.delete();
       const inputs = [body.shape, tool.shape];
       const warning = zeroThicknessWarning("cut", result, inputs);
-      registerBodySolids(state, body.bodyId, result, names);
+      registerBodySolids(state, body.bodyId, result, names, featureId);
       result.delete();
       return warning;
     });
@@ -632,7 +628,8 @@ function applyToolOperation(
     }
     const fused = fuseNamed(target, tool, featureId, "boolean join failed");
     const joined = finishJoin(fused, featureId, [target, tool], true);
-    registerBodySolids(state, target.bodyId, joined.shape, joined.names);
+    const { shape, names } = joined;
+    registerBodySolids(state, target.bodyId, shape, names, featureId);
     return { targets: [target.bodyId], ...warned([joined.warning]) };
   }
 
@@ -651,7 +648,7 @@ function applyToolOperation(
     featureId,
   );
   op.delete();
-  registerBodySolids(state, target.bodyId, result, names);
+  registerBodySolids(state, target.bodyId, result, names, featureId);
   return { targets: [target.bodyId] };
 }
 

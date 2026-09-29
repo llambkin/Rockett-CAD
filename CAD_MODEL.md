@@ -62,7 +62,7 @@ a test that loads the previous schema.
 
 ## Body identity
 
-Owners: `assignBodyIds` in `server/src/geometry/naming.ts`, `derivedBodyId`
+Owners: `orderBodyPieces` in `server/src/geometry/naming.ts`, `derivedBodyId`
 and `compareNames` in `shared/src/topoRefs.ts`.
 
 - A new body is `b:{featureId}`. Extra pieces are `b:{featureId}:2`, and so
@@ -71,7 +71,10 @@ and `compareNames` in `shared/src/topoRefs.ts`.
   id in `targets`, else the first by `compareNames`.
 - Split pieces: version 1 orders by volume. Version 2 orders by each piece's
   smallest unshared face name, and a piece with no name of its own fails as
-  an identity conflict.
+  an identity conflict. The first piece keeps the target's id. Under version
+  2 a join, cut or intersect names the rest `b:{featureId}:{n}`, numbered
+  from 2 across the feature, so the id never grows with chain depth; version
+  1 appends `:{n}` to the target's id.
 - Mirror and pattern copies are `b:{featureId}:{n}`, fixed length at any
   depth. The first `splitBody` piece keeps its id.
 - A fresh process gives the same ids and names.
