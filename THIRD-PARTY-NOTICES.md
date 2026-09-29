@@ -168,3 +168,12 @@ peers but ship in no artefact.
 | wrappy                  | 1.0.2                  | ISC           | image                        | https://github.com/npm/wrappy                        |
 | ws                      | 8.21.3                 | MIT           | image                        | https://github.com/websockets/ws                     |
 | zustand                 | 5.0.15                 | MIT           | client bundle                | https://github.com/pmndrs/zustand                    |
+
+## blend.wasm
+
+`modules/kernel/blend/blend.wasm` is Rockett CAD's own code from
+`modules/kernel/blend/entry.cpp`, built with the Emscripten 6.0.10 image that
+`build.sh` pins. It copies no third-party source. Emscripten links its own
+startup and stack helpers into the module, under Emscripten's MIT or
+University of Illinois/NCSA licence, Copyright 2010-2014 Emscripten authors.
+https://github.com/emscripten-core/emscripten
