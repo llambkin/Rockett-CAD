@@ -189,7 +189,7 @@ key grammar, so removed plugin values survive:
   and importer registries.
 - Export refuses a body blocked by an unresolved reference (`namingVersion` 2)
   with 422 `unprocessable`, and an id that is not a body with 400.
-  Measure refuses an unresolved face or edge reference with 400.
+  Measure answers 400 for a body or name the live evaluation lacks.
 - Writers: `server/src/geometry/exporters.ts`, `server/src/geometry/xde.ts`
   (STEP), `server/src/geometry/dxf.ts`.
 

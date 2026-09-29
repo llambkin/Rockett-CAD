@@ -11,7 +11,6 @@ import {
 import { areaOf, getKernel, lengthOf, progress, type Shape } from "./kernel.js";
 import { computeEdgeNames, computeVertexNames, findFace } from "./naming.js";
 import type { EvalState } from "./features.js";
-import { describeRef, resolveRefs } from "./resolve.js";
 
 interface Resolved {
   kind: string;
@@ -25,10 +24,10 @@ function resolveRef(
 ): Resolved {
   const k = getKernel();
   const body = state.bodies.get(ref.bodyId);
-  if (!body) throw new Error(`body ${ref.bodyId} not found`);
+  if (!body) throw new ValidationError(`body ${ref.bodyId} not found`);
   if (ref.kind === "face") {
     const face = findFace(body, ref.faceName);
-    if (!face) throw new Error(`face ${ref.faceName} not found`);
+    if (!face) throw new ValidationError(`face ${ref.faceName} not found`);
     const info: Resolved["info"] = { kind: "face", area: areaOf(face) };
     const surf = new k.BRepAdaptor_Surface_2(face, false);
     if (surf.GetType() === k.GeomAbs_SurfaceType.GeomAbs_Cylinder) {
@@ -42,7 +41,7 @@ function resolveRef(
   if (ref.kind === "edge") {
     const names = computeEdgeNames(body);
     const edge = names.byName.get(ref.edgeName);
-    if (!edge) throw new Error(`edge ${ref.edgeName} not found`);
+    if (!edge) throw new ValidationError(`edge ${ref.edgeName} not found`);
     const info: Resolved["info"] = { kind: "edge", length: lengthOf(edge) };
     const curve = new k.BRepAdaptor_Curve_2(edge);
     if (curve.GetType() === k.GeomAbs_CurveType.GeomAbs_Circle) {
@@ -55,7 +54,7 @@ function resolveRef(
   }
   const names = computeVertexNames(body);
   const vertex = names.byName.get(ref.vertexName);
-  if (!vertex) throw new Error(`vertex ${ref.vertexName} not found`);
+  if (!vertex) throw new ValidationError(`vertex ${ref.vertexName} not found`);
   const p = k.BRep_Tool.Pnt(vertex);
   const position: Vec3 = [p.X(), p.Y(), p.Z()];
   p.delete();
@@ -97,18 +96,9 @@ function edgeDirection(shape: Shape): Vec3 | null {
   return [v[0] / n, v[1] / n, v[2] / n];
 }
 
-function refuseUnresolved(state: EvalState, refs: MeasureRequest["refs"]) {
-  const topo = refs.filter((ref) => ref.kind !== "vertex");
-  resolveRefs(state.bodies, topo).forEach((resolution, i) => {
-    if (resolution.status !== "resolved")
-      throw new ValidationError(describeRef({ ref: topo[i]!, ...resolution }));
-  });
-}
-
 export function measure(state: EvalState, req: MeasureRequest): MeasureResult {
   const k = getKernel();
   const refs = req.refs.slice(0, 2);
-  refuseUnresolved(state, refs);
   const resolved = refs.map((r) => resolveRef(state, r));
   const result: MeasureResult = { items: resolved.map((r) => r.info) };
 

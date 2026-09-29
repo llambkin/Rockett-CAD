@@ -146,7 +146,8 @@ imports of one file name faces alike. Mesh imports keep
   features that name its bodies. Other bodies build. Export refuses a
   blocked body.
 - Version 1: nothing blocks. Failures still report their references.
-- Measurement refuses any reference that is not `resolved`.
+- Measurement skips the resolver. It measures the live pick by its exact
+  name, a tied `~?` name included, and never repairs or stores it.
 
 ### Known limitations
 
