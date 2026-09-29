@@ -180,6 +180,23 @@ function onCutter(
     : { id, type: "pointOnCircle", point, circle: cutter.id };
 }
 
+function cutsAt(
+  entities: SketchEntity[],
+  curve: Curve,
+  cutterId: string,
+  hit: CurveHit,
+): boolean {
+  const cutter = entities.find((e) => e.id === cutterId);
+  if (!cutter || cutter.kind === "point") return true;
+  const pair = [curve, cutter].flatMap((e) => [
+    ...pointsOf(e).map((id) => pointIn(entities, id)),
+    { ...e, construction: false },
+  ]);
+  return (curveHits(pair).get(curve.id) ?? []).some(
+    (h) => Math.hypot(h.x - hit.x, h.y - hit.y) < ON_POINT,
+  );
+}
+
 function keptPieces(
   curve: Curve,
   from: CurveHit | null,
@@ -319,10 +336,12 @@ function cut(
     const id = newId("p");
     points.push({ id, kind: "point", x: hit.x, y: hit.y });
     const unique = new Map(
-      hit.by.map((cutter) => {
-        const c = onCutter(entities, id, hit, cutter);
-        return [JSON.stringify({ ...c, id: "" }), c] as const;
-      }),
+      hit.by
+        .filter((cutter) => cutsAt(entities, curve, cutter, hit))
+        .map((cutter) => {
+          const c = onCutter(entities, id, hit, cutter);
+          return [JSON.stringify({ ...c, id: "" }), c] as const;
+        }),
     );
     added.push(...unique.values());
     return id;
