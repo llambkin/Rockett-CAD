@@ -24,7 +24,10 @@ function attempt(build: (() => Feature) | null): Feature | null {
 const picked = (value: unknown) =>
   JSON.stringify(value, (key, v) => (key === "sig" ? undefined : v));
 
-function changes(stored: Feature | undefined, patch: Partial<Feature>) {
+export function featureChanges(
+  stored: Feature | undefined,
+  patch: Partial<Feature>,
+) {
   const was: Record<string, unknown> = { targets: [], ...stored };
   return Object.entries({ targets: [], ...patch }).some(
     ([k, v]) => picked(was[k]) !== picked(v),
@@ -42,7 +45,7 @@ function useLivePreview(editId: string | undefined, draft: Feature | null) {
         const s = useStore.getState();
         if (!editId) return s.previewNewFeature(feature as Feature);
         const stored = s.document?.features.find((f) => f.id === editId);
-        if (changes(stored, patch))
+        if (featureChanges(stored, patch))
           return s.updateFeaturePreview(editId, patch);
       },
     }),
@@ -126,7 +129,7 @@ function DialogBody({
     [],
   );
   const update = async (patch: Partial<Feature>) => {
-    if (changes(stored, patch)) await updateFeature(editId!, patch);
+    if (featureChanges(stored, patch)) await updateFeature(editId!, patch);
   };
   const props = { editId, onClose: close, cancelPreview: live.cancel, update };
   if (ui.Panel) return <ui.Panel {...props} />;

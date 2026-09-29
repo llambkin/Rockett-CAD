@@ -12,6 +12,7 @@ import { useStore } from "../store";
 import { useSetting } from "../settings";
 import { storedTargets } from "../toolTargets";
 import { LengthField, NumField } from "./form/fields";
+import { featureChanges } from "./FeatureDialog";
 
 interface QuickValue {
   label: string;
@@ -90,15 +91,10 @@ export function quickValues(f: Feature): QuickValue[] {
   }
 }
 
-const differs = (f: Feature | undefined, patch: Partial<Feature>) =>
-  Object.entries(patch).some(
-    ([k, v]) => JSON.stringify((f as any)?.[k]) !== JSON.stringify(v),
-  );
-
 async function sendPreview(fid: string, patch: Partial<Feature>) {
   const s = useStore.getState();
   if (
-    differs(
+    featureChanges(
       s.document?.features.find((f) => f.id === fid),
       patch,
     )
@@ -197,7 +193,7 @@ export function QuickEdit({
 
   const commit = async () => {
     live.cancel();
-    if (!differs(feature, patch)) return onClose();
+    if (!featureChanges(feature, patch)) return onClose();
     committed.current = await useStore
       .getState()
       .updateFeature(feature.id, patch)
