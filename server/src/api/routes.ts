@@ -30,9 +30,9 @@ import {
 } from "@rockett/shared";
 import { build } from "../build.js";
 import type { NoticeStore } from "../auth/noticeStore.js";
-import type { ProjectStore } from "../store/projectStore.js";
+import { StoreError, type ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
-import { StoreError } from "../store/projectStore.js";
+import { pruneViews } from "../store/viewStore.js";
 import { etag } from "../store/jsonStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { HistoryStore, Previews } from "../store/historyStore.js";
@@ -233,8 +233,6 @@ export function createApiRouter(
   on(ROUTES.cancelJob, jobs.cancel);
   const evaluate = jobs.evaluate;
 
-  // Serialize the whole load/edit/save/evaluate operation for each project.
-  // Locking only save() would still allow two requests to edit stale copies.
   const wrap =
     (fn: (req: any, res: any, ctx: { user: User }) => Promise<void>) =>
     (req: any, res: any) => {
@@ -710,6 +708,7 @@ export function createApiRouter(
       if (idx < 0) throw new StoreError("feature not found", "not_found");
       const [deleted] = doc.features.splice(idx, 1);
       if (doc.timelinePosition > idx) doc.timelinePosition--;
+      await pruneViews(store.documents.options.storage, doc.id, deleted!.id);
       return { label: `Delete ${deleted!.name}` };
     }),
   );

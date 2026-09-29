@@ -1,5 +1,6 @@
 import path from "node:path";
 import {
+  bodyMadeBy,
   parse,
   projectView,
   viewCamera,
@@ -22,7 +23,55 @@ function camera(value: unknown): ProjectView["camera"] {
 }
 
 const stored = (view: ProjectViewBody) =>
-  parse(projectView, { ...view, camera: view.camera ?? null }) as ProjectView;
+  parse(projectView, {
+    ...view,
+    hidden: {
+      bodies: [...new Set(view.hidden.bodies)],
+      features: [...new Set(view.hidden.features)],
+    },
+    camera: view.camera ?? null,
+  }) as ProjectView;
+
+const file = (userId: string, projectId: string) => {
+  if (!ID_RE.test(userId) || !ID_RE.test(projectId))
+    throw new StoreError("invalid view id");
+  return path.posix.join("users", userId, "views", `${projectId}.json`);
+};
+
+const encoded = (view: ProjectViewBody) =>
+  JSON.stringify(stored(view), null, 1);
+
+async function users(storage: Storage): Promise<string[]> {
+  return (await storage.list("users")).filter((id) => ID_RE.test(id));
+}
+
+export async function pruneViews(
+  storage: Storage,
+  projectId: string,
+  featureId: string,
+): Promise<void> {
+  const kept = (id: string) => id !== featureId && !bodyMadeBy(featureId, id);
+  for (const userId of await users(storage)) {
+    const at = file(userId, projectId);
+    const view = await storage
+      .read(at)
+      .then((raw) => decode(raw, at))
+      .catch(() => undefined);
+    if (!view || [...view.hidden.bodies, ...view.hidden.features].every(kept))
+      continue;
+    const { bodies, features } = view.hidden;
+    await storage.writeAtomic(
+      at,
+      encoded({
+        ...view,
+        hidden: {
+          bodies: bodies.filter(kept),
+          features: features.filter(kept),
+        },
+      }),
+    );
+  }
+}
 
 function decode(raw: Buffer | undefined, label: string) {
   if (!raw) return undefined;
@@ -43,18 +92,12 @@ export class ViewStore {
     private readonly projectDir: (projectId: string) => string,
   ) {}
 
-  private file(userId: string, projectId: string): string {
-    if (!ID_RE.test(userId) || !ID_RE.test(projectId))
-      throw new StoreError("invalid view id");
-    return path.posix.join("users", userId, "views", `${projectId}.json`);
-  }
-
   async read(
     userId: string,
     projectId: string,
   ): Promise<ProjectView | undefined> {
     const raw = await this.storage
-      .read(this.file(userId, projectId))
+      .read(file(userId, projectId))
       .catch(() => undefined);
     return decode(raw, `view of project ${projectId}`);
   }
@@ -71,10 +114,7 @@ export class ViewStore {
     projectId: string,
     view: ProjectViewBody,
   ): [string, string] {
-    return [
-      this.file(userId, projectId),
-      JSON.stringify(stored(view), null, 1),
-    ];
+    return [file(userId, projectId), encoded(view)];
   }
 
   async write(
@@ -87,8 +127,7 @@ export class ViewStore {
   }
 
   async remove(projectId: string): Promise<void> {
-    for (const userId of await this.storage.list("users"))
-      if (ID_RE.test(userId))
-        await this.storage.remove(this.file(userId, projectId));
+    for (const userId of await users(this.storage))
+      await this.storage.remove(file(userId, projectId));
   }
 }
