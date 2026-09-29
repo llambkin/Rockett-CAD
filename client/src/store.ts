@@ -1,11 +1,3 @@
-/**
- * Central client state (zustand).
- *
- * The server owns the document and its undo history; every mutation goes
- * through the API and the store mirrors the returned document, evaluation
- * and history status.
- */
-
 import { create } from "zustand";
 import type {
   BodyPayload,
@@ -49,8 +41,6 @@ import {
 } from "./livePreview";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
 import { TIMING_MS } from "./tunables";
-
-// ---------------------------------------------------------------------------
 
 export type Selection =
   | { kind: "body"; bodyId: string }
@@ -181,12 +171,10 @@ interface State {
   selection: Selection[];
   hover: Selection | null;
 
-  /** Local working copy of the sketch being edited (solved client-side). */
   draftSketch: SketchFeature | null;
 
   measureResult: MeasureResult | null;
 
-  // actions
   openProject: (id: string, path?: string) => Promise<void>;
   closeProject: () => void;
   applyMutation: (m: MutationResponse) => void;
@@ -225,24 +213,19 @@ interface State {
   commitDraftSketch: () => Promise<void>;
   finishSketch: () => Promise<void>;
 
-  /** Delete sketch entities (and dependent curves/constraints) from the draft. */
   deleteSketchEntities: (entityIds: string[]) => Promise<void>;
-  /** Toggle the construction flag on draft sketch curves. */
   toggleSketchConstruction: (entityIds: string[]) => Promise<void>;
   trimSketchPieces: (targets: TrimTarget[]) => Promise<void>;
   insertSketchImport: (format: string, imported: SketchImport) => Promise<void>;
 
   addFeature: (feature: Feature) => Promise<void>;
   updateFeature: (fid: string, patch: Partial<Feature>) => Promise<void>;
-  /** Live-preview edit, staged by the server in the dialog's transaction. */
   updateFeaturePreview: (fid: string, patch: Partial<Feature>) => Promise<void>;
   previewNewFeature: (feature: Feature) => Promise<void>;
-  /** Abort the dialog's preview transaction. */
   cancelPreview: () => Promise<void>;
   deleteFeature: (fid: string) => Promise<void>;
   suppressFeature: (fid: string, suppressed: boolean) => Promise<void>;
   renameFeature: (fid: string, name: string) => Promise<void>;
-  /** Rename the open project (display only — no regeneration, not an undo step). */
   renameProject: (name: string) => Promise<void>;
   rollTimeline: (position: number) => Promise<void>;
   setBodyMeta: (bodyId: string, patch: { name: string }) => Promise<void>;
@@ -509,6 +492,30 @@ async function saveView(
   }
 }
 
+const landed = (m: MutationResponse) => ({
+  document: m.document,
+  evaluation: m.evaluation,
+  history: m.history ?? null,
+});
+
+async function loadHistory(document: CadDocument): Promise<void> {
+  try {
+    const { entries, position } = await api.history(document.id);
+    const [undo, redo] = [entries[position - 1], entries[position]];
+    if (useStore.getState().document === document)
+      useStore.setState({
+        history: {
+          canUndo: !!undo,
+          canRedo: !!redo,
+          undoLabel: undo?.label ?? null,
+          redoLabel: redo?.label ?? null,
+        },
+      });
+  } catch {
+    return;
+  }
+}
+
 function lost(e: unknown): Recovery | null {
   const recovery = recoveryFor(e);
   if (recovery) {
@@ -564,9 +571,7 @@ async function moveHistory(
       }),
     );
     useStore.setState({
-      document: m.document,
-      evaluation: m.evaluation,
-      history: m.history ?? null,
+      ...landed(m),
       savedAt: Date.now(),
       busy: false,
       ...historyEditingState(mode, m),
@@ -628,6 +633,7 @@ export const useStore = create<State>((set, get) => ({
       });
       unsent = [];
       showPath(path);
+      void loadHistory(document);
     } catch (e: any) {
       if (e?.status === 401) return set({ busy: false });
       window.history.replaceState(null, "", "/");
@@ -683,13 +689,7 @@ export const useStore = create<State>((set, get) => ({
       try {
         const m = await fn(tx);
         preview.base = null;
-        set({
-          document: m.document,
-          evaluation: m.evaluation,
-          history: m.history ?? null,
-          savedAt: Date.now(),
-          busy: false,
-        });
+        set({ ...landed(m), savedAt: Date.now(), busy: false });
       } catch (e: any) {
         if (lost(e)) unsent.push(() => fn(tx));
         set((s) => ({ error: s.recovery ? null : e.message, busy: false }));
@@ -721,6 +721,7 @@ export const useStore = create<State>((set, get) => ({
           busy: false,
           ...historyEditingState(mode, { document: latest, evaluation }),
         });
+        void loadHistory(latest);
         return true;
       } catch (e: any) {
         set({ busy: false, recovery: lost(e) ?? recovery });
@@ -782,11 +783,7 @@ export const useStore = create<State>((set, get) => ({
           : null;
       if (current())
         set({
-          ...(m && {
-            document: m.document,
-            evaluation: m.evaluation,
-            history: m.history ?? null,
-          }),
+          ...(m && landed(m)),
           busy: false,
         });
     } catch (e: any) {
@@ -1061,7 +1058,6 @@ export const useStore = create<State>((set, get) => ({
         tx,
       ),
     );
-    // refresh draft from authoritative solve
     const evaluation = get().evaluation;
     const solvedSketch = evaluation?.sketches.find(
       (s) => s.featureId === draftSketch.id,
@@ -1105,7 +1101,6 @@ export const useStore = create<State>((set, get) => ({
     if (!draftSketch || entityIds.length === 0) return;
     const idSet = new Set(entityIds);
 
-    // points referenced by curves being deleted (candidates for cleanup)
     const deletedCurvePoints = new Set<string>();
     for (const e of draftSketch.entities) {
       const gone =
@@ -1141,7 +1136,6 @@ export const useStore = create<State>((set, get) => ({
       return true;
     });
 
-    // drop endpoints orphaned by the deletion (still keep user-placed points)
     const stillUsed = new Set<string>();
     for (const e of entities) {
       if (e.kind === "line") {
@@ -1162,8 +1156,6 @@ export const useStore = create<State>((set, get) => ({
         !deletedCurvePoints.has(e.id),
     );
 
-    // A connected endpoint may survive deletion of its projected curve.
-    // Release that point rather than leaving a frozen, unlinked reference.
     const drivenPoints = new Set<string>();
     for (const e of entities) {
       if (e.kind === "point" || !e.projection) continue;
@@ -1312,7 +1304,6 @@ export const useStore = create<State>((set, get) => ({
       const { document: renamed } = await inTurn(() =>
         api.renameProject(document.id, trimmed),
       );
-      // only the name changed server-side; keep whatever else is in the store
       const current = get().document;
       if (current && current.id === renamed.id) {
         set({ document: { ...current, name: renamed.name } });
