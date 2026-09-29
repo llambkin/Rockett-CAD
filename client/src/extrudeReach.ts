@@ -249,15 +249,18 @@ function sketchRegions(
   );
 }
 
+interface Section {
+  key: string;
+  loops: Vec3[][];
+  normal: Vec3;
+  sketches: SketchPayload[];
+}
+
 function prism(
-  body: BodyPayload,
-  face: FaceInfo,
-  normal: Vec3,
-  sketches: SketchPayload[],
+  { loops, normal, sketches }: Section,
   [low, high]: number[],
   out: Mesh,
 ) {
-  const loops = faceLoops(body, face, normal);
   const depth = dot(loops[0]![0]!, normal);
   const side = across([
     [0, 0, 0],
@@ -312,13 +315,7 @@ export function extrudeGhosts(ghosts: PreviewGhost[]): PreviewGhost[] {
   const feature = previewedFeature(s);
   const bodies = previewBodies(s);
   const tint = ghosts[0]?.tint;
-  if (
-    !tint ||
-    feature?.type !== "extrude" ||
-    feature.profiles.length > 0 ||
-    !feature.faces?.length ||
-    feature.operation === "intersect"
-  )
+  if (!tint || feature?.type !== "extrude" || feature.operation === "intersect")
     return ghosts;
   const ends = span(
     feature.direction,
@@ -331,25 +328,48 @@ export function extrudeGhosts(ghosts: PreviewGhost[]): PreviewGhost[] {
   const sketches = (s.evaluation?.sketches ?? []).filter(
     (k) => order(k.featureId) < order(feature.id),
   );
+  const found = [
+    ...feature.profiles.map((ref): Section | undefined => {
+      const sketch = s.evaluation?.sketches.find(
+        (k) => k.featureId === ref.sketchId,
+      );
+      const profile = sketch && findProfile(sketch, ref.profileId);
+      if (!profile) return undefined;
+      return {
+        key: `${ref.sketchId} ${ref.profileId}`,
+        loops: [profile.polygon, ...profile.holePolygons].map((p) =>
+          framePoints(sketch.frame, p),
+        ),
+        normal: sketch.frame.normal,
+        sketches: [],
+      };
+    }),
+    ...(feature.faces ?? []).map((ref): Section | undefined => {
+      const body = bodies.find((b) => b.bodyId === ref.bodyId);
+      const face = body?.faces.find((f) => f.name === ref.faceName);
+      if (!body || face?.surface.type !== "plane") return undefined;
+      return {
+        key: `${body.meshKey} ${face.name}`,
+        loops: faceLoops(body, face, face.surface.normal),
+        normal: face.surface.normal,
+        sketches,
+      };
+    }),
+  ];
+  const sections = found.filter((c) => c !== undefined);
+  if (!found.length || sections.length < found.length) return ghosts;
   const out: Mesh = { positions: [], normals: [] };
-  const keys: string[] = [];
-  for (const ref of feature.faces) {
-    const body = bodies.find((b) => b.bodyId === ref.bodyId);
-    const face = body?.faces.find((f) => f.name === ref.faceName);
-    if (!body || !face || face.surface.type !== "plane") return ghosts;
-    keys.push(body.meshKey, face.name);
-    prism(body, face, face.surface.normal, sketches, ends, out);
-  }
-  const boxes = feature.faces.map((ref) =>
-    swept(faceBase(ref, bodies)!, ends[0]!, ends[1]!),
+  for (const section of sections) prism(section, ends, out);
+  const boxes = sections.map(({ loops, normal }) =>
+    swept({ points: loops.flat(), normal }, ends[0]!, ends[1]!),
   );
   const corner = (pick: (b: Bounds) => Vec3, f: typeof Math.min) =>
     [0, 1, 2].map((i) => f(...boxes.map((b) => pick(b)[i]!))) as Vec3;
   const indices = Array.from({ length: out.positions.length / 3 }, (_, i) => i);
   const body: BodyPayload = {
-    bodyId: feature.faces[0]!.bodyId,
+    bodyId: ghosts[0]!.body.bodyId,
     name: feature.name,
-    meshKey: `extrude ${feature.id} ${ends} ${keys}`,
+    meshKey: `extrude ${feature.id} ${ends} ${sections.map((c) => c.key)}`,
     ...out,
     indices,
     faces: [],
