@@ -21,6 +21,7 @@ import type { Selection } from "../store";
 import type { PreviewGhost, PreviewTint } from "../livePreview";
 import { clientRay } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
+import { fillGhost } from "./ghostGeometry";
 import { type LayerHandle, sceneLayers } from "./sceneLayers";
 import {
   activeTheme,
@@ -797,39 +798,25 @@ export class CadViewport {
   }
 
   setPreviewGhosts(ghosts: readonly PreviewGhost[]) {
-    const keys = new Set(ghosts.map((g) => g.body.meshKey));
-    for (const [key, mesh] of this.ghosts) {
-      if (keys.has(key)) continue;
+    const ids = new Set(ghosts.map((g) => g.body.bodyId));
+    for (const [id, mesh] of this.ghosts) {
+      if (ids.has(id)) continue;
       this.ghostRoot.remove(mesh);
       disposeObject(mesh);
-      this.ghosts.delete(key);
+      this.ghosts.delete(id);
     }
     for (const { body, tint, ranges } of ghosts) {
-      const mesh = this.ghosts.get(body.meshKey) ?? this.addGhost(body);
-      mesh.geometry.setIndex(
-        ranges.flatMap(({ start, count }) =>
-          body.indices.slice(start, start + count),
-        ),
-      );
+      const mesh = this.ghosts.get(body.bodyId) ?? this.addGhost(body.bodyId);
+      fillGhost(mesh.geometry, body, ranges);
       mesh.material.color.set(themeColor(tint));
       mesh.material.userData.themeToken = tint;
-      mesh.userData.ghostOf = body.bodyId;
     }
     this.requestRender();
   }
 
-  private addGhost(body: BodyPayload) {
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(body.positions, 3),
-    );
-    geom.setAttribute(
-      "normal",
-      new THREE.Float32BufferAttribute(body.normals, 3),
-    );
+  private addGhost(bodyId: string) {
     const mesh = new THREE.Mesh(
-      geom,
+      new THREE.BufferGeometry(),
       new THREE.MeshStandardMaterial({
         metalness: BODY_APPEARANCE.metalness,
         roughness: BODY_APPEARANCE.roughness,
@@ -840,8 +827,9 @@ export class CadViewport {
       }),
     );
     mesh.renderOrder = 3;
+    mesh.userData.ghostOf = bodyId;
     this.ghostRoot.add(mesh);
-    this.ghosts.set(body.meshKey, mesh);
+    this.ghosts.set(bodyId, mesh);
     return mesh;
   }
 
