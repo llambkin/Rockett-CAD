@@ -58,13 +58,12 @@ import { listenWheel } from "../three/wheel";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
 import { extrudeGhosts } from "../extrudeReach";
 import {
-  loadPreviewBase,
   previewBodies,
-  previewScene,
   previewedFeature,
   useStore,
   type Selection,
 } from "../store";
+import { baseBodies, loadPreviewBase, previewScene } from "../previewBase";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { registerHoldKey } from "../commands/keymap";
@@ -374,7 +373,7 @@ export function ViewportView() {
   // ---- sync bodies ----
   useEffect(() => {
     if (!editFeatureId) return;
-    void loadPreviewBase(editFeatureId).then(
+    void loadPreviewBase(editFeatureId, useStore.getState).then(
       (loaded) => loaded && setBaseLoads((n) => n + 1),
     );
   }, [editFeatureId]);
@@ -566,7 +565,7 @@ export function ViewportView() {
     }
     const faceSel = s.selection.find((x) => x.kind === "face") as any;
     if (!faceSel) return null;
-    const body = previewBodies(s).find((b) => b.bodyId === faceSel.bodyId);
+    const body = baseBodies(s).find((b) => b.bodyId === faceSel.bodyId);
     const face = body?.faces.find((f) => f.name === faceSel.faceName);
     if (!body || !face || face.surface.type !== "plane") return null;
     const centroid = faceCentroid(body, face);
@@ -654,7 +653,7 @@ export function ViewportView() {
       .filter((x) => x.kind === "body")
       .map((x: any) => x.bodyId);
     if (bodyIds.length === 0) return null;
-    const bodies = previewBodies(s).filter((b) => bodyIds.includes(b.bodyId));
+    const bodies = baseBodies(s).filter((b) => bodyIds.includes(b.bodyId));
     if (bodies.length === 0) return null;
     const t: [number, number, number] = [
       Number(s.dialogParams.tx) || 0,

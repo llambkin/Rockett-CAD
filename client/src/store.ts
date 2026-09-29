@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type {
-  BodyPayload,
   CadDocument,
   EvaluateResult,
   Feature,
@@ -35,11 +34,8 @@ import {
 import { api, type MutationResponse } from "./api";
 import * as cameraSave from "./cameraSave";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
-import {
-  previewTints,
-  type PreviewGhost,
-  type PreviewTint,
-} from "./livePreview";
+import * as previewBase from "./previewBase";
+export { previewBodies } from "./previewBase";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
 
 export type Selection =
@@ -253,18 +249,12 @@ const preview: {
   pending: { fid: string; patch: Partial<Feature> } | null;
   inFlight: Promise<void> | null;
   session: Session | null;
-  base: {
-    fid: string;
-    bodies: BodyPayload[];
-    after?: BodyPayload[] | undefined;
-  } | null;
   error: string | null;
 } = {
   seq: 0,
   pending: null,
   inFlight: null,
   session: null,
-  base: null,
   error: null,
 };
 
@@ -325,89 +315,6 @@ export function previewedFeature(s: {
   return s.document?.features.find((f) => f.id === id);
 }
 
-function previewAfter(s: { evaluation: EvaluateResult | null }): BodyPayload[] {
-  return preview.base?.after ?? s.evaluation?.bodies ?? [];
-}
-
-function previewBodyTints(s: {
-  document: CadDocument | null;
-  evaluation: EvaluateResult | null;
-}): Map<string, PreviewTint> {
-  const base = preview.base;
-  const feature = s.document?.features.find((f) => f.id === base?.fid);
-  if (!base || !feature || feature.suppressed || !s.evaluation)
-    return new Map();
-  return previewTints(feature, base.bodies, previewAfter(s));
-}
-
-async function bodiesAfter(
-  document: CadDocument,
-  fid: string,
-): Promise<BodyPayload[] | undefined> {
-  const index = document.features.findIndex((f) => f.id === fid);
-  if (index < 0 || index + 1 >= document.timelinePosition) return undefined;
-  return (await api.evaluate(document.id, index + 1)).bodies;
-}
-
-export function previewBodies(s: {
-  mode: Mode;
-  evaluation: EvaluateResult | null;
-}): BodyPayload[] {
-  return s.mode.name === "dialog" && preview.base
-    ? preview.base.bodies
-    : (s.evaluation?.bodies ?? []);
-}
-
-export function previewScene(s: {
-  mode: Mode;
-  document: CadDocument | null;
-  evaluation: EvaluateResult | null;
-  view: ProjectView;
-}): {
-  bodies: BodyPayload[];
-  tints: Map<string, PreviewTint>;
-  ghosts: PreviewGhost[];
-} {
-  const bodies = s.evaluation?.bodies ?? [];
-  const tints = previewBodyTints(s);
-  const shown = previewBodies(s);
-  if (shown === bodies) return { bodies, tints, ghosts: [] };
-  const hidden = new Set(s.view.hidden.bodies);
-  return {
-    bodies: shown,
-    tints: new Map(),
-    ghosts: previewAfter(s).flatMap((body) => {
-      const tint = tints.get(body.bodyId);
-      return tint && !hidden.has(body.bodyId) ? [{ body, ...tint }] : [];
-    }),
-  };
-}
-
-export async function loadPreviewBase(fid: string): Promise<boolean> {
-  const { document } = useStore.getState();
-  const index = document?.features.findIndex((f) => f.id === fid) ?? -1;
-  if (!document || index < 0 || index >= document.timelinePosition)
-    return false;
-  try {
-    const [{ bodies }, after] = await Promise.all([
-      api.evaluate(document.id, index),
-      bodiesAfter(document, fid),
-    ]);
-    const { mode, projectId } = useStore.getState();
-    if (
-      mode.name !== "dialog" ||
-      mode.editFeatureId !== fid ||
-      projectId !== document.id
-    )
-      return false;
-    const landed = preview.base?.fid === fid ? preview.base.after : undefined;
-    preview.base = { fid, bodies, after: landed ?? after };
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function sendPreviews(): Promise<void> {
   while (preview.pending) {
     const { fid, patch } = preview.pending;
@@ -436,9 +343,9 @@ async function sendPreviews(): Promise<void> {
       );
       session.staged++;
       if (seq !== preview.seq) continue;
-      const after = await bodiesAfter(m.document, fid);
+      const after = await previewBase.bodiesAfter(m.document, fid);
       if (seq !== preview.seq) continue;
-      if (preview.base?.fid === fid) preview.base.after = after;
+      previewBase.landAfter(fid, after);
       useStore.setState((s) => ({
         document: m.document,
         evaluation: m.evaluation,
@@ -689,7 +596,7 @@ export const useStore = create<State>((set, get) => ({
       set({ busy: true, error: null });
       try {
         const m = await fn(tx);
-        preview.base = null;
+        previewBase.dropBase();
         set({ ...landed(m), savedAt: Date.now(), busy: false });
       } catch (e: any) {
         if (lost(e)) unsent.push(() => fn(tx));
@@ -704,7 +611,7 @@ export const useStore = create<State>((set, get) => ({
     if (!document || !recovery) return;
     endPreviews();
     preview.session = null;
-    preview.base = null;
+    previewBase.dropBase();
     set({ busy: true, error: null });
     const reloaded = await inTurn(async () => {
       try {
@@ -743,7 +650,7 @@ export const useStore = create<State>((set, get) => ({
   async updateFeaturePreview(fid, patch) {
     const { document, evaluation, recovery } = get();
     if (!document || recovery) return;
-    preview.base ??= { fid, bodies: evaluation?.bodies ?? [] };
+    previewBase.holdBase(fid, evaluation);
     preview.session ??= {
       tx: crypto.randomUUID(),
       fid,
@@ -774,7 +681,7 @@ export const useStore = create<State>((set, get) => ({
     const settling = endPreviews();
     const session = preview.session;
     preview.session = null;
-    preview.base = null;
+    previewBase.dropBase();
     if (!document || !session || recovery) return;
     const current = () => get().projectId === document.id;
     set({ busy: true });
