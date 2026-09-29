@@ -112,6 +112,9 @@ Fillet and Chamfer default to **Select tangent chain**: clicking an edge picks
 the smooth edges connected to it, and clicking a picked chain drops it.
 Uncheck it to pick edges one at a time.
 
+A fillet that meets two earlier fillets can fail. This is a current
+limitation. Fillet the vertical edges before the top edges to avoid it.
+
 ### Replicate and construction
 
 - Replicate: mirror, rectangular pattern and circular pattern.
