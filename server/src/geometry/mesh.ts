@@ -1,4 +1,10 @@
-import { getKernel, faces as facesOf, scoped, type Shape } from "./kernel.js";
+import {
+  getKernel,
+  faces as facesOf,
+  release,
+  scoped,
+  type Shape,
+} from "./kernel.js";
 
 export interface FaceMesh {
   face: Shape;
@@ -40,31 +46,33 @@ function isExact(face: Shape): boolean {
   return exact;
 }
 
-function read(faces: Shape[]): FaceMesh[] {
-  const k = getKernel(),
-    out: FaceMesh[] = [];
-  for (const face of faces) {
-    const mesh = k.meshFace(face);
-    if (mesh) out.push({ face, ...mesh });
-    else face.delete();
-  }
-  return out;
-}
-
 export function meshShape(
   shape: Shape,
   { linear, angular }: { linear: number; angular: number },
 ): FaceMesh[] {
-  const faces = facesOf(shape);
-  if (!faces.every(isExact))
-    new (getKernel().BRepMesh_IncrementalMesh_2)(
-      shape,
-      linear,
-      false,
-      angular,
-      false,
-    ).delete();
-  return read(faces);
+  const k = getKernel(),
+    faces = facesOf(shape);
+  let meshes;
+  try {
+    if (!faces.every(isExact))
+      new k.BRepMesh_IncrementalMesh_2(
+        shape,
+        linear,
+        false,
+        angular,
+        false,
+      ).delete();
+    meshes = faces.map((face) => k.meshFace(face));
+  } catch (error) {
+    release(faces);
+    throw error;
+  }
+  return faces.flatMap((face, i) => {
+    const mesh = meshes[i];
+    if (mesh) return [{ face, ...mesh }];
+    face.delete();
+    return [];
+  });
 }
 
 export function meshCopy(
