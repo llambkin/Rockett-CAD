@@ -88,7 +88,11 @@ import {
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { checkedCut } from "./cutCheck.js";
-import { zeroThicknessWarning } from "./joinCheck.js";
+import {
+  bboxOverlap,
+  contactGroups,
+  zeroThicknessWarning,
+} from "./joinCheck.js";
 import {
   ORIGIN_FRAMES,
   V,
@@ -271,18 +275,6 @@ function resolveProfiles(
 // ---------------------------------------------------------------------------
 // Body bookkeeping
 // ---------------------------------------------------------------------------
-
-function bboxOverlap(a: Shape, b: Shape): boolean {
-  const ba = bboxOf(a);
-  const bb = bboxOf(b);
-  const margin = LINEAR_TOL;
-  for (let i = 0; i < 3; i++) {
-    if (ba.max[i]! < bb.min[i]! - margin || bb.max[i]! < ba.min[i]! + -margin) {
-      return false;
-    }
-  }
-  return true;
-}
 
 export function registerBodySolids(
   state: EvalState,
@@ -491,42 +483,25 @@ export function fuseNamed(
   featureId: string,
   failure: string,
 ): ToolResult {
-  const k = getKernel();
-  const op = new k.BRepAlgoAPI_Fuse_3(a.shape, b.shape, progress());
+  const op = new (getKernel().BRepAlgoAPI_Fuse_3)(a.shape, b.shape, progress());
   op.Build(progress());
-  if (!op.IsDone()) {
-    op.delete();
-    throw new Error(failure);
-  }
-  const shape = op.Shape();
-  const names = propagateNames(op, [a, b], shape, featureId);
+  if (op.IsDone()) return namedFuse(op, a, b, featureId);
   op.delete();
-  return { shape, names };
+  throw new Error(failure);
 }
 
-function touches(a: Shape, b: Shape): boolean {
-  if (!bboxOverlap(a, b)) return false;
-  const k = getKernel();
-  const dist = new k.BRepExtrema_DistShapeShape_2(
-    a,
-    b,
-    k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
-    k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
-    progress(),
-  );
-  const done = dist.IsDone();
-  const value = done ? dist.Value() : 0;
-  dist.delete();
-  if (!done) throw new Error("join contact check failed");
-  if (value > LINEAR_TOL) return false;
-  return scoped((own) => {
-    const op = own(new k.BRepAlgoAPI_Fuse_3(a, b, progress()));
-    op.Build(progress());
-    if (!op.IsDone()) throw new Error("join contact check failed");
-    const pieces = solids(own(op.Shape()));
-    release(pieces);
-    return pieces.length === 1;
-  });
+function namedFuse(
+  op: any,
+  a: ToolResult,
+  b: ToolResult,
+  featureId: string,
+): ToolResult {
+  try {
+    const shape = op.Shape();
+    return { shape, names: propagateNames(op, [a, b], shape, featureId) };
+  } finally {
+    op.delete();
+  }
 }
 
 export type FeatureOutcome = Pick<FeatureStatus, "warning" | "targets">;
@@ -564,51 +539,44 @@ function joinEvery(
     : overlapping(state, tool.shape).sort((a, b) =>
         compareNames(a.bodyId, b.bodyId),
       );
-  let groups: { bodies: StateBody[]; pieces: ToolResult[] }[] = [];
-  const loose: Shape[] = [];
-  for (const shape of solids(tool.shape)) {
-    const hits = bodies.filter((b) => touches(b.shape, shape));
-    if (hits.length === 0) {
-      loose.push(shape);
-      continue;
+  const held = new Set<any>();
+  try {
+    const { groups, loose } = contactGroups(bodies, tool, held);
+    const touched = new Set(groups.flatMap((g) => g.bodies));
+    const used = bodies.filter((b) => touched.has(b)).map((b) => b.bodyId);
+    const missed = targets?.find((id) => !used.includes(id));
+    if (missed) {
+      release([
+        ...loose,
+        ...groups.flatMap((g) => g.pieces.map((p) => p.shape)),
+      ]);
+      throw missedTarget("join", missed);
     }
-    const bridged = groups.filter((g) =>
-      g.bodies.some((b) => hits.includes(b)),
-    );
-    groups = [
-      ...groups.filter((g) => !bridged.includes(g)),
-      {
-        bodies: bodies.filter(
-          (b) => hits.includes(b) || bridged.some((g) => g.bodies.includes(b)),
-        ),
-        pieces: [...bridged.flatMap((g) => g.pieces), { ...tool, shape }],
-      },
-    ];
+    if (loose.length > 0)
+      registerSolids(state, `b:${featureId}`, loose, tool.names);
+    const warnings: (string | undefined)[] = [];
+    const join = (acc: ToolResult, next: ToolResult) =>
+      fuseNamed(acc, next, featureId, "boolean join failed");
+    for (const {
+      bodies: [first, ...rest],
+      pieces,
+      fuse,
+    } of groups) {
+      held.delete(fuse);
+      const fused = fuse
+        ? pieces
+            .slice(1)
+            .reduce(join, namedFuse(fuse, first!, pieces[0]!, featureId))
+        : [...pieces, ...rest].reduce<ToolResult>(join, first!);
+      for (const b of rest) state.bodies.delete(b.bodyId);
+      const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
+      warnings.push(joined.warning);
+      registerBodySolids(state, first!.bodyId, joined.shape, joined.names);
+    }
+    return { targets: used, ...warned(warnings) };
+  } finally {
+    release(held);
   }
-  const touched = new Set(groups.flatMap((g) => g.bodies));
-  const used = bodies.filter((b) => touched.has(b)).map((b) => b.bodyId);
-  const missed = targets?.find((id) => !used.includes(id));
-  if (missed) {
-    release([...loose, ...groups.flatMap((g) => g.pieces.map((p) => p.shape))]);
-    throw missedTarget("join", missed);
-  }
-  if (loose.length > 0)
-    registerSolids(state, `b:${featureId}`, loose, tool.names);
-  const warnings: (string | undefined)[] = [];
-  for (const {
-    bodies: [first, ...rest],
-    pieces,
-  } of groups) {
-    const fused = [...pieces, ...rest].reduce<ToolResult>(
-      (acc, next) => fuseNamed(acc, next, featureId, "boolean join failed"),
-      first!,
-    );
-    for (const b of rest) state.bodies.delete(b.bodyId);
-    const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
-    warnings.push(joined.warning);
-    registerBodySolids(state, first!.bodyId, joined.shape, joined.names);
-  }
-  return { targets: used, ...warned(warnings) };
 }
 
 function applyToolOperation(
