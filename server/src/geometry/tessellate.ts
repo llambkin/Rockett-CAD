@@ -8,13 +8,14 @@
  */
 
 import { createHash } from "node:crypto";
-import type {
-  BodyPayload,
-  EdgeInfo,
-  FaceInfo,
-  RefSignature,
-  VertexInfo,
-  Vec3,
+import {
+  compareNames,
+  type BodyPayload,
+  type EdgeInfo,
+  type FaceInfo,
+  type RefSignature,
+  type VertexInfo,
+  type Vec3,
 } from "@rockett/shared";
 import {
   bboxOf,
@@ -211,12 +212,14 @@ export function movePayload(
           ? f.surface
           : { ...f.surface, origin: at(f.surface.origin) },
     })),
-    edges: source.edges.map((e) => ({
-      ...e,
-      name: adjacent(e.name),
-      polyline: along(e.polyline),
-      curve: movedCurve(e.curve, at),
-    })),
+    edges: source.edges
+      .map((e) => ({
+        ...e,
+        name: adjacent(e.name),
+        polyline: along(e.polyline),
+        curve: movedCurve(e.curve, at),
+      }))
+      .sort((a, b) => compareNames(a.name, b.name)),
     vertices: nameVertices(
       vertexFacesOf(from).map((v) => ({
         faces: v.faces.map(named),

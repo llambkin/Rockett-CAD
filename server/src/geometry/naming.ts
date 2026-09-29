@@ -422,8 +422,7 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
     arr.push(e);
     groups.set(e.base, arr);
   }
-  const byName = new Map<string, Shape>();
-  for (const [e, name] of suffixDuplicates(
+  const named = suffixDuplicates(
     groups,
     (entry) => {
       try {
@@ -433,10 +432,8 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
       }
     },
     body.names.version,
-  )) {
-    byName.set(name, e.edge);
-  }
-  return { byName };
+  ).map(([e, name]) => [name, e.edge] as const);
+  return { byName: new Map(named.sort(([a], [b]) => compareNames(a, b))) };
 }
 
 export type VertexFaces = { faces: string[]; position: Vec3 };
