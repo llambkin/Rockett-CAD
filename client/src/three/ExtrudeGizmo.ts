@@ -88,8 +88,11 @@ export class ExtrudeGizmo extends Manipulator {
     this.cone.userData.themeToken = "gizmo";
     (this.shaft.userData as any).extrudeGizmo = true;
     (this.cone.userData as any).extrudeGizmo = true;
-    this.group.add(this.shaft);
-    this.group.add(this.cone);
+    for (const mesh of [this.shaft, this.cone]) {
+      mesh.frustumCulled = false;
+      mesh.onBeforeRender = () => this.layoutArrow();
+      this.group.add(mesh);
+    }
     this.update(initialValue);
   }
 
@@ -139,12 +142,22 @@ export class ExtrudeGizmo extends Manipulator {
   /** Re-position arrow + preview for a (signed) distance value. */
   update(value: number) {
     this.value = value;
+    this.layoutArrow();
+    this.updatePreview(value);
+    this.host.requestRender();
+  }
+
+  private length(): number {
+    return Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4);
+  }
+
+  private layoutArrow() {
     const wpp = this.host.worldPerPixel();
     const shaftRadius = wpp * 1.6;
     const coneH = wpp * 16;
     const coneR = wpp * 5;
-    const sign = value >= 0 ? 1 : -1;
-    const len = Math.max(Math.abs(value), wpp * 4);
+    const sign = this.value >= 0 ? 1 : -1;
+    const len = this.length();
 
     const tip = this.origin
       .clone()
@@ -163,9 +176,8 @@ export class ExtrudeGizmo extends Manipulator {
     this.cone.position.copy(tip);
     this.cone.quaternion.copy(quat);
     this.cone.scale.set(coneR, coneH, coneR);
-
-    this.updatePreview(value);
-    this.host.requestRender();
+    this.shaft.updateMatrixWorld();
+    this.cone.updateMatrixWorld();
   }
 
   private updatePreview(value: number) {
@@ -271,9 +283,9 @@ export class ExtrudeGizmo extends Manipulator {
 
   private tip(extra = 0): THREE.Vector3 {
     const sign = this.value >= 0 ? 1 : -1;
-    const len =
-      Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4) + extra;
-    return this.origin.clone().addScaledVector(this.axis, sign * len);
+    return this.origin
+      .clone()
+      .addScaledVector(this.axis, sign * (this.length() + extra));
   }
 
   hitTest(clientX: number, clientY: number): boolean {
