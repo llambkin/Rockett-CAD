@@ -27,7 +27,7 @@ import {
   engineFor,
   type EvaluateHooks,
 } from "../geometry/engine.js";
-import { kernelVersion } from "../geometry/kernel.js";
+import { kernelVersion, release } from "../geometry/kernel.js";
 import { measure } from "../geometry/measure.js";
 import { resolvePlaneFrame, type EvalState } from "../geometry/features.js";
 import { computeEdgeNames } from "../geometry/naming.js";
@@ -151,19 +151,24 @@ const ANSWERS: {
   },
   projectEdge(state, { plane, edge: ref, entityId }) {
     const body = state.bodies.get(ref.bodyId);
-    const edge = body && computeEdgeNames(body).byName.get(ref.edgeName);
-    if (!edge)
-      throw new ValidationError(
-        "This edge is not available before the sketch. Choose geometry from an earlier feature.",
+    const byName = body && computeEdgeNames(body).byName;
+    try {
+      const edge = byName?.get(ref.edgeName);
+      if (!edge)
+        throw new ValidationError(
+          "This edge is not available before the sketch. Choose geometry from an earlier feature.",
+        );
+      return asValidation(() =>
+        projectEdge(
+          curveInfo(edge),
+          resolvePlaneFrame(state, plane),
+          entityId,
+          ref,
+        ),
       );
-    return asValidation(() =>
-      projectEdge(
-        curveInfo(edge),
-        resolvePlaneFrame(state, plane),
-        entityId,
-        ref,
-      ),
-    );
+    } finally {
+      release(byName?.values() ?? []);
+    }
   },
   projectFace(state, { face: ref }) {
     const body = state.bodies.get(ref.bodyId);
