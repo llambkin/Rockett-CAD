@@ -71,7 +71,7 @@ export const THEME_TOKENS = {
   "viewport-bg": "#2a2d30",
   body,
   ...previewTints(PREVIEW_TINT_STRENGTH.default),
-  edge: "#30343a",
+  edge: "#0d0e10",
   selection: blue,
   hover,
   "sketch-line": text,
