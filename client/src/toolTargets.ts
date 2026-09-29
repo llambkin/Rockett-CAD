@@ -35,8 +35,12 @@ export function toolTargets(
 
 export function dialogTargets(): { targets?: string[] } {
   const s = useStore.getState();
-  const { operation = "join", targets } = s.dialogParams;
-  return toolTargets(operation, targets, s.document?.namingVersion);
+  if (s.mode.name !== "dialog") return {};
+  return toolTargets(
+    targetOperation(s.mode.dialog, s.dialogParams),
+    s.dialogParams.targets,
+    s.document?.namingVersion,
+  );
 }
 
 export function previewEdit(fid: string, patch: object): Promise<void> {
