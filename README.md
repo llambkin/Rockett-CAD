@@ -1,22 +1,5 @@
 # Rockett CAD
 
-Team Rockett!
-
-Prepare for trouble!
-And make it double!
-
-To protect the world from devastation!
-To unite all peoples within our nation!
-
-To denounce the evils of truth and love!
-To extend our reach to the stars above!
-
-Liam
-Mark
-
-Team Rocket blasts off at the speed of light!
-Surrender now, or prepare to fight!
-
 Self-hosted, browser-based **parametric CAD** with a B-Rep kernel and a feature
 timeline. The aim is Fusion features for design and manufacture workspaces: CNC
 toolpaths, PCB and electrical plugins, from the model to a finished part.
