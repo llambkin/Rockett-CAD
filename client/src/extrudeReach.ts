@@ -94,12 +94,35 @@ function span(
       : [start, start + d];
 }
 
+type ToolOperation = "newBody" | "join" | "cut";
+
+export function toolOperation(tools?: Bounds[], into = false): ToolOperation {
+  const bodies = previewBodies(useStore.getState());
+  const meets = (margin: number) =>
+    bodies.length > 0 &&
+    (!tools ||
+      tools.some((t) => bodies.some((b) => overlaps(t, b.bbox, margin))));
+  if (into && meets(LINEAR_TOL)) return "cut";
+  return meets(-LINEAR_TOL) ? "join" : "newBody";
+}
+
+export function autoOperation(
+  params: { operation?: string; autoOperation?: boolean },
+  operation: () => ToolOperation,
+) {
+  if (params.operation !== undefined && !params.autoOperation) return undefined;
+  const next = operation();
+  return next === params.operation
+    ? undefined
+    : { operation: next, autoOperation: true };
+}
+
 export function extrudeOperation(
   direction: string,
   distance: number,
   start: number,
   distance2: number,
-): "newBody" | "join" | "cut" {
+): ToolOperation {
   const [from, to] = span(direction, distance, start, distance2);
   const into = to < from && (direction === "normal" || direction === "reverse");
   const s = useStore.getState();
@@ -113,10 +136,7 @@ export function extrudeOperation(
           : null;
     return base ? [swept(base, from, to)] : [];
   });
-  const meets = (margin: number) =>
-    tools.some((t) => bodies.some((b) => overlaps(t, b.bbox, margin)));
-  if (into && meets(LINEAR_TOL)) return "cut";
-  return meets(-LINEAR_TOL) ? "join" : "newBody";
+  return toolOperation(tools, into);
 }
 
 function across([a, b, c]: Vec3[]): Vec3 {

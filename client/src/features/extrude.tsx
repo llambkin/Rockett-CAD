@@ -6,7 +6,7 @@ import {
   SelInfo,
 } from "../components/form/fields";
 import { profilesOrFaces, targets } from "../dialogPicks";
-import { extrudeOperation } from "../extrudeReach";
+import { autoOperation, extrudeOperation } from "../extrudeReach";
 import { useSetting } from "../settings";
 import {
   bodyTargets,
@@ -72,10 +72,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps) {
           onChange={(v) => setParams({ distance2: v })}
         />
       )}
-      <OperationField
-        intersect
-        onChange={(v) => setParams({ operation: v, autoOperation: false })}
-      />
+      <OperationField intersect />
     </>
   );
 }
@@ -125,20 +122,17 @@ const extrude: FeatureUI<ExtrudeFeature> = {
     },
     selection: [...profilePicks(f.profiles), ...facePicks(f.faces ?? [])],
   }),
-  onParamsChange: (params) => {
-    if (distance(params) === 0) return undefined;
-    if (params.operation !== undefined && !params.autoOperation)
-      return undefined;
-    const operation = extrudeOperation(
-      params.direction ?? "normal",
-      distance(params),
-      num(params, "startOffset", 0),
-      num(params, "distance2", 5),
-    );
-    return operation === params.operation
+  onParamsChange: (params) =>
+    distance(params) === 0
       ? undefined
-      : { operation, autoOperation: true };
-  },
+      : autoOperation(params, () =>
+          extrudeOperation(
+            params.direction ?? "normal",
+            distance(params),
+            num(params, "startOffset", 0),
+            num(params, "distance2", 5),
+          ),
+        ),
 };
 
 registerFeatureUI(extrude);

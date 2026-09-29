@@ -527,13 +527,7 @@ export function TargetField({ operation }: { operation: string }) {
   );
 }
 
-export function OperationField({
-  intersect,
-  onChange,
-}: {
-  intersect?: boolean;
-  onChange?: (operation: string) => void;
-}) {
+export function OperationField({ intersect }: { intersect?: boolean }) {
   const operation: string = useStore((s) => s.dialogParams.operation ?? "join");
   const setParams = useStore((s) => s.setDialogParams);
   return (
@@ -549,7 +543,7 @@ export function OperationField({
             ? [["intersect", "Intersect"] as [string, string]]
             : []),
         ]}
-        onChange={onChange ?? ((v) => setParams({ operation: v }))}
+        onChange={(v) => setParams({ operation: v, autoOperation: false })}
       />
       <TargetField operation={operation} />
     </>

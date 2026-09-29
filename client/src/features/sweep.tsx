@@ -5,6 +5,7 @@ import {
   SelectField,
 } from "../components/form/fields";
 import { clearInput, profiles, targets, type PickInput } from "../dialogPicks";
+import { autoOperation, toolOperation } from "../extrudeReach";
 import { useStore, type Selection } from "../store";
 import { bodyTargets, profilePicks, profileRefs } from "./inputs";
 import {
@@ -92,6 +93,7 @@ const sweep: FeatureUI<SweepFeature> = {
     },
     selection: profilePicks(f.profiles),
   }),
+  onParamsChange: (params) => autoOperation(params, () => toolOperation()),
 };
 
 registerFeatureUI(sweep);

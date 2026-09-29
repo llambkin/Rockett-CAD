@@ -1,6 +1,7 @@
 import { newId, type LoftFeature } from "@rockett/shared";
 import { OperationField, SelInfo } from "../components/form/fields";
 import { profiles, targets } from "../dialogPicks";
+import { autoOperation, toolOperation } from "../extrudeReach";
 import { bodyTargets, profilePicks, profileRefs } from "./inputs";
 import { registerFeatureUI, type FeatureUI } from "./registry";
 
@@ -48,6 +49,7 @@ const loft: FeatureUI<LoftFeature> = {
     },
     selection: profilePicks(f.sections),
   }),
+  onParamsChange: (params) => autoOperation(params, () => toolOperation()),
 };
 
 registerFeatureUI(loft);

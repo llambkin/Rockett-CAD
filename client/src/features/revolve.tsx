@@ -6,6 +6,7 @@ import {
   SelInfo,
 } from "../components/form/fields";
 import { axis, clearInput, profilesOrFaces, targets } from "../dialogPicks";
+import { autoOperation, toolOperation } from "../extrudeReach";
 import { useStore } from "../store";
 import {
   axisHint,
@@ -102,6 +103,7 @@ const revolve: FeatureUI<RevolveFeature> = {
       ...axisSelection(f.axis),
     ],
   }),
+  onParamsChange: (params) => autoOperation(params, () => toolOperation()),
 };
 
 registerFeatureUI(revolve);
