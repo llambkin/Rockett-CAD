@@ -17,6 +17,7 @@ import {
 } from "../../store";
 import { activeInput, heldBy } from "../../dialogPicks";
 import { chosenTargets, several } from "../../toolTargets";
+import { savedRegionIds } from "../../sketchUsage";
 
 export function NumField({
   label,
@@ -335,14 +336,13 @@ export function pickLabel(
   const sketch = featureName(pick.sketchId);
   if (pick.kind === "sketch") return sketch ?? "Sketch";
   if (pick.kind === "profile") {
-    const profiles =
+    const sk =
       evaluation &&
-      ranked(evaluation.sketches, (s) => s.featureId).get(pick.sketchId)?.item
-        .profiles;
+      ranked(evaluation.sketches, (s) => s.featureId).get(pick.sketchId)?.item;
+    const [id = ""] = sk ? savedRegionIds(sk, pick.profileId) : [];
     return numbered(
       "Profile",
-      (profiles && ranked(profiles, (x) => x.id).get(pick.profileId)?.rank) ??
-        -1,
+      (sk && ranked(sk.profiles, (x) => x.id).get(id)?.rank) ?? -1,
       sketch,
     );
   }

@@ -416,7 +416,7 @@ export function ViewportView() {
     // A sketch stays visible after a feature uses it, so its other regions can
     // still be extruded or cut. Used regions shade faintly but stay pickable
     // (the body over them may be hidden); free ones shade normally.
-    const usage = sketchUsage(document_);
+    const usage = sketchUsage(document_, evaluation.sketches);
     const hiddenSketches = new Set(hiddenFeatures);
 
     const activeSketchId = mode.name === "sketch" ? mode.sketchId : null;
