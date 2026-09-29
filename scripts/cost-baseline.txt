@@ -66,5 +66,5 @@ shared/src/sketchModify.ts 741
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts offsetRoundedChain 124
 shared/src/sketchModify.ts offsetSketch 159
-shared/src/solver.ts 717
-shared/src/solver.ts buildProblem 360
+shared/src/solver.ts 649
+shared/src/solver.ts buildProblem 325

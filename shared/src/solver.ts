@@ -24,6 +24,15 @@ import type {
 } from "./model.js";
 import { ValidationError } from "./schema/index.js";
 import { formatAngle, formatLength } from "./units.js";
+import {
+  dampingFloor,
+  evalResiduals,
+  jacobianRank,
+  leastSquares,
+  numericJacobian,
+  type Block,
+  type Residual,
+} from "./leastSquares.js";
 
 export interface SolveInput {
   entities: SketchEntity[];
@@ -47,24 +56,22 @@ export interface SolveResult {
   maxResidual: number;
 }
 
-const CONV_TOL = 1e-8;
 const CONFLICT_TOL = 1e-4;
-const MAX_ITER = 120;
 const DRAG_WEIGHT = 0.02;
-const DAMPING_FLOOR = 1e-6;
-
-type Residual = (x: Float64Array) => number;
 
 interface Problem {
   x0: Float64Array;
   residuals: Residual[];
+  deps: number[][];
+  refs: Set<string>;
   /** residuals contributed by real constraints (excludes drag pulls) */
   hardCount: number;
+  varsOf: (id: string) => number[];
   apply: (x: Float64Array, entities: SketchEntity[]) => void;
   numVars: number;
 }
 
-function buildProblem(input: SolveInput): Problem {
+function layout(input: SolveInput) {
   const points = new Map<string, SketchPoint>();
   const lines = new Map<string, SketchLine>();
   const circles = new Map<string, SketchCircle>();
@@ -84,7 +91,6 @@ function buildProblem(input: SolveInput): Problem {
     if (p.external) fixedPoints.add(p.id);
   }
 
-  // Variable layout
   const vars: number[] = [];
   const pointVarIndex = new Map<string, number>(); // -1 → fixed
   const radiusVarIndex = new Map<string, number>();
@@ -104,10 +110,58 @@ function buildProblem(input: SolveInput): Problem {
       vars.push(c.radius);
     }
   }
+  const varsOf = (id: string): number[] => {
+    const p = pointVarIndex.get(id) ?? -1;
+    if (p >= 0) return [p, p + 1];
+    const r = radiusVarIndex.get(id) ?? -1;
+    return r >= 0 ? [r] : [];
+  };
+  const apply = (x: Float64Array, entities: SketchEntity[]) => {
+    for (const e of entities) {
+      if (e.kind === "point") {
+        const vi = pointVarIndex.get(e.id)!;
+        if (vi >= 0) {
+          e.x = x[vi]!;
+          e.y = x[vi + 1]!;
+        }
+      } else if (e.kind === "circle") {
+        const vi = radiusVarIndex.get(e.id)!;
+        if (vi >= 0) e.radius = Math.abs(x[vi]!);
+      }
+    }
+  };
+  return {
+    points,
+    lines,
+    circles,
+    arcs,
+    vars,
+    pointVarIndex,
+    radiusVarIndex,
+    varsOf,
+    apply,
+  };
+}
+
+function buildProblem(input: SolveInput): Problem {
+  const space = layout(input);
+  const { points, lines, circles, arcs, varsOf } = space;
+  const { pointVarIndex, radiusVarIndex } = space;
+  const residuals: Residual[] = [];
+  const deps: number[][] = [];
+  const refs = new Set<string>();
+  const touched = new Set<string>();
+  const settle = (into?: Set<string>) => {
+    const used = [...refs].flatMap(varsOf);
+    while (deps.length < residuals.length) deps.push(used);
+    for (const id of refs) into?.add(id);
+    refs.clear();
+  };
 
   const px = (id: string) => {
     const p = points.get(id);
     if (!p) throw new SolverModelError(`unknown point ${id}`);
+    refs.add(id);
     const vi = pointVarIndex.get(id)!;
     if (vi < 0) {
       const fx = p.x;
@@ -127,6 +181,7 @@ function buildProblem(input: SolveInput): Problem {
   const radius = (id: string) => {
     const c = circles.get(id);
     if (c) {
+      refs.add(id);
       const vi = radiusVarIndex.get(id)!;
       if (vi < 0) {
         const r = c.radius;
@@ -160,9 +215,6 @@ function buildProblem(input: SolveInput): Problem {
     return { x1: px(l.p1), y1: py(l.p1), x2: px(l.p2), y2: py(l.p2) };
   };
 
-  const residuals: Residual[] = [];
-
-  // Implicit residual: arc start & end are equidistant from center.
   for (const a of arcs.values()) {
     const cx = px(a.center),
       cy = py(a.center);
@@ -175,6 +227,7 @@ function buildProblem(input: SolveInput): Problem {
         Math.hypot(sx(x) - cx(x), sy(x) - cy(x)) -
         Math.hypot(ex(x) - cx(x), ey(x) - cy(x)),
     );
+    settle();
   }
 
   for (const c of input.constraints) {
@@ -388,6 +441,7 @@ function buildProblem(input: SolveInput): Problem {
         break;
       }
     }
+    settle(touched);
   }
 
   const hardCount = residuals.length;
@@ -398,30 +452,20 @@ function buildProblem(input: SolveInput): Problem {
       const { x: tx, y: ty } = { x: input.drag.x, y: input.drag.y };
       residuals.push((x) => DRAG_WEIGHT * (x[vi]! - tx));
       residuals.push((x) => DRAG_WEIGHT * (x[vi + 1]! - ty));
+      refs.add(input.drag.pointId);
+      settle();
     }
   }
 
-  const apply = (x: Float64Array, entities: SketchEntity[]) => {
-    for (const e of entities) {
-      if (e.kind === "point") {
-        const vi = pointVarIndex.get(e.id)!;
-        if (vi >= 0) {
-          e.x = x[vi]!;
-          e.y = x[vi + 1]!;
-        }
-      } else if (e.kind === "circle") {
-        const vi = radiusVarIndex.get(e.id)!;
-        if (vi >= 0) e.radius = Math.abs(x[vi]!);
-      }
-    }
-  };
-
   return {
-    x0: Float64Array.from(vars),
+    x0: Float64Array.from(space.vars),
     residuals,
+    deps,
+    refs: touched,
     hardCount,
-    apply,
-    numVars: vars.length,
+    varsOf,
+    apply: space.apply,
+    numVars: space.vars.length,
   };
 }
 
@@ -441,197 +485,79 @@ function lineOffset(l: {
 
 export class SolverModelError extends Error {}
 
-function evalResiduals(res: Residual[], x: Float64Array): Float64Array {
-  const out = new Float64Array(res.length);
-  for (let i = 0; i < res.length; i++) out[i] = res[i]!(x);
-  return out;
+function components(deps: number[][], numVars: number): Block[] {
+  const parent = Array.from({ length: numVars }, (_, v) => v);
+  const root = (v: number): number => {
+    while (parent[v] !== v) v = parent[v] = parent[parent[v]!]!;
+    return v;
+  };
+  for (const [first, ...rest] of deps)
+    for (const v of rest) parent[root(v)] = root(first!);
+  const found = new Map<number, Block>();
+  for (const [row, used] of deps.entries()) {
+    if (used.length === 0) continue;
+    const key = root(used[0]!);
+    const part = found.get(key) ?? { vars: [], rows: [] };
+    found.set(key, part);
+    part.rows.push(row);
+  }
+  for (let v = 0; v < numVars; v++) found.get(root(v))?.vars.push(v);
+  return [...found.values()];
 }
 
-function checkLength(values: { length: number }, length: number): void {
-  if (values.length !== length) {
-    throw new RangeError(`expected length ${length}, got ${values.length}`);
-  }
-}
-
-function numericJacobian(
-  res: Residual[],
-  x: Float64Array,
-  r0: Float64Array,
-): Float64Array[] {
-  checkLength(r0, res.length);
-  const m = res.length;
-  const n = x.length;
-  const J: Float64Array[] = [];
-  for (let i = 0; i < m; i++) J.push(new Float64Array(n));
-  const xp = Float64Array.from(x);
-  for (let j = 0; j < n; j++) {
-    const h = 1e-6 * Math.max(1, Math.abs(x[j]!));
-    xp[j] = x[j]! + h;
-    for (let i = 0; i < m; i++) {
-      J[i]![j] = (res[i]!(xp) - r0[i]!) / h;
-    }
-    xp[j] = x[j]!;
-  }
-  return J;
-}
-
-/** Solve (A + λ·diag(A)) dx = b with Gaussian elimination (A = JᵀJ, b = −Jᵀr). */
-function solveNormal(
-  J: Float64Array[],
-  r: Float64Array,
-  lambda: number,
-  n: number,
-): Float64Array | null {
-  checkLength(r, J.length);
-  for (const row of J) checkLength(row, n);
-  // Build A = JᵀJ and g = Jᵀr
-  const A: Float64Array[] = [];
-  for (let i = 0; i < n; i++) A.push(new Float64Array(n + 1));
-  for (const [ri, row] of J.entries()) {
-    for (let a = 0; a < n; a++) {
-      if (row[a] === 0) continue;
-      for (let b = a; b < n; b++) {
-        A[a]![b]! += row[a]! * row[b]!;
-      }
-      A[a]![n]! -= row[a]! * r[ri]!;
-    }
-  }
-  let floor = 0;
-  for (let a = 0; a < n; a++)
-    floor = Math.max(floor, A[a]![a]! * DAMPING_FLOOR);
-  for (let a = 0; a < n; a++) {
-    for (let b = 0; b < a; b++) A[a]![b] = A[b]![a]!;
-    A[a]![a]! *= 1 + lambda;
-    A[a]![a]! += 1e-12 + lambda * floor;
-  }
-  // Gaussian elimination with partial pivoting
-  for (let col = 0; col < n; col++) {
-    let piv = col;
-    for (let row = col + 1; row < n; row++) {
-      if (Math.abs(A[row]![col]!) > Math.abs(A[piv]![col]!)) piv = row;
-    }
-    if (Math.abs(A[piv]![col]!) < 1e-14) continue;
-    if (piv !== col) {
-      const t = A[piv]!;
-      A[piv] = A[col]!;
-      A[col] = t;
-    }
-    const d = A[col]![col]!;
-    for (let row = col + 1; row < n; row++) {
-      const f = A[row]![col]! / d;
-      if (f === 0) continue;
-      for (let k = col; k <= n; k++) A[row]![k]! -= f * A[col]![k]!;
-    }
-  }
-  const dx = new Float64Array(n);
-  for (let row = n - 1; row >= 0; row--) {
-    let s = A[row]![n]!;
-    for (let k = row + 1; k < n; k++) s -= A[row]![k]! * dx[k]!;
-    dx[row] = Math.abs(A[row]![row]!) < 1e-14 ? 0 : s / A[row]![row]!;
-  }
-  return dx;
-}
-
-/** Rank of the Jacobian via row-echelon elimination with a tolerance. */
-function jacobianRank(J: Float64Array[], n: number): number {
-  for (const row of J) checkLength(row, n);
-  const rows = J.map((r) => Float64Array.from(r));
-  let rank = 0;
-  let col = 0;
-  const tol = 1e-7;
-  while (rank < rows.length && col < n) {
-    let piv = -1;
-    let best = tol;
-    for (let r = rank; r < rows.length; r++) {
-      const v = Math.abs(rows[r]![col]!);
-      if (v > best) {
-        best = v;
-        piv = r;
-      }
-    }
-    if (piv < 0) {
-      col++;
-      continue;
-    }
-    const t = rows[piv]!;
-    rows[piv] = rows[rank]!;
-    rows[rank] = t;
-    const d = rows[rank]![col]!;
-    for (let r = rank + 1; r < rows.length; r++) {
-      const f = rows[r]![col]! / d;
-      if (f === 0) continue;
-      for (let k = col; k < n; k++) rows[r]![k]! -= f * rows[rank]![k]!;
-    }
-    rank++;
-    col++;
-  }
-  return rank;
-}
-
-function runLM(
-  residuals: Residual[],
-  xStart: Float64Array,
-  numVars: number,
-): { x: Float64Array; r: Float64Array } {
-  checkLength(xStart, numVars);
-  let x = Float64Array.from(xStart);
-  let r = evalResiduals(residuals, x);
-  let cost = r.reduce((s, v) => s + v * v, 0);
-  let lambda = 1e-3;
-
-  if (numVars > 0 && residuals.length > 0) {
-    for (let iter = 0; iter < MAX_ITER; iter++) {
-      if (Math.sqrt(cost) < CONV_TOL) break;
-      const J = numericJacobian(residuals, x, r);
-      const dx = solveNormal(J, r, lambda, numVars);
-      if (!dx) break;
-      const xNew = Float64Array.from(x);
-      for (const [j, dj] of dx.entries()) xNew[j]! += dj;
-      const rNew = evalResiduals(residuals, xNew);
-      const costNew = rNew.reduce((s, v) => s + v * v, 0);
-      if (costNew < cost) {
-        x = xNew;
-        r = rNew;
-        cost = costNew;
-        lambda = Math.max(lambda * 0.4, 1e-9);
-        const step = Math.sqrt(dx.reduce((s, v) => s + v * v, 0));
-        if (step < 1e-12) break;
-      } else {
-        lambda *= 5;
-        if (lambda > 1e10) break;
-      }
-    }
-  }
-  return { x, r };
-}
-
-export function solveSketch(input: SolveInput): SolveResult {
+function solveTouching(
+  input: SolveInput,
+  seeds: Set<string> | null,
+): SolveResult {
   const entities: SketchEntity[] = input.entities.map((e) => ({ ...e }));
   const problem = buildProblem({ ...input, entities });
-  const { residuals, x0, numVars, hardCount } = problem;
-
-  let { x } = runLM(residuals, x0, numVars);
-
-  // Drag pulls are soft; polish with hard constraints only so the final
-  // configuration satisfies constraints exactly.
-  const hard = residuals.slice(0, hardCount);
-  if (residuals.length > hardCount) {
-    ({ x } = runLM(hard, x, numVars));
+  const { residuals, deps, numVars, hardCount } = problem;
+  const x = Float64Array.from(problem.x0);
+  const seedVars = seeds && new Set([...seeds].flatMap(problem.varsOf));
+  const solved: Block[] = [];
+  const kept: Block[] = [];
+  for (const part of components(deps, numVars)) {
+    const touched = !seedVars || part.vars.some((v) => seedVars.has(v));
+    (touched ? solved : kept).push(part);
   }
-  const r = evalResiduals(hard, x);
+  const hard = (row: number) => row < hardCount;
+  let dof = numVars;
+  const count = ({ vars, rows }: Block): number => {
+    const own = rows.filter(hard).map((row) => residuals[row]!);
+    if (own.length === 0) return 0;
+    const J = numericJacobian(own, x, evalResiduals(own, x), vars);
+    dof -= jacobianRank(J, vars.length);
+    return dampingFloor(J);
+  };
+  const floor = kept.reduce((f, part) => Math.max(f, count(part)), 0);
+  const solvedRows = new Set(solved.flatMap((part) => part.rows));
+  const descend = (keep: (row: number) => boolean): number[] => {
+    const rows = [...deps.keys()].filter(
+      (row) => keep(row) && (!deps[row]!.length || solvedRows.has(row)),
+    );
+    const at = new Map(rows.map((row, i) => [row, i]));
+    const blocks = solved.map(({ vars, rows: own }) => ({
+      vars,
+      rows: own.filter(keep).map((row) => at.get(row)!),
+    }));
+    leastSquares(
+      rows.map((row) => residuals[row]!),
+      x,
+      blocks,
+      floor,
+    );
+    return rows;
+  };
+  const judged = descend(() => true).filter(hard);
+  if (residuals.length > hardCount) descend(hard);
+  for (const part of solved) count(part);
 
   problem.apply(x, entities);
 
   let maxResidual = 0;
-  for (const v of r) maxResidual = Math.max(maxResidual, Math.abs(v));
+  for (const row of judged)
+    maxResidual = Math.max(maxResidual, Math.abs(residuals[row]!(x)));
   const converged = maxResidual < CONFLICT_TOL;
-
-  // DOF analysis at the solution (hard constraints only).
-  let dof = numVars;
-  if (numVars > 0 && hardCount > 0) {
-    const Jh = numericJacobian(hard, x, r);
-    dof = numVars - jacobianRank(Jh, numVars);
-  }
 
   let status: SketchSolveStatus;
   if (!converged) status = "over_constrained";
@@ -647,15 +573,16 @@ export function solveSketch(input: SolveInput): SolveResult {
   return { entities, status, dof, converged, maxResidual };
 }
 
+export const solveSketch = (input: SolveInput): SolveResult =>
+  solveTouching(input, input.drag ? new Set([input.drag.pointId]) : null);
+
 export const settledEntities = (
   result: SolveResult,
   stored: SketchEntity[],
 ): SketchEntity[] => (result.converged ? result.entities : stored);
 
-const holds = (input: SolveInput): boolean => {
-  const { residuals, x0 } = buildProblem(input);
-  return residuals.every((r) => Math.abs(r(x0)) < CONFLICT_TOL);
-};
+const holds = ({ residuals, x0 }: Problem): boolean =>
+  residuals.every((r) => Math.abs(r(x0)) < CONFLICT_TOL);
 
 const constraintName = (c: SketchConstraint): string => {
   const words = c.type.replace(/[A-Z]/g, (m) => ` ${m.toLowerCase()}`);
@@ -674,18 +601,20 @@ export class OverConstrainedError extends ValidationError {
 const converges = (
   entities: SketchEntity[],
   constraints: SketchConstraint[],
-): boolean => solveSketch({ entities, constraints }).converged;
+  touched: Set<string>,
+): boolean => solveTouching({ entities, constraints }, touched).converged;
 
 function firstConflict(
   entities: SketchEntity[],
   kept: SketchConstraint[],
   added: SketchConstraint[],
+  touched: Set<string>,
 ): SketchConstraint {
   let lo = 0;
   let hi = added.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (converges(entities, [...kept, ...added.slice(0, mid + 1)]))
+    if (converges(entities, [...kept, ...added.slice(0, mid + 1)], touched))
       lo = mid + 1;
     else hi = mid;
   }
@@ -700,14 +629,17 @@ export function editedEntities(
   const isNew = (c: SketchConstraint) => !had.has(JSON.stringify(c));
   const added = after.constraints.filter(isNew);
   try {
-    if (holds({ entities: after.entities, constraints: added }))
-      return after.entities;
-    const solved = solveSketch(after);
+    const probe = buildProblem({
+      entities: after.entities,
+      constraints: added,
+    });
+    if (holds(probe)) return after.entities;
+    const solved = solveTouching(after, probe.refs);
     if (solved.converged) return solved.entities;
     const kept = after.constraints.filter((c) => !isNew(c));
-    if (converges(after.entities, kept))
+    if (converges(after.entities, kept, probe.refs))
       throw new OverConstrainedError(
-        firstConflict(after.entities, kept, added),
+        firstConflict(after.entities, kept, added, probe.refs),
       );
     return after.entities;
   } catch (e) {

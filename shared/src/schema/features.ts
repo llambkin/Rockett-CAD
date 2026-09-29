@@ -180,16 +180,12 @@ const sketchConstraint = Type.Union([
   dimension("angle", { ...pair, value }),
 ]);
 
-const entityIds = Type.Array(id, {
-  minItems: 1,
-  maxItems: 5000,
-  uniqueItems: true,
-});
+const entityIds = Type.Array(id, { minItems: 1, uniqueItems: true });
 
 const sketch = feature("sketch", {
   plane: planeRef,
-  entities: Type.Array(entity, { maxItems: 5000 }),
-  constraints: Type.Array(sketchConstraint, { maxItems: 5000 }),
+  entities: Type.Array(entity),
+  constraints: Type.Array(sketchConstraint),
   offsets: Type.Optional(
     Type.Array(
       Type.Object({
@@ -199,7 +195,6 @@ const sketch = feature("sketch", {
         entityIds,
         joinTolerance: Type.Number({ minimum: 0, maximum: 1 }),
       }),
-      { maxItems: 1000 },
     ),
   ),
 });
