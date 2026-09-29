@@ -69,14 +69,15 @@ function refused(error: unknown): boolean {
   );
 }
 
-export function sizeLimit(
+export async function sizeLimit(
   state: EvalState,
   doc: CadDocument,
   position: number | undefined,
   feature: SizedFeature,
-): SizeLimit {
+  resume: () => Promise<EvalState> = async () => state,
+): Promise<SizeLimit> {
   const earlier = doc.features.slice(0, position ?? doc.timelinePosition);
-  const deadline = performance.now() + TIMING_MS.sizeLimitSearch;
+  let deadline = performance.now() + TIMING_MS.sizeLimitSearch;
   const late = () => performance.now() > deadline;
   const fits = (size: number) =>
     trialBuild(
@@ -99,6 +100,11 @@ export function sizeLimit(
   if (!(size > 0 && size < Infinity))
     throw new ValidationError("no size to try for these picks");
   while (builds < TRIAL_BUDGET.sizeLimitBuilds && !late()) {
+    if (builds > 0) {
+      const paused = performance.now();
+      state = await resume();
+      deadline += performance.now() - paused;
+    }
     builds++;
     try {
       if (fits(size)) fit = size;

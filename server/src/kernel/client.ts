@@ -141,7 +141,8 @@ const ANSWERS: {
     state: EvalState,
     query: StateQuery<K>,
     doc: CadDocument,
-  ) => StateAnswers[K];
+    resume?: () => Promise<EvalState>,
+  ) => StateAnswers[K] | Promise<StateAnswers[K]>;
 } = {
   measure: (state, { request }) => measure(state, request),
   tangentEdges(state, { edge }) {
@@ -191,8 +192,8 @@ const ANSWERS: {
     signRefs(state.bodies, signed);
     return signed.map((ref) => ref.sig);
   },
-  sizeLimit: (state, { position, feature }, doc) =>
-    sizeLimit(state, doc, position, feature),
+  sizeLimit: (state, { position, feature }, doc, resume) =>
+    sizeLimit(state, doc, position, feature, resume),
 };
 
 function exportBodies(state: EvalState, { bodyIds, hidden }: ExportJob) {
@@ -272,7 +273,10 @@ function sourceFor(accepted: ExportSource[], job: ExportJob): ExportSource {
 }
 
 export class InProcessKernel implements KernelClient {
-  constructor(private readonly store: Pick<ProjectStore, "sources">) {}
+  constructor(
+    private readonly store: Pick<ProjectStore, "sources">,
+    private readonly idle?: () => Promise<void>,
+  ) {}
 
   private async sourced(doc: CadDocument) {
     const engine = engineFor(doc.id);
@@ -303,11 +307,18 @@ export class InProcessKernel implements KernelClient {
     doc: CadDocument,
     query: StateQuery<K>,
   ) {
-    const state = await this.stateAt(
+    const position = "position" in query ? query.position : undefined;
+    const idle = this.idle;
+    return ANSWERS[query.kind](
+      await this.stateAt(doc, position),
+      query,
       doc,
-      "position" in query ? query.position : undefined,
+      idle &&
+        (async () => {
+          await idle();
+          return this.stateAt(doc, position);
+        }),
     );
-    return ANSWERS[query.kind](state, query, doc);
   }
 
   async visibleTargets(

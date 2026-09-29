@@ -1,4 +1,8 @@
-import { parentPort, type Transferable } from "node:worker_threads";
+import {
+  parentPort,
+  receiveMessageOnPort,
+  type Transferable,
+} from "node:worker_threads";
 import { initKernel, kernelVersion } from "../geometry/kernel.js";
 import { dropEngine, engineFor } from "../geometry/engine.js";
 import { InProcessKernel } from "./client.js";
@@ -23,6 +27,23 @@ const post = (message: FromWorker, transfer: Transferable[] = []) =>
 
 const asks = new Map<number, (settled: Settled<Payload>) => void>();
 
+let busy = 0;
+const waiting: Array<() => void> = [];
+
+function settle() {
+  busy--;
+  if (busy === 0) waiting.splice(0).forEach((wake) => wake());
+}
+
+const idle = async () => {
+  let queued;
+  while ((queued = receiveMessageOnPort(port)))
+    receive(queued.message as ToWorker);
+  settle();
+  while (busy > 0) await new Promise<void>((wake) => waiting.push(wake));
+  busy++;
+};
+
 function ask(id: number, held: string[]): Promise<Payload> {
   return new Promise((resolve, reject) => {
     asks.set(id, (settled) =>
@@ -33,19 +54,22 @@ function ask(id: number, held: string[]): Promise<Payload> {
 }
 
 function kernelFor(id: number) {
-  return new InProcessKernel({
-    async sources(_doc, held = new Map()) {
-      const given = await ask(id, [...held.keys()]);
-      if (given instanceof ArrayBuffer)
-        throw new Error("the kernel worker asked for sources, not bytes");
-      return new Map(
-        [...given].flatMap(([hash, bytes]) => {
-          const found = bytes ?? held.get(hash);
-          return found ? [[hash, found] as const] : [];
-        }),
-      );
+  return new InProcessKernel(
+    {
+      async sources(_doc, held = new Map()) {
+        const given = await ask(id, [...held.keys()]);
+        if (given instanceof ArrayBuffer)
+          throw new Error("the kernel worker asked for sources, not bytes");
+        return new Map(
+          [...given].flatMap(([hash, bytes]) => {
+            const found = bytes ?? held.get(hash);
+            return found ? [[hash, found] as const] : [];
+          }),
+        );
+      },
     },
-  });
+    idle,
+  );
 }
 
 async function uploadBytes(id: number) {
@@ -86,6 +110,7 @@ const booted = initKernel().then(() =>
 );
 
 async function serve({ id, method, args }: Call) {
+  busy++;
   await booted;
   const run = RUN[method] as (
     id: number,
@@ -105,10 +130,11 @@ async function serve({ id, method, args }: Call) {
     post({ type: "reply", id, settled: { ok: false, error: toWire(error) } });
   } finally {
     asks.delete(id);
+    settle();
   }
 }
 
-port.on("message", (message: ToWorker) => {
+function receive(message: ToWorker) {
   switch (message.type) {
     case "call":
       void serve(message);
@@ -124,4 +150,6 @@ port.on("message", (message: ToWorker) => {
       engineFor(message.docId).setQuarantine(message.features);
       return;
   }
-});
+}
+
+port.on("message", receive);
