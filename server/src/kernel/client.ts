@@ -27,7 +27,7 @@ import {
   engineFor,
   type EvaluateHooks,
 } from "../geometry/engine.js";
-import { kernelVersion, release } from "../geometry/kernel.js";
+import { initKernel, kernelVersion, release } from "../geometry/kernel.js";
 import { measure } from "../geometry/measure.js";
 import { resolvePlaneFrame, type EvalState } from "../geometry/features.js";
 import { computeEdgeNames } from "../geometry/naming.js";
@@ -273,6 +273,11 @@ function sourceFor(accepted: ExportSource[], job: ExportJob): ExportSource {
 }
 
 export class InProcessKernel implements KernelClient {
+  static async start(store: Pick<ProjectStore, "sources">) {
+    await initKernel();
+    return new InProcessKernel(store);
+  }
+
   constructor(
     private readonly store: Pick<ProjectStore, "sources">,
     private readonly idle?: () => Promise<void>,

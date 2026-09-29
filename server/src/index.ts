@@ -11,7 +11,6 @@ import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import type { AddressInfo } from "node:net";
 import { compileSchemas, DEFAULT_PORT, SCHEMA_VERSION } from "@rockett/shared";
-import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { validateDocument } from "./api/validate.js";
 import { FolderStore } from "./store/folderStore.js";
@@ -67,9 +66,9 @@ async function startKernel(store: ProjectStore): Promise<KernelClient> {
   }
   console.log("[rockett] loading OCCT kernel…");
   const t0 = Date.now();
-  await initKernel();
+  const kernel = await InProcessKernel.start(store);
   console.log(`[rockett] kernel ready in ${Date.now() - t0}ms`);
-  return new InProcessKernel(store);
+  return kernel;
 }
 
 async function main(allowedOrigins: string[], cookie: CookieConfig) {
