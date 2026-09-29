@@ -3,6 +3,7 @@ import type { SignInStep, TotpEnrolment, User } from "@rockett/shared";
 import { api, UnauthorizedError, watchUnauthorized } from "./api";
 import { projectIdFromPath, showPath } from "./paths";
 import { leaveBrowserProject } from "./browserSession";
+import { dropCameraSave } from "./cameraSave";
 import { useStore } from "./store";
 import { clearSettings } from "./settings";
 
@@ -145,6 +146,7 @@ export function confirmSignOut(): boolean {
 
 export function endSession(): void {
   leaveBrowserProject();
+  dropCameraSave();
   useStore.getState().closeProject();
   useStore.setState(useStore.getInitialState(), true);
   clearSettings();

@@ -33,6 +33,7 @@ import {
   withShown,
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
+import * as cameraSave from "./cameraSave";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
 import {
   previewTints,
@@ -40,7 +41,6 @@ import {
   type PreviewTint,
 } from "./livePreview";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
-import { TIMING_MS } from "./tunables";
 
 export type Selection =
   | { kind: "body"; bodyId: string }
@@ -472,8 +472,6 @@ const inTurn = writeQueue((count) => {
   useStore.setState(saveState);
 });
 
-let cameraSave: ReturnType<typeof setTimeout> | undefined;
-
 async function saveView(
   projectId: string,
   change: (view: ProjectView) => ProjectView,
@@ -484,7 +482,7 @@ async function saveView(
     await inTurn(() => api.putView(projectId, next));
   } catch (e: any) {
     const conflict = e?.status === 409;
-    if (conflict) clearTimeout(cameraSave);
+    if (conflict) cameraSave.dropCameraSave();
     const view = conflict
       ? await api.getView(projectId).catch(() => null)
       : null;
@@ -608,7 +606,7 @@ export const useStore = create<State>((set, get) => ({
   measureResult: null,
 
   async openProject(id, path = projectPath(id)) {
-    clearTimeout(cameraSave);
+    cameraSave.dropCameraSave();
     void get().cancelPreview();
     api.forgetJob?.();
     set({ busy: true, error: null, job: null, jobStartedAt: null });
@@ -645,7 +643,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
   closeProject() {
-    clearTimeout(cameraSave);
+    cameraSave.flushCameraSave();
     void get().cancelPreview();
     api.forgetJob?.();
     [unsent, abandoned] = [[], []];
@@ -1328,13 +1326,12 @@ export const useStore = create<State>((set, get) => ({
   },
 
   moveCamera(camera) {
-    clearTimeout(cameraSave);
+    cameraSave.dropCameraSave();
     const { projectId } = get();
-    if (!projectId) return;
-    cameraSave = setTimeout(
-      () => void saveView(projectId, (view) => ({ ...view, camera })),
-      TIMING_MS.viewSave,
-    );
+    if (projectId)
+      cameraSave.scheduleCameraSave(
+        () => void saveView(projectId, (view) => ({ ...view, camera })),
+      );
   },
 
   async runMeasure() {
