@@ -98,8 +98,11 @@ function contactFuse(a: Shape, b: Shape): any {
     return op;
   op.delete();
   if (failed) throw new Error("join contact check failed");
-  return null;
+  return "touch";
 }
+
+const TOUCH_WARNING =
+  "join touches only along an edge or at a vertex; the bodies stay separate";
 
 type JoinGroup = { bodies: StateBody[]; pieces: ToolResult[]; fuse: any };
 
@@ -109,11 +112,13 @@ export function contactGroups(
   held: Set<any>,
 ) {
   let groups: JoinGroup[] = [];
+  let touching = false;
   const loose: Shape[] = [];
   for (const shape of solids(tool.shape)) {
     const hits = bodies.flatMap((body) => {
       const fuse = contactFuse(body.shape, shape);
-      if (!fuse) return [];
+      touching ||= fuse === "touch";
+      if (!fuse || fuse === "touch") return [];
       held.add(fuse);
       return [{ body, fuse }];
     });
@@ -141,5 +146,5 @@ export function contactGroups(
       },
     ];
   }
-  return { groups, loose };
+  return { groups, loose, warning: touching ? TOUCH_WARNING : undefined };
 }

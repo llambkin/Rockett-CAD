@@ -183,11 +183,12 @@ A kernel success is not trusted. Each guard errors and keeps the previous
 body.
 
 - Every cut runs through `checkedCut` in `server/src/geometry/cutCheck.ts`.
-- Every join ends in `finishJoin` in `server/src/geometry/features.ts`. The
-  one guard that warns instead: a join, or an extrude, revolve, sweep, loft or
-  emboss cut, that leaves a zero-thickness edge its inputs lacked
-  (`server/src/geometry/joinCheck.ts`) builds, and the feature status is
-  `warning` naming the edge length.
+- Every join ends in `finishJoin` in `server/src/geometry/features.ts`. Two
+  guards warn instead, both in `server/src/geometry/joinCheck.ts`. A join, or
+  an extrude, revolve, sweep, loft or emboss cut, that leaves a zero-thickness
+  edge its inputs lacked builds, and the feature status is `warning` naming
+  the edge length. A join tool that touches a body only along an edge or at a
+  vertex stays a separate body, and the status is `warning` saying so.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
 - Shell must leave a hollow (`server/src/geometry/shell.ts`). When the kernel

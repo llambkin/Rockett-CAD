@@ -542,7 +542,7 @@ function joinEvery(
       );
   const held = new Set<any>();
   try {
-    const { groups, loose } = contactGroups(bodies, tool, held);
+    const { groups, loose, warning } = contactGroups(bodies, tool, held);
     const touched = new Set(groups.flatMap((g) => g.bodies));
     const used = bodies.filter((b) => touched.has(b)).map((b) => b.bodyId);
     const missed = targets?.find((id) => !used.includes(id));
@@ -555,7 +555,7 @@ function joinEvery(
     }
     if (loose.length > 0)
       registerSolids(state, `b:${featureId}`, loose, tool.names);
-    const warnings: (string | undefined)[] = [];
+    const warnings: (string | undefined)[] = [warning];
     const join = (acc: ToolResult, next: ToolResult) =>
       fuseNamed(acc, next, featureId, "boolean join failed");
     for (const {
