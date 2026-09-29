@@ -146,7 +146,7 @@ export interface AppDeps {
   trustProxy?: TrustProxy;
 }
 
-export function createApp({
+export async function createApp({
   store,
   folders,
   kernel,
@@ -158,7 +158,8 @@ export function createApp({
   setupToken = process.env.ROCKETT_SETUP_TOKEN,
   access,
   trustProxy = trustProxyConfig(process.env.ROCKETT_TRUST_PROXY),
-}: AppDeps): { app: Express; sweep: () => Promise<void> } {
+}: AppDeps): Promise<{ app: Express; sweep: () => Promise<void> }> {
+  await store.uploads.empty();
   const app = express();
   const projects = new ProjectQueue();
   const notices = new NoticeStore(store.documents.options.storage);

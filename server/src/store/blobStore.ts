@@ -73,6 +73,11 @@ export class Uploads {
   discard(staged: Pick<Staged, "path">): Promise<void> {
     return this.storage.remove(staged.path);
   }
+
+  async empty(): Promise<void> {
+    for (const name of await this.storage.list(this.dir))
+      await this.storage.remove(path.posix.join(this.dir, name));
+  }
 }
 
 export class BlobStore {

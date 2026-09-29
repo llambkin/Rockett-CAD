@@ -101,7 +101,7 @@ async function main(allowedOrigins: string[], cookie: CookieConfig) {
   const clientDir = candidates.find((c) =>
     fs.existsSync(path.join(c, "index.html")),
   );
-  const { app, sweep } = createApp({
+  const { app, sweep } = await createApp({
     store,
     folders: new FolderStore(storage),
     kernel,
