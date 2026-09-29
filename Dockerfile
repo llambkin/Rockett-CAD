@@ -1,10 +1,10 @@
 # Rockett CAD — self-hosted parametric CAD
 #
-# Multi-stage build: workspace build → slim runtime.
+# Multi-stage build: dependencies → server and client builds → slim runtime.
 # The runtime runs as a non-root user and stores all state under /data.
 
 # ---------- build ----------
-FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS build
+FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -13,11 +13,17 @@ COPY server/package.json server/package.json
 COPY client/package.json client/package.json
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
+FROM deps AS server
 COPY shared shared
 COPY server server
+RUN npm run build --workspace server
+
+FROM deps AS client
+COPY shared shared
 COPY client client
-RUN npm run build --workspace server \
-  && npm run build --workspace client
+RUN npm run build --workspace client
+
+FROM deps AS notices
 COPY THIRD-PARTY-NOTICES.md ./
 COPY scripts/check-notices.sh scripts/
 
@@ -44,11 +50,11 @@ COPY client/package.json client/package.json
 RUN npm ci --omit=dev --workspace server --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 COPY THIRD-PARTY-NOTICES.md ./
-RUN --mount=type=bind,from=build,source=/app,target=/build \
+RUN --mount=type=bind,from=notices,source=/app,target=/build \
   sh /build/scripts/check-notices.sh --collect /app/licences
 
-COPY --from=build /app/server/dist/server.mjs /app/server/dist/kernel-worker.mjs ./
-COPY --from=build /app/client/dist client/dist
+COPY --from=server /app/server/dist/server.mjs /app/server/dist/kernel-worker.mjs ./
+COPY --from=client /app/client/dist client/dist
 
 # Non-root user; /data is the single persistent volume.
 RUN groupadd -r rockett && useradd -r -g rockett rockett \
