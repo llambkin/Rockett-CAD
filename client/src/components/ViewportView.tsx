@@ -63,7 +63,12 @@ import {
   useStore,
   type Selection,
 } from "../store";
-import { baseBodies, loadPreviewBase, previewScene } from "../previewBase";
+import {
+  baseBodies,
+  loadPreviewBase,
+  previewScene,
+  usePreviewBase,
+} from "../previewBase";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { registerHoldKey } from "../commands/keymap";
@@ -141,7 +146,7 @@ export function ViewportView() {
   const dialogParams = useStore((s) => s.dialogParams);
   const dialogOpen = mode.name === "dialog";
   const editFeatureId = dialogOpen ? mode.editFeatureId : undefined;
-  const [baseLoads, setBaseLoads] = useState(0);
+  const held = usePreviewBase();
 
   const [dimEdit, setDimEdit] = useState<{
     fields: DimEditField[];
@@ -373,9 +378,7 @@ export function ViewportView() {
   // ---- sync bodies ----
   useEffect(() => {
     if (!editFeatureId) return;
-    void loadPreviewBase(editFeatureId, useStore.getState).then(
-      (loaded) => loaded && setBaseLoads((n) => n + 1),
-    );
+    void loadPreviewBase(editFeatureId, useStore.getState);
   }, [editFeatureId]);
 
   useEffect(() => {
@@ -385,14 +388,7 @@ export function ViewportView() {
     vp.syncBodies(scene.bodies, new Set(hiddenBodies));
     vp.setBodyTints(scene.tints);
     vp.setPreviewGhosts(extrudeGhosts(scene.ghosts));
-  }, [
-    evaluation,
-    document_,
-    hiddenBodies,
-    dialogOpen,
-    editFeatureId,
-    baseLoads,
-  ]);
+  }, [evaluation, document_, hiddenBodies, dialogOpen, editFeatureId, held]);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -528,7 +524,7 @@ export function ViewportView() {
     hover,
     peeked,
     draftSketch,
-    baseLoads,
+    held,
     units,
   ]);
 
@@ -596,7 +592,7 @@ export function ViewportView() {
   // build / rebuild the gizmo when the extrude dialog selection changes
   useEffect(() => {
     extrudeSlot.rebuild(buildExtrudeGizmo);
-  }, [mode, selection, evaluation, baseLoads]);
+  }, [mode, selection, evaluation, held]);
 
   function buildExtrudeGizmo(): ExtrudeGizmo | null {
     setGizmoLabel(null);
@@ -642,7 +638,7 @@ export function ViewportView() {
   // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
   useEffect(() => {
     moveSlot.rebuild(buildMoveGizmo);
-  }, [mode, selection, evaluation, baseLoads]);
+  }, [mode, selection, evaluation, held]);
 
   function buildMoveGizmo(): MoveGizmo | null {
     const vp = viewportRef.current;
@@ -790,7 +786,7 @@ export function ViewportView() {
       layer.dispose();
       vp.requestRender();
     };
-  }, [mode, selection, evaluation, dialogParams, baseLoads]);
+  }, [mode, selection, evaluation, dialogParams, held]);
 
   // rotational drag handle for the revolve angle (ring around the axis)
   useEffect(() => {
@@ -804,7 +800,7 @@ export function ViewportView() {
     evaluation,
     dialogParams.axisSource,
     dialogParams.axis,
-    baseLoads,
+    held,
   ]);
 
   function buildRevolveGizmo(): RevolveGizmo | null {
@@ -843,7 +839,7 @@ export function ViewportView() {
 
   useEffect(() => {
     featureSlot.rebuild(buildFeatureHandle);
-  }, [mode, selection, evaluation, dialogParams, baseLoads]);
+  }, [mode, selection, evaluation, dialogParams, held]);
 
   function buildFeatureHandle(): ExtrudeGizmo | RevolveGizmo | null {
     const vp = viewportRef.current;

@@ -9,12 +9,8 @@ import {
   type Units,
 } from "@rockett/shared";
 import { useEffect, useRef, useState } from "react";
-import {
-  previewBodies,
-  selectionKey,
-  useStore,
-  type Selection,
-} from "../../store";
+import { selectionKey, useStore, type Selection } from "../../store";
+import { previewBodies, usePreviewBase } from "../../previewBase";
 import { activeInput, heldBy } from "../../dialogPicks";
 import { chosenTargets, several } from "../../toolTargets";
 import { savedRegionIds } from "../../sketchUsage";
@@ -437,7 +433,7 @@ export function SelInfo({
   const mode = useStore((s) => s.mode);
   const selection = useStore((s) => s.selection);
   const active = useStore((s) => activeInput(s)?.key === input);
-  const bodies = previewBodies({ mode, evaluation });
+  const bodies = previewBodies({ mode, evaluation }, usePreviewBase());
   const shown =
     picks ??
     (mode.name === "dialog" ? heldBy(mode.dialog, input, selection) : []);

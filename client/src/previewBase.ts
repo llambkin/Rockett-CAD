@@ -4,6 +4,7 @@ import type {
   EvaluateResult,
   ProjectView,
 } from "@rockett/shared";
+import { create } from "zustand";
 import { api } from "./api";
 import {
   previewTints,
@@ -12,33 +13,42 @@ import {
 } from "./livePreview";
 import type { Mode } from "./store";
 
-let base: {
+type Base = {
   fid: string;
   bodies: BodyPayload[];
   loaded: boolean;
   after?: BodyPayload[] | undefined;
-} | null = null;
+} | null;
+
+const held = create<{ base: Base }>(() => ({ base: null }));
+const hold = (base: Base) => held.setState({ base });
+const current = () => held.getState().base;
+
+export const usePreviewBase = () => held((s) => s.base);
 
 export function dropBase(): void {
-  base = null;
+  hold(null);
 }
 
 export function holdBase(fid: string, evaluation: EvaluateResult | null) {
-  base ??= { fid, bodies: evaluation?.bodies ?? [], loaded: false };
+  if (!current())
+    hold({ fid, bodies: evaluation?.bodies ?? [], loaded: false });
 }
 
 export function landAfter(fid: string, after: BodyPayload[] | undefined) {
-  if (base?.fid === fid) base.after = after;
+  const base = current();
+  if (base?.fid === fid) hold({ ...base, after });
 }
 
 function previewAfter(s: { evaluation: EvaluateResult | null }): BodyPayload[] {
-  return base?.after ?? s.evaluation?.bodies ?? [];
+  return current()?.after ?? s.evaluation?.bodies ?? [];
 }
 
 function previewBodyTints(s: {
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
 }): Map<string, PreviewTint> {
+  const base = current();
   const feature = s.document?.features.find((f) => f.id === base?.fid);
   if (!base || !feature || feature.suppressed || !s.evaluation)
     return new Map();
@@ -54,10 +64,10 @@ export async function bodiesAfter(
   return (await api.evaluate(document.id, index + 1)).bodies;
 }
 
-export function previewBodies(s: {
-  mode: Mode;
-  evaluation: EvaluateResult | null;
-}): BodyPayload[] {
+export function previewBodies(
+  s: { mode: Mode; evaluation: EvaluateResult | null },
+  base = current(),
+): BodyPayload[] {
   return s.mode.name === "dialog" && base
     ? base.bodies
     : (s.evaluation?.bodies ?? []);
@@ -68,7 +78,7 @@ export function baseBodies(s: {
   evaluation: EvaluateResult | null;
 }): BodyPayload[] {
   const editing = s.mode.name === "dialog" && s.mode.editFeatureId;
-  return editing && !base?.loaded ? [] : previewBodies(s);
+  return editing && !current()?.loaded ? [] : previewBodies(s);
 }
 
 export function previewScene(s: {
@@ -120,8 +130,9 @@ export async function loadPreviewBase(
       projectId !== document.id
     )
       return false;
+    const base = current();
     const landed = base?.fid === fid ? base.after : undefined;
-    base = { fid, bodies, loaded: true, after: landed ?? after };
+    hold({ fid, bodies, loaded: true, after: landed ?? after });
     return true;
   } catch {
     return false;
