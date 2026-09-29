@@ -90,13 +90,41 @@ function offsetInside(
   };
 }
 
+function prismed(
+  image: Shape,
+  [x, y, z]: [number, number, number],
+  thickness: number,
+): Shape {
+  const k = getKernel();
+  const v = vec(x * thickness, y * thickness, z * thickness);
+  const prism = new k.BRepPrimAPI_MakePrism_1(image, v, false, true);
+  const slab = prism.Shape();
+  prism.delete();
+  v.delete();
+  return slab;
+}
+
+function thickened(image: Shape, thickness: number): Shape {
+  const op = new (getKernel().BRepOffsetAPI_MakeThickSolid)();
+  try {
+    op.MakeThickSolidBySimple(image, thickness);
+    if (!op.IsDone()) throw new Error("shell failed: could not open the wall");
+    const slab = op.Shape();
+    if (volumeOf(slab) > 0) return slab;
+    const outward = slab.Reversed();
+    slab.delete();
+    return outward;
+  } finally {
+    op.delete();
+  }
+}
+
 function openedThroughWalls(
   body: StateBody,
   open: Shape[],
   thickness: number,
   featureId: string,
 ): ToolResult | null {
-  const k = getKernel();
   const { op, inner } = offsetInside(body, thickness, featureId);
   try {
     if (invalidPart(inner.shape) || !(volumeOf(inner.shape) > 0))
@@ -106,17 +134,11 @@ function openedThroughWalls(
     for (const [i, face] of open.entries()) {
       const normal = normals[i];
       const images = listToArray(op.Generated(face));
-      if (!normal || images.length === 0) {
-        release(images);
-        return null;
-      }
-      const [x, y, z] = normal;
+      if (images.length === 0) return null;
       for (const image of images) {
-        const v = vec(x * thickness, y * thickness, z * thickness);
-        const prism = new k.BRepPrimAPI_MakePrism_1(image, v, false, true);
-        const slab = prism.Shape();
-        prism.delete();
-        v.delete();
+        const slab = normal
+          ? prismed(image, normal, thickness)
+          : thickened(image, thickness);
         tool = fuseNamed(
           tool,
           {

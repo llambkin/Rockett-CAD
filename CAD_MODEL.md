@@ -189,7 +189,10 @@ body.
   `warning` naming the edge length.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
-- Shell must leave a hollow (`server/src/geometry/shell.ts`).
+- Shell must leave a hollow (`server/src/geometry/shell.ts`). When the kernel
+  cannot open a face, Shell cuts the kernel's inner offset joined to a slab
+  over each opened face's inner image: a prism for a flat face, the inner face
+  thickened outward for a rounded one.
 - Tangent chains: `server/src/geometry/tangentEdges.ts`.
 - Mesh imports cap at `MAX_MESH_TRIANGLES` in
   `server/src/geometry/importers.ts`.
