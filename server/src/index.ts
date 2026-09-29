@@ -115,7 +115,7 @@ async function main(allowedOrigins: string[], cookie: CookieConfig) {
     console.log(`[rockett] serving client from ${clientDir}`);
   } else {
     console.log(
-      "[rockett] no client build found — API only (use Vite dev server)",
+      "[rockett] no client build found: API only (use Vite dev server)",
     );
   }
 

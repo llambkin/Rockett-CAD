@@ -40,7 +40,7 @@ export function kernelVersion(): Health["kernelVersion"] {
 
 export function getKernel(): OC {
   if (!oc)
-    throw new Error("OCCT kernel not initialised — call initKernel() first");
+    throw new Error("OCCT kernel not initialised: call initKernel() first");
   return oc;
 }
 
@@ -345,7 +345,7 @@ export function kernelCall<T>(label: string, fn: () => T): T {
       const k = getKernel();
       const [, message] = k.getExceptionMessage(err);
       k.decrementExceptionRefcount(err);
-      throw new Error(`${label}: ${message}`);
+      throw new Error(`${label}: ${message}`, { cause: err });
     }
     throw new Error(`${label}: ${err?.message ?? String(err)}`, {
       cause: err,
