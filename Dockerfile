@@ -18,6 +18,8 @@ COPY server server
 COPY client client
 RUN npm run build --workspace server \
   && npm run build --workspace client
+COPY THIRD-PARTY-NOTICES.md ./
+COPY scripts/check-notices.sh scripts/
 
 # ---------- runtime ----------
 FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS runtime
@@ -41,6 +43,9 @@ COPY server/package.json server/package.json
 COPY client/package.json client/package.json
 RUN npm ci --omit=dev --workspace server --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
+COPY THIRD-PARTY-NOTICES.md ./
+RUN --mount=type=bind,from=build,source=/app,target=/build \
+  sh /build/scripts/check-notices.sh --collect /app/licences
 
 COPY --from=build /app/server/dist/server.mjs /app/server/dist/kernel-worker.mjs ./
 COPY --from=build /app/client/dist client/dist

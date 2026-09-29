@@ -7,6 +7,13 @@ its upstream. `scripts/check-notices.sh` compares the table with
 `npm ls --omit=dev --all --parseable` and the installed packages, fails when
 a `.wasm` under `modules/` has no section here, and `npm run check` runs it.
 
+The image carries this file at `/app/THIRD-PARTY-NOTICES.md`. Its build copies
+the licence text of every package the table ships in the image or the client
+bundle to `/app/licences/<name>@<version>/`, and writes
+`/app/licences/base-image.txt`: each Node.js, Node and Debian package of the
+base image with its version and the path of its licence text, or `none`.
+`scripts/check-notices.sh IMAGE` checks all three in a locally built image.
+
 This file covers third-party code only. Rockett CAD's own licence is not set
 yet.
 
@@ -27,6 +34,17 @@ https://github.com/msegec/opencascade.js.
   `node_modules/opencascade.js/dist` for a compatible build replaces the
   library without rebuilding Rockett CAD.
 - Rockett CAD is for intranet use only and is not distributed.
+
+### Source offer
+
+Anyone who receives an image that carries `opencascade.js`
+`2.0.0-msegec.occt801.2` may copy its complete corresponding source, at no
+charge, from https://github.com/msegec/opencascade.js at tag
+`v2.0.0-msegec.occt801.2`. The offer covers that package and the Open CASCADE
+Technology 8.0.1 build inside it, under LGPL-2.1-only: the fork's build files
+and planar fold patch, and the OCCT `V8_0_1` source its `Dockerfile` names.
+The source stays there for as long as an image that carries this build is
+offered.
 
 ## adaptive.wasm
 
@@ -58,15 +76,11 @@ The licence texts ship beside it in `freecad/LICENSE` and
 
 Distribution is not approved. Confirm these obligations first:
 
-- LGPL-2.1 section 6: accompany the image with the corresponding source of
-  the exact `opencascade.js` build, or a written offer of it. An artefact
-  that carries `adaptive.wasm` does the same with its directory.
-- The client and CAM bundles are minified without licence comments, and the
-  image carries neither this file nor the licence texts of the bundled
-  packages. Copy both into the image. Each image package keeps its own
-  licence file under `node_modules`.
-- The base image `node:24-trixie-slim` carries Node.js and Debian packages
-  under their own licences. This table does not inventory them.
+- Publish the exact corresponding source of every GPL or LGPL component
+  beside each image tag for as long as the tag is offered. An artefact that
+  carries `adaptive.wasm` does the same with its directory.
+- Base image packages that `base-image.txt` marks `none` ship no licence text
+  of their own. Find each one's terms before the image leaves the intranet.
 
 ## Packages
 
