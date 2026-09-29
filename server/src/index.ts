@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import type { AddressInfo } from "node:net";
-import { DEFAULT_PORT, SCHEMA_VERSION } from "@rockett/shared";
+import { compileSchemas, DEFAULT_PORT, SCHEMA_VERSION } from "@rockett/shared";
 import { initKernel } from "./geometry/kernel.js";
 import { ProjectStore } from "./store/projectStore.js";
 import { validateDocument } from "./api/validate.js";
@@ -72,6 +72,7 @@ async function startKernel(store: ProjectStore): Promise<KernelClient> {
 }
 
 async function main(allowedOrigins: string[], cookie: CookieConfig) {
+  compileSchemas();
   console.log(
     `[rockett] session cookie: ${cookie.secure ? "secure" : "plain HTTP"}`,
   );

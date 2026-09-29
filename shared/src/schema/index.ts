@@ -1,6 +1,7 @@
 import type { Static, TSchema } from "typebox";
 import { Compile, type Validator } from "typebox/compile";
 import { Value } from "typebox/value";
+import { documentSchema, FEATURE_SCHEMAS } from "./features.js";
 
 export class ValidationError extends Error {
   readonly code = "validation";
@@ -34,4 +35,9 @@ export function parse<S extends TSchema>(
     [root, path.slice(1).replaceAll("/", ".")].filter(Boolean).join(".") ||
     "request";
   throw new ValidationError(`${field} ${error?.message ?? "is invalid"}`, path);
+}
+
+export function compileSchemas(): void {
+  for (const schema of [documentSchema, ...Object.values(FEATURE_SCHEMAS)])
+    validator(schema);
 }
