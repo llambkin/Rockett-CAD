@@ -1,5 +1,6 @@
 import { Router, json, type Request, type RequestHandler } from "express";
 import {
+  bodyMadeBy,
   DOCUMENT_EDITS,
   editedEntities,
   lacksTargets,
@@ -173,19 +174,18 @@ function pruneGroups(
   const sketches = new Set(
     doc.features.filter((f) => f.type === "sketch").map((f) => f.id),
   );
-  const bodies =
-    position === undefined && doc.timelinePosition === doc.features.length
-      ? new Set(evaluation.bodies.map((b) => b.bodyId))
-      : null;
-  let changed = false;
-  for (const group of doc.groups) {
-    const kept = group.members.filter((id) =>
-      group.kind === "sketch" ? sketches.has(id) : (bodies?.has(id) ?? true),
+  const failed = evaluation.featureStatuses.filter((s) => s.status === "error");
+  const whole =
+    position === undefined && doc.timelinePosition === doc.features.length;
+  const made = new Set(evaluation.bodies.map((b) => b.bodyId));
+  const built = (id: string) =>
+    !whole || made.has(id) || failed.some((s) => bodyMadeBy(s.featureId, id));
+  const before = JSON.stringify(doc.groups);
+  for (const group of doc.groups)
+    group.members = group.members.filter((id) =>
+      group.kind === "sketch" ? sketches.has(id) : built(id),
     );
-    changed ||= kept.length !== group.members.length;
-    group.members = kept;
-  }
-  return changed;
+  return JSON.stringify(doc.groups) !== before;
 }
 
 const userNames = async (users?: UserStore) =>
