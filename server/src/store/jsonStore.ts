@@ -56,6 +56,10 @@ export function etag(value: unknown): string {
   return `"${sha256(JSON.stringify(value))}"`;
 }
 
+export function sameTag(header: string, value: unknown): boolean {
+  return header.replace(/^W\//, "") === etag(value);
+}
+
 export class NamespaceBackup {
   private readonly dir: string;
   private readonly root: string;

@@ -11,7 +11,7 @@ import {
   type LayerValues,
   type SettingsPatch,
 } from "@rockett/shared";
-import { etag, JsonStore, StoreError } from "./jsonStore.js";
+import { etag, JsonStore, sameTag, StoreError } from "./jsonStore.js";
 import { ID_RE } from "./manifestStore.js";
 import { ProjectQueue } from "./projectQueue.js";
 import type { Storage } from "./storage.js";
@@ -169,7 +169,7 @@ export class SettingsStore {
     const { store, key, path: file } = this.locate(layer);
     return this.queue.run(file, async () => {
       const current = await this.read(layer);
-      if (expected !== undefined && expected !== this.version(current))
+      if (expected !== undefined && !sameTag(expected, current))
         throw new SettingsConflict("Settings changed in another session.");
       const values = { ...current, ...set };
       for (const name of reset) delete values[name];

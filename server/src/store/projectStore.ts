@@ -13,7 +13,7 @@ import {
 import { UserStore } from "../auth/userStore.js";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
-import { etag, JsonStore, sha256, StoreError } from "./jsonStore.js";
+import { JsonStore, sameTag, sha256, StoreError } from "./jsonStore.js";
 import type { Inventory, Write } from "./jsonStore.js";
 import {
   checkManifest,
@@ -310,7 +310,7 @@ export class ProjectStore {
     await this.exists(id);
     if (
       expected !== undefined &&
-      expected !== etag(await this.view(id, userId))
+      !sameTag(expected, await this.view(id, userId))
     )
       throw new StoreError("This view changed in another session.", "conflict");
     return this.views.write(userId, id, view);
