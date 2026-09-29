@@ -244,9 +244,7 @@ export class HistoryStore {
       );
       if (!range)
         throw new StoreError(`snapshot ${hash} not found`, "not_found");
-      const bytes = (await this.storage.read(this.path(id, LOG))).subarray(
-        ...range,
-      );
+      const bytes = await this.storage.readRange(this.path(id, LOG), ...range);
       if (sha256(bytes) !== hash)
         throw new StoreError(`snapshot ${hash} is corrupted`, "internal");
       return JSON.parse((await gunzip(bytes)).toString("utf8"));

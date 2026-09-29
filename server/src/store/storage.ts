@@ -6,6 +6,7 @@ export type Data = string | Uint8Array | AsyncIterable<Uint8Array>;
 
 export interface Storage {
   read(file: string): Promise<Buffer>;
+  readRange(file: string, start: number, end: number): Promise<Buffer>;
   stamp(file: string): Promise<string | undefined>;
   modified(file: string): Promise<number>;
   writeAtomic(file: string, data: Data): Promise<void>;
@@ -45,6 +46,17 @@ export class LocalStorage implements Storage {
 
   async read(file: string): Promise<Buffer> {
     return this.fs.readFile(this.resolve(file));
+  }
+
+  async readRange(file: string, start: number, end: number): Promise<Buffer> {
+    const handle = await this.fs.open(this.resolve(file), "r");
+    try {
+      const out = Buffer.alloc(end - start);
+      const { bytesRead } = await handle.read(out, 0, out.length, start);
+      return out.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
+    }
   }
 
   async stamp(file: string): Promise<string | undefined> {
