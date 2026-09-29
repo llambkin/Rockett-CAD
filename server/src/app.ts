@@ -26,12 +26,12 @@ import type { KernelClient } from "./kernel/client.js";
 import { TIMING_MS } from "./tunables.js";
 
 const COMPRESSIBLE = /\.(?:js|css|html)$/;
+const ASSETS = "/assets/";
 const gzipAsync = promisify(gzip);
 const toUrl = (file: string) => `/${file.split(path.sep).join("/")}`;
 
 function cacheControl(urlPath: string) {
-  if (urlPath.startsWith("/assets/"))
-    return "public, max-age=31536000, immutable";
+  if (urlPath.startsWith(ASSETS)) return "public, max-age=31536000, immutable";
   if (urlPath === "/index.html") return "no-cache";
   return undefined;
 }
@@ -80,7 +80,8 @@ function serveClient(clientDir: string): Router {
       },
     }),
   );
-  router.get("/{*splat}", (_req, res) => {
+  router.get("/{*splat}", (req, res) => {
+    if (req.path.startsWith(ASSETS)) return res.sendStatus(404);
     res.set("Cache-Control", "no-cache");
     res.sendFile("index.html", { root: clientDir });
   });
