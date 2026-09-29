@@ -1,8 +1,12 @@
+import { ShapeUtils, Vector2 } from "three";
 import {
   findProfile,
   LINEAR_TOL,
+  pointInPolygon,
+  UNIT_DOT_TOL,
   type BodyPayload,
   type FaceInfo,
+  type PlaneFrame,
   type SketchPayload,
   type Vec3,
 } from "@rockett/shared";
@@ -19,6 +23,23 @@ interface Bounds {
   max: Vec3;
 }
 
+function framePoints(
+  { origin: o, xAxis: x, yAxis: y }: PlaneFrame,
+  polygon: number[],
+): Vec3[] {
+  const points: Vec3[] = [];
+  for (let i = 0; i + 1 < polygon.length; i += 2) {
+    const u = polygon[i]!;
+    const v = polygon[i + 1]!;
+    points.push([
+      o[0] + u * x[0] + v * y[0],
+      o[1] + u * x[1] + v * y[1],
+      o[2] + u * x[2] + v * y[2],
+    ]);
+  }
+  return points;
+}
+
 function profileBase(
   sel: { sketchId: string; profileId: string },
   sketches: SketchPayload[],
@@ -26,18 +47,10 @@ function profileBase(
   const sketch = sketches.find((s) => s.featureId === sel.sketchId);
   const profile = sketch && findProfile(sketch, sel.profileId);
   if (!sketch || !profile) return null;
-  const { origin: o, xAxis: x, yAxis: y, normal } = sketch.frame;
-  const points: Vec3[] = [];
-  for (let i = 0; i + 1 < profile.polygon.length; i += 2) {
-    const u = profile.polygon[i]!;
-    const v = profile.polygon[i + 1]!;
-    points.push([
-      o[0] + u * x[0] + v * y[0],
-      o[1] + u * x[1] + v * y[1],
-      o[2] + u * x[2] + v * y[2],
-    ]);
-  }
-  return { points, normal };
+  return {
+    points: framePoints(sketch.frame, profile.polygon),
+    normal: sketch.frame.normal,
+  };
 }
 
 function faceBase(
@@ -163,42 +176,135 @@ function triangle(out: Mesh, points: Vec3[]) {
   }
 }
 
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+const flatten = (ring: Vector2[]) => ring.flatMap((q) => [q.x, q.y]);
+
+function faceLoops(body: BodyPayload, face: FaceInfo, normal: Vec3) {
+  const at = (v: number): Vec3 => [
+    body.positions[v * 3]!,
+    body.positions[v * 3 + 1]!,
+    body.positions[v * 3 + 2]!,
+  ];
+  const open = new Map<string, [Vec3, Vec3]>();
+  for (let i = face.start; i + 2 < face.start + face.count; i += 3) {
+    const tri = body.indices.slice(i, i + 3).map(at);
+    if (dot(across(tri), normal) < 0) tri.reverse();
+    for (const [k, u] of tri.entries()) {
+      const w = tri[(k + 1) % 3]!;
+      if (!open.delete(`${w} ${u}`)) open.set(`${u} ${w}`, [u, w]);
+    }
+  }
+  const next = new Map([...open.values()].map(([u, w]) => [`${u}`, w]));
+  const loops: Vec3[][] = [];
+  for (const start of next.keys()) {
+    const loop: Vec3[] = [];
+    let key = start;
+    for (let p = next.get(key); p && next.delete(key); p = next.get(key)) {
+      loop.push(p);
+      key = `${p}`;
+    }
+    loops.push(loop);
+  }
+  return loops;
+}
+
+function gap(q: Vector2, a: Vector2, b: Vector2): number {
+  const ab = b.clone().sub(a);
+  const t = Math.min(1, Math.max(0, q.clone().sub(a).dot(ab) / ab.lengthSq()));
+  return q.distanceTo(a.clone().addScaledVector(ab, t));
+}
+
+function sketchRegions(
+  rings: Vector2[][],
+  normal: Vec3,
+  depth: number,
+  sketches: SketchPayload[],
+  flat: (p: Vec3) => Vector2,
+): Vector2[][] {
+  const polygons = rings.map(flatten);
+  const inside = (q: Vector2) =>
+    polygons.filter((p) => pointInPolygon(q.x, q.y, p)).length % 2 === 1 &&
+    rings.every((r) =>
+      r.every((a, k) => gap(q, a, r[(k + 1) % r.length]!) > LINEAR_TOL),
+    );
+  const found = sketches.flatMap(({ frame, profiles }) =>
+    Math.abs(dot(frame.normal, normal)) < 1 - UNIT_DOT_TOL ||
+    Math.abs(dot(frame.origin, normal) - depth) > 1e-5
+      ? []
+      : profiles.flatMap((p) => {
+          const ring = framePoints(frame, p.polygon).map(flat);
+          const step = Math.max(1, Math.ceil(ring.length / 48));
+          return p.area > 1e-9 &&
+            ring.every((q, i) => i % step > 0 || inside(q))
+            ? [ring]
+            : [];
+        }),
+  );
+  return found.filter(
+    (r, i) =>
+      !found.some(
+        (o, j) => j !== i && pointInPolygon(r[0]!.x, r[0]!.y, flatten(o)),
+      ),
+  );
+}
+
 function prism(
   body: BodyPayload,
   face: FaceInfo,
   normal: Vec3,
+  sketches: SketchPayload[],
   [low, high]: number[],
   out: Mesh,
 ) {
-  const at = (v: number, t = 0): Vec3 => [
-    body.positions[v * 3]! + normal[0] * t,
-    body.positions[v * 3 + 1]! + normal[1] * t,
-    body.positions[v * 3 + 2]! + normal[2] * t,
-  ];
-  const open = new Map<string, [number, number]>();
-  for (let i = face.start; i + 2 < face.start + face.count; i += 3) {
-    const tri = body.indices.slice(i, i + 3);
-    const n = across(tri.map((v) => at(v)));
-    if (n[0] * normal[0] + n[1] * normal[1] + n[2] * normal[2] < 0)
-      tri.reverse();
+  const loops = faceLoops(body, face, normal);
+  const depth = dot(loops[0]![0]!, normal);
+  const side = across([
+    [0, 0, 0],
+    normal,
+    normal[0] ** 2 < 0.5 ? [1, 0, 0] : [0, 1, 0],
+  ]);
+  const e1 = side.map((v) => v / Math.hypot(...side)) as Vec3;
+  const e2 = across([[0, 0, 0], normal, e1]);
+  const where = new Map<Vector2, Vec3>();
+  const flat = (p: Vec3) => {
+    const q = new Vector2(dot(p, e1), dot(p, e2));
+    where.set(q, p);
+    return q;
+  };
+  const lift = (q: Vector2, t = 0) =>
+    where.get(q)!.map((v, i) => v + normal[i]! * t) as Vec3;
+  const rings = loops
+    .map((l) => l.map(flat))
+    .toSorted(
+      (a, b) => Math.abs(ShapeUtils.area(b)) - Math.abs(ShapeUtils.area(a)),
+    );
+  const [outer, ...holes] = [
+    ...rings,
+    ...sketchRegions(rings, normal, depth, sketches, flat),
+  ].map((r, i) =>
+    ShapeUtils.isClockWise(r) === (i === 0) ? r.toReversed() : r,
+  );
+  const caps = ShapeUtils.triangulateShape(outer!, holes);
+  const points = [outer!, ...holes].flat();
+  for (const tri of caps) {
+    const ring = tri.map((i) => points[i]!);
+    if (ShapeUtils.isClockWise(ring)) ring.reverse();
     triangle(
       out,
-      tri.map((v) => at(v, high)),
+      ring.map((q) => lift(q, high)),
     );
     triangle(
       out,
-      tri.toReversed().map((v) => at(v, low)),
+      ring.toReversed().map((q) => lift(q, low)),
     );
-    for (const [k, u] of tri.entries()) {
-      const w = tri[(k + 1) % 3]!;
-      if (!open.delete(`${at(w)} ${at(u)}`))
-        open.set(`${at(u)} ${at(w)}`, [u, w]);
+  }
+  for (const ring of [outer!, ...holes])
+    for (const [k, a] of ring.entries()) {
+      const b = ring[(k + 1) % ring.length]!;
+      triangle(out, [lift(a, low), lift(b, low), lift(b, high)]);
+      triangle(out, [lift(a, low), lift(b, high), lift(a, high)]);
     }
-  }
-  for (const [u, w] of open.values()) {
-    triangle(out, [at(u, low), at(w, low), at(w, high)]);
-    triangle(out, [at(u, low), at(w, high), at(u, high)]);
-  }
 }
 
 export function extrudeGhosts(ghosts: PreviewGhost[]): PreviewGhost[] {
@@ -220,6 +326,11 @@ export function extrudeGhosts(ghosts: PreviewGhost[]): PreviewGhost[] {
     feature.startOffset ?? 0,
     feature.distance2 ?? 0,
   ).toSorted((a, b) => a - b);
+  const order = (id: string) =>
+    s.document!.features.findIndex((f) => f.id === id);
+  const sketches = (s.evaluation?.sketches ?? []).filter(
+    (k) => order(k.featureId) < order(feature.id),
+  );
   const out: Mesh = { positions: [], normals: [] };
   const keys: string[] = [];
   for (const ref of feature.faces) {
@@ -227,7 +338,7 @@ export function extrudeGhosts(ghosts: PreviewGhost[]): PreviewGhost[] {
     const face = body?.faces.find((f) => f.name === ref.faceName);
     if (!body || !face || face.surface.type !== "plane") return ghosts;
     keys.push(body.meshKey, face.name);
-    prism(body, face, face.surface.normal, ends, out);
+    prism(body, face, face.surface.normal, sketches, ends, out);
   }
   const boxes = feature.faces.map((ref) =>
     swept(faceBase(ref, bodies)!, ends[0]!, ends[1]!),
