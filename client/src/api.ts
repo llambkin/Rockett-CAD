@@ -374,17 +374,18 @@ export function send<P extends string, Req, Res>(
   });
 }
 
+type Held = ReadonlyMap<string, BodyPayload>;
 let meshes = new Map<string, BodyPayload>();
+let staged: { tx?: string | undefined; held: string[] } | undefined;
+let closed: typeof staged;
 
-function keep(evaluation: EvaluateResult): EvaluateResult {
-  meshes = new Map(evaluation.bodies.map((body) => [body.meshKey, body]));
+function keep(evaluation: EvaluateResult, held: Held): EvaluateResult {
+  if (held === meshes)
+    meshes = new Map(evaluation.bodies.map((body) => [body.meshKey, body]));
   return evaluation;
 }
 
-function refill(
-  evaluation: WireEvaluateResult,
-  held: ReadonlyMap<string, BodyPayload>,
-): EvaluateResult {
+function refill(evaluation: WireEvaluateResult, held: Held): EvaluateResult {
   return {
     ...evaluation,
     bodies: evaluation.bodies.map((body) => {
@@ -401,13 +402,11 @@ async function sendHeld<P extends string, Req, Res>(
   params: PathParams<P>,
   body: Req,
   stamp: Stamp = {},
-): Promise<[Res, ReadonlyMap<string, BodyPayload>]> {
-  const held = meshes;
-  const response = await send(route, params, {
-    body: { ...body, held: [...held.keys()] },
-    ...stamp,
-  });
-  return [response, held];
+): Promise<[Res, Held]> {
+  const [held, keys] = [meshes, [...meshes.keys()]];
+  if (stamp.seq === 1) staged = { tx: stamp.tx, held: keys };
+  const options = { body: { ...body, held: keys }, ...stamp };
+  return [await send(route, params, options), held];
 }
 
 async function holding<P extends string, Req, Res extends WireMutationResponse>(
@@ -417,7 +416,8 @@ async function holding<P extends string, Req, Res extends WireMutationResponse>(
   stamp?: Stamp,
 ): Promise<Omit<Res, "evaluation"> & MutationResponse> {
   const [response, held] = await sendHeld(route, params, body, stamp);
-  return { ...response, evaluation: keep(refill(response.evaluation, held)) };
+  const evaluation = keep(refill(response.evaluation, held), held);
+  return { ...response, evaluation };
 }
 
 function fileForm(name: string, file: File): FormData {
@@ -531,18 +531,13 @@ export const api = {
 
   forgetMeshes: () => {
     meshes = new Map();
+    closed = staged;
   },
   evaluate: async (id: string, position?: number) => {
-    const [wire, held] = await sendHeld(
-      ROUTES.evaluate,
-      { id },
-      {},
-      {
-        position,
-      },
-    );
+    const stamp = { position };
+    const [wire, held] = await sendHeld(ROUTES.evaluate, { id }, {}, stamp);
     const evaluation = refill(wire, held);
-    return position === undefined ? keep(evaluation) : evaluation;
+    return position === undefined ? keep(evaluation, held) : evaluation;
   },
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
     send(ROUTES.tangentEdges, { id }, { body: { edge, beforeFeatureId } }),
@@ -577,8 +572,12 @@ export const api = {
     holding(ROUTES.redo, { id }, {}, { position }),
   commitPreview: (id: string, tx: string) =>
     holding(ROUTES.commitPreview, { id, tx }, {}),
-  abortPreview: (id: string, tx: string) =>
-    holding(ROUTES.abortPreview, { id, tx }, {}),
+  abortPreview: async (id: string, tx: string) => {
+    if (closed?.tx !== tx) return holding(ROUTES.abortPreview, { id, tx }, {});
+    const { held } = closed;
+    await send(ROUTES.abortPreview, { id, tx }, { body: { held } });
+    return null;
+  },
   history: (id: string) => send(ROUTES.history, { id }),
   createCheckpoint: (id: string, label: string) =>
     send(ROUTES.createCheckpoint, { id }, { body: { label } }),
