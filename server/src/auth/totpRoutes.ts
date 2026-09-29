@@ -56,10 +56,11 @@ async function withCode(
 
 async function signIn(
   { limiter, cookie, sessions }: TotpDeps,
+  req: Request,
   res: Response,
   record: UserRecord,
 ): Promise<void> {
-  limiter.success(record.username);
+  limiter.success(record.username, req.ip ?? "");
   res.set(
     "Set-Cookie",
     sessionCookie(cookie, await sessions.create(record.id)),
@@ -94,7 +95,7 @@ function registerCodeStep(router: Router, deps: TotpDeps): void {
         );
         if (!record) return;
         await sessions.revoke(token(deps, req)!);
-        await signIn(deps, res, record);
+        await signIn(deps, req, res, record);
       } catch (err) {
         next(err);
       }
@@ -140,7 +141,7 @@ function registerEnrolRoutes(router: Router, deps: TotpDeps): void {
         );
         if (!record) return;
         await sessions.revokeUser(record.id);
-        await signIn(deps, res, record);
+        await signIn(deps, req, res, record);
       } catch (err) {
         if (err instanceof StoreError && err.code === "conflict")
           return res.status(409).json({ error: "TOTP is already on." });

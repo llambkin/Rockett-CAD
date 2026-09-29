@@ -89,7 +89,7 @@ function registerSetupGuard(router: Router, limiter: AuthRateLimiter): void {
       if (wait !== null) return refused(res, wait);
       if (typeof username !== "string" || username.length > 32) return next();
       res.once("finish", () => {
-        if (res.statusCode === 201) limiter.success(username);
+        if (res.statusCode === 201) limiter.success(username, ip);
         else if (res.statusCode === 403) limiter.failure(username, ip);
       });
       next();
@@ -137,7 +137,7 @@ function registerPasswordChange(
           !(await users.changePassword(id, record.passwordHash, passwordHash))
         )
           return res.status(403).json({ error: "Incorrect current password." });
-        limiter.success(username);
+        limiter.success(username, ip);
         await sessions.revokeUser(id);
         const token = await sessions.create(id);
         res.set("Set-Cookie", sessionCookie(cookie, token));
@@ -206,7 +206,7 @@ function registerLogin(
           );
           return res.json({ step: login.scope });
         }
-        limiter.success(username);
+        limiter.success(username, ip);
         res.set("Set-Cookie", sessionCookie(cookie, login.token));
         res.json(toPublicUser(login.current));
       } catch (err) {

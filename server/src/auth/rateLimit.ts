@@ -23,8 +23,8 @@ export class AuthRateLimiter {
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  private userKey(username: string): string {
-    return `user:${username.normalize("NFKC").toLowerCase()}`;
+  private userKey(username: string, ip: string): string {
+    return `user:${JSON.stringify([username.normalize("NFKC").toLowerCase(), ip])}`;
   }
 
   private ipKey(ip: string): string {
@@ -63,7 +63,7 @@ export class AuthRateLimiter {
 
   check(username: string, ip: string): number | null {
     this.expire();
-    const keys = [this.userKey(username), this.ipKey(ip)];
+    const keys = [this.userKey(username, ip), this.ipKey(ip)];
     let wait = 0;
     for (const key of keys) {
       const counter = this.counters.get(key);
@@ -93,12 +93,12 @@ export class AuthRateLimiter {
 
   failure(username: string, ip: string): void {
     this.expire();
-    this.add(this.userKey(username), USER_LIMIT);
+    this.add(this.userKey(username, ip), USER_LIMIT);
     this.add(this.ipKey(ip), IP_LIMIT);
   }
 
-  success(username: string): void {
-    this.counters.delete(this.userKey(username));
+  success(username: string, ip: string): void {
+    this.counters.delete(this.userKey(username, ip));
   }
 
   private acquireHash(): (() => void) | null {
