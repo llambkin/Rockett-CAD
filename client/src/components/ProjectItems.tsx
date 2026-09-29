@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
-import type { Folder, FolderTree, ProjectSummary } from "@rockett/shared";
+import type { FolderTree, ProjectSummary } from "@rockett/shared";
 import { api, saveDownload, type Download } from "../api";
 import {
   deleteBrowserProject,
@@ -18,13 +18,13 @@ import { useSession } from "../session";
 import {
   canMoveTo,
   itemCount,
-  projectsIn,
-  subfolders,
+  projectView,
   THIS_BROWSER,
   trail,
   type Item,
 } from "../projectTree";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { ProjectBreadcrumb, type DropTarget } from "./ProjectBreadcrumb";
 import { MoveDialog } from "./MoveDialog";
 import { RenameInput } from "./RenameInput";
 import {
@@ -91,39 +91,6 @@ function useDragMove(
     };
   };
   return { source, target };
-}
-
-type DropTarget = ReturnType<ReturnType<typeof useDragMove>["target"]>;
-
-function Breadcrumb({
-  folders,
-  onOpen,
-  target,
-}: {
-  folders: Pick<Folder, "id" | "name">[];
-  onOpen: (id: string | null) => void;
-  target: (id: string | null) => DropTarget;
-}) {
-  const crumbs = [{ id: null, name: "Projects" }, ...folders];
-  const current = crumbs.pop()!;
-  return (
-    <div className="breadcrumb">
-      {crumbs.map((c) => {
-        const { active, ...drop } = target(c.id);
-        return (
-          <button
-            key={c.id ?? ""}
-            className={active ? "drop-target" : undefined}
-            onClick={() => onOpen(c.id)}
-            {...drop}
-          >
-            {c.name}
-          </button>
-        );
-      })}
-      <span>{current.name}</span>
-    </div>
-  );
 }
 
 function ItemRow({
@@ -289,6 +256,21 @@ const moveTo = (item: Item, open: (moving: Moving) => void): RowAction => ({
   run: (at) => open({ item, at }),
 });
 
+type ProjectItemsProps = {
+  controls?: ReactNode;
+  filter?: string;
+  projects: ProjectSummary[];
+  tree: FolderTree;
+  folderId: string | null;
+  kept: number | null;
+  renaming: Renaming;
+  setRenaming: (r: Renaming) => void;
+  onOpenFolder: (id: string | null) => void;
+  onOpenBrowser: () => void;
+  onOpenProject: (id: string) => void;
+  run: Run;
+};
+
 export function ProjectItems({
   projects,
   tree,
@@ -300,18 +282,9 @@ export function ProjectItems({
   onOpenBrowser,
   onOpenProject,
   run,
-}: {
-  projects: ProjectSummary[];
-  tree: FolderTree;
-  folderId: string | null;
-  kept: number | null;
-  renaming: Renaming;
-  setRenaming: (r: Renaming) => void;
-  onOpenFolder: (id: string | null) => void;
-  onOpenBrowser: () => void;
-  onOpenProject: (id: string) => void;
-  run: Run;
-}) {
+  controls,
+  filter = "",
+}: ProjectItemsProps) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Moving>(null);
   const [sharing, setSharing] = useState<Item | null>(null);
@@ -358,16 +331,21 @@ export function ProjectItems({
       snapshot={snapshot}
     />
   );
-  const folders = subfolders(tree, folderId);
-  const here = projectsIn(tree, projects, folderId);
-  const pinned = folderId === null ? kept : null;
+  const { folders, here, pinned, meta, empty } = projectView(
+    tree,
+    projects,
+    folderId,
+    kept,
+    filter,
+  );
   return (
     <>
-      <Breadcrumb
+      <ProjectBreadcrumb
         folders={trail(tree, folderId)}
         onOpen={onOpenFolder}
         target={target}
       />
+      {controls}
       {pinned !== null && (
         <ItemRow
           item={{ kind: "folder", id: THIS_BROWSER, name: "This browser" }}
@@ -382,7 +360,7 @@ export function ProjectItems({
       {folders.map((f) => {
         const item: Item = { kind: "folder", ...f };
         const n = itemCount(tree, projects, f.id);
-        return row(item, count(n, "item"), [
+        return row(item, meta(item, count(n, "item")), [
           { label: "Rename", glyph: "✎", run: () => setRenaming(item) },
           ...(actor && (actor.role === "admin" || f.owner === actor.id)
             ? [{ label: "Share", glyph: "♧", run: () => setSharing(item) }]
@@ -408,7 +386,10 @@ export function ProjectItems({
             <ItemRow
               key={`project:${p.id}`}
               item={item}
-              meta={`${reason} · Owner: ${p.ownerName ?? "Unclaimed"}`}
+              meta={meta(
+                item,
+                `${reason} · Owner: ${p.ownerName ?? "Unclaimed"}`,
+              )}
               dimmed
               snapshot={p}
               actions={[
@@ -419,7 +400,7 @@ export function ProjectItems({
           );
         return row(
           item,
-          `${features(p)} · Owner: ${p.ownerName ?? "Unclaimed"}`,
+          meta(item, `${features(p)} · Owner: ${p.ownerName ?? "Unclaimed"}`),
           projectActions(
             p.name,
             run,
@@ -440,11 +421,7 @@ export function ProjectItems({
         );
       })}
       {folders.length + here.length + (pinned ?? 0) === 0 && (
-        <div className="tree-empty">
-          {folderId === null
-            ? "No projects yet"
-            : "This folder is empty. Drag a project here or Move to."}
-        </div>
+        <div className="tree-empty">{empty}</div>
       )}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {moving && (
@@ -512,7 +489,7 @@ export function BrowserItems({
   const actor = session.kind === "signed-in" ? session.user : null;
   return (
     <>
-      <Breadcrumb
+      <ProjectBreadcrumb
         folders={[{ id: THIS_BROWSER, name: "This browser" }]}
         onOpen={onOpenFolder}
         target={() => ({ active: false })}

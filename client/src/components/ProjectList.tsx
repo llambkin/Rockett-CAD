@@ -9,7 +9,7 @@ import {
   isBrowserPath,
   showPath,
 } from "../paths";
-import { EMPTY_TREE } from "../projectTree";
+import { byName, EMPTY_TREE } from "../projectTree";
 import { useStore } from "../store";
 import { BrowserItems, ProjectItems, type Renaming } from "./ProjectItems";
 import { StepImportButton } from "./StepImportButton";
@@ -110,9 +110,44 @@ function OpenProjectFile({ onError }: { onError: (e: string) => void }) {
   );
 }
 
+function useListView(projects: Awaited<ReturnType<typeof api.listProjects>>) {
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState("modified");
+  return {
+    filter,
+    projects: projects.toSorted((a, b) =>
+      sort === "name" ? byName(a, b) : b.modifiedAt.localeCompare(a.modifiedAt),
+    ),
+    controls: (
+      <div className="new-project">
+        <input
+          placeholder="Filter by name…"
+          aria-label="Filter by name"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setFilter("")}
+        />
+        <label>
+          Sort{" "}
+          <select
+            className="tb-select"
+            aria-label="Sort projects"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="modified">Modified</option>
+            <option value="name">Name</option>
+          </select>
+        </label>
+      </div>
+    ),
+  };
+}
+
 export function ProjectList({ onUsers }: { onUsers: () => void }) {
   const server = useLoaded(readProjects, { projects: [], tree: EMPTY_TREE });
   const { projects, tree } = server.value;
+  const view = useListView(projects);
   const kept = useBrowserProjects();
   const { inBrowser, folderId, openFolder, openBrowser } = usePlace();
   const { load, refresh } = inBrowser ? kept : server;
@@ -150,7 +185,6 @@ export function ProjectList({ onUsers }: { onUsers: () => void }) {
         setRenaming({ kind: "folder", id: folder.id });
       }),
     );
-
   return (
     <div className="project-list-page">
       <div className="project-list-card">
@@ -202,7 +236,7 @@ export function ProjectList({ onUsers }: { onUsers: () => void }) {
               />
             ) : (
               <ProjectItems
-                projects={projects}
+                {...view}
                 tree={tree}
                 folderId={folderId}
                 kept={kept.load === "ready" ? kept.value.length : null}

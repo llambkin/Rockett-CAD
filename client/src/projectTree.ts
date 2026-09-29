@@ -11,7 +11,7 @@ export const THIS_BROWSER = "browser";
 
 export const EMPTY_TREE: FolderTree = { folders: [], placement: {} };
 
-const byName = (a: Folder, b: Folder) =>
+export const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { numeric: true });
 
 const find = (tree: FolderTree, id: string | null) =>
@@ -72,4 +72,37 @@ export function canMoveTo(
   if (target === parentOf(tree, item)) return false;
   if (target === THIS_BROWSER) return item.kind === "project";
   return item.kind === "project" || !isInside(tree, target, item.id);
+}
+
+export function projectView(
+  tree: FolderTree,
+  projects: ProjectSummary[],
+  folderId: string | null,
+  kept: number | null,
+  filter: string,
+) {
+  const matches = (name: string) =>
+    name.toLowerCase().includes(filter.toLowerCase());
+  return {
+    folders: filter
+      ? tree.folders.filter((f) => matches(f.name)).toSorted(byName)
+      : subfolders(tree, folderId),
+    here: filter
+      ? projects.filter((p) => matches(p.name))
+      : projectsIn(tree, projects, folderId),
+    pinned: !filter && folderId === null ? kept : null,
+    meta: (item: Item, normal: string) =>
+      filter
+        ? `in ${
+            trail(tree, parentOf(tree, item))
+              .map((f) => f.name)
+              .join(" > ") || "Projects"
+          }`
+        : normal,
+    empty: filter
+      ? `No project or folder matches "${filter}".`
+      : folderId === null
+        ? "No projects yet"
+        : "This folder is empty. Drag a project here or Move to.",
+  };
 }
