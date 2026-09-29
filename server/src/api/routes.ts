@@ -492,7 +492,7 @@ export function createApiRouter(
   on(
     ROUTES.deleteProject,
     wrap(async (req, res) => {
-      await store.remove(req.params.id);
+      await history.remove(req.params.id);
       kernel.drop(req.params.id);
       meshCache.drop(req.params.id);
       await folders.place(req.params.id, null);

@@ -8,7 +8,7 @@ import {
   type CadDocument,
 } from "@rockett/shared";
 import { HASH_RE } from "./blobStore.js";
-import { snapshotBodies } from "./historyStore.js";
+import { snapshotBodies } from "./historyLog.js";
 import { backupNamespace, sha256 } from "./jsonStore.js";
 import {
   documentMigrations,
