@@ -7,7 +7,7 @@ import {
 } from "@rockett/shared";
 import { TIMING_MS, TRIAL_BUDGET } from "../tunables.js";
 import { trialBuild } from "./engine.js";
-import { invalidPart, NoCorner, type EvalState } from "./features.js";
+import { NoCorner, type EvalState } from "./features.js";
 import {
   areaOf,
   getKernel,
@@ -79,19 +79,14 @@ export async function sizeLimit(
   const earlier = doc.features.slice(0, position ?? doc.timelinePosition);
   let deadline = performance.now() + TIMING_MS.sizeLimitSearch;
   const late = () => performance.now() > deadline;
-  const fits = (size: number) =>
+  const build = (size: number) =>
     trialBuild(
       state,
       { ...feature, [SIZE[feature.type]]: size },
       earlier,
       doc.namingVersion,
       late,
-      (built) =>
-        [...built.bodies.values()].every(
-          (b) =>
-            state.bodies.get(b.bodyId)?.shape === b.shape ||
-            invalidPart(b.shape) === null,
-        ),
+      () => undefined,
     );
   let fit = 0;
   let fail = Infinity;
@@ -107,8 +102,8 @@ export async function sizeLimit(
     }
     builds++;
     try {
-      if (fits(size)) fit = size;
-      else if (!late()) fail = size;
+      build(size);
+      fit = size;
     } catch (error) {
       if (late()) break;
       if (refused(error)) return { kind: "smooth", builds };
