@@ -75,12 +75,20 @@ function deriveName(text, column) {
 }
 
 function measure() {
-  const tracked = new Set(run("git", ["ls-files", "-z"]).split("\0"));
+  const measured = new Set(
+    run("git", [
+      "ls-files",
+      "-z",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+    ]).split("\0"),
+  );
   const isTest =
     /(^|\/)(test|tests|__tests__)\/|\.(test|spec|bench)\.[cm]?[jt]sx?$/;
   const files = new Map();
   for (const d of lintSizes()) {
-    if (!tracked.has(d.filename) || isTest.test(d.filename)) continue;
+    if (!measured.has(d.filename) || isTest.test(d.filename)) continue;
     const file = files.get(d.filename) ?? {
       path: d.filename,
       lines: 0,
