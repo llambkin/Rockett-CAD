@@ -30,6 +30,8 @@ function sizeText(
     case "none":
       return `Fails at every size tried, down to ${formatLength(limit.below, units)}`;
     case "stopped":
+      if ("size" in limit)
+        return `Works up to about ${formatLength(limit.size, units)}, stopped early`;
       return `Stopped early: fails at ${formatLength(limit.below, units)}, smaller sizes not checked`;
     case "slow":
       return "Too slow to find the usable size";

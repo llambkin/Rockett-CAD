@@ -315,6 +315,7 @@ export type SizeLimit = { builds: number } & (
   | { kind: "smooth" }
   | { kind: "none"; below: number }
   | { kind: "stopped"; below: number }
+  | { kind: "stopped"; size: number }
   | { kind: "slow" }
 );
 

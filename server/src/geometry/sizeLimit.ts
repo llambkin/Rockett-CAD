@@ -114,6 +114,8 @@ export async function sizeLimit(
     else if (fail === Infinity) size = fit * STEP;
     else size = Math.sqrt(fit * fail);
   }
+  if (fit > 0 && fail / fit > CLOSE_ENOUGH && late())
+    return { kind: "stopped", size: fit, builds };
   if (fit > 0) return { kind: "upTo", size: fit, builds };
   if (fail === Infinity) return { kind: "slow", builds };
   if (late()) return { kind: "stopped", below: fail, builds };
