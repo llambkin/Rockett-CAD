@@ -96,9 +96,10 @@ router checks project access first (`server/src/api/projectAccess.ts`).
 ## Performance
 
 - Regeneration is incremental, cached per feature.
-- Engines, tessellations and encoded meshes sit in bounded LRU caches. The
-  bounds live in code: `MAX_ENGINES` in `server/src/geometry/engine.ts` and
-  the mesh limit in `server/src/kernel/meshCache.ts`.
+- Engines, tessellations and encoded meshes sit in bounded LRU caches.
+  Engines evict by measured bytes against `ENGINE_CACHE` in
+  `server/src/tunables.ts`, a share of the host memory limit; the mesh limit
+  is in `server/src/kernel/meshCache.ts`.
 - Viewport work never calls the kernel.
 - Sketch drags solve in the browser; API.md, Evaluation, says when a sketch
   write or evaluation solves.
