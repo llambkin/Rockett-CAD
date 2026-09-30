@@ -22,8 +22,8 @@ import type {
   SketchPoint,
   SketchSolveStatus,
 } from "./model.js";
-import { ValidationError } from "./schema/index.js";
-import { formatAngle, formatLength } from "./units.js";
+import { OverConstrainedError } from "./solverError.js";
+export { OverConstrainedError } from "./solverError.js";
 import {
   dampingFloor,
   evalResiduals,
@@ -584,17 +584,12 @@ export const settledEntities = (
 const holds = ({ residuals, x0 }: Problem): boolean =>
   residuals.every((r) => Math.abs(r(x0)) < CONFLICT_TOL);
 
-const constraintName = (c: SketchConstraint): string => {
-  const words = c.type.replace(/[A-Z]/g, (m) => ` ${m.toLowerCase()}`);
-  const name = words.charAt(0).toUpperCase() + words.slice(1);
-  if (!("value" in c)) return name;
-  const angle = c.type === "angle" || c.type === "lineAngle";
-  return `${name} ${angle ? formatAngle(c.value, 3) : formatLength(c.value, "mm")}`;
-};
-
-export class OverConstrainedError extends ValidationError {
-  constructor(readonly constraint: SketchConstraint) {
-    super(`${constraintName(constraint)} would over-constrain the sketch.`);
+export function sketchConstraintsHold(input: SolveInput): boolean | null {
+  try {
+    return holds(buildProblem(input));
+  } catch (e) {
+    if (e instanceof SolverModelError) return null;
+    throw e;
   }
 }
 

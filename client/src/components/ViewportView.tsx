@@ -11,7 +11,6 @@ import type {
   PlaneFrame,
   SketchConstraint,
   SketchEntity,
-  SketchSolveStatus,
   TrimPiece,
   ViewCamera,
 } from "@rockett/shared";
@@ -94,6 +93,7 @@ import { featureUI } from "../features/registry";
 import { handleValue } from "../features/inputs";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
+import { SketchStatus } from "./SketchStatus";
 import { PickReadout } from "./PickReadout";
 
 interface DimEditField {
@@ -3104,8 +3104,6 @@ export function ViewportView() {
 
 function ViewportHud() {
   const mode = useStore((s) => s.mode);
-  const evaluation = useStore((s) => s.evaluation);
-  const draftSketch = useStore((s) => s.draftSketch);
   const job = useStore((s) => s.job);
   const jobStartedAt = useStore((s) => s.jobStartedAt);
   const cancelJob = useStore((s) => s.cancelJob);
@@ -3150,25 +3148,6 @@ function ViewportHud() {
   } else if (mode.name === "measure")
     hint = "Select up to two faces / edges / vertices";
 
-  let sketchBadge: { label: string; cls: string } | null = null;
-  if (mode.name === "sketch" && draftSketch && evaluation) {
-    const solved = evaluation.sketches.find(
-      (s) => s.featureId === draftSketch.id,
-    );
-    const status = solved?.solveStatus ?? "unconstrained";
-    const dof = solved?.dof ?? 0;
-    const map: Record<SketchSolveStatus, { label: string; cls: string }> = {
-      unconstrained: { label: `Unconstrained (${dof} DOF)`, cls: "warn" },
-      partially_constrained: {
-        label: `Partially constrained (${dof} DOF)`,
-        cls: "warn",
-      },
-      fully_constrained: { label: "Fully constrained", cls: "ok" },
-      over_constrained: { label: "Over-constrained!", cls: "err" },
-    };
-    sketchBadge = map[status];
-  }
-
   return (
     <>
       {(showJob && jobStartedAt !== null) || hint ? (
@@ -3189,11 +3168,7 @@ function ViewportHud() {
           )}
         </div>
       ) : null}
-      {sketchBadge && (
-        <div className={`sketch-status ${sketchBadge.cls}`}>
-          {sketchBadge.label}
-        </div>
-      )}
+      <SketchStatus />
       <PickReadout />
     </>
   );

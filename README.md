@@ -19,7 +19,7 @@ everything downstream against persistent topology references.
 ### Sketch
 
 - **Sketcher**: draw lines, rectangles, circles, arcs, polygons, slots, points and construction geometry.
-- **Constraints and dimensions**: constrain shapes, drive them with editable or driven dimensions and watch the remaining degrees of freedom; over-constraining is refused.
+- **Constraints and dimensions**: editable or driven dimensions, remaining degrees of freedom, refused over-constraints; unsettled sketches warn before the next edit.
 - **Dimension kinds**: point to line, parallel lines, line to line or axis angles; right-click a dimension for horizontal, vertical or radius.
 - **Line angles**: a typed angle is kept; double-click a line to edit its length and angle.
 - **Regions**: crossing curves and linked planar face boundaries split sketches into selectable regions.
