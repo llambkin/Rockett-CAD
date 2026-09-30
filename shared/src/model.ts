@@ -9,7 +9,7 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 export type NamingVersion = 1 | 2;
 
@@ -292,7 +292,7 @@ export interface SweepFeature extends ToolFeatureBase {
 
 export interface LoftFeature extends ToolFeatureBase {
   type: "loft";
-  sections: ProfileRef[];
+  sections: (ProfileRef | FaceRef)[];
   operation: BooleanOperation;
 }
 

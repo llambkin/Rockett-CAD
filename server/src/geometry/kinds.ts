@@ -13,7 +13,6 @@ import {
   evalImportMesh,
   evalImportStep,
   evalLinearPattern,
-  evalLoft,
   evalMirror,
   evalMove,
   evalReferenceImage,
@@ -23,6 +22,7 @@ import {
   type FeatureOutcome,
 } from "./features.js";
 import { evalChamfer, evalFillet } from "./blend.js";
+import { evalLoft } from "./loft.js";
 import { evalShell } from "./shell.js";
 
 const kind = <T extends FeatureType>(

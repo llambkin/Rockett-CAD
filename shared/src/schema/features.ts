@@ -310,7 +310,11 @@ const sweep = feature("sweep", {
   targets,
 });
 
-const loft = feature("loft", { sections: profiles(2), operation, targets });
+const loft = feature("loft", {
+  sections: Type.Array(Type.Union([profileRef, faceRef]), { minItems: 2 }),
+  operation,
+  targets,
+});
 
 const fillet = feature("fillet", {
   tangentChain: flag,

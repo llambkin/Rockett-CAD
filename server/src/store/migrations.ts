@@ -198,7 +198,10 @@ export const documentMigrations: Migrations<CadDocument> = {
       return split.doc;
     },
     11: (doc) => ({ ...doc, namingVersion: 1 }),
-    12: (doc) => splitView(doc).doc,
+    12: (doc) => ({
+      ...splitView(doc).doc,
+      ...(!Object.hasOwn(doc, "namingVersion") && { namingVersion: 1 }),
+    }),
     13: (doc) => doc,
     14: (doc) => doc,
     15: (doc) => doc,
@@ -217,6 +220,7 @@ export const documentMigrations: Migrations<CadDocument> = {
           }
         : doc,
     20: (doc) => ({ ...doc, modifiedBy: null }),
+    21: (doc) => doc,
   },
   nested: extensionFeatures,
 };

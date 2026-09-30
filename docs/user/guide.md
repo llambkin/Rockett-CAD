@@ -94,7 +94,10 @@ numbers can change when the body is rebuilt.
 
 - Extrude: new body, join, cut or intersect; symmetric or two-sided; from
   sketch profiles or planar faces.
-- Revolve, sweep, loft, emboss and deboss.
+- Revolve, sweep, emboss and deboss.
+- Loft: click profiles or planar faces in section order without a modifier.
+  Click a section again to remove it. Join merges the selected source bodies;
+  New body keeps them. Curved faces and faces with holes are refused.
 - Target: join, cut and intersect act on the bodies you choose. Auto picks
   the bodies the tool meets, again after each edit.
 - Sweep paths take lines and arcs in any order. A branched or broken path

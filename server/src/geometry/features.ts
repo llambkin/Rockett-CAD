@@ -41,7 +41,6 @@ import {
   type ImportMeshFeature,
   type ImportStepFeature,
   type LinearPatternFeature,
-  type LoftFeature,
   type MirrorFeature,
   type MoveFeature,
   type ReferenceImageFeature,
@@ -73,7 +72,6 @@ import {
   solids,
   transformOp,
   vec,
-  wires as wiresOf,
   type Shape,
 } from "./kernel.js";
 import {
@@ -97,6 +95,7 @@ import {
   arcEdge,
   buildProfileFace,
   snapper,
+  sideEdgeNames,
   type ProfileFace,
 } from "./sketchGeom.js";
 
@@ -471,19 +470,6 @@ function applyProfileTools(
   }
 }
 
-function sideEdgeNames(
-  featureId: string,
-  pf: ProfileFace,
-  edges = edgesOf(pf.face),
-): Array<[Shape, string]> {
-  return edges.flatMap((e): Array<[Shape, string]> => {
-    const entityId = pf.edgeEntity.get(e);
-    if (entityId) return [[e, `f:${featureId}:s:${entityId}`]];
-    e.delete();
-    return [];
-  });
-}
-
 function revolveSources(state: EvalState, f: RevolveFeature) {
   const faceRefs = f.faces ?? [];
   const profiles =
@@ -658,52 +644,6 @@ export function evalSweep(state: EvalState, f: SweepFeature) {
     return applyToolOperation(state, f.id, tools[0]!, f.operation, f.targets);
   } finally {
     tools[0]!.shape.delete();
-  }
-}
-
-export function evalLoft(state: EvalState, f: LoftFeature) {
-  const k = getKernel();
-  if (f.sections.length < 2)
-    throw new Error("loft requires at least two sections");
-  const tool = kernelCall("loft", () =>
-    scoped((own) => {
-      const thru = own(
-        new k.BRepOffsetAPI_ThruSections(true, false, LINEAR_TOL),
-      );
-      let first: { pf: ProfileFace; wire: Shape } | undefined;
-      for (const ref of f.sections) {
-        const sketch = state.sketches.get(ref.sketchId);
-        if (!sketch) throw new Error(`sketch ${ref.sketchId} not found`);
-        const profile = findProfile(sketch, ref.profileId);
-        if (!profile) throw new Error(`profile ${ref.profileId} not found`);
-        const pf = buildProfileFace(profile, sketch.entities, sketch.frame);
-        own(pf.face);
-        const outer = wiresOf(pf.face).map(own)[0];
-        if (!outer) throw new Error("loft section has no wire");
-        thru.AddWire(outer);
-        first ??= { pf, wire: outer };
-      }
-      thru.Build(progress());
-      if (!thru.IsDone())
-        throw new Error("loft failed: sections may be incompatible");
-      const shape = thru.Shape();
-      const names =
-        namingVersion() === 1
-          ? finalizeNames(shape, new ShapeMap(), f.id)
-          : sweptNames(
-              shape,
-              f.id,
-              sideEdgeNames(f.id, first!.pf, edgesOf(first!.wire)),
-              (e) => thru.Generated(e),
-              [thru.FirstShape(), thru.LastShape()],
-            );
-      return { shape, names };
-    }),
-  );
-  try {
-    return applyToolOperation(state, f.id, tool, f.operation, f.targets);
-  } finally {
-    tool.shape.delete();
   }
 }
 

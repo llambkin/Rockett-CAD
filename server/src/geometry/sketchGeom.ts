@@ -11,6 +11,7 @@ import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
 import { arcAngles, LINEAR_TOL } from "@rockett/shared";
 import {
   getKernel,
+  edges as edgesOf,
   kernelCall,
   pnt,
   dir,
@@ -322,5 +323,18 @@ export function buildProfileFace(
     const finalEdgeEntity = matchEdgesToEntities(face, chainIds, maps, frame);
 
     return { face, edgeEntity: finalEdgeEntity, profileId: profile.id };
+  });
+}
+
+export function sideEdgeNames(
+  featureId: string,
+  pf: ProfileFace,
+  edges = edgesOf(pf.face),
+): Array<[Shape, string]> {
+  return edges.flatMap((e): Array<[Shape, string]> => {
+    const entityId = pf.edgeEntity.get(e);
+    if (entityId) return [[e, `f:${featureId}:s:${entityId}`]];
+    e.delete();
+    return [];
   });
 }

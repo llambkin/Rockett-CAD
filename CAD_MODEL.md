@@ -293,3 +293,17 @@ Extrude, revolve, sweep, loft and emboss may store `targets`. Stored targets
 give the result the defaults gave. Add and update write them; hidden bodies
 are never default participants; evaluation never reads the view:
 `pinTargets` in `shared/src/topoRefs.ts`.
+
+## Loft sections
+
+Loft stores profile and planar-face references in picked order. Face sections
+use their existing boundary, with one outline and no holes. Join includes
+each selected source body before any explicit extra target, retaining the
+first source body's identity. Profile-only lofts keep their existing target
+behaviour.
+
+Schema 22 adds mixed sections without changing existing profile references.
+The fork migration chain remains authoritative. Upstream schema 12 documents
+that have no naming version receive version 1 while retaining the fork's
+view split. The project store backs up the complete previous project before
+the first migrated save.
