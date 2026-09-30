@@ -1040,8 +1040,6 @@ export function ViewportView() {
       }
       if (extrudeSlot.isDragging && extrudeSlot.current) {
         const g = extrudeSlot.current;
-        // Ctrl while dragging: collapse the extrude to zero so the sketch
-        // profiles reappear and can be re-picked.
         const zeroed = e.ctrlKey || e.metaKey;
         const v = zeroed ? 0 : g.dragValue(e.clientX, e.clientY);
         if (zeroed || Math.abs(v) > 1e-9) {
@@ -1052,16 +1050,18 @@ export function ViewportView() {
           if (!zeroed && (curDir === "normal" || curDir === "reverse")) {
             patch.direction = v < 0 ? "reverse" : "normal";
           }
-          s.setDialogParams(patch);
+          const params = { ...s.dialogParams, ...patch };
+          s.setDialogParams({
+            ...patch,
+            ...featureUI("extrude")?.onParamsChange?.(params),
+          });
+          const current = useStore.getState().dialogParams;
           const tip = g.tipScreenPosition();
           setGizmoLabel({
             x: tip.x,
             y: tip.y,
             text: formatLength(zeroed ? 0 : Math.abs(v), units),
           });
-          // editing an existing extrude: live-update the real geometry.
-          // At zero the feature is previewed as suppressed (a real zero
-          // extrude is invalid) so the body vanishes and profiles show.
           const modeNow = s.mode;
           if (
             modeNow.name === "dialog" &&
@@ -1075,9 +1075,8 @@ export function ViewportView() {
                 : {
                     suppressed: false,
                     distance: Math.abs(v),
-                    direction:
-                      patch.direction ?? s.dialogParams.direction ?? "normal",
-                    operation: s.dialogParams.operation,
+                    direction: current.direction ?? "normal",
+                    operation: current.operation,
                   }) as any,
             );
           }
