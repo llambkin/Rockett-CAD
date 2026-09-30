@@ -30,7 +30,8 @@ release workflow remain under development.
 - Server-owned undo/redo, preview transactions, history attribution, checkpoints
   and confirmed restore. Admins can collect orphan project blobs.
 - Reference signatures, explicit tool targets and reference repair in feature
-  dialogs. Existing naming-version 1 projects can review and apply a backed-up,
+  dialogs, including sketch projections and reference-image planes. Existing
+  naming-version 1 projects can review and apply a backed-up,
   undoable upgrade to version 2.
 - Planar-face revolve, construction planes by angle, three points or two edges,
   plane flip and midplane offset, origin-axis picking, active dialog pick rows
@@ -71,6 +72,10 @@ release workflow remain under development.
   preview revolve face edits and retain the current extrude operation. Cancel,
   unchanged OK, conflicts, late replies and project closure restore or discard
   the right state without an extra undo step.
+- Completed single picks advance to missing inputs, then return to multiple
+  picks. Extrude and Revolve both explain Shift-clicking planar faces.
+- Project settings are edited on the Project page; personal Editing settings
+  keep personal scope. Body rename requests require a string name.
 - Trim ends at its actual cutter; deleting constraints moves no geometry.
   Old region IDs still render, and unsettled sketches warn before the next edit.
 - View saves survive project closure; deleted features lose stale view IDs;
@@ -85,9 +90,12 @@ release workflow remain under development.
 - Sign-in/setup failures are rate-limited by address, including behind an
   explicitly trusted proxy. Common passwords are refused, malformed sessions
   are moved aside, health diagnostics require access and request contents stay
-  out of authentication logs.
+  out of authentication logs. Response security headers restrict content sources
+  and framing, prevent MIME sniffing and limit cross-origin referrer details,
+  including on errors and unmatched routes.
 - Missing assets return 404, API fallbacks return coded errors, history
   decompression is bounded and interrupted uploads are cleared at startup.
+  Startup reports recovered writes as interrupted writes rather than migrations.
 - Reduced kernel-handle retention in extrude, sweep, loft, fillet and export
   paths. Mesh, highlight and preview resources are reused or released on project
   closure. Sketch solving touches only affected components; history reads one
