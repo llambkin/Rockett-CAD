@@ -91,6 +91,7 @@ import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { repick } from "./RefRepair";
 import { featureUI } from "../features/registry";
+import { handleValue } from "../features/inputs";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
 import { PickReadout } from "./PickReadout";
@@ -606,10 +607,7 @@ export function ViewportView() {
       src.profile = undefined;
       src.faceGhost = undefined;
     }
-    const distRaw = Number(s.dialogParams.distance);
-    // 0 is a valid (Ctrl-zeroed) state — only fall back to 10 when unset.
-    // The distance is signed (typed negative = other side), as is "Reversed".
-    const dist = Number.isFinite(distRaw) ? distRaw : 10;
+    const dist = handleValue(s.dialogParams, "extrude");
     const sign = s.dialogParams.direction === "reverse" ? -1 : 1;
     const startRaw = Number(s.dialogParams.startOffset);
     return new ExtrudeGizmo(
@@ -770,14 +768,13 @@ export function ViewportView() {
     if (!sel || !axis) return;
     const { sk, profile } = sel;
 
-    const angle = Number(s.dialogParams.angle);
     const ghost = buildRevolveGhost(
       sk.frame,
       profile.polygon,
       profile.holePolygons,
       axis.origin,
       axis.dir,
-      Number.isFinite(angle) ? angle : 360,
+      handleValue(s.dialogParams, "revolve"),
     );
     const layer = vp.addLayer("revolveGhost");
     layer.group.add(ghost);
@@ -818,14 +815,13 @@ export function ViewportView() {
       axis.dir,
       vp.worldPerPixel(),
     );
-    const angle = Number(s.dialogParams.angle);
     return new RevolveGizmo(
       vp,
       ring.center,
       ring.dir,
       ring.zeroDir,
       ring.radius,
-      Number.isFinite(angle) ? angle : 360,
+      handleValue(s.dialogParams, "revolve"),
     );
   }
 

@@ -12,6 +12,8 @@ import type { DialogType, Selection } from "../store";
 import { ORIGIN_PLANE_DEFS, uv3 } from "./CadViewport";
 
 export const HANDLE_VALUES = {
+  extrude: { param: "distance", fallback: 10 },
+  revolve: { param: "angle", fallback: 360 },
   fillet: {
     param: "radius",
     fallback: 2,
@@ -312,8 +314,9 @@ function offsetPlaneRay(input: HandleInput): Ray | null {
 
 export function featureHandle(input: HandleInput): FeatureHandle | null {
   if (!(input.dialog in HANDLE_VALUES)) return null;
-  const { param, fallback, signed, place } =
-    HANDLE_VALUES[input.dialog as HandleDialog];
+  const definition = HANDLE_VALUES[input.dialog as HandleDialog];
+  if (!("place" in definition)) return null;
+  const { param, fallback, signed, place } = definition;
   const raw = Number(input.params[param]);
   const value = Number.isFinite(raw) ? raw : fallback;
   const at = place(input);

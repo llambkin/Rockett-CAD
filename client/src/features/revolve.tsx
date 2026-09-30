@@ -17,7 +17,7 @@ import {
   axisSelection,
   bodyTargets,
   facePicks,
-  num,
+  handleValue,
   profilePicks,
   profileSources,
   storedFeature,
@@ -55,7 +55,7 @@ function RevolveForm({ params, setParams }: FeatureFormProps) {
       <NumField
         label="Angle (°)"
         autoFocus
-        value={params.angle ?? 360}
+        value={handleValue(params, "revolve")}
         onChange={(v) => setParams({ angle: v })}
       />
       <OperationField intersect />
@@ -83,7 +83,7 @@ const revolve: FeatureUI<RevolveFeature> = {
       suppressed: false,
       ...sources,
       axis: axisOf,
-      angle: num(params, "angle", 360),
+      angle: handleValue(params, "revolve"),
       operation,
       ...bodyTargets(operation, params),
     };

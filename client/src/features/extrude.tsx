@@ -11,6 +11,7 @@ import { useSetting } from "../settings";
 import {
   bodyTargets,
   facePicks,
+  handleValue,
   num,
   profilePicks,
   profileSources,
@@ -23,7 +24,7 @@ import {
   type FeatureUI,
 } from "./registry";
 
-const distance = (params: DialogParams) => num(params, "distance", 10);
+const distance = (params: DialogParams) => handleValue(params, "extrude");
 
 function ExtrudeForm({ params, setParams }: FeatureFormProps) {
   const units = useSetting("units.length");
@@ -47,7 +48,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps) {
         label="Distance"
         units={units}
         autoFocus
-        value={params.distance ?? 10}
+        value={distance(params)}
         onChange={(v) => setParams({ distance: v })}
       />
       <div className="field-hint">
