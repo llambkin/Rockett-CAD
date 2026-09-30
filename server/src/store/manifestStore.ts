@@ -64,6 +64,10 @@ export class ManifestStore {
     });
   }
 
+  source(id: string) {
+    return this.manifests.source(id);
+  }
+
   read(id: string): Promise<ProjectManifest> {
     return this.manifests.read(id).catch((err) => {
       if (!(err instanceof StoreError && err.code === "not_found")) throw err;

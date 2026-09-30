@@ -9,40 +9,58 @@ import {
 
 const sourceTag = (data: Buffer) => `"${sha256(data)}"`;
 
+export const isInvalidProject = (error: unknown): boolean =>
+  (error instanceof StoreError &&
+    (error.code === "internal" || error.code === "unprocessable")) ||
+  error instanceof TooNewError ||
+  error instanceof MissingStepError;
+
 function unreadable(
   error: unknown,
   data: Buffer,
+  corruptOnly = false,
 ): Partial<Record<keyof CadDocument, unknown>> {
-  let raw: unknown;
+  if (!isInvalidProject(error)) throw error;
   try {
-    raw = JSON.parse(data.toString("utf8"));
+    const raw: unknown = JSON.parse(data.toString("utf8"));
+    if (corruptOnly && error instanceof StoreError && error.code === "internal")
+      throw error;
+    return typeof raw === "object" && raw !== null ? raw : {};
   } catch (parseError) {
-    if (
-      parseError instanceof SyntaxError &&
-      error instanceof StoreError &&
-      error.code === "internal"
-    )
-      return {};
-    throw error;
+    if (parseError instanceof SyntaxError) return {};
+    throw parseError;
   }
-  if (
-    !(error instanceof StoreError && error.code === "unprocessable") &&
-    !(
-      (error instanceof TooNewError || error instanceof MissingStepError) &&
-      error.namespace === documentMigrations.namespace
-    )
-  )
-    throw error;
-  return typeof raw === "object" && raw !== null ? raw : {};
+}
+
+type RecoveryStore = Pick<
+  ProjectStore,
+  "documents" | "load" | "projectAccess" | "manifestSource"
+>;
+
+async function deleteTag(store: RecoveryStore, id: string, data: Buffer) {
+  try {
+    await store.projectAccess(id);
+  } catch (error) {
+    if (!isInvalidProject(error)) throw error;
+    const { data: manifest } = await store.manifestSource(id);
+    return {
+      tag: sourceTag(
+        Buffer.concat([Buffer.from(`${data.length}:`), data, manifest]),
+      ),
+      manifestInvalid: true,
+    };
+  }
+  return { tag: sourceTag(data), manifestInvalid: false };
 }
 
 export async function checkDeleteTag(
-  store: Pick<ProjectStore, "documents" | "load">,
+  store: RecoveryStore,
   id: string,
   header: string,
 ): Promise<void> {
   const { data } = await store.documents.source(id);
-  if (sourceTag(data) !== header)
+  const snapshot = await deleteTag(store, id, data);
+  if (snapshot.tag !== header)
     throw new StoreError(
       "This project changed since it was listed. Reload to continue.",
       "conflict",
@@ -50,7 +68,7 @@ export async function checkDeleteTag(
   try {
     await store.load(id);
   } catch (error) {
-    unreadable(error, data);
+    unreadable(error, data, !snapshot.manifestInvalid);
     return;
   }
   throw new StoreError(
@@ -63,7 +81,7 @@ const text = (v: unknown, fallback: string) =>
   typeof v === "string" ? v : fallback;
 
 export async function listProjects(
-  store: Pick<ProjectStore, "documents" | "load" | "isTemporary">,
+  store: RecoveryStore & Pick<ProjectStore, "isTemporary">,
 ): Promise<ProjectSummary[]> {
   const out: ProjectSummary[] = [];
   for (const id of await store.documents.keys()) {
@@ -94,7 +112,7 @@ export async function listProjects(
         modifiedAt: text(raw.modifiedAt, ""),
         modifiedBy: typeof raw.modifiedBy === "string" ? raw.modifiedBy : null,
         featureCount: Array.isArray(raw.features) ? raw.features.length : 0,
-        deleteTag: sourceTag(data),
+        deleteTag: (await deleteTag(store, id, data)).tag,
         status: tooNew ? "tooNew" : "invalid",
         error: (err as Error).message,
         ...(tooNew && { schemaVersion: err.version }),

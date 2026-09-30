@@ -6,6 +6,7 @@ import {
   type User,
 } from "@rockett/shared";
 import { StoreError } from "../store/jsonStore.js";
+import { isInvalidProject } from "../store/projectInventory.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
 import type { Folder } from "@rockett/shared";
@@ -118,6 +119,13 @@ export function projectAccessGuard(store: ProjectStore, folders: FolderStore) {
         next();
       })
       .catch((err: unknown) => {
+        if (
+          user.role === "admin" &&
+          req.method === ROUTES.deleteProject.method &&
+          req.route.path === ROUTES.deleteProject.path &&
+          isInvalidProject(err)
+        )
+          return next();
         if (err instanceof StoreError && err.code === "not_found")
           return res
             .status(404)

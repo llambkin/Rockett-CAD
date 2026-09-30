@@ -117,8 +117,10 @@ queue: missing is 428, malformed is 400, stale is 409, and none writes:
 folders, members, settings, assets, export `retain`) take no revision.
 Project deletion also requires the revision shown in the project list; a stale
 request leaves the project intact. Unreadable projects list a `deleteTag`, a
-quoted SHA256 of the stored document bytes; deletion needs that exact tag and
-refuses changed or now-readable contents. Temporary cleanup needs no revision.
+quoted SHA256 of the stored document bytes. An unreadable manifest also binds
+its stored bytes into the tag; only an admin may delete such a project. Deletion
+needs that exact tag and refuses changed or now-readable contents. Storage
+failures refuse listing and deletion. Temporary cleanup needs no revision.
 
 ## History
 

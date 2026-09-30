@@ -149,6 +149,10 @@ export class ProjectStore {
     return listProjects(this);
   }
 
+  manifestSource(id: string) {
+    return this.manifests.source(id);
+  }
+
   async projectAccess(id: string): Promise<ProjectAccess> {
     await this.exists(id);
     return this.manifests.access(id);
