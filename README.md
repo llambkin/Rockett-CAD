@@ -72,7 +72,7 @@ everything downstream against persistent topology references.
 - **Undo and redo**: undo any edit, even in a sketch, separately from the timeline; an unchanged OK adds nothing; tooltips name the step.
 - **History**: the History button lists edits and checkpoints with who made them; restore one after a confirm, then undo it.
 - **Tool panels**: open with the main number selected and list each pick to remove; Enter confirms, Escape reverts.
-- **Pick fields**: each dialog pick input is a row; viewport and tree clicks fill only the active row.
+- **Pick fields**: clicks fill the active row; completed single picks advance to missing inputs, then back to multiple picks.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.
 - **Tree selection**: Ctrl or Cmd+click adds bodies or sketches, Shift+click selects a range; right-click acts on all.
 - **Live preview**: dialogs keep the prior model pickable and ghost only the result, green added, red removed, with adjustable tint and opacity.

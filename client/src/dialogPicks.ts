@@ -263,7 +263,10 @@ export function clearInput(key: string) {
 function following(key: string, s: Store): PickInput | undefined {
   const inputs = dialogInputs(s);
   const at = inputs.findIndex((i) => i.key === key);
-  return [...inputs.slice(at + 1), ...inputs.slice(0, at)].find(empty(s));
+  return (
+    [...inputs.slice(at + 1), ...inputs.slice(0, at)].find(empty(s)) ??
+    inputs.find((i) => !i.one)
+  );
 }
 
 export function pickInto(picks: readonly Selection[], additive: boolean) {
