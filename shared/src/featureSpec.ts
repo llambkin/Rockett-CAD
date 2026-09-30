@@ -63,6 +63,53 @@ export function featureRefs(f: Feature): FeatureRef[] {
   return specOf(f.type).refs(f);
 }
 
+export function featureInputs(f: Feature) {
+  const bodies = new Set<string>();
+  const features = new Set<string>();
+  const topology: Array<[string, FaceRef | EdgeRef]> = [];
+  const topo = (path: string, ref: FaceRef | EdgeRef) => {
+    bodies.add(ref.bodyId);
+    topology.push([path, ref]);
+  };
+  for (const ref of featureSpec(f.type)?.refs(f) ?? []) {
+    switch (ref.kind) {
+      case "face":
+        topo(ref.path, ref.face);
+        break;
+      case "edge":
+        topo(ref.path, ref.edge);
+        break;
+      case "body":
+        bodies.add(ref.body);
+        break;
+      case "sketch":
+        features.add(ref.sketch);
+        break;
+      case "profile":
+        features.add(ref.profile.sketchId);
+        break;
+      case "plane":
+        if (ref.plane.kind === "face") topo(`${ref.path}/face`, ref.plane.face);
+        else if (ref.plane.kind === "construction")
+          features.add(ref.plane.featureId);
+        break;
+      case "axis":
+        if (ref.axis.kind === "edge") topo(`${ref.path}/edge`, ref.axis.edge);
+        else if (ref.axis.kind === "sketchLine")
+          features.add(ref.axis.sketchId);
+        break;
+      case "point":
+        if (ref.point.kind === "vertex") bodies.add(ref.point.bodyId);
+        else features.add(ref.point.sketchId);
+        break;
+    }
+  }
+  return { bodies: [...bodies], features: [...features], topology };
+}
+
+export const inputBodies = (f: Feature) => featureInputs(f).bodies;
+export const inputFeatures = (f: Feature) => featureInputs(f).features;
+
 export function nextFeatureName(doc: CadDocument, type: string): string {
   const label = specOf(type).label;
   const n = (doc.counters[type] ?? 0) + 1;

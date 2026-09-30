@@ -1,5 +1,7 @@
 import {
   collectTopoRefs,
+  inputBodies,
+  inputFeatures,
   compareNames,
   LINEAR_TOL,
   UNIT_DOT_TOL,
@@ -7,9 +9,6 @@ import {
   type FaceRef,
   type Feature,
   type FeatureStatus,
-  type AxisRef,
-  type PlaneRef,
-  type PointRef,
   type RefCandidate,
   type RefResolution,
   type RefSignature,
@@ -302,70 +301,7 @@ export class BlockedFeature extends Error {
   }
 }
 
-export const BODY_FIELDS = [
-  "targets",
-  "bodies",
-  "toolBodies",
-  "targetBody",
-  "body",
-] as const;
-
-export function inputBodies(feature: Feature): string[] {
-  const fields = feature as Partial<
-    Record<(typeof BODY_FIELDS)[number], string | string[]>
-  >;
-  return [
-    ...new Set([
-      ...collectTopoRefs(feature).map((ref) => ref.bodyId),
-      ...BODY_FIELDS.flatMap((key) => fields[key] ?? []),
-    ]),
-  ];
-}
-
-export function inputFeatures(feature: Feature): string[] {
-  const ids: string[] = [];
-  const plane = (ref: PlaneRef) => {
-    if (ref.kind === "construction") ids.push(ref.featureId);
-  };
-  const axis = (ref: AxisRef) => {
-    if (ref.kind === "sketchLine") ids.push(ref.sketchId);
-  };
-  const point = (ref: PointRef) => {
-    if (ref.kind === "sketchPoint") ids.push(ref.sketchId);
-  };
-  if ("profiles" in feature)
-    ids.push(...feature.profiles.map((profile) => profile.sketchId));
-  if ("sections" in feature)
-    ids.push(...feature.sections.map((section) => section.sketchId));
-  if ("pathSketchId" in feature) ids.push(feature.pathSketchId);
-  if ("plane" in feature) plane(feature.plane);
-  if ("axis" in feature) axis(feature.axis);
-  if (feature.type === "splitBody") plane(feature.tool);
-  if (feature.type === "constructionPlane") {
-    const { method } = feature;
-    switch (method.kind) {
-      case "offset":
-        plane(method.base);
-        break;
-      case "midplane":
-        plane(method.a);
-        plane(method.b);
-        break;
-      case "angle":
-        plane(method.base);
-        axis(method.axis);
-        break;
-      case "threePoints":
-        method.points.forEach(point);
-        break;
-      case "twoEdges":
-        axis(method.a);
-        axis(method.b);
-        break;
-    }
-  }
-  return ids;
-}
+export { inputBodies, inputFeatures } from "@rockett/shared";
 
 export interface CrashFeature {
   featureId: string;

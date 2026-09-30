@@ -279,7 +279,10 @@ the inside out.
 
 Feature add and update fill each missing `sig` from the state before the
 feature and keep one sent with the reference. `collectTopoRefs` in
-`shared/src/topoRefs.ts` finds the references.
+`shared/src/topoRefs.ts` derives face and edge paths from `FeatureSpec.refs`.
+The same contract owns body and feature dependencies, including references
+inside planes, axes and points. Opaque extension parameters are not references
+unless their registered spec declares them.
 
 ## Tool targets
 

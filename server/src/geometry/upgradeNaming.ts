@@ -1,5 +1,6 @@
 import {
   compareNames,
+  featureRefs,
   LINEAR_TOL,
   topoRefPaths,
   ValidationError,
@@ -18,7 +19,7 @@ import type { Sources } from "./importers.js";
 import { faces, getKernel, release, scoped, type Shape } from "./kernel.js";
 import { computeEdgeNames, instanceName, type NamedBody } from "./naming.js";
 import { pinRefs } from "./pinRefs.js";
-import { BODY_FIELDS, signatureCandidates } from "./resolve.js";
+import { signatureCandidates } from "./resolve.js";
 import { signRefs } from "./signature.js";
 
 type Kind = "body" | "face" | "edge";
@@ -294,17 +295,21 @@ function translate(
   after: Side,
   decide: Decide,
 ) {
-  const fields = feature as unknown as Record<string, unknown>;
-  const moveBody = (path: string, bodyId: string) =>
-    decide(feature.id, path, "body", { bodyId }, mapBody(before, after, bodyId))
-      ?.bodyId ?? bodyId;
-  for (const field of BODY_FIELDS) {
-    const value = fields[field];
-    if (typeof value === "string") fields[field] = moveBody(`/${field}`, value);
-    if (Array.isArray(value))
-      fields[field] = value.map((id: string, i) =>
-        moveBody(`/${field}/${i}`, id),
-      );
+  for (const ref of featureRefs(feature)) {
+    if (ref.kind !== "body") continue;
+    const to = decide(
+      feature.id,
+      ref.path,
+      "body",
+      { bodyId: ref.body },
+      mapBody(before, after, ref.body),
+    );
+    if (!to) continue;
+    const keys = ref.path.slice(1).split("/");
+    let target = feature as unknown as Record<string, unknown>;
+    for (const key of keys.slice(0, -1))
+      target = target[key] as Record<string, unknown>;
+    target[keys.at(-1)!] = to.bodyId;
   }
   const moved: Ref[] = [];
   for (const [path, ref] of topoRefPaths(feature)) {

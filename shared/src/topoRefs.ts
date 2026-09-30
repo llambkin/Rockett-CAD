@@ -1,27 +1,9 @@
 import type { EdgeRef, FaceRef, Feature } from "./model.js";
-import { featureSpec } from "./featureSpec.js";
+import { featureInputs, featureSpec } from "./featureSpec.js";
 import { MAX_TARGETS } from "./schema/features.js";
 
-export function topoRefPaths(
-  feature: Feature,
-): Array<[string, FaceRef | EdgeRef]> {
-  const found: Array<[string, FaceRef | EdgeRef]> = [];
-  const visit = (value: unknown, at: string): void => {
-    if (typeof value !== "object" || value === null) return;
-    const item = value as Record<string, unknown>;
-    if (
-      (item.kind === "face" && typeof item.faceName === "string") ||
-      (item.kind === "edge" && typeof item.edgeName === "string")
-    ) {
-      found.push([at, value as FaceRef | EdgeRef]);
-      return;
-    }
-    for (const [key, child] of Object.entries(item))
-      visit(child, `${at}/${key}`);
-  };
-  visit(feature, "");
-  return found;
-}
+export const topoRefPaths = (feature: Feature) =>
+  featureInputs(feature).topology;
 
 export function collectTopoRefs(feature: Feature): Array<FaceRef | EdgeRef> {
   return topoRefPaths(feature).map(([, ref]) => ref);

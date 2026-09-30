@@ -793,9 +793,9 @@ describe.each(Object.entries(cases))("%s feature spec", (type, specCase) => {
       for (const ref of refs) expect(valueAt(f, ref.path)).toEqual(target(ref));
       const missed = markedPaths(f).filter(
         (path) =>
-          !refs.some(
+          refs.filter(
             (ref) => path === ref.path || path.startsWith(`${ref.path}/`),
-          ),
+          ).length !== 1,
       );
       expect(missed).toEqual([]);
     }
