@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import {
   LINEAR_TOL,
+  MAX_IMPORT_BYTES,
   NAME_LENGTH,
   newId,
   ValidationError,
@@ -21,6 +22,7 @@ import {
 import { setExactTriangle } from "./mesh.js";
 import { read3mf } from "./read3mf.js";
 import { sha256 } from "../store/jsonStore.js";
+import { registerImporter } from "../api/importers.js";
 
 export type Sources = ReadonlyMap<string, Uint8Array>;
 
@@ -312,10 +314,11 @@ interface Imported {
 }
 
 function importer(format: Format, extensions: string[]) {
-  return {
+  registerImporter({
     format,
     label: READERS[format].label,
     extensions,
+    bytes: MAX_IMPORT_BYTES,
     read(bytes: Buffer, filename: string): Imported {
       const source = Buffer.from(
           bytes.toString("utf8").replace(/^\uFEFF/, ""),
@@ -339,14 +342,15 @@ function importer(format: Format, extensions: string[]) {
       }
       return { features: [feature], sources };
     },
-  };
+  });
 }
 
 function meshImporter(format: MeshFormat) {
-  return {
+  registerImporter({
     format,
     label: MESH_READERS[format].label,
     extensions: [`.${format}`],
+    bytes: MAX_IMPORT_BYTES,
     read(bytes: Buffer, filename: string): Imported {
       return {
         features: [
@@ -363,19 +367,12 @@ function meshImporter(format: MeshFormat) {
         sources: new Map(),
       };
     },
-  };
+  });
 }
 
-export const IMPORTERS = [
-  importer("step", [".step", ".stp"]),
-  importer("iges", [".igs", ".iges"]),
-  importer("brep", [".brep"]),
-  meshImporter("stl"),
-  meshImporter("obj"),
-  meshImporter("3mf"),
-];
-
-export const importerFor = (filename: string) =>
-  IMPORTERS.find((i) =>
-    i.extensions.some((e) => filename.toLowerCase().endsWith(e)),
-  );
+importer("step", [".step", ".stp"]);
+importer("iges", [".igs", ".iges"]);
+importer("brep", [".brep"]);
+meshImporter("stl");
+meshImporter("obj");
+meshImporter("3mf");

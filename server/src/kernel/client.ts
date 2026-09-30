@@ -1,5 +1,4 @@
 import {
-  MAX_IMPORT_BYTES,
   projectEdge,
   ValidationError,
   type CadDocument,
@@ -37,13 +36,8 @@ import { signRefs } from "../geometry/signature.js";
 import { planNamingUpgrade } from "../geometry/upgradeNaming.js";
 import { tangentEdges } from "../geometry/tangentEdges.js";
 import { sizeLimit } from "../geometry/sizeLimit.js";
-import { IMPORTERS, type Sources } from "../geometry/importers.js";
-import {
-  importers,
-  importFile,
-  registerImporter,
-  type ImportUpload,
-} from "../api/importers.js";
+import type { Sources } from "../geometry/importers.js";
+import { importers, importFile, type ImportUpload } from "../api/importers.js";
 import {
   EXPORT_QUALITY,
   exporterFor,
@@ -88,9 +82,6 @@ export interface Imported {
   features: Feature[];
   sources: Sources;
 }
-
-for (const importer of IMPORTERS)
-  registerImporter({ ...importer, bytes: MAX_IMPORT_BYTES });
 
 export interface NamingPlan {
   document: CadDocument;
