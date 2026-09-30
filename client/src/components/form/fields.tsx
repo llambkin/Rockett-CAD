@@ -9,9 +9,10 @@ import {
   type Units,
 } from "@rockett/shared";
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { selectionKey, useStore, type Selection } from "../../store";
 import { previewBodies, usePreviewBase } from "../../previewBase";
-import { activeInput, heldBy } from "../../dialogPicks";
+import { activeInput, clearInput, readInput } from "../../dialogPicks";
 import { chosenTargets, several } from "../../toolTargets";
 import { savedRegionIds } from "../../sketchUsage";
 
@@ -428,15 +429,18 @@ export function SelInfo({
   input: string;
   onRemove?: (keys: string[]) => void;
 }) {
-  const document = useStore((s) => s.document);
-  const evaluation = useStore((s) => s.evaluation);
-  const mode = useStore((s) => s.mode);
-  const selection = useStore((s) => s.selection);
+  const { document, evaluation, mode } = useStore(
+    useShallow(({ document, evaluation, mode, selection, dialogParams }) => ({
+      document,
+      evaluation,
+      mode,
+      selection,
+      dialogParams,
+    })),
+  );
   const active = useStore((s) => activeInput(s)?.key === input);
   const bodies = previewBodies({ mode, evaluation }, usePreviewBase());
-  const shown =
-    picks ??
-    (mode.name === "dialog" ? heldBy(mode.dialog, input, selection) : []);
+  const shown = picks ?? readInput(input, useStore.getState());
   return (
     <>
       <button
@@ -455,16 +459,7 @@ export function SelInfo({
           name: pickLabel(pick, document, evaluation, bodies),
           pick,
         }))}
-        onRemove={
-          onRemove ??
-          ((keys) => {
-            const gone = new Set(keys);
-            const s = useStore.getState();
-            s.setSelection(
-              s.selection.filter((x) => !gone.has(selectionKey(x))),
-            );
-          })
-        }
+        onRemove={onRemove ?? ((keys) => clearInput(input, keys))}
       />
     </>
   );
@@ -496,7 +491,6 @@ export function TargetField({ operation }: { operation: string }) {
           id,
           bodies.find((b) => b.bodyId === id)?.name ?? id,
         ]);
-  const picks = ids.map((bodyId): Selection => ({ kind: "body", bodyId }));
   const label = many ? "Targets" : "Target";
   return (
     <>
@@ -510,15 +504,7 @@ export function TargetField({ operation }: { operation: string }) {
         ]}
         onChange={(id) => set(many ? [...ids, id] : id === "" ? [] : [id])}
       />
-      <SelInfo
-        label={label}
-        input="targets"
-        picks={picks}
-        hint="Auto, or click a body"
-        onRemove={(keys) =>
-          set(ids.filter((_, i) => !keys.includes(selectionKey(picks[i]!))))
-        }
-      />
+      <SelInfo label={label} input="targets" hint="Auto, or click a body" />
     </>
   );
 }

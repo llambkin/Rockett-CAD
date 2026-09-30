@@ -4,7 +4,7 @@ import {
   SelInfo,
   SelectField,
 } from "../components/form/fields";
-import { clearInput, profiles, targets, type PickInput } from "../dialogPicks";
+import { profiles, targets, type PickInput } from "../dialogPicks";
 import { autoOperation, toolOperation } from "../extrudeReach";
 import { useStore, type Selection } from "../store";
 import { bodyTargets, profilePicks, profileRefs } from "./inputs";
@@ -50,9 +50,7 @@ function SweepForm({ params, setParams }: FeatureFormProps) {
       <SelInfo
         label="Path sketch"
         input="path"
-        picks={sketchPicks(params.pathSketchId)}
         hint="click a curve of the path sketch"
-        onRemove={() => clearInput("path")}
       />
       <OperationField />
     </>

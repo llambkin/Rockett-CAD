@@ -128,15 +128,9 @@ function dialogInputs(s: Store): PickInput[] {
 const held = (i: PickInput | undefined, selection: Selection[]) =>
   selection.filter((x) => !!i?.kinds.includes(x.kind));
 
-export function heldBy(
-  dialog: DialogType,
-  key: string,
-  selection: Selection[],
-): Selection[] {
-  return held(
-    picksOf(dialog).find((i) => i.key === key),
-    selection,
-  );
+export function readInput(key: string, s: Store): Selection[] {
+  const i = dialogInputs(s).find((x) => x.key === key);
+  return i ? inputPicks(i, s) : [];
 }
 
 function inputPicks(i: PickInput, s: Store): Selection[] {
@@ -255,10 +249,22 @@ function write(i: PickInput, next: Selection[], s: Store) {
   ]);
 }
 
-export function clearInput(key: string) {
+export function clearInput(key: string, keys?: string[]) {
   const s = useStore.getState();
   const i = dialogInputs(s).find((x) => x.key === key);
-  if (i) write(i, [], s);
+  if (!i) return;
+  const had = inputPicks(i, s);
+  const gone = new Set(keys ?? had.map(selectionKey));
+  if (i.param)
+    return i.param.write(
+      had.filter((x) => !gone.has(selectionKey(x))),
+      s,
+    );
+  s.setSelection(
+    s.selection.filter(
+      (x) => !i.kinds.includes(x.kind) || !gone.has(selectionKey(x)),
+    ),
+  );
 }
 
 function following(key: string, s: Store): PickInput | undefined {
