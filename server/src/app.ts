@@ -205,6 +205,7 @@ export async function createApp({
     sendError(res, { error: "Not found", code: "not_found" });
   });
   if (clientDir) app.use(serveClient(clientDir));
+  app.use((_req, res) => res.sendStatus(404));
   app.use(answerError);
   const sweep = async () => {
     for (const id of await store.temporaryIds())
