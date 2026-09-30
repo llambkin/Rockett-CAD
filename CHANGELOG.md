@@ -88,9 +88,10 @@ release workflow remain under development.
   out of authentication logs.
 - Missing assets return 404, API fallbacks return coded errors, history
   decompression is bounded and interrupted uploads are cleared at startup.
-- Kernel, mesh, highlight and preview resources are released or reused across
-  regeneration, export, errors and project closure. Sketch solving touches only
-  affected components; history reads one snapshot and appends one record.
+- Reduced kernel-handle retention in extrude, sweep, loft, fillet and export
+  paths. Mesh, highlight and preview resources are reused or released on project
+  closure. Sketch solving touches only affected components; history reads one
+  snapshot and appends one record.
 - The server shuts down gracefully on SIGTERM and the viewport redraws after
   WebGL context recovery.
 
@@ -127,6 +128,7 @@ release workflow remain under development.
 
 ### Known limits
 
+- Kernel handle cleanup remains incomplete on some feature paths.
 - CAD foundation acceptance is unfinished. Shell and blend failures remain on
   some composed parts; a fillet meeting two earlier fillets can fail.
 - Loft face sections must be planar and have one outline; faces with holes and
