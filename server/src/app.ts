@@ -166,6 +166,16 @@ export async function createApp({
   const friends = new FriendStore(store.documents.options.storage);
   app.disable("x-powered-by");
   app.set("trust proxy", trustProxy);
+  app.use((_req, res, next) => {
+    res.set({
+      "Content-Security-Policy":
+        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "same-origin",
+      "X-Frame-Options": "DENY",
+    });
+    next();
+  });
   app.use("/api", requireAllowedOrigin(allowedOrigins));
   app.use("/api", gzipJson);
   const team = process.env.ROCKETT_CF_ACCESS_TEAM;
