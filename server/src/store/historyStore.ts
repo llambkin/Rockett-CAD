@@ -5,6 +5,7 @@ import {
   HISTORY_LIMIT,
   HISTORY_VERSION,
   LABEL_LIMIT,
+  MB,
   historyLog,
   parse,
   type CadDocument,
@@ -29,7 +30,7 @@ import { ID_RE } from "./manifestStore.js";
 import { documentMigrations, migrate } from "./migrations.js";
 import type { ProjectStore } from "./projectStore.js";
 import type { Storage } from "./storage.js";
-import { PREVIEW_LIMITS, TIMING_MS } from "../tunables.js";
+import { HISTORY_LIMITS, PREVIEW_LIMITS, TIMING_MS } from "../tunables.js";
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -247,7 +248,17 @@ export class HistoryStore {
       const bytes = await this.storage.readRange(this.path(id, LOG), ...range);
       if (sha256(bytes) !== hash)
         throw new StoreError(`snapshot ${hash} is corrupted`, "internal");
-      return JSON.parse((await gunzip(bytes)).toString("utf8"));
+      const text = await gunzip(bytes, {
+        maxOutputLength: HISTORY_LIMITS.snapshotBytes,
+      }).catch((error: unknown) => {
+        if ((error as { code?: string }).code === "ERR_BUFFER_TOO_LARGE")
+          throw new StoreError(
+            `This history snapshot expands past ${HISTORY_LIMITS.snapshotBytes / MB} MB, the limit.`,
+            "internal",
+          );
+        throw error;
+      });
+      return JSON.parse(text.toString("utf8"));
     });
   }
 

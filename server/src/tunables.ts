@@ -1,5 +1,12 @@
 import { totalmem } from "node:os";
-import { DAY, HOUR, MB, MINUTE, SESSION_DAY_RANGE } from "@rockett/shared";
+import {
+  DAY,
+  HOUR,
+  MB,
+  MINUTE,
+  PROJECT_FILE_LIMIT_MB,
+  SESSION_DAY_RANGE,
+} from "@rockett/shared";
 
 const WASM_HEAP_MAX = 4096 * MB;
 const hostMemory = Math.min(
@@ -38,6 +45,10 @@ export const TRIAL_BUDGET = {
 
 export const PREVIEW_LIMITS = {
   bytes: 256 * MB,
+} as const;
+
+export const HISTORY_LIMITS = {
+  snapshotBytes: 2 * PROJECT_FILE_LIMIT_MB * MB,
 } as const;
 
 export const ENGINE_CACHE = {
