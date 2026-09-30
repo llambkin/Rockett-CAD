@@ -178,6 +178,7 @@ export function sketchRegionCompound(
   for (const { sk, profile } of regions) {
     const pf = buildProfileFace(profile, sk.entities, sk.frame);
     builder.Add(comp, pf.face);
+    pf.edgeEntity.release();
   }
 
   return comp;
@@ -187,7 +188,7 @@ export function sketchRegionEdgeNames(
   cutFace: Shape,
   regions: { sk: SketchOnPlane; profile: Profile }[],
 ) {
-  const edgeEntity = new Map<number, string>();
+  const edgeEntity = new ShapeMap<string>();
   const bySketch = new Map<SketchOnPlane, Set<string>>();
   for (const { sk, profile } of regions) {
     let ids = bySketch.get(sk);
@@ -202,7 +203,11 @@ export function sketchRegionEdgeNames(
       buildMaps(sk.entities),
       sk.frame,
     );
-    for (const [h, id] of matched) edgeEntity.set(h, id);
+    try {
+      for (const [edge, id] of matched.entries()) edgeEntity.set(edge, id);
+    } finally {
+      matched.release();
+    }
   }
 
   return edgeEntity;

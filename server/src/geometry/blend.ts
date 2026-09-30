@@ -429,15 +429,14 @@ function chamferByEnvelope(
   try {
     built = scoped((own) => {
       const k = getKernel();
-      const selHashes = new Set(selected.map((s) => shapeHash(s.edge)));
+      const chosen = selected
+        .map(({ edge }) => edge)
+        .filter((edge, i, all) => !all.slice(0, i).some((e) => e.IsSame(edge)));
       const bodyFaces = facesOf(body.shape).map(own);
-      const edgeFaces = new Map<number, Shape[]>();
-      for (const face of bodyFaces) {
-        for (const e of edgesOf(face).map(own)) {
-          const h = shapeHash(e);
-          edgeFaces.set(h, [...(edgeFaces.get(h) ?? []), face]);
-        }
-      }
+      const edgeFaces = bodyFaces.map((face) => ({
+        face,
+        edges: edgesOf(face).map(own),
+      }));
       const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
       const caps: {
@@ -448,15 +447,18 @@ function chamferByEnvelope(
       const covered = new Set<number>();
       for (const face of bodyFaces) {
         const fe = edgesOf(own(k.BRepTools.OuterWire(face))).map(own);
-        if (fe.length === 0 || !fe.every((e) => selHashes.has(shapeHash(e))))
+        if (
+          fe.length === 0 ||
+          !fe.every((e) => chosen.some((s) => s.IsSame(e)))
+        )
           continue;
         const plane = planarFacePlane(face);
         if (!plane) return false;
         for (const e of fe) {
-          const h = shapeHash(e);
-          const wall = (edgeFaces.get(h) ?? []).find(
-            (w) => shapeHash(w) !== shapeHash(face),
-          );
+          const wall = edgeFaces.find(
+            (w) =>
+              !w.face.IsSame(face) && w.edges.some((edge) => edge.IsSame(e)),
+          )?.face;
           const wp = wall ? planarFacePlane(wall) : null;
           if (
             !wall ||
@@ -475,11 +477,11 @@ function chamferByEnvelope(
             wallDepth = Math.max(wallDepth, -dot(rel, plane.normal));
           }
           if (wallDepth < distance - LINEAR_TOL) return false;
-          covered.add(h);
+          covered.add(chosen.findIndex((s) => s.IsSame(e)));
         }
         caps.push({ face, edges: fe, plane });
       }
-      if (caps.length === 0 || covered.size !== selHashes.size) return false;
+      if (caps.length === 0 || covered.size !== chosen.length) return false;
 
       const inward = (shape: Shape, n: Vec3, t: number): Shape => {
         const tr = own(new k.gp_Trsf_1());
@@ -624,9 +626,7 @@ function chamferByEnvelope(
             }
           });
           if (best < 0) continue;
-          const idx = selected.findIndex(
-            (s) => shapeHash(s.edge) === shapeHash(mids[best]!.e),
-          );
+          const idx = selected.findIndex((s) => s.edge.IsSame(mids[best]!.e));
           envNames.set(face, `f:${featureId}:fe:${idx + 1}`);
         }
 

@@ -51,6 +51,7 @@ import {
   sketchRegionCompound,
   sketchRegionEdgeNames,
 } from "./booleanTools.js";
+import { ShapeMap } from "./shapeMap.js";
 import type { SketchOnPlane } from "./sketchGeom.js";
 export { unifyTool } from "./booleanNaming.js";
 
@@ -460,8 +461,8 @@ export function splitAtEnds(
 export function subtractSketchRegionsFromFace(
   face: Shape,
   sketches: Iterable<SketchOnPlane>,
-): { face: Shape; edgeEntity: Map<number, string> } {
-  const noop = { face, edgeEntity: new Map<number, string>() };
+): { face: Shape; edgeEntity: ShapeMap<string> } {
+  const noop = { face, edgeEntity: new ShapeMap<string>() };
   try {
     const prepared = interiorSketchRegions(face, sketches);
     if (!prepared || prepared.regions.length === 0) return noop;

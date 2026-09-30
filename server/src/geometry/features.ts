@@ -70,7 +70,6 @@ import {
   progress,
   release,
   scoped,
-  shapeHash,
   solids,
   transformOp,
   vec,
@@ -304,13 +303,13 @@ function buildPrism(
       const tr = transformOp(face, trsf);
       const moved = tr.Shape();
       // remap edge->entity through the transform
-      const newMap = new Map<number, string>();
+      const newMap = new ShapeMap<string>();
       for (const e of edgesOf(face)) {
-        const id = profileFace.edgeEntity.get(shapeHash(e));
+        const id = profileFace.edgeEntity.get(e);
         if (!id) continue;
         try {
           const me = tr.ModifiedShape(e);
-          newMap.set(shapeHash(me), id);
+          newMap.set(me, id);
         } catch {
           // ignore
         }
@@ -337,7 +336,7 @@ function buildPrism(
     // side faces from profile edges
     const faceEdges = edgesOf(face);
     for (const e of faceEdges) {
-      const entityId = offsetEdgeEntity.get(shapeHash(e));
+      const entityId = offsetEdgeEntity.get(e);
       if (!entityId) continue;
       const gen = listToArray(prism.Generated(e));
       for (const g of gen) {
@@ -478,7 +477,7 @@ function sideEdgeNames(
   edges = edgesOf(pf.face),
 ): Array<[Shape, string]> {
   return edges.flatMap((e): Array<[Shape, string]> => {
-    const entityId = pf.edgeEntity.get(shapeHash(e));
+    const entityId = pf.edgeEntity.get(e);
     if (entityId) return [[e, `f:${featureId}:s:${entityId}`]];
     e.delete();
     return [];

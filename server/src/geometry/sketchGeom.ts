@@ -16,15 +16,14 @@ import {
   dir,
   release,
   scoped,
-  shapeHash,
   type Shape,
 } from "./kernel.js";
+import { ShapeMap } from "./shapeMap.js";
 import { uvTo3d } from "./frames.js";
 
 export interface ProfileFace {
   face: Shape; // TopoDS_Face
-  /** edge hash → sketch entity id, for naming generated side faces */
-  edgeEntity: Map<number, string>;
+  edgeEntity: ShapeMap<string>;
   profileId: string;
 }
 
@@ -101,10 +100,6 @@ export function arcEdge(
   });
 }
 
-/**
- * Build one wire from an oriented curve chain.
- * Returns the wire plus edge-hash → entity-id entries appended to edgeEntity.
- */
 function buildWire(
   chain: {
     entityId: string;
@@ -114,7 +109,6 @@ function buildWire(
   maps: EntityMaps,
   frame: PlaneFrame,
   snap: (x: number, y: number) => [number, number],
-  edgeEntity: Map<number, string>,
 ): Shape {
   const k = getKernel();
   const wireMaker = new k.BRepBuilderAPI_MakeWire_1();
@@ -175,7 +169,6 @@ function buildWire(
     }
     if (!edge)
       throw new Error(`profile references unknown entity ${oc.entityId}`);
-    edgeEntity.set(shapeHash(edge), oc.entityId);
     wireMaker.Add_1(edge);
     edge.delete();
     if (!wireMaker.IsDone()) {
@@ -190,19 +183,14 @@ function buildWire(
   return wire;
 }
 
-/**
- * Match each edge of the final face back to the sketch entity it came from,
- * by geometry (wire building can rebuild edge shapes, so hashes from
- * construction time are unreliable).
- */
 export function matchEdgesToEntities(
   face: Shape,
   chainIds: string[],
   maps: EntityMaps,
   frame: PlaneFrame,
-): Map<number, string> {
+): ShapeMap<string> {
   const k = getKernel();
-  const result = new Map<number, string>();
+  const result = new ShapeMap<string>();
   const origin = frame.origin;
   const toUV = (p: {
     X(): number;
@@ -259,7 +247,7 @@ export function matchEdgesToEntities(
       if (best === null || d < best.d) best = { id, d };
     }
     if (best && best.d < 1e-4) {
-      result.set(shapeHash(edge), best.id);
+      result.set(edge, best.id);
     }
     release([current, edge]);
     ex.Next();
@@ -295,9 +283,8 @@ export function buildProfileFace(
     const k = getKernel();
     const maps = buildMaps(entities);
     const snap = snapper();
-    const edgeEntity = new Map<number, string>();
 
-    const outerWire = buildWire(profile.outer, maps, frame, snap, edgeEntity);
+    const outerWire = buildWire(profile.outer, maps, frame, snap);
 
     let face = scoped((own) => {
       const pln = own(
@@ -317,7 +304,7 @@ export function buildProfileFace(
       const outer = face;
       face = scoped((own) => {
         own(outer);
-        const holeWire = own(buildWire(hole, maps, frame, snap, edgeEntity));
+        const holeWire = own(buildWire(hole, maps, frame, snap));
         const reversedWire = own(k.TopoDS.Wire_1(own(holeWire.Reversed())));
         const withHole = own(
           new k.BRepBuilderAPI_MakeFace_22(outer, reversedWire),
@@ -328,7 +315,6 @@ export function buildProfileFace(
       });
     }
 
-    // Re-derive edge → entity mapping from the final face geometry.
     const chainIds = [
       ...profile.outer.map((c) => c.entityId),
       ...profile.holes.flatMap((h) => h.map((c) => c.entityId)),

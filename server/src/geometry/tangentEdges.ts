@@ -1,4 +1,5 @@
 import { LINEAR_TOL, type EdgeRef, type Vec3 } from "@rockett/shared";
+import { ShapeMap } from "./shapeMap.js";
 import { computeEdgeNames, type NamedBody } from "./naming.js";
 import {
   edges,
@@ -6,19 +7,24 @@ import {
   getKernel,
   lengthOf,
   pnt,
-  shapeHash,
+  scoped,
   vec,
 } from "./kernel.js";
 
-/** Follow smooth continuations and tiny connecting steps, stopping at corners and ambiguous branches. */
 export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
   const names = computeEdgeNames(body).byName,
     k = getKernel();
   const ends = new Map<string, { p: Vec3; d: Vec3 }[]>();
   const lengths = new Map<string, number>();
-  const faceEdges = faces(body.shape).map(
-    (face) => new Set(edges(face).map(shapeHash)),
-  );
+  const faceEdges = scoped((own) => {
+    const edgeNames = new ShapeMap<string>();
+    own({ delete: () => edgeNames.release() });
+    for (const [name, edge] of names) edgeNames.set(edge, name);
+    return faces(body.shape).map((face) => {
+      own(face);
+      return new Set(edges(face).map((edge) => edgeNames.get(own(edge))));
+    });
+  });
   for (const ref of seeds) {
     if (ref.bodyId !== body.bodyId)
       throw new Error("All edges must belong to the same body");
@@ -46,7 +52,7 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
         lengths.set(name, lengthOf(edge));
       }
     } catch {
-      /* Singular/degenerated edges do not establish a tangent continuation. */
+      continue;
     } finally {
       curve.delete();
       p.delete();
@@ -76,9 +82,6 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
         queue.push(candidates[0]![0]);
       }
       if (candidates.length !== 0) continue;
-      // A tiny step between otherwise parallel edges is common after joining
-      // separately dimensioned sketch regions. Include its real connecting
-      // edge (never bridge empty space), so the chamfer contour stays complete.
       const bridges: string[][] = [];
       for (const [name, endpoints] of ends) {
         if (
@@ -95,12 +98,9 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
             n !== queue[i] &&
             es.some((e) => coincident(far.p, e.p) && continues(end.d, e.d)) &&
             faceEdges.some((face) =>
-              [queue[i]!, name, n].every((id) =>
-                face.has(shapeHash(names.get(id)!)),
-              ),
+              [queue[i]!, name, n].every((id) => face.has(id)),
             ),
         );
-        // Stop at junctions rather than guessing a path through another feature.
         if (neighbours.length !== 1) continue;
         const [next] = neighbours[0]!;
         if (lengths.get(name)! > lengths.get(next)! * 0.01) continue;
