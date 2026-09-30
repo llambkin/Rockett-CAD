@@ -7,12 +7,12 @@ import {
   type Vec3,
 } from "@rockett/shared";
 import {
+  acquire,
   bboxOf,
   getKernel,
   kernelCall,
   planarFacePlane,
   progress,
-  release,
   scoped,
   shapeList,
   solids,
@@ -56,29 +56,26 @@ import type { SketchOnPlane } from "./sketchGeom.js";
 export { unifyTool } from "./booleanNaming.js";
 
 export function fuseOperation(a: Shape, b: Shape): any {
-  return new (getKernel().BRepAlgoAPI_Fuse_3)(a, b, progress());
+  return acquire(new (getKernel().BRepAlgoAPI_Fuse_3)(a, b, progress()));
 }
 
 export function cutOperation(a: Shape, b: Shape): any {
-  return new (getKernel().BRepAlgoAPI_Cut_3)(a, b, progress());
+  return acquire(new (getKernel().BRepAlgoAPI_Cut_3)(a, b, progress()));
 }
 
 export function commonOperation(a: Shape, b: Shape): any {
-  return new (getKernel().BRepAlgoAPI_Common_3)(a, b, progress());
+  return acquire(new (getKernel().BRepAlgoAPI_Common_3)(a, b, progress()));
 }
 
 export function checkedCut(body: Shape, tool: Shape, failed: string): any {
-  const op = cutOperation(body, tool);
-  try {
-    if (!op.IsDone()) throw new Error(failed);
-    if (scoped((own) => removesVolume(op, body, tool, own(op.Shape()))))
-      return op;
-    op.delete();
-    return null;
-  } catch (err) {
-    op.delete();
-    throw err;
-  }
+  const op = scoped((own) => {
+    const cut = own(cutOperation(body, tool));
+    if (!cut.IsDone()) throw new Error(failed);
+    return removesVolume(cut, body, tool, own(cut.Shape()))
+      ? own.keep(cut)
+      : null;
+  });
+  return op && acquire(op);
 }
 
 export function fuseNamed(
@@ -90,23 +87,23 @@ export function fuseNamed(
   const op = fuseOperation(a.shape, b.shape);
   op.Build(progress());
   if (op.IsDone()) return namedFuse(op, a, b, featureId);
-  op.delete();
   throw new Error(failure);
 }
 
 export function contactFuse(a: Shape, b: Shape): any {
   if (!bboxOverlap(a, b)) return null;
   const k = getKernel();
-  const dist = new k.BRepExtrema_DistShapeShape_2(
-    a,
-    b,
-    k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
-    k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
-    progress(),
+  const dist = acquire(
+    new k.BRepExtrema_DistShapeShape_2(
+      a,
+      b,
+      k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
+      k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
+      progress(),
+    ),
   );
   const done = dist.IsDone();
   const value = done ? dist.Value() : 0;
-  dist.delete();
   if (!done) throw new Error("join contact check failed");
   if (value > LINEAR_TOL) return null;
   const op = fuseOperation(a, b);
@@ -114,7 +111,6 @@ export function contactFuse(a: Shape, b: Shape): any {
   const failed = !op.IsDone();
   if (!failed && scoped((own) => solids(own(op.Shape())).map(own).length === 1))
     return op;
-  op.delete();
   if (failed) throw new Error("join contact check failed");
   return "touch";
 }
@@ -124,11 +120,7 @@ const TOUCH_WARNING =
 
 type JoinGroup = { bodies: StateBody[]; pieces: ToolResult[]; fuse: any };
 
-export function contactGroups(
-  bodies: StateBody[],
-  tool: ToolResult,
-  held: Set<any>,
-) {
+export function contactGroups(bodies: StateBody[], tool: ToolResult) {
   let groups: JoinGroup[] = [];
   let touching = false;
   const loose: Shape[] = [];
@@ -137,7 +129,6 @@ export function contactGroups(
       const fuse = contactFuse(body.shape, shape);
       touching ||= fuse === "touch";
       if (!fuse || fuse === "touch") return [];
-      held.add(fuse);
       return [{ body, fuse }];
     });
     if (hits.length === 0) {
@@ -150,11 +141,6 @@ export function contactGroups(
       (b) => hit(b) || bridged.some((g) => g.bodies.includes(b)),
     );
     const fuse = joined.length === 1 ? (bridged[0] ?? hits[0]!).fuse : null;
-    for (const { fuse: op } of [...hits, ...bridged]) {
-      if (!op || op === fuse) continue;
-      held.delete(op);
-      op.delete();
-    }
     groups = [
       ...groups.filter((g) => !bridged.includes(g)),
       {
@@ -178,45 +164,36 @@ export function joinEvery(
     : overlapping(state, tool.shape).sort((a, b) =>
         compareNames(a.bodyId, b.bodyId),
       );
-  const held = new Set<any>();
-  try {
-    const { groups, loose, warning } = contactGroups(bodies, tool, held);
-    const touched = new Set(groups.flatMap((g) => g.bodies));
-    const used = bodies.filter((b) => touched.has(b)).map((b) => b.bodyId);
-    const missed = targets?.find((id) => !used.includes(id));
-    if (missed) {
-      release([
-        ...loose,
-        ...groups.flatMap((g) => g.pieces.map((p) => p.shape)),
-      ]);
-      throw missedTarget("join", missed);
-    }
-    if (loose.length > 0)
-      registerSolids(state, `b:${featureId}`, loose, tool.names);
-    const warnings: (string | undefined)[] = [warning];
-    const join = (acc: ToolResult, next: ToolResult) =>
-      fuseNamed(acc, next, featureId, "boolean join failed");
-    for (const {
-      bodies: [first, ...rest],
-      pieces,
-      fuse,
-    } of groups) {
-      held.delete(fuse);
-      const fused = fuse
-        ? pieces
-            .slice(1)
-            .reduce(join, namedFuse(fuse, first!, pieces[0]!, featureId))
-        : [...pieces, ...rest].reduce<ToolResult>(join, first!);
-      for (const b of rest) state.bodies.delete(b.bodyId);
-      const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
-      warnings.push(joined.warning);
-      const { shape, names } = joined;
-      registerBodySolids(state, first!.bodyId, shape, names, featureId);
-    }
-    return { targets: used, ...warned(warnings) };
-  } finally {
-    release(held);
+
+  const { groups, loose, warning } = contactGroups(bodies, tool);
+  const touched = new Set(groups.flatMap((g) => g.bodies));
+  const used = bodies.filter((b) => touched.has(b)).map((b) => b.bodyId);
+  const missed = targets?.find((id) => !used.includes(id));
+  if (missed) {
+    throw missedTarget("join", missed);
   }
+  if (loose.length > 0)
+    registerSolids(state, `b:${featureId}`, loose, tool.names);
+  const warnings: (string | undefined)[] = [warning];
+  const join = (acc: ToolResult, next: ToolResult) =>
+    fuseNamed(acc, next, featureId, "boolean join failed");
+  for (const {
+    bodies: [first, ...rest],
+    pieces,
+    fuse,
+  } of groups) {
+    const fused = fuse
+      ? pieces
+          .slice(1)
+          .reduce(join, namedFuse(fuse, first!, pieces[0]!, featureId))
+      : [...pieces, ...rest].reduce<ToolResult>(join, first!);
+    for (const b of rest) state.bodies.delete(b.bodyId);
+    const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
+    warnings.push(joined.warning);
+    const { shape, names } = joined;
+    registerBodySolids(state, first!.bodyId, shape, names, featureId);
+  }
+  return { targets: used, ...warned(warnings) };
 }
 
 export function applyToolOperation(
@@ -247,13 +224,11 @@ export function applyToolOperation(
     const warnings = bodies.map((body) => {
       const op = checkedCut(body.shape, tool.shape, "boolean cut failed");
       if (!op) return undefined;
-      const result = op.Shape();
+      const result = acquire(op.Shape());
       const names = propagateNames(op, [body, tool], result, featureId);
-      op.delete();
       const inputs = [body.shape, tool.shape];
       const warning = zeroThicknessWarning("cut", result, inputs);
       registerBodySolids(state, body.bodyId, result, names, featureId);
-      result.delete();
       return warning;
     });
     return { targets: bodies.map((b) => b.bodyId), ...warned(warnings) };
@@ -279,17 +254,15 @@ export function applyToolOperation(
   const op = commonOperation(target.shape, tool.shape);
   op.Build(progress());
   if (!op.IsDone()) {
-    op.delete();
     throw new Error("boolean intersect failed");
   }
-  const result = op.Shape();
+  const result = acquire(op.Shape());
   const names = propagateNames(
     op,
     [target, { shape: tool.shape, names: tool.names }],
     result,
     featureId,
   );
-  op.delete();
   registerBodySolids(state, target.bodyId, result, names, featureId);
   return { targets: [target.bodyId] };
 }
@@ -316,7 +289,6 @@ export function evalCombine(state: EvalState, f: CombineFeature) {
       }
       if (!op) continue;
       if (!op.IsDone()) {
-        op.delete();
         throw new Error(`boolean ${f.operation} failed`);
       }
       current = {
@@ -364,7 +336,6 @@ export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature) {
         : checkedCut(current.shape, toolShape, "offset face boolean failed");
       if (!op) continue;
       if (!op.IsDone()) {
-        op.delete();
         throw new Error("offset face boolean failed");
       }
       current = {
@@ -396,21 +367,17 @@ export function evalSplitBody(state: EvalState, f: SplitBodyFeature): void {
         bbox.max[1] - bbox.min[1],
         bbox.max[2] - bbox.min[2],
       ) + 10;
-    const { sols, names } = scoped((own) => {
-      const toolFace = splitPlaneFace(frame, diag, own);
-      const splitter = own(new k.BRepAlgoAPI_Splitter_1());
-      splitter.SetArguments(own(shapeList([body.shape])));
-      splitter.SetTools(own(shapeList([toolFace])));
-      splitter.Build(progress());
-      if (!splitter.IsDone()) throw new Error("split failed");
-      const result = own(splitter.Shape());
-      const names = propagateNames(splitter, [body], result, f.id);
-      return { sols: solids(result), names };
-    });
-    if (sols.length < 2) {
-      release(sols);
+    const toolFace = splitPlaneFace(frame, diag, acquire);
+    const splitter = acquire(new k.BRepAlgoAPI_Splitter_1());
+    splitter.SetArguments(shapeList([body.shape]));
+    splitter.SetTools(shapeList([toolFace]));
+    splitter.Build(progress());
+    if (!splitter.IsDone()) throw new Error("split failed");
+    const result = acquire(splitter.Shape());
+    const names = propagateNames(splitter, [body], result, f.id);
+    const sols = solids(result);
+    if (sols.length < 2)
       throw new Error("split plane does not intersect the body");
-    }
     registerSplitBodies(state, f.body, f.id, sols, names, frame.normal);
   });
 }
@@ -426,9 +393,8 @@ export function hollowedByCut(
     "shell failed: could not hollow the closed body",
   );
   if (!cut) return null;
-  const shape = cut.Shape();
+  const shape = acquire(cut.Shape());
   const names = propagateNames(cut, [body, inner], shape, featureId);
-  cut.delete();
   return { shape, names };
 }
 
@@ -473,22 +439,21 @@ export function subtractSketchRegionsFromFace(
       const op = cutOperation(faceT, comp);
       op.Build(progress());
       if (!op.IsDone()) {
-        op.delete();
         return noop;
       }
-      const result = op.Shape();
-      op.delete();
-      const ex = new k.TopExp_Explorer_2(
-        result,
-        k.TopAbs_ShapeEnum.TopAbs_FACE,
-        k.TopAbs_ShapeEnum.TopAbs_SHAPE,
+      const result = acquire(op.Shape());
+      const ex = acquire(
+        new k.TopExp_Explorer_2(
+          result,
+          k.TopAbs_ShapeEnum.TopAbs_FACE,
+          k.TopAbs_ShapeEnum.TopAbs_SHAPE,
+        ),
       );
       const cutFaces: Shape[] = [];
       while (ex.More()) {
-        cutFaces.push(k.TopoDS.Face_1(ex.Current()));
+        cutFaces.push(acquire(k.TopoDS.Face_1(acquire(ex.Current()))));
         ex.Next();
       }
-      ex.delete();
       if (cutFaces.length !== 1) return noop;
       const cutFace = cutFaces[0];
       const edgeEntity = sketchRegionEdgeNames(cutFace!, regions);

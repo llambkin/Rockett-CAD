@@ -10,12 +10,12 @@
 import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
 import { arcAngles, LINEAR_TOL } from "@rockett/shared";
 import {
+  acquire,
   getKernel,
   edges as edgesOf,
   kernelCall,
   pnt,
   dir,
-  release,
   scoped,
   type Shape,
 } from "./kernel.js";
@@ -88,17 +88,19 @@ export function arcEdge(
   const p1 = uvTo3d(frame, from[0], from[1]);
   const pm = uvTo3d(frame, c.x + r * Math.cos(amid), c.y + r * Math.sin(amid));
   const p2 = uvTo3d(frame, to[0], to[1]);
-  return scoped((own) => {
-    const arcMk = own(
-      new k.GC_MakeArcOfCircle_4(
-        own(pnt(...p1)),
-        own(pnt(...pm)),
-        own(pnt(...p2)),
-      ),
-    );
-    const curve = own(k.upcastCurve(own(arcMk.Value())));
-    return own(new k.BRepBuilderAPI_MakeEdge_24(curve)).Edge();
-  });
+  return acquire(
+    scoped((own) => {
+      const arcMk = own(
+        new k.GC_MakeArcOfCircle_4(
+          own(pnt(...p1)),
+          own(pnt(...pm)),
+          own(pnt(...p2)),
+        ),
+      );
+      const curve = own(k.upcastCurve(own(arcMk.Value())));
+      return own.keep(own(own(new k.BRepBuilderAPI_MakeEdge_24(curve)).Edge()));
+    }),
+  );
 }
 
 function buildWire(
@@ -112,7 +114,7 @@ function buildWire(
   snap: (x: number, y: number) => [number, number],
 ): Shape {
   const k = getKernel();
-  const wireMaker = new k.BRepBuilderAPI_MakeWire_1();
+  const wireMaker = acquire(new k.BRepBuilderAPI_MakeWire_1());
 
   const to3d = (uv: [number, number]): Vec3 => uvTo3d(frame, uv[0], uv[1]);
 
@@ -134,13 +136,13 @@ function buildWire(
       if (oc.reversed) [s, e] = [e, s];
       const p1 = to3d(s);
       const p2 = to3d(e);
-      edge = scoped((own) =>
-        own(
-          new k.BRepBuilderAPI_MakeEdge_3(
-            own(pnt(p1[0], p1[1], p1[2])),
-            own(pnt(p2[0], p2[1], p2[2])),
-          ),
-        ).Edge(),
+      edge = acquire(
+        scoped((own) => {
+          const make = own(
+            new k.BRepBuilderAPI_MakeEdge_3(pnt(...p1), pnt(...p2)),
+          );
+          return own.keep(own(make.Edge()));
+        }),
       );
     } else if (arc || (circle && oc.trim)) {
       // arcs, and pieces of a circle split by crossings (trim = CCW start/end)
@@ -156,31 +158,32 @@ function buildWire(
     } else if (circle) {
       const c = maps.points.get(circle.center)!;
       const c3 = to3d([c.x, c.y]);
-      edge = scoped((own) => {
-        const ax2 = own(
-          new k.gp_Ax2_2(
-            own(pnt(c3[0], c3[1], c3[2])),
-            own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
-            own(dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2])),
-          ),
-        );
-        const circ = own(new k.gp_Circ_2(ax2, circle.radius));
-        return own(new k.BRepBuilderAPI_MakeEdge_8(circ)).Edge();
-      });
+      edge = acquire(
+        scoped((own) => {
+          const ax2 = own(
+            new k.gp_Ax2_2(
+              own(pnt(c3[0], c3[1], c3[2])),
+              own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
+              own(dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2])),
+            ),
+          );
+          const circ = own(new k.gp_Circ_2(ax2, circle.radius));
+          return own.keep(
+            own(own(new k.BRepBuilderAPI_MakeEdge_8(circ)).Edge()),
+          );
+        }),
+      );
     }
     if (!edge)
       throw new Error(`profile references unknown entity ${oc.entityId}`);
     wireMaker.Add_1(edge);
-    edge.delete();
     if (!wireMaker.IsDone()) {
-      wireMaker.delete();
       throw new Error(
         `failed to connect profile wire at entity ${oc.entityId}`,
       );
     }
   }
-  const wire = wireMaker.Wire();
-  wireMaker.delete();
+  const wire = acquire(wireMaker.Wire());
   return wire;
 }
 
@@ -190,71 +193,71 @@ export function matchEdgesToEntities(
   maps: EntityMaps,
   frame: PlaneFrame,
 ): ShapeMap<string> {
-  const k = getKernel();
-  const result = new ShapeMap<string>();
-  const origin = frame.origin;
-  const toUV = (p: {
-    X(): number;
-    Y(): number;
-    Z(): number;
-  }): [number, number] => {
-    const dx = p.X() - origin[0];
-    const dy = p.Y() - origin[1];
-    const dz = p.Z() - origin[2];
-    return [
-      dx * frame.xAxis[0] + dy * frame.xAxis[1] + dz * frame.xAxis[2],
-      dx * frame.yAxis[0] + dy * frame.yAxis[1] + dz * frame.yAxis[2],
-    ];
-  };
-  const ex = new k.TopExp_Explorer_2(
-    face,
-    k.TopAbs_ShapeEnum.TopAbs_EDGE,
-    k.TopAbs_ShapeEnum.TopAbs_SHAPE,
-  );
-  while (ex.More()) {
-    const current = ex.Current();
-    const edge = k.TopoDS.Edge_1(current);
-    const curve = new k.BRepAdaptor_Curve_2(edge);
-    const tMid = (curve.FirstParameter() + curve.LastParameter()) / 2;
-    const mid3d = curve.Value(tMid);
-    const [u, v] = toUV(mid3d);
-    mid3d.delete();
-    curve.delete();
+  return scoped(() => {
+    const k = getKernel();
+    const result = new ShapeMap<string>();
+    const origin = frame.origin;
+    const toUV = (p: {
+      X(): number;
+      Y(): number;
+      Z(): number;
+    }): [number, number] => {
+      const dx = p.X() - origin[0];
+      const dy = p.Y() - origin[1];
+      const dz = p.Z() - origin[2];
+      return [
+        dx * frame.xAxis[0] + dy * frame.xAxis[1] + dz * frame.xAxis[2],
+        dx * frame.yAxis[0] + dy * frame.yAxis[1] + dz * frame.yAxis[2],
+      ];
+    };
+    const ex = acquire(
+      new k.TopExp_Explorer_2(
+        face,
+        k.TopAbs_ShapeEnum.TopAbs_EDGE,
+        k.TopAbs_ShapeEnum.TopAbs_SHAPE,
+      ),
+    );
+    while (ex.More()) {
+      const current = acquire(ex.Current());
+      const edge = acquire(k.TopoDS.Edge_1(current));
+      const curve = acquire(new k.BRepAdaptor_Curve_2(edge));
+      const tMid = (curve.FirstParameter() + curve.LastParameter()) / 2;
+      const mid3d = acquire(curve.Value(tMid));
+      const [u, v] = toUV(mid3d);
 
-    let best: { id: string; d: number } | null = null;
-    for (const id of chainIds) {
-      const line = maps.lines.get(id);
-      const circle = maps.circles.get(id);
-      const arc = maps.arcs.get(id);
-      let d = Infinity;
-      if (line) {
-        const a = maps.points.get(line.p1)!;
-        const b = maps.points.get(line.p2)!;
-        const abx = b.x - a.x,
-          aby = b.y - a.y;
-        const len2 = abx * abx + aby * aby || 1;
-        let t = ((u - a.x) * abx + (v - a.y) * aby) / len2;
-        t = Math.max(0, Math.min(1, t));
-        d = Math.hypot(u - (a.x + t * abx), v - (a.y + t * aby));
-      } else if (circle) {
-        const c = maps.points.get(circle.center)!;
-        d = Math.abs(Math.hypot(u - c.x, v - c.y) - circle.radius);
-      } else if (arc) {
-        const c = maps.points.get(arc.center)!;
-        const s = maps.points.get(arc.start)!;
-        const r = Math.hypot(s.x - c.x, s.y - c.y);
-        d = Math.abs(Math.hypot(u - c.x, v - c.y) - r);
+      let best: { id: string; d: number } | null = null;
+      for (const id of chainIds) {
+        const line = maps.lines.get(id);
+        const circle = maps.circles.get(id);
+        const arc = maps.arcs.get(id);
+        let d = Infinity;
+        if (line) {
+          const a = maps.points.get(line.p1)!;
+          const b = maps.points.get(line.p2)!;
+          const abx = b.x - a.x,
+            aby = b.y - a.y;
+          const len2 = abx * abx + aby * aby || 1;
+          let t = ((u - a.x) * abx + (v - a.y) * aby) / len2;
+          t = Math.max(0, Math.min(1, t));
+          d = Math.hypot(u - (a.x + t * abx), v - (a.y + t * aby));
+        } else if (circle) {
+          const c = maps.points.get(circle.center)!;
+          d = Math.abs(Math.hypot(u - c.x, v - c.y) - circle.radius);
+        } else if (arc) {
+          const c = maps.points.get(arc.center)!;
+          const s = maps.points.get(arc.start)!;
+          const r = Math.hypot(s.x - c.x, s.y - c.y);
+          d = Math.abs(Math.hypot(u - c.x, v - c.y) - r);
+        }
+        if (best === null || d < best.d) best = { id, d };
       }
-      if (best === null || d < best.d) best = { id, d };
+      if (best && best.d < 1e-4) {
+        result.set(edge, best.id);
+      }
+      ex.Next();
     }
-    if (best && best.d < 1e-4) {
-      result.set(edge, best.id);
-    }
-    release([current, edge]);
-    ex.Next();
-  }
-  ex.delete();
-  return result;
+    return result;
+  });
 }
 
 /** Minimal evaluated-sketch shape needed for face-region subtraction. */
@@ -280,61 +283,75 @@ export function buildProfileFace(
   entities: SketchEntity[],
   frame: PlaneFrame,
 ): ProfileFace {
-  return kernelCall(`profile ${profile.id}`, () => {
-    const k = getKernel();
-    const maps = buildMaps(entities);
-    const snap = snapper();
+  const result = kernelCall(`profile ${profile.id}`, () =>
+    scoped((profileOwn) => {
+      const k = getKernel();
+      const maps = buildMaps(entities);
+      const snap = snapper();
 
-    const outerWire = buildWire(profile.outer, maps, frame, snap);
+      const outerWire = buildWire(profile.outer, maps, frame, snap);
 
-    let face = scoped((own) => {
-      const pln = own(
-        new k.gp_Pln_3(
-          own(pnt(frame.origin[0], frame.origin[1], frame.origin[2])),
-          own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
-        ),
+      let face = acquire(
+        scoped((own) => {
+          const pln = own(
+            new k.gp_Pln_3(
+              own(pnt(frame.origin[0], frame.origin[1], frame.origin[2])),
+              own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
+            ),
+          );
+          const faceMk = own(
+            new k.BRepBuilderAPI_MakeFace_16(pln, own(outerWire), true),
+          );
+          if (!faceMk.IsDone()) throw new Error("failed to build profile face");
+          return own.keep(own(faceMk.Face()));
+        }),
       );
-      const faceMk = own(
-        new k.BRepBuilderAPI_MakeFace_16(pln, own(outerWire), true),
-      );
-      if (!faceMk.IsDone()) throw new Error("failed to build profile face");
-      return faceMk.Face();
-    });
 
-    for (const hole of profile.holes) {
-      const outer = face;
-      face = scoped((own) => {
-        own(outer);
-        const holeWire = own(buildWire(hole, maps, frame, snap));
-        const reversedWire = own(k.TopoDS.Wire_1(own(holeWire.Reversed())));
-        const withHole = own(
-          new k.BRepBuilderAPI_MakeFace_22(outer, reversedWire),
+      for (const hole of profile.holes) {
+        const outer = face;
+        face = acquire(
+          scoped((own) => {
+            own(outer);
+            const holeWire = own(buildWire(hole, maps, frame, snap));
+            const reversedWire = own(k.TopoDS.Wire_1(own(holeWire.Reversed())));
+            const withHole = own(
+              new k.BRepBuilderAPI_MakeFace_22(outer, reversedWire),
+            );
+            if (!withHole.IsDone())
+              throw new Error("failed to add hole to profile face");
+            return own.keep(own(withHole.Face()));
+          }),
         );
-        if (!withHole.IsDone())
-          throw new Error("failed to add hole to profile face");
-        return withHole.Face();
-      });
-    }
+      }
 
-    const chainIds = [
-      ...profile.outer.map((c) => c.entityId),
-      ...profile.holes.flatMap((h) => h.map((c) => c.entityId)),
-    ];
-    const finalEdgeEntity = matchEdgesToEntities(face, chainIds, maps, frame);
+      const chainIds = [
+        ...profile.outer.map((c) => c.entityId),
+        ...profile.holes.flatMap((h) => h.map((c) => c.entityId)),
+      ];
+      const finalEdgeEntity = matchEdgesToEntities(face, chainIds, maps, frame);
 
-    return { face, edgeEntity: finalEdgeEntity, profileId: profile.id };
-  });
+      return {
+        face: profileOwn.keep(face),
+        edgeEntity: finalEdgeEntity,
+        profileId: profile.id,
+      };
+    }),
+  );
+  acquire(result.face);
+  return result;
 }
 
 export function sideEdgeNames(
   featureId: string,
   pf: ProfileFace,
-  edges = edgesOf(pf.face),
+  edges?: Shape[],
 ): Array<[Shape, string]> {
-  return edges.flatMap((e): Array<[Shape, string]> => {
-    const entityId = pf.edgeEntity.get(e);
-    if (entityId) return [[e, `f:${featureId}:s:${entityId}`]];
-    e.delete();
-    return [];
-  });
+  const named = scoped((own) =>
+    (edges ?? edgesOf(pf.face)).flatMap((edge): Array<[Shape, string]> => {
+      const entityId = pf.edgeEntity.get(edge);
+      return entityId ? [[own.keep(edge), `f:${featureId}:s:${entityId}`]] : [];
+    }),
+  );
+  if (!edges) for (const [edge] of named) acquire(edge);
+  return named;
 }

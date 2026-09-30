@@ -6,12 +6,13 @@ import {
   type Vec3,
 } from "@rockett/shared";
 import {
+  acquire,
+  scoped,
   bboxOf,
   dir,
   getKernel,
   pnt,
   progress,
-  release,
   vec,
   faces as facesOf,
   type Shape,
@@ -64,23 +65,19 @@ export function offsetFaceTool(
   const dist = Math.abs(distance);
   const dirVec: Vec3 = outward ? normal : [-normal[0], -normal[1], -normal[2]];
   const v = vec(dirVec[0] * dist, dirVec[1] * dist, dirVec[2] * dist);
-  const prism = new k.BRepPrimAPI_MakePrism_1(face, v, false, true);
+  const prism = acquire(new k.BRepPrimAPI_MakePrism_1(face, v, false, true));
   prism.Build(progress());
   if (!prism.IsDone()) {
-    prism.delete();
     throw new Error("offset face prism failed");
   }
-  const toolShape = prism.Shape();
+  const toolShape = acquire(prism.Shape());
   const moved = new ShapeMap<string>();
   if (current.names.version === 2) {
-    const last = prism.LastShape_1();
+    const last = acquire(prism.LastShape_1());
     const caps = facesOf(last);
     for (const cap of caps) moved.set(cap, faceName);
-    release([...caps, last]);
   }
   const toolNames = finalizeNames(toolShape, moved, featureId);
-  prism.delete();
-  v.delete();
 
   return { shape: toolShape, names: toolNames };
 }
@@ -108,72 +105,78 @@ export function interiorSketchRegions(
   face: Shape,
   sketches: Iterable<SketchOnPlane>,
 ) {
-  const k = getKernel();
-  const faceT = k.TopoDS.Face_1(face);
-  const surf = new k.BRepAdaptor_Surface_2(faceT, false);
-  if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
-    surf.delete();
-    return null;
-  }
-  const pln = surf.Plane();
-  const loc = pln.Location();
-  const axd = pln.Axis().Direction();
-  const fp: Vec3 = [loc.X(), loc.Y(), loc.Z()];
-  const fn: Vec3 = [axd.X(), axd.Y(), axd.Z()];
-  surf.delete();
-  const samples = (polygon: number[]): [number, number][] => {
-    const n = polygon.length / 2;
-    const out: [number, number][] = [];
-    const step = Math.max(1, Math.ceil(n / 48));
-    for (let i = 0; i < n; i += step) {
-      out.push([polygon[i * 2]!, polygon[i * 2 + 1]!]);
+  const result = scoped((own) => {
+    const k = getKernel();
+    const faceT = acquire(k.TopoDS.Face_1(face));
+    const surf = acquire(new k.BRepAdaptor_Surface_2(faceT, false));
+    if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
+      return null;
     }
-    return out;
-  };
+    const pln = acquire(surf.Plane());
+    const loc = acquire(pln.Location());
+    const axd = acquire(acquire(pln.Axis()).Direction());
+    const fp: Vec3 = [loc.X(), loc.Y(), loc.Z()];
+    const fn: Vec3 = [axd.X(), axd.Y(), axd.Z()];
+    const samples = (polygon: number[]): [number, number][] => {
+      const n = polygon.length / 2;
+      const out: [number, number][] = [];
+      const step = Math.max(1, Math.ceil(n / 48));
+      for (let i = 0; i < n; i += step) {
+        out.push([polygon[i * 2]!, polygon[i * 2 + 1]!]);
+      }
+      return out;
+    };
 
-  const strictlyInside = (frame: PlaneFrame, polygon: number[]): boolean => {
-    const pts = samples(polygon);
-    if (pts.length === 0) return false;
-    for (const [u, v] of pts) {
-      const w = uvTo3d(frame, u, v);
-      const cls = new k.BRepClass_FaceClassifier_4(
-        faceT,
-        pnt(w[0], w[1], w[2]),
-        LINEAR_TOL,
-        false,
-        0.1,
+    const strictlyInside = (frame: PlaneFrame, polygon: number[]): boolean => {
+      const pts = samples(polygon);
+      if (pts.length === 0) return false;
+      for (const [u, v] of pts) {
+        const w = uvTo3d(frame, u, v);
+        const cls = acquire(
+          new k.BRepClass_FaceClassifier_4(
+            faceT,
+            pnt(w[0], w[1], w[2]),
+            LINEAR_TOL,
+            false,
+            0.1,
+          ),
+        );
+        const st = cls.State();
+        if (st !== k.TopAbs_State.TopAbs_IN) return false;
+      }
+      return true;
+    };
+    const regions: { sk: SketchOnPlane; profile: Profile }[] = [];
+    for (const sk of sketches) {
+      const n = sk.frame.normal;
+      const o = sk.frame.origin;
+      const ndot = Math.abs(n[0] * fn[0] + n[1] * fn[1] + n[2] * fn[2]);
+      if (ndot < 1 - UNIT_DOT_TOL) continue;
+      const doff = Math.abs(
+        (o[0] - fp[0]) * fn[0] +
+          (o[1] - fp[1]) * fn[1] +
+          (o[2] - fp[2]) * fn[2],
       );
-      const st = cls.State();
-      cls.delete();
-      if (st !== k.TopAbs_State.TopAbs_IN) return false;
+      if (doff > 1e-5) continue;
+      for (const p of sk.profiles) {
+        if (p.area <= 1e-9) continue;
+        if (strictlyInside(sk.frame, p.polygon))
+          regions.push({ sk, profile: p });
+      }
     }
-    return true;
-  };
-  const regions: { sk: SketchOnPlane; profile: Profile }[] = [];
-  for (const sk of sketches) {
-    const n = sk.frame.normal;
-    const o = sk.frame.origin;
-    const ndot = Math.abs(n[0] * fn[0] + n[1] * fn[1] + n[2] * fn[2]);
-    if (ndot < 1 - UNIT_DOT_TOL) continue;
-    const doff = Math.abs(
-      (o[0] - fp[0]) * fn[0] + (o[1] - fp[1]) * fn[1] + (o[2] - fp[2]) * fn[2],
-    );
-    if (doff > 1e-5) continue;
-    for (const p of sk.profiles) {
-      if (p.area <= 1e-9) continue;
-      if (strictlyInside(sk.frame, p.polygon)) regions.push({ sk, profile: p });
-    }
-  }
 
-  return { faceT, regions };
+    return { faceT: own.keep(faceT), regions };
+  });
+  if (result) acquire(result.faceT);
+  return result;
 }
 
 export function sketchRegionCompound(
   regions: { sk: SketchOnPlane; profile: Profile }[],
 ): Shape {
   const k = getKernel();
-  const builder = new k.BRep_Builder();
-  const comp = new k.TopoDS_Compound();
+  const builder = acquire(new k.BRep_Builder());
+  const comp = acquire(new k.TopoDS_Compound());
   builder.MakeCompound(comp);
   for (const { sk, profile } of regions) {
     const pf = buildProfileFace(profile, sk.entities, sk.frame);

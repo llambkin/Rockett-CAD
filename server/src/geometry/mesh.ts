@@ -1,7 +1,7 @@
 import {
   getKernel,
+  acquire,
   faces as facesOf,
-  release,
   scoped,
   type Shape,
 } from "./kernel.js";
@@ -20,58 +20,54 @@ export function setExactTriangle(
   face: Shape,
   corners: number[][],
 ) {
-  const k = getKernel(),
-    mesh = new k.Poly_Triangulation_2(3, 1, false, false),
-    triangle = new k.Poly_Triangle_2(1, 2, 3);
-  corners.forEach(([x, y, z], i) => {
-    const at = new k.gp_Pnt_3(x, y, z);
-    mesh.SetNode(i + 1, at);
-    at.delete();
+  const k = getKernel();
+  scoped((own) => {
+    const mesh = own(new k.Poly_Triangulation_2(3, 1, false, false));
+    corners.forEach(([x, y, z], i) =>
+      mesh.SetNode(i + 1, own(new k.gp_Pnt_3(x, y, z))),
+    );
+    mesh.SetTriangle(1, own(new k.Poly_Triangle_2(1, 2, 3)));
+    mesh.SetMeshPurpose(EXACT);
+    mesh.IncrementRefCounter();
+    let handle;
+    try {
+      handle = own(mesh.Copy());
+    } finally {
+      mesh.DecrementRefCounter();
+    }
+    builder.UpdateFace_2(face, handle, true);
   });
-  mesh.SetTriangle(1, triangle);
-  mesh.SetMeshPurpose(EXACT);
-  triangle.delete();
-  const handle = new k.Handle_Poly_Triangulation_2(mesh);
-  builder.UpdateFace_2(face, handle, true);
-  handle.delete();
 }
 
 function isExact(face: Shape): boolean {
-  const k = getKernel(),
-    at = new k.TopLoc_Location_1(),
-    mesh = k.BRep_Tool.Triangulation(face, at, EXACT),
-    exact = !mesh.IsNull();
-  mesh.delete();
-  at.delete();
-  return exact;
+  const k = getKernel();
+  return scoped((own) => {
+    const at = own(new k.TopLoc_Location_1());
+    const mesh = own(k.BRep_Tool.Triangulation(face, at, EXACT));
+    return !mesh.IsNull();
+  });
 }
 
 export function meshShape(
   shape: Shape,
   { linear, angular }: { linear: number; angular: number },
 ): FaceMesh[] {
-  const k = getKernel(),
-    faces = facesOf(shape);
-  let meshes;
-  try {
+  const k = getKernel();
+  return scoped((own) => {
+    const faces = facesOf(shape).map(own);
     if (!faces.every(isExact))
-      new k.BRepMesh_IncrementalMesh_2(
-        shape,
-        linear,
-        false,
-        angular,
-        false,
-      ).delete();
-    meshes = faces.map((face) => k.meshFace(face));
-  } catch (error) {
-    release(faces);
-    throw error;
-  }
-  return faces.flatMap((face, i) => {
-    const mesh = meshes[i];
-    if (mesh) return [{ face, ...mesh }];
-    face.delete();
-    return [];
+      own(
+        new k.BRepMesh_IncrementalMesh_2(shape, linear, false, angular, false),
+      );
+    return faces.flatMap((face) => {
+      const mesh = k.meshFace(face);
+      if (!mesh) return [];
+      own.keep(face);
+      return [{ face, ...mesh }];
+    });
+  }).map((mesh) => {
+    acquire(mesh.face);
+    return mesh;
   });
 }
 

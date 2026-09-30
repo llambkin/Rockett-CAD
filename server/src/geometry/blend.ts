@@ -15,6 +15,7 @@ import {
 } from "@rockett/shared";
 import {
   bboxOf,
+  acquire,
   edgeCentroid,
   edges as edgesOf,
   explore,
@@ -26,7 +27,6 @@ import {
   planarFacePlane,
   pnt,
   progress,
-  release,
   scoped,
   shapeHash,
   shapeList,
@@ -107,35 +107,33 @@ function blendNames(
   result: Shape,
   featureId: string,
 ): NameMap {
-  const k = getKernel();
-  const provisional = new ShapeMap<string>();
-  const bodyFaces = facesOf(body.shape);
-  try {
-    for (const face of bodyFaces) {
-      const name = body.names.get(face);
-      if (!name || op.IsDeleted(face)) continue;
-      const modified = listToArray(op.Modified(face));
-      for (const mf of modified.length > 0 ? modified : [face]) {
-        provisional.set(mf, name);
+  return scoped(() => {
+    const k = getKernel();
+    const provisional = new ShapeMap<string>();
+    const bodyFaces = facesOf(body.shape);
+    {
+      for (const face of bodyFaces) {
+        const name = body.names.get(face);
+        if (!name || op.IsDeleted(face)) continue;
+        const modified = listToArray(op.Modified(face));
+        for (const mf of modified.length > 0 ? modified : [face]) {
+          provisional.set(mf, name);
+        }
       }
-      release(modified);
     }
-  } finally {
-    release(bodyFaces);
-  }
-  sourceEdges.forEach((se, i) => {
-    const gen = listToArray(op.Generated(se.edge));
-    gen.forEach((g, j) => {
-      if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-        provisional.set(
-          g,
-          `f:${featureId}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
-        );
-      }
+    sourceEdges.forEach((se, i) => {
+      const gen = listToArray(op.Generated(se.edge));
+      gen.forEach((g, j) => {
+        if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
+          provisional.set(
+            g,
+            `f:${featureId}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
+          );
+        }
+      });
     });
-    release(gen);
+    return finalizeNames(result, provisional, featureId);
   });
-  return finalizeNames(result, provisional, featureId);
 }
 
 export function evalFillet(state: EvalState, f: FilletFeature): void {
@@ -156,12 +154,14 @@ function filletBody(
   const k = getKernel();
   kernelCall("fillet", () => {
     const byName = computeEdgeNames(body).byName;
-    const op = new k.BRepFilletAPI_MakeFillet(
-      body.shape,
-      k.ChFi3d_FilletShape.ChFi3d_Rational,
+    const op = acquire(
+      new k.BRepFilletAPI_MakeFillet(
+        body.shape,
+        k.ChFi3d_FilletShape.ChFi3d_Rational,
+      ),
     );
     let result: Shape | undefined;
-    try {
+    {
       const sourceEdges = collectEdges(body, byName, refs, f.tangentChain);
       for (const { edge } of sourceEdges) {
         if (!op.Contour(edge)) op.Add_2(f.radius, edge);
@@ -187,7 +187,7 @@ function filletBody(
       if (!op.IsDone()) {
         throw new Error(filletFailure(op, byName, refs, f.radius));
       }
-      result = op.Shape();
+      result = acquire(op.Shape());
       rejectBadBlend(
         op,
         sourceEdges,
@@ -199,10 +199,6 @@ function filletBody(
       );
       const names = blendNames(op, body, sourceEdges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
-    } finally {
-      result?.delete();
-      op.delete();
-      release(byName.values());
     }
   });
 }
@@ -213,18 +209,20 @@ interface OpenEnd {
 }
 
 function outward(edge: Shape, vertex: Shape): OpenEnd {
-  const k = getKernel();
-  const at = vertexPoint(vertex);
-  const curve = new k.BRepAdaptor_Curve_2(edge);
-  const p = pnt(0, 0, 0);
-  const d = vec(0, 0, 0);
-  const [start, end] = [curve.FirstParameter(), curve.LastParameter()];
-  curve.D1(start, p, d);
-  const atStart = V.norm(V.sub([p.X(), p.Y(), p.Z()], at)) < LINEAR_TOL;
-  curve.D1(atStart ? start : end, p, d);
-  const along = V.normalize([d.X(), d.Y(), d.Z()]);
-  release([curve, p, d]);
-  return { at, out: atStart ? V.scale(along, -1) : along };
+  return scoped(() => {
+    const k = getKernel();
+    const at = vertexPoint(vertex);
+    const curve = acquire(new k.BRepAdaptor_Curve_2(edge));
+    const p = pnt(0, 0, 0);
+    const d = vec(0, 0, 0);
+    const [start, end] = [curve.FirstParameter(), curve.LastParameter()];
+    curve.D1(start, p, d);
+    const atStart = V.norm(V.sub([p.X(), p.Y(), p.Z()], at)) < LINEAR_TOL;
+    curve.D1(atStart ? start : end, p, d);
+    const along = V.normalize([d.X(), d.Y(), d.Z()]);
+
+    return { at, out: atStart ? V.scale(along, -1) : along };
+  });
 }
 
 function capsEnd(face: Shape, end: OpenEnd): boolean {
@@ -251,35 +249,33 @@ function openEnds(
   sourceEdges: { edge: Shape }[],
   spilled: Set<number>,
 ): OpenEnd[] {
-  const chosen = new Set(sourceEdges.map(({ edge }) => shapeHash(edge)));
-  const touches = new Map<number, { vertex: Shape; edge: Shape }[]>();
-  for (const { edge } of sourceEdges) {
-    for (const vertex of verticesOf(edge)) {
-      const hash = shapeHash(vertex);
-      touches.set(hash, [...(touches.get(hash) ?? []), { vertex, edge }]);
-    }
-  }
-  const continued = new Set<number>();
-  for (let c = 1; c <= op.NbContours(); c++) {
-    for (let e = 1; e <= op.NbEdges(c); e++) {
-      const edge = op.Edge(c, e);
-      if (!chosen.has(shapeHash(edge))) {
-        const vertices = verticesOf(edge);
-        for (const vertex of vertices) continued.add(shapeHash(vertex));
-        release(vertices);
+  return scoped(() => {
+    const chosen = new Set(sourceEdges.map(({ edge }) => shapeHash(edge)));
+    const touches = new Map<number, { vertex: Shape; edge: Shape }[]>();
+    for (const { edge } of sourceEdges) {
+      for (const vertex of verticesOf(edge)) {
+        const hash = shapeHash(vertex);
+        touches.set(hash, [...(touches.get(hash) ?? []), { vertex, edge }]);
       }
-      edge.delete();
     }
-  }
-  const ends = [...touches]
-    .filter(
-      ([hash, list]) =>
-        list.length === 1 && (continued.has(hash) || spilled.has(hash)),
-    )
-    .map(([, [only]]) => outward(only!.edge, only!.vertex));
-  for (const list of touches.values())
-    release(list.map(({ vertex }) => vertex));
-  return ends;
+    const continued = new Set<number>();
+    for (let c = 1; c <= op.NbContours(); c++) {
+      for (let e = 1; e <= op.NbEdges(c); e++) {
+        const edge = acquire(op.Edge(c, e));
+        if (!chosen.has(shapeHash(edge))) {
+          const vertices = verticesOf(edge);
+          for (const vertex of vertices) continued.add(shapeHash(vertex));
+        }
+      }
+    }
+    const ends = [...touches]
+      .filter(
+        ([hash, list]) =>
+          list.length === 1 && (continued.has(hash) || spilled.has(hash)),
+      )
+      .map(([, [only]]) => outward(only!.edge, only!.vertex));
+    return ends;
+  });
 }
 
 function filletClipped(
@@ -291,7 +287,7 @@ function filletClipped(
   const k = getKernel();
   const size = `radius ${f.radius}`;
   const advice = "try fewer edges or a different radius";
-  return scoped((own) => {
+  const clipped = scoped((own) => {
     const split = splitAtEnds(body, sourceEdges, ends, f.id, own);
     if (!split) return null;
     const { piece, rest, kept } = split;
@@ -315,22 +311,12 @@ function filletClipped(
     );
     const merged = unifyTool(joined, f.id);
     if (merged !== joined) own(joined.shape);
-    try {
-      rejectBadBlend(
-        null,
-        [],
-        merged.shape,
-        body.shape,
-        "fillet",
-        size,
-        advice,
-      );
-    } catch (error) {
-      merged.shape.delete();
-      throw error;
-    }
+    rejectBadBlend(null, [], merged.shape, body.shape, "fillet", size, advice);
+    own.keep(merged.shape);
     return merged;
   });
+  if (clipped) acquire(clipped.shape);
+  return clipped;
 }
 
 function filletFailure(
@@ -339,23 +325,25 @@ function filletFailure(
   refs: EdgeRef[],
   radius: number,
 ): string {
-  const chosen = new Set(refs.map((r) => shapeHash(byName.get(r.edgeName)!)));
-  const names = new Map(
-    [...byName].map(([name, edge]) => [shapeHash(edge), name]),
-  );
-  const added = new Set<string>();
-  for (let i = 1; i <= op.NbFaultyContours(); i++) {
-    const contour = op.FaultyContour(i);
-    for (let j = 1; j <= op.NbEdges(contour); j++) {
-      const edge = op.Edge(contour, j);
-      const hash = shapeHash(edge);
-      edge.delete();
-      if (!chosen.has(hash)) added.add(names.get(hash) ?? "an unnamed edge");
+  return scoped(() => {
+    const chosen = new Set(refs.map((r) => shapeHash(byName.get(r.edgeName)!)));
+    const names = new Map(
+      [...byName].map(([name, edge]) => [shapeHash(edge), name]),
+    );
+    const added = new Set<string>();
+    for (let i = 1; i <= op.NbFaultyContours(); i++) {
+      const contour = op.FaultyContour(i);
+      for (let j = 1; j <= op.NbEdges(contour); j++) {
+        const edge = acquire(op.Edge(contour, j));
+        const hash = shapeHash(edge);
+
+        if (!chosen.has(hash)) added.add(names.get(hash) ?? "an unnamed edge");
+      }
     }
-  }
-  return added.size > 0
-    ? `fillet of radius ${radius} failed on ${[...added].join(", ")}, a tangent continuation of the selected edges: try a smaller radius or fillet this edge before its neighbours`
-    : `fillet of radius ${radius} failed: radius may be too large for the geometry`;
+    return added.size > 0
+      ? `fillet of radius ${radius} failed on ${[...added].join(", ")}, a tangent continuation of the selected edges: try a smaller radius or fillet this edge before its neighbours`
+      : `fillet of radius ${radius} failed: radius may be too large for the geometry`;
+  });
 }
 
 function rejectBadBlend(
@@ -386,36 +374,39 @@ function rejectBadBlend(
 }
 
 function spilledEnds(op: any): Set<number> {
-  const touches = new Map<number, number>();
-  const ends: { vertex: Shape; edge: Shape }[] = [];
-  for (let c = 1; c <= op.NbContours(); c++) {
-    if (!op.Closed(c))
-      ends.push(
-        { vertex: op.FirstVertex(c), edge: op.Edge(c, 1) },
-        { vertex: op.LastVertex(c), edge: op.Edge(c, op.NbEdges(c)) },
-      );
-    for (let e = 1; e <= op.NbEdges(c); e++) {
-      const edge = op.Edge(c, e);
-      const vertices = verticesOf(edge);
-      for (const vertex of vertices) {
-        const hash = shapeHash(vertex);
-        touches.set(hash, (touches.get(hash) ?? 0) + 1);
+  return scoped(() => {
+    const touches = new Map<number, number>();
+    const ends: { vertex: Shape; edge: Shape }[] = [];
+    for (let c = 1; c <= op.NbContours(); c++) {
+      if (!op.Closed(c))
+        ends.push(
+          { vertex: acquire(op.FirstVertex(c)), edge: acquire(op.Edge(c, 1)) },
+          {
+            vertex: acquire(op.LastVertex(c)),
+            edge: acquire(op.Edge(c, op.NbEdges(c))),
+          },
+        );
+      for (let e = 1; e <= op.NbEdges(c); e++) {
+        const edge = acquire(op.Edge(c, e));
+        const vertices = verticesOf(edge);
+        for (const vertex of vertices) {
+          const hash = shapeHash(vertex);
+          touches.set(hash, (touches.get(hash) ?? 0) + 1);
+        }
       }
-      release([edge, ...vertices]);
     }
-  }
-  const spilled = new Set<number>();
-  for (const { vertex, edge } of ends) {
-    const hash = shapeHash(vertex);
-    if (touches.get(hash) !== 1) continue;
-    const generated = listToArray(op.Generated(vertex));
-    const end = generated.length > 0 ? outward(edge, vertex) : null;
-    if (end && !generated.every((face) => capsEnd(face, end)))
-      spilled.add(hash);
-    release(generated);
-  }
-  release(ends.flatMap(({ vertex, edge }) => [vertex, edge]));
-  return spilled;
+    const spilled = new Set<number>();
+    for (const { vertex, edge } of ends) {
+      const hash = shapeHash(vertex);
+      if (touches.get(hash) !== 1) continue;
+      const generated = listToArray(op.Generated(vertex));
+      const end = generated.length > 0 ? outward(edge, vertex) : null;
+      if (end && !generated.every((face) => capsEnd(face, end)))
+        spilled.add(hash);
+    }
+
+    return spilled;
+  });
 }
 
 function chamferByEnvelope(
@@ -425,234 +416,222 @@ function chamferByEnvelope(
   featureId: string,
 ): ToolResult | null {
   let current: NamedBody = body;
-  let built = false;
-  try {
-    built = scoped((own) => {
-      const k = getKernel();
-      const chosen = selected
-        .map(({ edge }) => edge)
-        .filter((edge, i, all) => !all.slice(0, i).some((e) => e.IsSame(edge)));
-      const bodyFaces = facesOf(body.shape).map(own);
-      const edgeFaces = bodyFaces.map((face) => ({
-        face,
-        edges: edgesOf(face).map(own),
-      }));
-      const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const built = scoped((own) => {
+    const k = getKernel();
+    const chosen = selected
+      .map(({ edge }) => edge)
+      .filter((edge, i, all) => !all.slice(0, i).some((e) => e.IsSame(edge)));
+    const bodyFaces = facesOf(body.shape).map(own);
+    const edgeFaces = bodyFaces.map((face) => ({
+      face,
+      edges: edgesOf(face).map(own),
+    }));
+    const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-      const caps: {
-        face: Shape;
-        edges: Shape[];
-        plane: { origin: Vec3; normal: Vec3 };
-      }[] = [];
-      const covered = new Set<number>();
-      for (const face of bodyFaces) {
-        const fe = edgesOf(own(k.BRepTools.OuterWire(face))).map(own);
+    const caps: {
+      face: Shape;
+      edges: Shape[];
+      plane: { origin: Vec3; normal: Vec3 };
+    }[] = [];
+    const covered = new Set<number>();
+    for (const face of bodyFaces) {
+      const fe = edgesOf(own(k.BRepTools.OuterWire(face))).map(own);
+      if (fe.length === 0 || !fe.every((e) => chosen.some((s) => s.IsSame(e))))
+        continue;
+      const plane = planarFacePlane(face);
+      if (!plane) return false;
+      for (const e of fe) {
+        const wall = edgeFaces.find(
+          (w) => !w.face.IsSame(face) && w.edges.some((edge) => edge.IsSame(e)),
+        )?.face;
+        const wp = wall ? planarFacePlane(wall) : null;
         if (
-          fe.length === 0 ||
-          !fe.every((e) => chosen.some((s) => s.IsSame(e)))
+          !wall ||
+          !wp ||
+          Math.abs(dot(wp.normal, plane.normal)) > UNIT_DOT_TOL
         )
-          continue;
-        const plane = planarFacePlane(face);
-        if (!plane) return false;
-        for (const e of fe) {
-          const wall = edgeFaces.find(
-            (w) =>
-              !w.face.IsSame(face) && w.edges.some((edge) => edge.IsSame(e)),
-          )?.face;
-          const wp = wall ? planarFacePlane(wall) : null;
-          if (
-            !wall ||
-            !wp ||
-            Math.abs(dot(wp.normal, plane.normal)) > UNIT_DOT_TOL
-          )
-            return false;
-          let wallDepth = 0;
-          for (const v of verticesOf(wall).map(own)) {
-            const p = vertexPoint(v);
-            const rel: Vec3 = [
-              p[0] - plane.origin[0],
-              p[1] - plane.origin[1],
-              p[2] - plane.origin[2],
-            ];
-            wallDepth = Math.max(wallDepth, -dot(rel, plane.normal));
-          }
-          if (wallDepth < distance - LINEAR_TOL) return false;
-          covered.add(chosen.findIndex((s) => s.IsSame(e)));
+          return false;
+        let wallDepth = 0;
+        for (const v of verticesOf(wall).map(own)) {
+          const p = vertexPoint(v);
+          const rel: Vec3 = [
+            p[0] - plane.origin[0],
+            p[1] - plane.origin[1],
+            p[2] - plane.origin[2],
+          ];
+          wallDepth = Math.max(wallDepth, -dot(rel, plane.normal));
         }
-        caps.push({ face, edges: fe, plane });
+        if (wallDepth < distance - LINEAR_TOL) return false;
+        covered.add(chosen.findIndex((s) => s.IsSame(e)));
       }
-      if (caps.length === 0 || covered.size !== chosen.length) return false;
+      caps.push({ face, edges: fe, plane });
+    }
+    if (caps.length === 0 || covered.size !== chosen.length) return false;
 
-      const inward = (shape: Shape, n: Vec3, t: number): Shape => {
-        const tr = own(new k.gp_Trsf_1());
-        tr.SetTranslation_1(own(vec(-n[0] * t, -n[1] * t, -n[2] * t)));
-        return own(own(transformOp(shape, tr)).Shape());
-      };
-      const bb = bboxOf(body.shape);
-      const diag = Math.hypot(
-        bb.max[0] - bb.min[0],
-        bb.max[1] - bb.min[1],
-        bb.max[2] - bb.min[2],
+    const inward = (shape: Shape, n: Vec3, t: number): Shape => {
+      const tr = own(new k.gp_Trsf_1());
+      tr.SetTranslation_1(own(vec(-n[0] * t, -n[1] * t, -n[2] * t)));
+      return own(own(transformOp(shape, tr)).Shape());
+    };
+    const bb = bboxOf(body.shape);
+    const diag = Math.hypot(
+      bb.max[0] - bb.min[0],
+      bb.max[1] - bb.min[1],
+      bb.max[2] - bb.min[2],
+    );
+
+    for (const cap of caps) {
+      const n = cap.plane.normal;
+      const outlineFaceMk = own(
+        new k.BRepBuilderAPI_MakeFace_15(
+          own(k.BRepTools.OuterWire(cap.face)),
+          true,
+        ),
       );
-
-      for (const cap of caps) {
-        const n = cap.plane.normal;
-        const outlineFaceMk = own(
-          new k.BRepBuilderAPI_MakeFace_15(
-            own(k.BRepTools.OuterWire(cap.face)),
-            true,
-          ),
-        );
-        if (!outlineFaceMk.IsDone()) return false;
-        const outlineFace = own(outlineFaceMk.Face());
-        const offsetOutline = (d: number): Shape | undefined => {
-          const mk = own(
-            new k.BRepOffsetAPI_MakeOffset_2(
-              outlineFace,
-              k.GeomAbs_JoinType.GeomAbs_Intersection,
-              false,
-            ),
-          );
-          mk.Perform(d, 0);
-          return mk.IsDone() ? wiresOf(own(mk.Shape())).map(own)[0] : undefined;
-        };
-        const inner = offsetOutline(-distance);
-        if (!inner) return false;
-        const innerPts = verticesOf(inner).map(own).map(vertexPoint);
-        const nearestInner = (q: Vec3): Vec3 | undefined => {
-          let best = innerPts[0];
-          let bestDist = Infinity;
-          for (const c of innerPts) {
-            const dist = Math.hypot(c[0] - q[0], c[1] - q[1], c[2] - q[2]);
-            if (dist < bestDist) {
-              bestDist = dist;
-              best = c;
-            }
-          }
-          return best;
-        };
-        const deeper = (p: Vec3): Vec3 => [
-          p[0] - n[0] * distance,
-          p[1] - n[1] * distance,
-          p[2] - n[2] * distance,
-        ];
-        const sewing = own(
-          new k.BRepBuilderAPI_Sewing(LINEAR_TOL, true, true, true, false),
-        );
-        const addFace = (wire: Shape): boolean => {
-          const mk = own(
-            new k.BRepBuilderAPI_MakeFace_15(own(k.TopoDS.Wire_1(wire)), true),
-          );
-          const ok = mk.IsDone();
-          if (ok) sewing.Add(own(mk.Face()));
-          return ok;
-        };
-        for (const e of cap.edges) {
-          const ends = verticesOf(e).map(own).map(vertexPoint);
-          if (ends.length !== 2) return false;
-          const q1 = nearestInner(ends[0]!);
-          const q2 = nearestInner(ends[1]!);
-          if (!q1 || !q2 || q1 === q2) return false;
-          const poly = own(new k.BRepBuilderAPI_MakePolygon_1());
-          for (const p of [deeper(ends[0]!), deeper(ends[1]!), q2, q1]) {
-            poly.Add_1(own(pnt(p[0], p[1], p[2])));
-          }
-          poly.Close();
-          if (!poly.IsDone() || !addFace(own(poly.Wire()))) return false;
-        }
-        if (!addFace(inner)) return false;
-        if (!addFace(inward(own(k.BRepTools.OuterWire(cap.face)), n, distance)))
-          return false;
-        sewing.Perform(progress());
-        const shell = own(sewing.SewedShape());
-        if (shell.ShapeType() !== k.TopAbs_ShapeEnum.TopAbs_SHELL) return false;
-        const solidMk = own(
-          new k.BRepBuilderAPI_MakeSolid_3(own(k.TopoDS.Shell_1(shell))),
-        );
-        const band: Shape = own(solidMk.Solid());
-        k.BRepLib.OrientClosedSolid(band);
-        const bigWire = offsetOutline(diag);
-        if (!bigWire) return false;
-        const bigFace = own(
-          new k.BRepBuilderAPI_MakeFace_15(
-            own(k.TopoDS.Wire_1(inward(bigWire, n, distance))),
-            true,
-          ),
-        );
-        const far = diag + 1;
-        const prism = own(
-          new k.BRepPrimAPI_MakePrism_1(
-            own(bigFace.Face()),
-            own(vec(-n[0] * far, -n[1] * far, -n[2] * far)),
+      if (!outlineFaceMk.IsDone()) return false;
+      const outlineFace = own(outlineFaceMk.Face());
+      const offsetOutline = (d: number): Shape | undefined => {
+        const mk = own(
+          new k.BRepOffsetAPI_MakeOffset_2(
+            outlineFace,
+            k.GeomAbs_JoinType.GeomAbs_Intersection,
             false,
-            true,
           ),
         );
-        prism.Build(progress());
-        const fuse = own(fuseOperation(band, own(prism.Shape())));
-        fuse.Build(progress());
-        if (!fuse.IsDone()) return false;
-        const envelope = own(fuse.Shape());
-
-        const envNames = new ShapeMap<string>();
-        const capName = current.names.get(cap.face);
-        const mids = cap.edges.map((e) => ({ e, c: edgeCentroid(e) }));
-        for (const face of facesOf(envelope).map(own)) {
-          const c = faceCentroid(face);
-          const depth = -dot(
-            [
-              c[0] - cap.plane.origin[0],
-              c[1] - cap.plane.origin[1],
-              c[2] - cap.plane.origin[2],
-            ],
-            n,
-          );
-          if (Math.abs(depth) < LINEAR_TOL) {
-            if (capName) envNames.set(face, capName);
-            continue;
+        mk.Perform(d, 0);
+        return mk.IsDone() ? wiresOf(own(mk.Shape())).map(own)[0] : undefined;
+      };
+      const inner = offsetOutline(-distance);
+      if (!inner) return false;
+      const innerPts = verticesOf(inner).map(own).map(vertexPoint);
+      const nearestInner = (q: Vec3): Vec3 | undefined => {
+        let best = innerPts[0];
+        let bestDist = Infinity;
+        for (const c of innerPts) {
+          const dist = Math.hypot(c[0] - q[0], c[1] - q[1], c[2] - q[2]);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = c;
           }
-          if (depth < LINEAR_TOL || depth > distance - LINEAR_TOL) continue;
-          let best = -1;
-          let bestDist = Infinity;
-          mids.forEach((m, i) => {
-            const dist = Math.hypot(
-              c[0] - m.c[0],
-              c[1] - m.c[1],
-              c[2] - m.c[2],
-            );
-            if (dist < bestDist) {
-              bestDist = dist;
-              best = i;
-            }
-          });
-          if (best < 0) continue;
-          const idx = selected.findIndex((s) => s.edge.IsSame(mids[best]!.e));
-          envNames.set(face, `f:${featureId}:fe:${idx + 1}`);
         }
-
-        const common = own(commonOperation(current.shape, envelope));
-        common.Build(progress());
-        if (!common.IsDone()) return false;
-        const result = common.Shape();
-        if (solids(result).map(own).length === 0) {
-          result.delete();
-          return false;
-        }
-        const names = propagateNames(
-          common,
-          [current, { shape: envelope, names: envNames }],
-          result,
-          featureId,
+        return best;
+      };
+      const deeper = (p: Vec3): Vec3 => [
+        p[0] - n[0] * distance,
+        p[1] - n[1] * distance,
+        p[2] - n[2] * distance,
+      ];
+      const sewing = own(
+        new k.BRepBuilderAPI_Sewing(LINEAR_TOL, true, true, true, false),
+      );
+      const addFace = (wire: Shape): boolean => {
+        const mk = own(
+          new k.BRepBuilderAPI_MakeFace_15(own(k.TopoDS.Wire_1(wire)), true),
         );
-        if (current !== body) own(current.shape);
-        current = { bodyId: body.bodyId, shape: result, names };
+        const ok = mk.IsDone();
+        if (ok) sewing.Add(own(mk.Face()));
+        return ok;
+      };
+      for (const e of cap.edges) {
+        const ends = verticesOf(e).map(own).map(vertexPoint);
+        if (ends.length !== 2) return false;
+        const q1 = nearestInner(ends[0]!);
+        const q2 = nearestInner(ends[1]!);
+        if (!q1 || !q2 || q1 === q2) return false;
+        const poly = own(new k.BRepBuilderAPI_MakePolygon_1());
+        for (const p of [deeper(ends[0]!), deeper(ends[1]!), q2, q1]) {
+          poly.Add_1(own(pnt(p[0], p[1], p[2])));
+        }
+        poly.Close();
+        if (!poly.IsDone() || !addFace(own(poly.Wire()))) return false;
       }
-      return true;
-    });
-    return built ? { shape: current.shape, names: current.names } : null;
-  } finally {
-    if (!built && current !== body) current.shape.delete();
-  }
+      if (!addFace(inner)) return false;
+      if (!addFace(inward(own(k.BRepTools.OuterWire(cap.face)), n, distance)))
+        return false;
+      sewing.Perform(progress());
+      const shell = own(sewing.SewedShape());
+      if (shell.ShapeType() !== k.TopAbs_ShapeEnum.TopAbs_SHELL) return false;
+      const solidMk = own(
+        new k.BRepBuilderAPI_MakeSolid_3(own(k.TopoDS.Shell_1(shell))),
+      );
+      const band: Shape = own(solidMk.Solid());
+      k.BRepLib.OrientClosedSolid(band);
+      const bigWire = offsetOutline(diag);
+      if (!bigWire) return false;
+      const bigFace = own(
+        new k.BRepBuilderAPI_MakeFace_15(
+          own(k.TopoDS.Wire_1(inward(bigWire, n, distance))),
+          true,
+        ),
+      );
+      const far = diag + 1;
+      const prism = own(
+        new k.BRepPrimAPI_MakePrism_1(
+          own(bigFace.Face()),
+          own(vec(-n[0] * far, -n[1] * far, -n[2] * far)),
+          false,
+          true,
+        ),
+      );
+      prism.Build(progress());
+      const fuse = own(fuseOperation(band, own(prism.Shape())));
+      fuse.Build(progress());
+      if (!fuse.IsDone()) return false;
+      const envelope = own(fuse.Shape());
+
+      const envNames = new ShapeMap<string>();
+      const capName = current.names.get(cap.face);
+      const mids = cap.edges.map((e) => ({ e, c: edgeCentroid(e) }));
+      for (const face of facesOf(envelope).map(own)) {
+        const c = faceCentroid(face);
+        const depth = -dot(
+          [
+            c[0] - cap.plane.origin[0],
+            c[1] - cap.plane.origin[1],
+            c[2] - cap.plane.origin[2],
+          ],
+          n,
+        );
+        if (Math.abs(depth) < LINEAR_TOL) {
+          if (capName) envNames.set(face, capName);
+          continue;
+        }
+        if (depth < LINEAR_TOL || depth > distance - LINEAR_TOL) continue;
+        let best = -1;
+        let bestDist = Infinity;
+        mids.forEach((m, i) => {
+          const dist = Math.hypot(c[0] - m.c[0], c[1] - m.c[1], c[2] - m.c[2]);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = i;
+          }
+        });
+        if (best < 0) continue;
+        const idx = selected.findIndex((s) => s.edge.IsSame(mids[best]!.e));
+        envNames.set(face, `f:${featureId}:fe:${idx + 1}`);
+      }
+
+      const common = own(commonOperation(current.shape, envelope));
+      common.Build(progress());
+      if (!common.IsDone()) return false;
+      const result = own(common.Shape());
+      if (solids(result).map(own).length === 0) {
+        return false;
+      }
+      const names = propagateNames(
+        common,
+        [current, { shape: envelope, names: envNames }],
+        result,
+        featureId,
+      );
+      if (current !== body) own(current.shape);
+      current = { bodyId: body.bodyId, shape: result, names };
+    }
+    if (current !== body) own.keep(current.shape);
+    return true;
+  });
+  if (built) acquire(current.shape);
+  return built ? { shape: current.shape, names: current.names } : null;
 }
 
 export function evalChamfer(state: EvalState, f: ChamferFeature): void {
@@ -673,9 +652,9 @@ function chamferBody(
   const k = getKernel();
   kernelCall("chamfer", () => {
     const byName = computeEdgeNames(body).byName;
-    const op = new k.BRepFilletAPI_MakeChamfer(body.shape);
+    const op = acquire(new k.BRepFilletAPI_MakeChamfer(body.shape));
     let result: Shape | undefined;
-    try {
+    {
       const sourceEdges = collectEdges(body, byName, refs, f.tangentChain);
       for (const { edge } of sourceEdges) {
         if (!op.Contour(edge)) op.Add_2(f.distance, edge);
@@ -708,7 +687,7 @@ function chamferBody(
         registerBodySolids(state, bodyId, result, viaEnvelope.names);
         return;
       }
-      result = op.Shape();
+      result = acquire(op.Shape());
       rejectBadBlend(
         op,
         sourceEdges,
@@ -720,10 +699,6 @@ function chamferBody(
       );
       const names = blendNames(op, body, sourceEdges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
-    } finally {
-      result?.delete();
-      op.delete();
-      release(byName.values());
     }
   });
 }
@@ -739,23 +714,25 @@ interface Patch {
 }
 
 function shellCount(shape: Shape): number {
-  const shells = [...explore(shape, "shell")];
-  release(shells);
-  return shells.length;
+  return scoped(() => {
+    const shells = [...explore(shape, "shell")];
+
+    return shells.length;
+  });
 }
 
 function generatedBy(op: any, sourceEdges: { edge: Shape }[]): Set<number> {
-  const made = new Set<number>();
-  for (const { edge } of sourceEdges) {
-    const ends = verticesOf(edge);
-    for (const from of [edge, ...ends]) {
-      const generated = listToArray(op.Generated(from));
-      for (const shape of generated) made.add(shapeHash(shape));
-      release(generated);
+  return scoped(() => {
+    const made = new Set<number>();
+    for (const { edge } of sourceEdges) {
+      const ends = verticesOf(edge);
+      for (const from of [edge, ...ends]) {
+        const generated = listToArray(op.Generated(from));
+        for (const shape of generated) made.add(shapeHash(shape));
+      }
     }
-    release(ends);
-  }
-  return made;
+    return made;
+  });
 }
 
 function toleranceOf(face: Shape): number {
@@ -772,25 +749,29 @@ function looseBlend(
   sourceEdges: { edge: Shape }[],
   result: Shape,
 ): boolean {
-  const made = generatedBy(op, sourceEdges);
-  const all = facesOf(result);
-  const loose = all.some(
-    (face) => made.has(shapeHash(face)) && toleranceOf(face) > LOOSE,
-  );
-  release(all);
-  return loose;
+  return scoped(() => {
+    const made = generatedBy(op, sourceEdges);
+    const all = facesOf(result);
+    const loose = all.some(
+      (face) => made.has(shapeHash(face)) && toleranceOf(face) > LOOSE,
+    );
+
+    return loose;
+  });
 }
 
 function patch(face: Shape, box: any): Patch {
-  const k = getKernel();
-  const tolerance = toleranceOf(face);
-  if (tolerance > CONTACT) k.BRepBndLib.AddOptimal(face, box, false, false);
-  else k.BRepBndLib.Add(face, box, true);
-  box.Enlarge(CONTACT);
-  const around = edgesOf(face);
-  const hashes = new Set(around.map(shapeHash));
-  release(around);
-  return { face, edges: hashes, tolerance, box };
+  return scoped(() => {
+    const k = getKernel();
+    const tolerance = toleranceOf(face);
+    if (tolerance > CONTACT) k.BRepBndLib.AddOptimal(face, box, false, false);
+    else k.BRepBndLib.Add(face, box, true);
+    box.Enlarge(CONTACT);
+    const around = edgesOf(face);
+    const hashes = new Set(around.map(shapeHash));
+
+    return { face, edges: hashes, tolerance, box };
+  });
 }
 
 function sharesEdge(a: Patch, b: Patch): boolean {

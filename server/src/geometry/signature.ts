@@ -1,10 +1,10 @@
 import type { EdgeRef, FaceRef, RefSignature } from "@rockett/shared";
 import {
+  acquire,
   faceCentroid,
   faces,
   getKernel,
   pnt,
-  release,
   scoped,
   vec,
   type Shape,
@@ -77,28 +77,28 @@ const finite = (sig: RefSignature) =>
   [...sig.point, ...sig.direction].every(Number.isFinite);
 
 function faceSig(body: NamedBody, name: string): RefSignature | undefined {
-  const face = findFace(body, name);
-  if (!face) return undefined;
-  try {
+  return scoped(() => {
+    const face = findFace(body, name);
+    if (!face) return undefined;
+
     return faceSignature(face);
-  } finally {
-    face.delete();
-  }
+  });
 }
 
 export function signRefs(
   bodies: ReadonlyMap<string, NamedBody>,
   refs: Array<FaceRef | EdgeRef>,
 ): void {
-  const edges = new Map<string, Map<string, Shape>>();
-  const edgesOf = (body: NamedBody) => {
-    const known = edges.get(body.bodyId);
-    if (known) return known;
-    const named = computeEdgeNames(body).byName;
-    edges.set(body.bodyId, named);
-    return named;
-  };
-  try {
+  return scoped(() => {
+    const edges = new Map<string, Map<string, Shape>>();
+    const edgesOf = (body: NamedBody) => {
+      const known = edges.get(body.bodyId);
+      if (known) return known;
+      const named = computeEdgeNames(body).byName;
+      edges.set(body.bodyId, named);
+      return named;
+    };
+
     for (const ref of refs) {
       const body = bodies.get(ref.bodyId);
       if (!body) continue;
@@ -109,15 +109,15 @@ export function signRefs(
           : edge && edgeSignature(edge);
       if (sig && finite(sig)) ref.sig = sig;
     }
-  } finally {
-    for (const named of edges.values()) release(named.values());
-  }
+  });
 }
 
 export function geometryNames(shape: Shape, featureId: string): NameMap {
-  const provisional = new ShapeMap<string>();
-  const shapeFaces = faces(shape);
-  try {
+  return scoped(() => {
+    const provisional = new ShapeMap<string>();
+    acquire({ delete: () => provisional.release() });
+    const shapeFaces = faces(shape);
+
     for (const face of shapeFaces) {
       const sig = faceSignature(face);
       const key = sha256(
@@ -125,8 +125,7 @@ export function geometryNames(shape: Shape, featureId: string): NameMap {
       ).slice(0, 16);
       provisional.set(face, `f:${featureId}:g:${sig.type}:${key}`);
     }
-  } finally {
-    release(shapeFaces);
-  }
-  return finalizeNames(shape, provisional, featureId);
+
+    return finalizeNames(shape, provisional, featureId);
+  });
 }

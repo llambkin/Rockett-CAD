@@ -18,14 +18,14 @@ import {
   type Vec3,
 } from "@rockett/shared";
 import {
+  acquire,
   bboxOf,
   getKernel,
   lengthOf,
-  release,
   scoped,
   type Shape,
 } from "./kernel.js";
-import { meshShape } from "./mesh.js";
+import { meshShape, type FaceMesh } from "./mesh.js";
 import {
   computeEdgeNames,
   computeVertexNames,
@@ -44,68 +44,75 @@ export interface TessellationOptions {
   angular?: number;
 }
 
+function appendFaceMesh(
+  body: NamedBody,
+  m: FaceMesh,
+  positions: number[],
+  normals: number[],
+  indices: number[],
+  faceInfos: FaceInfo[],
+): void {
+  const start = indices.length;
+  const vertexOffset = positions.length / 3;
+  for (let i = 0; i < m.positions.length; i++) {
+    positions.push(m.positions[i]!);
+    normals.push(m.normals[i]!);
+  }
+
+  const P = m.positions;
+  let area = 0;
+  for (let i = 0; i < m.indices.length; i += 3) {
+    const a = m.indices[i]! * 3,
+      b = m.indices[i + 1]! * 3,
+      c = m.indices[i + 2]! * 3;
+    indices.push(
+      vertexOffset + m.indices[i]!,
+      vertexOffset + m.indices[i + 1]!,
+      vertexOffset + m.indices[i + 2]!,
+    );
+    const ux = P[b]! - P[a]!,
+      uy = P[b + 1]! - P[a + 1]!,
+      uz = P[b + 2]! - P[a + 2]!;
+    const vx = P[c]! - P[a]!,
+      vy = P[c + 1]! - P[a + 1]!,
+      vz = P[c + 2]! - P[a + 2]!;
+    area +=
+      Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+  }
+
+  faceInfos.push({
+    name: body.names.get(m.face) ?? "?",
+    start,
+    count: indices.length - start,
+    surface: surfaceInfo(m.face),
+    area,
+  });
+}
+
 export function tessellateBody(
   body: NamedBody,
   meta: { name: string },
   opts: TessellationOptions = {},
 ): BodyPayload {
-  const k = getKernel();
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
-  const faceInfos: FaceInfo[] = [];
-  const bbox = bboxOf(body.shape);
+  return scoped(() => {
+    const k = getKernel();
+    const positions: number[] = [];
+    const normals: number[] = [];
+    const indices: number[] = [];
+    const faceInfos: FaceInfo[] = [];
+    const bbox = bboxOf(body.shape);
 
-  const meshes = meshShape(body.shape, {
-    linear: opts.linear ?? viewportDeflection(bbox),
-    angular: opts.angular ?? 0.35,
-  });
-  try {
-    for (const m of meshes) {
-      const start = indices.length;
-      const vertexOffset = positions.length / 3;
-      for (let i = 0; i < m.positions.length; i++) {
-        positions.push(m.positions[i]!);
-        normals.push(m.normals[i]!);
-      }
+    const meshes = meshShape(body.shape, {
+      linear: opts.linear ?? viewportDeflection(bbox),
+      angular: opts.angular ?? 0.35,
+    });
 
-      const P = m.positions;
-      let area = 0;
-      for (let i = 0; i < m.indices.length; i += 3) {
-        const a = m.indices[i]! * 3,
-          b = m.indices[i + 1]! * 3,
-          c = m.indices[i + 2]! * 3;
-        indices.push(
-          vertexOffset + m.indices[i]!,
-          vertexOffset + m.indices[i + 1]!,
-          vertexOffset + m.indices[i + 2]!,
-        );
-        const ux = P[b]! - P[a]!,
-          uy = P[b + 1]! - P[a + 1]!,
-          uz = P[b + 2]! - P[a + 2]!;
-        const vx = P[c]! - P[a]!,
-          vy = P[c + 1]! - P[a + 1]!,
-          vz = P[c + 2]! - P[a + 2]!;
-        area +=
-          Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) /
-          2;
-      }
+    for (const mesh of meshes)
+      appendFaceMesh(body, mesh, positions, normals, indices, faceInfos);
 
-      faceInfos.push({
-        name: body.names.get(m.face) ?? "?",
-        start,
-        count: indices.length - start,
-        surface: surfaceInfo(m.face),
-        area,
-      });
-    }
-  } finally {
-    release(meshes.map((m) => m.face));
-  }
+    const edgeNames = computeEdgeNames(body).byName;
+    const edgeInfos: EdgeInfo[] = [];
 
-  const edgeNames = computeEdgeNames(body).byName;
-  const edgeInfos: EdgeInfo[] = [];
-  try {
     for (const [name, edge] of edgeNames) {
       const polyline = Array.from<number>(k.sampleEdge(edge));
       if (polyline.length < 6) continue;
@@ -116,37 +123,31 @@ export function tessellateBody(
         curve: curveInfo(edge),
       });
     }
-  } finally {
-    release(edgeNames.values());
-  }
 
-  const vertexNames = computeVertexNames(body).byName;
-  const vertexInfos: VertexInfo[] = [];
-  try {
+    const vertexNames = computeVertexNames(body).byName;
+    const vertexInfos: VertexInfo[] = [];
+
     for (const [name, vertex] of vertexNames) {
-      const p = k.BRep_Tool.Pnt(vertex);
+      const p = acquire(k.BRep_Tool.Pnt(vertex));
       vertexInfos.push({ name, position: [p.X(), p.Y(), p.Z()] });
-      p.delete();
     }
-  } finally {
-    release(vertexNames.values());
-  }
 
-  const mesh = {
-    positions,
-    normals,
-    indices,
-    faces: faceInfos,
-    edges: edgeInfos,
-    vertices: vertexInfos,
-    bbox,
-  };
-  return {
-    bodyId: body.bodyId,
-    name: meta.name,
-    meshKey: createHash("sha256").update(JSON.stringify(mesh)).digest("hex"),
-    ...mesh,
-  };
+    const mesh = {
+      positions,
+      normals,
+      indices,
+      faces: faceInfos,
+      edges: edgeInfos,
+      vertices: vertexInfos,
+      bbox,
+    };
+    return {
+      bodyId: body.bodyId,
+      name: meta.name,
+      meshKey: createHash("sha256").update(JSON.stringify(mesh)).digest("hex"),
+      ...mesh,
+    };
+  });
 }
 
 const sourceVertices = new WeakMap<NamedBody, VertexFaces[]>();
@@ -154,11 +155,12 @@ const sourceVertices = new WeakMap<NamedBody, VertexFaces[]>();
 function vertexFacesOf(body: NamedBody): VertexFaces[] {
   const known = sourceVertices.get(body);
   if (known) return known;
-  const entries = vertexFaces(body);
-  release(entries.map((e) => e.vertex));
-  const found = entries.map(({ faces, position }) => ({ faces, position }));
-  sourceVertices.set(body, found);
-  return found;
+  return scoped(() => {
+    const entries = vertexFaces(body);
+    const found = entries.map(({ faces, position }) => ({ faces, position }));
+    sourceVertices.set(body, found);
+    return found;
+  });
 }
 
 export function movePayload(

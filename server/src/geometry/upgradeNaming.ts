@@ -16,7 +16,7 @@ import {
 } from "@rockett/shared";
 import { dropEngine, engineFor } from "./engine.js";
 import type { Sources } from "./importers.js";
-import { faces, getKernel, release, scoped, type Shape } from "./kernel.js";
+import { faces, getKernel, scoped, type Shape } from "./kernel.js";
 import { computeEdgeNames, instanceName, type NamedBody } from "./naming.js";
 import { pinRefs } from "./pinRefs.js";
 import { signatureCandidates } from "./resolve.js";
@@ -84,17 +84,15 @@ function volumeAndCentre(shape: Shape): { volume: number; centre: Vec3 } {
 }
 
 function namesOf(body: NamedBody, kind: Named): string[] {
-  if (kind === "edge") {
-    const { byName } = computeEdgeNames(body);
-    release(byName.values());
-    return [...byName.keys()];
-  }
-  const shapes = faces(body.shape);
-  try {
+  return scoped(() => {
+    if (kind === "edge") {
+      const { byName } = computeEdgeNames(body);
+      return [...byName.keys()];
+    }
+    const shapes = faces(body.shape);
+
     return shapes.flatMap((face) => body.names.get(face) ?? []);
-  } finally {
-    release(shapes);
-  }
+  });
 }
 
 class Cache {

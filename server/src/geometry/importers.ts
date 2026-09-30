@@ -10,6 +10,8 @@ import {
 } from "@rockett/shared";
 import {
   explore,
+  acquire,
+  scoped,
   getKernel,
   solids,
   progress,
@@ -32,15 +34,15 @@ interface Reader {
 
 function translate(reader: any, file: string): Shape | undefined {
   const k = getKernel();
-  try {
+  const result = scoped((own) => {
+    own(reader);
     if (reader.ReadFile(file) !== k.IFSelect_ReturnStatus.IFSelect_RetDone)
       return undefined;
     reader.SetSystemLengthUnit?.(1);
     reader.TransferRoots(progress());
-    return reader.OneShape();
-  } finally {
-    reader.delete();
-  }
+    return own.keep(own(reader.OneShape()));
+  });
+  return result && acquire(result);
 }
 
 const READERS: Record<Format, Reader> = {
@@ -58,16 +60,15 @@ const READERS: Record<Format, Reader> = {
     label: "BREP",
     extension: "brep",
     read(file) {
-      const k = getKernel(),
-        shape = new k.TopoDS_Shape(),
-        builder = new k.BRep_Builder();
-      try {
-        if (k.BRepTools.Read_2(shape, file, builder, progress())) return shape;
-        shape.delete();
+      const k = getKernel();
+      const result = scoped((own) => {
+        const shape = own(new k.TopoDS_Shape());
+        const builder = own(new k.BRep_Builder());
+        if (k.BRepTools.Read_2(shape, file, builder, progress()))
+          return own.keep(shape);
         return undefined;
-      } finally {
-        builder.delete();
-      }
+      });
+      return result && acquire(result);
     },
   },
 };
@@ -97,10 +98,15 @@ export function readImport(
     throw new Error(
       `The ${reader.label} source of ${feature.filename} is missing or damaged.`,
     );
-  const shape = withFile(data, reader.extension, reader.read);
-  if (shape && !shape.IsNull() && solids(shape).length > 0) return shape;
-  shape?.delete();
-  throw new Error(`No solid found in the ${reader.label} file.`);
+  return acquire(
+    scoped((own) => {
+      const shape = withFile(data, reader.extension, reader.read);
+      if (shape) own(shape);
+      if (shape && !shape.IsNull() && solids(shape).length > 0)
+        return own.keep(shape);
+      throw new Error(`No solid found in the ${reader.label} file.`);
+    }),
+  );
 }
 
 export const MAX_MESH_TRIANGLES = 200_000;
@@ -114,12 +120,11 @@ export interface MeshPart {
 }
 
 function triangulation(handle: any): MeshPart {
-  try {
+  return scoped((own) => {
+    own(handle);
     const { positions, indices } = getKernel().meshTriangulation(handle);
     return { nodes: positions, triangles: indices };
-  } finally {
-    handle.delete();
-  }
+  });
 }
 
 function markBinaryStl(bytes: Buffer) {
@@ -153,53 +158,83 @@ const MESH_READERS: Record<
   "3mf": { label: "3MF", read: read3mf },
 };
 
+function attachTriangle(
+  builder: any,
+  sewing: any,
+  sides: (Shape | null)[],
+  corners: number[][],
+  normalVector: number[],
+): void {
+  const k = getKernel();
+  scoped((local) => {
+    const wire = local(new k.BRepBuilderAPI_MakeWire_4(...sides));
+    const origin = local(new k.gp_Pnt_3(...corners[0]!));
+    const normal = local(new k.gp_Dir_5(...normalVector));
+    const plane = local(new k.gp_Pln_3(origin, normal));
+    const make = local(new k.BRepBuilderAPI_MakeFace_3(plane));
+    const face = local(make.Face());
+    builder.UpdateFace_3(face, LINEAR_TOL);
+    setExactTriangle(builder, face, corners);
+    builder.Add(face, local(wire.Wire()));
+    sewing.Add(face);
+  });
+}
+
 function sewTriangles({ nodes, triangles, transform: m }: MeshPart): {
   shape: Shape;
   openEdges: number;
 } {
-  const k = getKernel(),
-    builder = new k.BRep_Builder(),
-    sewing = new k.BRepBuilderAPI_Sewing(LINEAR_TOL, true, false, false, false),
-    owned: any[] = [builder, sewing],
-    vertices = new Map<number, Shape>(),
-    edges = new Map<number, Shape | null>(),
-    count = nodes.length / 3;
-  const point = (i: number): number[] => {
-    const [x, y, z] = [nodes[3 * i]!, nodes[3 * i + 1]!, nodes[3 * i + 2]!];
-    if (!m) return [x, y, z];
-    return [0, 1, 2].map(
-      (axis) =>
-        x * m[axis]! + y * m[3 + axis]! + z * m[6 + axis]! + m[9 + axis]!,
+  const k = getKernel();
+  const result = scoped((own) => {
+    const builder = own(new k.BRep_Builder());
+    const sewing = own(
+      new k.BRepBuilderAPI_Sewing(LINEAR_TOL, true, false, false, false),
     );
-  };
-  const vertex = (i: number): Shape => {
-    if (!vertices.has(i)) {
-      const p = point(i),
-        at = new k.gp_Pnt_3(p[0], p[1], p[2]),
-        make = new k.BRepBuilderAPI_MakeVertex(at);
-      vertices.set(i, make.Vertex());
-      make.delete();
-      at.delete();
-    }
-    return vertices.get(i)!;
-  };
-  const edge = (a: number, b: number): Shape | null => {
-    const key = Math.min(a, b) * count + Math.max(a, b);
-    if (!edges.has(key)) {
-      const make = new k.BRepBuilderAPI_MakeEdge_2(
-        vertex(Math.min(a, b)),
-        vertex(Math.max(a, b)),
+    const vertices = new Map<number, Shape>();
+    const edges = new Map<number, Shape | null>();
+    const count = nodes.length / 3;
+    const point = (i: number): number[] => {
+      const [x, y, z] = [nodes[3 * i]!, nodes[3 * i + 1]!, nodes[3 * i + 2]!];
+      if (!m) return [x, y, z];
+      return [0, 1, 2].map(
+        (axis) =>
+          x * m[axis]! + y * m[3 + axis]! + z * m[6 + axis]! + m[9 + axis]!,
       );
-      edges.set(key, make.IsDone() ? make.Edge() : null);
-      make.delete();
-    }
-    const found = edges.get(key)!;
-    if (!found || a < b) return found;
-    const reversed = k.TopoDS.Edge_1(found.Reversed());
-    owned.push(reversed);
-    return reversed;
-  };
-  try {
+    };
+    const vertex = (i: number): Shape => {
+      if (!vertices.has(i)) {
+        const made = scoped((local) => {
+          const p = point(i);
+          const at = local(new k.gp_Pnt_3(p[0], p[1], p[2]));
+          const make = local(new k.BRepBuilderAPI_MakeVertex(at));
+          return local.keep(local(make.Vertex()));
+        });
+        vertices.set(i, own(made));
+      }
+      return vertices.get(i)!;
+    };
+    const edge = (a: number, b: number): Shape | null => {
+      const key = Math.min(a, b) * count + Math.max(a, b);
+      if (!edges.has(key)) {
+        const made = scoped((local) => {
+          const make = local(
+            new k.BRepBuilderAPI_MakeEdge_2(
+              vertex(Math.min(a, b)),
+              vertex(Math.max(a, b)),
+            ),
+          );
+          return make.IsDone() ? local.keep(local(make.Edge())) : null;
+        });
+        edges.set(key, made && own(made));
+      }
+      const found = edges.get(key)!;
+      if (!found || a < b) return found;
+      return own(
+        scoped((local) =>
+          local.keep(local(k.TopoDS.Edge_1(local(found.Reversed())))),
+        ),
+      );
+    };
     for (let i = 0; i < triangles.length; i += 3) {
       const [a, b, c] = [triangles[i]!, triangles[i + 1]!, triangles[i + 2]!],
         [p, q, r] = [point(a), point(b), point(c)],
@@ -213,23 +248,16 @@ function sewTriangles({ nodes, triangles, transform: m }: MeshPart): {
         sides = [edge(a, b), edge(b, c), edge(c, a)];
       if (sides.includes(null) || Math.hypot(n[0]!, n[1]!, n[2]!) === 0)
         continue;
-      const wire = new k.BRepBuilderAPI_MakeWire_4(...sides),
-        origin = new k.gp_Pnt_3(p[0], p[1], p[2]),
-        normal = new k.gp_Dir_5(n[0], n[1], n[2]),
-        plane = new k.Handle_Geom_Surface_2(new k.Geom_Plane_3(origin, normal)),
-        face = new k.TopoDS_Face();
-      builder.MakeFace_2(face, plane, LINEAR_TOL);
-      setExactTriangle(builder, face, [p, q, r]);
-      builder.Add(face, wire.Wire());
-      sewing.Add(face);
-      owned.push(wire, origin, normal, plane, face);
+      attachTriangle(builder, sewing, sides, [p, q, r], n);
     }
     sewing.Perform(progress());
-    return { shape: sewing.SewedShape(), openEdges: sewing.NbFreeEdges() };
-  } finally {
-    for (const shape of [...owned, ...vertices.values(), ...edges.values()])
-      shape?.delete();
-  }
+    return {
+      shape: own.keep(own(sewing.SewedShape())),
+      openEdges: sewing.NbFreeEdges(),
+    };
+  });
+  acquire(result.shape);
+  return result;
 }
 
 export function readMesh(feature: ImportMeshFeature): {
@@ -247,36 +275,35 @@ export function readMesh(feature: ImportMeshFeature): {
     throw new Error(
       `The ${label} mesh has ${triangles.toLocaleString("en-US")} triangles; the limit is ${MAX_MESH_TRIANGLES.toLocaleString("en-US")}.`,
     );
-  const builder = new k.BRep_Builder(),
-    sewn = new k.TopoDS_Compound();
-  let openEdges = 0;
-  try {
+  const result = scoped((own) => {
+    const builder = own(new k.BRep_Builder());
+    const sewn = own(new k.TopoDS_Compound());
+    let openEdges = 0;
     builder.MakeCompound(sewn);
     for (const part of parts) {
-      const result = sewTriangles(part);
-      builder.Add(sewn, result.shape);
-      result.shape.delete();
-      openEdges += result.openEdges;
+      const partShape = sewTriangles(part);
+      builder.Add(sewn, partShape.shape);
+      openEdges += partShape.openEdges;
     }
     if (openEdges > 0)
       return {
-        shape: sewn,
+        shape: own.keep(sewn),
         warning: `The ${label} mesh is open at ${openEdges} edges, so it imported as a shell, not a solid.`,
       };
-    const compound = new k.TopoDS_Compound();
+    const compound = own(new k.TopoDS_Compound());
     builder.MakeCompound(compound);
     for (const shell of explore(sewn, "shell")) {
-      const make = new k.BRepBuilderAPI_MakeSolid_3(k.TopoDS.Shell_1(shell)),
-        solid = make.Solid();
+      const make = own(
+        new k.BRepBuilderAPI_MakeSolid_3(own(k.TopoDS.Shell_1(shell))),
+      );
+      const solid = own(make.Solid());
       if (volumeOf(solid) < 0) solid.Reverse();
       builder.Add(compound, solid);
-      make.delete();
     }
-    sewn.delete();
-    return { shape: compound };
-  } finally {
-    builder.delete();
-  }
+    return { shape: own.keep(compound) };
+  });
+  acquire(result.shape);
+  return result;
 }
 
 interface Imported {
@@ -306,7 +333,7 @@ function importer(format: Format, extensions: string[]) {
           blob,
         };
       try {
-        readImport(feature, sources).delete();
+        scoped((own) => own(readImport(feature, sources)));
       } catch (error) {
         throw new ValidationError((error as Error).message);
       }

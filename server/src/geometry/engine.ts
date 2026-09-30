@@ -20,9 +20,8 @@ import type { Sources } from "./importers.js";
 import { movePayload, tessellateBody } from "./tessellate.js";
 import { withNamingVersion, type NamedBody } from "./naming.js";
 import { modifiedFaces } from "./modified.js";
-import { cancellable, shapeHash, type Shape } from "./kernel.js";
+import { cancellable, release, shapeHash, type Shape } from "./kernel.js";
 import { heapBytes, lruEngines } from "./engineCache.js";
-import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
 import {
   BlockedFeature,
   CRASH_BLOCKED_MESSAGE,
@@ -78,9 +77,15 @@ function releaseSnapshots(
     const key = cacheKey(body);
     if (tessCache.entries.get(key)?.shape === body.shape) evict(key);
   }
-  for (const shape of new Set(freed.map((b) => b.shape))) shape.delete();
-  for (const names of new Set(dropped.map((b) => b.names)))
-    if (!keptNames.has(names)) names.release();
+  const names = [...new Set(dropped.map((b) => b.names))].filter(
+    (bodyNames) => !keptNames.has(bodyNames),
+  );
+  release([
+    ...names
+      .toReversed()
+      .map((bodyNames) => ({ delete: () => bodyNames.release() })),
+    ...new Set(freed.map((b) => b.shape)),
+  ]);
 }
 
 function evaluateTracked(
@@ -91,22 +96,12 @@ function evaluateTracked(
   namingVersion: NamingVersion,
   shouldStop?: () => boolean,
 ): FeatureOutcome | void {
-  const made: ShapeMap<unknown>[] = [];
   const run = () => evaluateFeature(next, feature, earlier, sources);
-  try {
-    return cancellable(shouldStop, () =>
-      trackShapeMaps(made, () =>
-        withNamingVersion(namingVersion, () =>
-          namingVersion === 1 ? run() : evaluateResolved(next, feature, run),
-        ),
-      ),
-    );
-  } finally {
-    const held = new Set<ShapeMap<unknown>>(
-      [...next.bodies.values()].map((b) => b.names),
-    );
-    for (const map of made) if (!held.has(map)) map.release();
-  }
+  return cancellable(shouldStop, () =>
+    withNamingVersion(namingVersion, () =>
+      namingVersion === 1 ? run() : evaluateResolved(next, feature, run),
+    ),
+  );
 }
 
 export function trialBuild<T>(
@@ -117,7 +112,7 @@ export function trialBuild<T>(
   shouldStop: () => boolean,
   inspect: (built: EvalState) => T,
 ): T {
-  const next = cloneState(state);
+  const next = { ...state };
   try {
     evaluateTracked(
       next,
@@ -396,7 +391,7 @@ class DocumentEngine {
     for (; i < upTo && !hooks?.shouldStop?.(); i++) {
       const feature = doc.features[i]!;
       hooks?.onFeatureStart?.(i, feature.id, keyAt(i));
-      const next = cloneState(state);
+      const next = { ...state };
       let status: FeatureStatus;
       const crash = crashStatus(
         feature,
@@ -405,8 +400,10 @@ class DocumentEngine {
         blockedFeatures,
       );
       if (feature.suppressed) {
+        Object.assign(next, cloneState(state));
         status = { featureId: feature.id, status: "suppressed" };
       } else if (crash) {
+        Object.assign(next, cloneState(state));
         status = crash;
         next.blocked = blockedBodies(state, feature);
       } else {
@@ -462,7 +459,7 @@ class DocumentEngine {
       if (!found?.some((id) => excluded.has(id))) return found;
       const before =
         index === 0 ? emptyState() : this.snapshots[index - 1]!.state;
-      const trial: EvalState = { ...cloneState(before), hidden: excluded };
+      const trial: EvalState = { ...before, hidden: excluded };
       try {
         return evaluateTracked(
           trial,
@@ -482,10 +479,13 @@ class DocumentEngine {
   }
 
   invalidate(): void {
-    releaseSnapshots(this.snapshots, []);
-    this.snapshots = [];
-    this.held = new Map();
-    this.bytes = this.wasm = this.js = 0;
+    try {
+      releaseSnapshots(this.snapshots, []);
+    } finally {
+      this.snapshots = [];
+      this.held = new Map();
+      this.bytes = this.wasm = this.js = 0;
+    }
   }
 }
 

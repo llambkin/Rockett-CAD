@@ -1,10 +1,10 @@
 import { LINEAR_TOL, UNIT_DOT_TOL, type Vec3 } from "@rockett/shared";
 import {
+  acquire,
   bboxOf,
   faces as facesOf,
   getKernel,
   listToArray,
-  release,
   scoped,
   lengthOf,
   type Shape,
@@ -39,58 +39,54 @@ export function cylinderAxes(face: Shape): Vec3[] | null {
 }
 
 export function reparametrisedCylinderEdges(shape: Shape): Shape[] {
-  const k = getKernel();
-  const map = new k.TopTools_IndexedDataMapOfShapeListOfShape_1();
-  k.TopExp.MapShapesAndAncestors(
-    shape,
-    k.TopAbs_ShapeEnum.TopAbs_EDGE,
-    k.TopAbs_ShapeEnum.TopAbs_FACE,
-    map,
-  );
-  const keep: Shape[] = [];
-  for (let i = 1; i <= map.Extent(); i++) {
-    const adjacent = listToArray(map.FindFromIndex_2(i));
-    const [a, b] = adjacent.map(cylinderAxes);
-    release(adjacent);
-    if (a && b && a.some((d, j) => V.dot(d, b[j]!) < 1 - UNIT_DOT_TOL))
-      keep.push(map.FindKey_2(i));
-  }
-  map.delete();
-  return keep;
+  return scoped((own) => {
+    const k = getKernel();
+    const map = acquire(new k.TopTools_IndexedDataMapOfShapeListOfShape_1());
+    k.TopExp.MapShapesAndAncestors(
+      shape,
+      k.TopAbs_ShapeEnum.TopAbs_EDGE,
+      k.TopAbs_ShapeEnum.TopAbs_FACE,
+      map,
+    );
+    const keep: Shape[] = [];
+    for (let i = 1; i <= map.Extent(); i++) {
+      const adjacent = listToArray(map.FindFromIndex_2(i));
+      const [a, b] = adjacent.map(cylinderAxes);
+      if (a && b && a.some((d, j) => V.dot(d, b[j]!) < 1 - UNIT_DOT_TOL))
+        keep.push(own.keep(own(map.FindKey_2(i))));
+    }
+    return keep;
+  }).map(acquire);
 }
 
 export function unifyTool(tool: ToolResult, featureId: string): ToolResult {
-  const k = getKernel();
   try {
-    const uni = new k.ShapeUpgrade_UnifySameDomain_2(
-      tool.shape,
-      true,
-      true,
-      false,
-    );
-    if (tool.names.version === 2) {
-      const { min, max } = bboxOf(tool.shape);
-      uni.SetLinearTolerance(LINEAR_TOL);
-      uni.SetAngularTolerance(
-        LINEAR_TOL / Math.max(1, V.norm(V.sub(max, min))),
+    const result = scoped((own) => {
+      const k = getKernel();
+      const uni = acquire(
+        new k.ShapeUpgrade_UnifySameDomain_2(tool.shape, true, true, false),
       );
-    }
-    const seams = reparametrisedCylinderEdges(tool.shape);
-    for (const edge of seams) uni.KeepShape(edge);
-    release(seams);
-    uni.Build();
-    const merged = uni.Shape();
-    const mergedFaces = facesOf(merged);
-    release(mergedFaces);
-    if (mergedFaces.length === 0) {
-      release([merged, uni]);
-      return tool;
-    }
-    const history = uni.History_1();
-    const names = historyNames(history.get(), tool, merged, featureId);
-    history.delete?.();
-    uni.delete();
-    return { shape: merged, names };
+      if (tool.names.version === 2) {
+        const { min, max } = bboxOf(tool.shape);
+        uni.SetLinearTolerance(LINEAR_TOL);
+        uni.SetAngularTolerance(
+          LINEAR_TOL / Math.max(1, V.norm(V.sub(max, min))),
+        );
+      }
+      const seams = reparametrisedCylinderEdges(tool.shape);
+      for (const edge of seams) uni.KeepShape(edge);
+      uni.Build();
+      const merged = acquire(uni.Shape());
+      const mergedFaces = facesOf(merged);
+      if (mergedFaces.length === 0) {
+        return tool;
+      }
+      const history = acquire(uni.History_1());
+      const names = historyNames(history.get(), tool, merged, featureId);
+      return { shape: own.keep(merged), names };
+    });
+    if (result !== tool) acquire(result.shape);
+    return result;
   } catch {
     return tool;
   }
@@ -124,12 +120,8 @@ export function namedFuse(
   b: ToolResult,
   featureId: string,
 ): ToolResult {
-  try {
-    const shape = op.Shape();
-    return { shape, names: propagateNames(op, [a, b], shape, featureId) };
-  } finally {
-    op.delete();
-  }
+  const shape = acquire(op.Shape());
+  return { shape, names: propagateNames(op, [a, b], shape, featureId) };
 }
 
 export function targetBody(
@@ -159,9 +151,8 @@ export function namedResult(
   parts: ToolResult[],
   featureId: string,
 ): ToolResult {
-  const shape = op.Shape();
+  const shape = acquire(op.Shape());
   const names = propagateNames(op, parts, shape, featureId);
-  op.delete();
   return { shape, names };
 }
 
@@ -174,7 +165,6 @@ export function keptSplitEdges(
   const kept = sourceEdges.map(({ edge }) => {
     const split = cut.IsDeleted(edge) ? [] : listToArray(cut.Modified(edge));
     const image = split.length === 1 ? own(k.TopoDS.Edge_1(split[0])) : edge;
-    release(split);
     const whole = !cut.IsDeleted(edge) && split.length <= 1;
     return whole && Math.abs(lengthOf(image) - lengthOf(edge)) < LINEAR_TOL
       ? { edge: image }

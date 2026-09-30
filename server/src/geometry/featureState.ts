@@ -9,10 +9,11 @@ import {
   type Vec3,
 } from "@rockett/shared";
 import {
+  acquire,
+  scoped,
   bboxOf,
   getKernel,
   planarFacePlane,
-  release,
   solids,
   faces as facesOf,
   edges as edgesOf,
@@ -85,25 +86,27 @@ export function resolvePlaneFrame(state: EvalState, ref: PlaneRef): PlaneFrame {
     if (!p) throw new Error(`construction plane ${ref.featureId} not found`);
     return p.frame;
   }
-  const body = state.bodies.get(ref.face.bodyId);
-  if (!body) throw new Error(`body ${ref.face.bodyId} no longer exists`);
-  const face = findFace(body, ref.face.faceName);
-  if (!face) {
-    throw new Error(
-      `face ${ref.face.faceName} no longer exists on ${ref.face.bodyId}`,
-    );
-  }
-  const plane = planarFacePlane(face);
-  face.delete();
-  if (!plane) throw new Error(`face ${ref.face.faceName} is not planar`);
-  return frameFromPlane(plane.origin, plane.normal);
+  return scoped(() => {
+    const body = state.bodies.get(ref.face.bodyId);
+    if (!body) throw new Error(`body ${ref.face.bodyId} no longer exists`);
+    const face = findFace(body, ref.face.faceName);
+    if (!face) {
+      throw new Error(
+        `face ${ref.face.faceName} no longer exists on ${ref.face.bodyId}`,
+      );
+    }
+    const plane = planarFacePlane(face);
+    if (!plane) throw new Error(`face ${ref.face.faceName} is not planar`);
+    return frameFromPlane(plane.origin, plane.normal);
+  });
 }
 
 export function vertexPoint(vertex: Shape): Vec3 {
-  const p = getKernel().BRep_Tool.Pnt(vertex);
-  const out: Vec3 = [p.X(), p.Y(), p.Z()];
-  p.delete();
-  return out;
+  return scoped(() => {
+    const p = acquire(getKernel().BRep_Tool.Pnt(vertex));
+    const out: Vec3 = [p.X(), p.Y(), p.Z()];
+    return out;
+  });
 }
 
 export function registerBodySolids(
@@ -139,13 +142,7 @@ export function registerPieces(
   pieces: BodyPiece[],
   madeBy?: string,
 ): void {
-  let ordered: BodyPiece[];
-  try {
-    ordered = orderBodyPieces(bodyId, pieces);
-  } catch (err) {
-    release(pieces.map((p) => p.shape));
-    throw err;
-  }
+  const ordered = orderBodyPieces(bodyId, pieces);
   let n = 2;
   const extraId = (i: number) => {
     if (!madeBy) return `${bodyId}:${i + 1}`;
@@ -176,8 +173,10 @@ export function rejectInvalid(
 }
 
 export function invalidPart(shape: Shape): string | null {
-  const check = new (getKernel().BRepCheck_Analyzer)(shape, true, false, false);
-  try {
+  return scoped(() => {
+    const check = acquire(
+      new (getKernel().BRepCheck_Analyzer)(shape, true, false, false),
+    );
     if (check.IsValid_2()) return null;
     for (const [part, of] of [
       ["face", facesOf],
@@ -185,16 +184,11 @@ export function invalidPart(shape: Shape): string | null {
       ["vertex", verticesOf],
     ] as const) {
       const shapes = of(shape);
-      try {
-        if (shapes.some((s) => !check.IsValid_1(s))) return part;
-      } finally {
-        release(shapes);
-      }
+
+      if (shapes.some((s) => !check.IsValid_1(s))) return part;
     }
     return "solid";
-  } finally {
-    check.delete();
-  }
+  });
 }
 
 export function registerSplitBodies(

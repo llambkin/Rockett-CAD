@@ -1,5 +1,6 @@
 import { LINEAR_TOL, type Feature, type ShellFeature } from "@rockett/shared";
 import {
+  acquire,
   areaOf,
   edges as edgesOf,
   faces as facesOf,
@@ -8,7 +9,7 @@ import {
   listToArray,
   planarFacePlane,
   progress,
-  release,
+  scoped,
   shapeHash,
   shapeList,
   vec,
@@ -36,26 +37,23 @@ function hollowed(before: Shape, after: Shape): boolean {
 function thickSolid(shape: Shape, closing: Shape[], thickness: number): any {
   const k = getKernel();
   const list = shapeList(closing);
-  const op = new k.BRepOffsetAPI_MakeThickSolid();
-  try {
-    op.MakeThickSolidByJoin(
-      shape,
-      list,
-      -thickness,
-      LINEAR_TOL,
-      k.BRepOffset_Mode.BRepOffset_Skin,
-      true,
-      false,
-      k.GeomAbs_JoinType.GeomAbs_Arc,
-      false,
-      progress(),
-    );
-    op.Build(progress());
-  } finally {
-    list.delete();
-  }
+  const op = acquire(new k.BRepOffsetAPI_MakeThickSolid());
+
+  op.MakeThickSolidByJoin(
+    shape,
+    list,
+    -thickness,
+    LINEAR_TOL,
+    k.BRepOffset_Mode.BRepOffset_Skin,
+    true,
+    false,
+    k.GeomAbs_JoinType.GeomAbs_Arc,
+    false,
+    progress(),
+  );
+  op.Build(progress());
+
   if (op.IsDone()) return op;
-  op.delete();
   throw new Error("shell failed: thickness may be too large");
 }
 
@@ -65,7 +63,7 @@ function offsetInside(
   featureId: string,
 ): { op: any; inner: ToolResult } {
   const op = thickSolid(body.shape, [], thickness);
-  const shape = op.Shape();
+  const shape = acquire(op.Shape());
   return {
     op,
     inner: { shape, names: propagateNames(op, [body], shape, featureId) },
@@ -79,26 +77,20 @@ function prismed(
 ): Shape {
   const k = getKernel();
   const v = vec(x * thickness, y * thickness, z * thickness);
-  const prism = new k.BRepPrimAPI_MakePrism_1(image, v, false, true);
-  const slab = prism.Shape();
-  prism.delete();
-  v.delete();
+  const prism = acquire(new k.BRepPrimAPI_MakePrism_1(image, v, false, true));
+  const slab = acquire(prism.Shape());
   return slab;
 }
 
 function thickened(image: Shape, thickness: number): Shape {
-  const op = new (getKernel().BRepOffsetAPI_MakeThickSolid)();
-  try {
-    op.MakeThickSolidBySimple(image, thickness);
-    if (!op.IsDone()) throw new Error("shell failed: could not open the wall");
-    const slab = op.Shape();
-    if (volumeOf(slab) > 0) return slab;
-    const outward = slab.Reversed();
-    slab.delete();
-    return outward;
-  } finally {
-    op.delete();
-  }
+  const op = acquire(new (getKernel().BRepOffsetAPI_MakeThickSolid)());
+
+  op.MakeThickSolidBySimple(image, thickness);
+  if (!op.IsDone()) throw new Error("shell failed: could not open the wall");
+  const slab = acquire(op.Shape());
+  if (volumeOf(slab) > 0) return slab;
+  const outward = acquire(slab.Reversed());
+  return outward;
 }
 
 function openedThroughWalls(
@@ -108,37 +100,33 @@ function openedThroughWalls(
   featureId: string,
 ): ToolResult | null {
   const { op, inner } = offsetInside(body, thickness, featureId);
-  try {
-    if (invalidPart(inner.shape) || !(volumeOf(inner.shape) > 0))
-      throw new Error("shell failed: the inner wall could not be offset");
-    const normals = open.map((face) => planarFacePlane(face)?.normal);
-    let tool = inner;
-    for (const [i, face] of open.entries()) {
-      const normal = normals[i];
-      const images = listToArray(op.Generated(face));
-      if (images.length === 0) return null;
-      for (const image of images) {
-        const slab = normal
-          ? prismed(image, normal, thickness)
-          : thickened(image, thickness);
-        tool = fuseNamed(
-          tool,
-          {
-            shape: slab,
-            names: finalizeNames(slab, new ShapeMap(), featureId),
-          },
-          featureId,
-          "shell failed: could not open the wall",
-        );
-      }
-      release(images);
+
+  if (invalidPart(inner.shape) || !(volumeOf(inner.shape) > 0))
+    throw new Error("shell failed: the inner wall could not be offset");
+  const normals = open.map((face) => planarFacePlane(face)?.normal);
+  let tool = inner;
+  for (const [i, face] of open.entries()) {
+    const normal = normals[i];
+    const images = listToArray(op.Generated(face));
+    if (images.length === 0) return null;
+    for (const image of images) {
+      const slab = normal
+        ? prismed(image, normal, thickness)
+        : thickened(image, thickness);
+      tool = fuseNamed(
+        tool,
+        {
+          shape: slab,
+          names: finalizeNames(slab, new ShapeMap(), featureId),
+        },
+        featureId,
+        "shell failed: could not open the wall",
+      );
     }
-    const opened = hollowedByCut(body, tool, featureId);
-    if (!opened) throw new Error("shell failed: opening left no hollow");
-    return opened;
-  } finally {
-    op.delete();
   }
+  const opened = hollowedByCut(body, tool, featureId);
+  if (!opened) throw new Error("shell failed: opening left no hollow");
+  return opened;
 }
 
 function blendsBeside(
@@ -146,29 +134,28 @@ function blendsBeside(
   open: Shape[],
   earlier: Feature[],
 ): string[] {
-  const blends = new Map(
-    earlier
-      .filter((e) => e.type === "fillet" || e.type === "chamfer")
-      .map((e) => [e.id, e.name]),
-  );
-  const owners = (shapes: Shape[]) => [
-    ...new Set(
-      shapes
-        .map((face) => blends.get(body.names.get(face)?.split(":")[1] ?? ""))
-        .filter((name): name is string => name !== undefined),
-    ),
-  ];
-  const opened = owners(open);
-  if (opened.length > 0) return opened;
-  const rims = new Set(open.flatMap((face) => edgesOf(face).map(shapeHash)));
-  const all = facesOf(body.shape);
-  try {
+  return scoped(() => {
+    const blends = new Map(
+      earlier
+        .filter((e) => e.type === "fillet" || e.type === "chamfer")
+        .map((e) => [e.id, e.name]),
+    );
+    const owners = (shapes: Shape[]) => [
+      ...new Set(
+        shapes
+          .map((face) => blends.get(body.names.get(face)?.split(":")[1] ?? ""))
+          .filter((name): name is string => name !== undefined),
+      ),
+    ];
+    const opened = owners(open);
+    if (opened.length > 0) return opened;
+    const rims = new Set(open.flatMap((face) => edgesOf(face).map(shapeHash)));
+    const all = facesOf(body.shape);
+
     return owners(
       all.filter((face) => edgesOf(face).some((e) => rims.has(shapeHash(e)))),
     );
-  } finally {
-    release(all);
-  }
+  });
 }
 
 export function evalShell(
@@ -182,19 +169,16 @@ export function evalShell(
   const noHollow = `shell of ${f.thickness} mm left no hollow, so the wall is too thick for this body: try a thinner wall; the previous body has been kept`;
   const publishable = (built: ToolResult | null): ToolResult => {
     if (!built) throw new Error(noHollow);
-    try {
-      rejectInvalid(
-        built.shape,
-        body.shape,
-        "shell",
-        `${f.thickness} mm`,
-        "try a different wall thickness",
-      );
-      if (!hollowed(body.shape, built.shape)) throw new Error(noHollow);
-    } catch (err) {
-      built.shape.delete();
-      throw err;
-    }
+
+    rejectInvalid(
+      built.shape,
+      body.shape,
+      "shell",
+      `${f.thickness} mm`,
+      "try a different wall thickness",
+    );
+    if (!hollowed(body.shape, built.shape)) throw new Error(noHollow);
+
     return built;
   };
   const publish = (built: ToolResult) =>
@@ -208,8 +192,7 @@ export function evalShell(
   );
   if (open.length === 0)
     return kernelCall("shell", () => {
-      const { op, inner } = offsetInside(body, f.thickness, f.id);
-      op.delete();
+      const { inner } = offsetInside(body, f.thickness, f.id);
       publish(publishable(hollowedByCut(body, inner, f.id)));
     });
   let failure: unknown;
@@ -217,9 +200,8 @@ export function evalShell(
   try {
     built = kernelCall("shell", () => {
       const op = thickSolid(body.shape, open, f.thickness);
-      const shape = op.Shape();
+      const shape = acquire(op.Shape());
       const names = propagateNames(op, [body], shape, f.id);
-      op.delete();
       return publishable({ shape, names });
     });
   } catch (err) {

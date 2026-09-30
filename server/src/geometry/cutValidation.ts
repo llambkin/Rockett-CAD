@@ -1,11 +1,11 @@
 import { LINEAR_TOL } from "@rockett/shared";
 import {
+  acquire,
   areaOf,
   faces,
   getKernel,
   listToArray,
   progress,
-  release,
   scoped,
   vertices,
   volumeAbout,
@@ -24,7 +24,7 @@ const SPREAD = [0.5, 0.25, 0.75, 0.1, 0.9];
 
 function interiorPoint(face: Shape): Shape | null {
   const k = getKernel();
-  return scoped((own) => {
+  const result = scoped((own) => {
     const surface = own(new k.BRepAdaptor_Surface_2(face, true));
     const u0 = surface.FirstUParameter();
     const v0 = surface.FirstVParameter();
@@ -44,10 +44,11 @@ function interiorPoint(face: Shape): Shape | null {
           ),
         );
         if (where.State() === k.TopAbs_State.TopAbs_IN)
-          return surface.Value(u, v);
+          return own.keep(own(surface.Value(u, v)));
       }
     return null;
   });
+  return result && acquire(result);
 }
 
 function outside(solid: Shape, face: Shape): boolean {
@@ -92,19 +93,20 @@ function leavesToolOutside(op: any, tool: Shape, body: Shape): boolean {
 }
 
 function vertexMean(shape: Shape): [number, number, number] {
-  const k = getKernel();
-  const all = vertices(shape);
-  const sum: [number, number, number] = [0, 0, 0];
-  for (const vertex of all)
-    scoped((own) => {
-      const p = own(k.BRep_Tool.Pnt(vertex));
-      sum[0] += p.X();
-      sum[1] += p.Y();
-      sum[2] += p.Z();
-    });
-  release(all);
-  const n = all.length;
-  return [sum[0] / n, sum[1] / n, sum[2] / n];
+  return scoped(() => {
+    const k = getKernel();
+    const all = vertices(shape);
+    const sum: [number, number, number] = [0, 0, 0];
+    for (const vertex of all)
+      scoped((own) => {
+        const p = own(k.BRep_Tool.Pnt(vertex));
+        sum[0] += p.X();
+        sum[1] += p.Y();
+        sum[2] += p.Z();
+      });
+    const n = all.length;
+    return [sum[0] / n, sum[1] / n, sum[2] / n];
+  });
 }
 
 export function removesVolume(

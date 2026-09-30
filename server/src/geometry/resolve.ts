@@ -14,7 +14,7 @@ import {
   type RefSignature,
   type UnresolvedRef,
 } from "@rockett/shared";
-import { faces, release, type Shape } from "./kernel.js";
+import { faces, scoped, type Shape } from "./kernel.js";
 import { computeEdgeNames, namingVersion, type NamedBody } from "./naming.js";
 import type { EvalState, FeatureOutcome } from "./features.js";
 import { edgeSignature, faceSignature } from "./signature.js";
@@ -88,10 +88,6 @@ class Topology {
     this.signatures.set(shape, sig);
     return sig;
   }
-
-  release(): void {
-    for (const named of this.named.values()) release(named.values());
-  }
 }
 
 function namedFaces(body: NamedBody): Map<string, Shape> {
@@ -99,7 +95,6 @@ function namedFaces(body: NamedBody): Map<string, Shape> {
   for (const face of faces(body.shape)) {
     const name = body.names.get(face);
     if (name && !named.has(name)) named.set(name, face);
-    else face.delete();
   }
   return named;
 }
@@ -249,12 +244,11 @@ export function resolveRefs(
   bodies: ReadonlyMap<string, NamedBody>,
   refs: Ref[],
 ): RefResolution[] {
-  const topology = new Topology();
-  try {
+  return scoped(() => {
+    const topology = new Topology();
+
     return refs.map((ref) => resolveRef(topology, bodies, ref));
-  } finally {
-    topology.release();
-  }
+  });
 }
 
 export function signatureCandidates(
@@ -262,17 +256,16 @@ export function signatureCandidates(
   bodyIds: string[],
   ref: Ref,
 ): RefCandidate[] {
-  const { sig } = ref;
-  if (!sig) return [];
-  const topology = new Topology();
-  try {
+  return scoped(() => {
+    const { sig } = ref;
+    if (!sig) return [];
+    const topology = new Topology();
+
     return bodyIds.flatMap((id) => {
       const body = bodies.get(id);
       return body ? nearest(topology, body, ref.kind, sig) : [];
     });
-  } finally {
-    topology.release();
-  }
+  });
 }
 
 export function unresolvedRefs(

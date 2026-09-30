@@ -2,6 +2,7 @@ import { findProfile, LINEAR_TOL, type LoftFeature } from "@rockett/shared";
 import { applyToolOperation, joinEvery } from "./boolean.js";
 import { invalidPart, type EvalState } from "./featureState.js";
 import {
+  acquire,
   edges,
   getKernel,
   kernelCall,
@@ -79,41 +80,34 @@ export function evalLoft(state: EvalState, f: LoftFeature) {
       thru.Build(progress());
       if (!thru.IsDone())
         throw new Error("loft failed: sections may be incompatible");
-      const shape = thru.Shape();
-      try {
-        if (
-          sources.length > 0 &&
-          (invalidPart(shape) ||
-            scoped((keep) => solids(shape).map(keep).length !== 1) ||
-            volumeOf(shape) <= LINEAR_TOL ** 3)
-        )
-          throw new Error(
-            "loft did not produce a valid solid; choose distinct, compatible sections in order",
-          );
-        const names =
-          namingVersion() === 1
-            ? finalizeNames(shape, new ShapeMap(), f.id)
-            : sweptNames(
-                shape,
-                f.id,
-                sideEdgeNames(f.id, first!.pf, edges(first!.wire)),
-                (e) => thru.Generated(e),
-                [thru.FirstShape(), thru.LastShape()],
-              );
-        return { shape, names };
-      } catch (error) {
-        shape.delete();
-        throw error;
-      }
+      const shape = own(thru.Shape());
+
+      if (
+        sources.length > 0 &&
+        (invalidPart(shape) ||
+          scoped((keep) => solids(shape).map(keep).length !== 1) ||
+          volumeOf(shape) <= LINEAR_TOL ** 3)
+      )
+        throw new Error(
+          "loft did not produce a valid solid; choose distinct, compatible sections in order",
+        );
+      const names =
+        namingVersion() === 1
+          ? finalizeNames(shape, new ShapeMap(), f.id)
+          : sweptNames(
+              shape,
+              f.id,
+              sideEdgeNames(f.id, first!.pf, edges(first!.wire)),
+              (e) => thru.Generated(e),
+              [acquire(thru.FirstShape()), acquire(thru.LastShape())],
+            );
+      return { shape: own.keep(shape), names };
     }),
   );
-  try {
-    return f.operation === "join" && sources.length > 0
-      ? joinEvery(state, f.id, tool, [
-          ...new Set([...sources, ...(f.targets ?? [])]),
-        ])
-      : applyToolOperation(state, f.id, tool, f.operation, f.targets);
-  } finally {
-    tool.shape.delete();
-  }
+  acquire(tool.shape);
+  return f.operation === "join" && sources.length > 0
+    ? joinEvery(state, f.id, tool, [
+        ...new Set([...sources, ...(f.targets ?? [])]),
+      ])
+    : applyToolOperation(state, f.id, tool, f.operation, f.targets);
 }

@@ -1,5 +1,5 @@
 import { compareNames, LINEAR_TOL, type Vec3 } from "@rockett/shared";
-import { areaOf, faceCentroid, faces, release, type Shape } from "./kernel.js";
+import { areaOf, faceCentroid, faces, scoped, type Shape } from "./kernel.js";
 import { V } from "./frames.js";
 import type { StateBody } from "./features.js";
 
@@ -42,19 +42,20 @@ export function modifiedFaces(
   before: ReadonlyMap<string, StateBody>,
   after: ReadonlyMap<string, StateBody>,
 ): Record<string, string[]> | undefined {
-  const changed = [...after.values()].filter((b) => before.get(b.bodyId) !== b);
-  if (changed.length === 0) return;
-  const carried = new Set([...before.values()].flatMap((b) => [...bases(b)]));
-  const candidates = changed.filter((b) => shares(b, carried));
-  if (candidates.length === 0) return;
-  const wanted = new Set(candidates.flatMap((b) => [...bases(b)]));
-  const priors = new Map<string, Prior[]>();
-  const held: Shape[] = [];
-  const out: Record<string, string[]> = {};
-  try {
+  return scoped(() => {
+    const changed = [...after.values()].filter(
+      (b) => before.get(b.bodyId) !== b,
+    );
+    if (changed.length === 0) return;
+    const carried = new Set([...before.values()].flatMap((b) => [...bases(b)]));
+    const candidates = changed.filter((b) => shares(b, carried));
+    if (candidates.length === 0) return;
+    const wanted = new Set(candidates.flatMap((b) => [...bases(b)]));
+    const priors = new Map<string, Prior[]>();
+    const out: Record<string, string[]> = {};
+
     for (const body of [...before.values()].filter((b) => shares(b, wanted)))
       for (const face of faces(body.shape)) {
-        held.push(face);
         const name = body.names.get(face);
         if (name)
           priors.set(base(name), [...(priors.get(base(name)) ?? []), { face }]);
@@ -62,7 +63,6 @@ export function modifiedFaces(
     for (const body of candidates) {
       const names: string[] = [];
       for (const face of faces(body.shape)) {
-        held.push(face);
         const name = body.names.get(face);
         if (
           name &&
@@ -73,8 +73,7 @@ export function modifiedFaces(
       }
       if (names.length > 0) out[body.bodyId] = names.sort(compareNames);
     }
-  } finally {
-    release(held);
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
+
+    return Object.keys(out).length > 0 ? out : undefined;
+  });
 }

@@ -56,6 +56,7 @@ import {
   Placement,
 } from "@rockett/shared";
 import {
+  acquire,
   bboxOf,
   dir,
   edges as edgesOf,
@@ -67,7 +68,6 @@ import {
   planarFacePlane,
   pnt,
   progress,
-  release,
   scoped,
   solids,
   transformOp,
@@ -89,8 +89,8 @@ import { ShapeMap } from "./shapeMap.js";
 import { V, frameFromPlane, offsetFrame, uvTo3d } from "./frames.js";
 import { geometryNames } from "./signature.js";
 import { curveInfo } from "./tessellate.js";
-import { readImport, readMesh, type Sources } from "./importers.js";
-import { featureKind, type EvalContext } from "./featureKinds.js";
+import { readImport, readMesh } from "./importers.js";
+import { type EvalContext } from "./featureKinds.js";
 import {
   arcEdge,
   buildProfileFace,
@@ -150,18 +150,14 @@ function resolveAxis(
   const edge = edgeNames.byName.get(ref.edge.edgeName);
   if (!edge) throw new Error(`edge ${ref.edge.edgeName} no longer exists`);
   const k = getKernel();
-  const curve = new k.BRepAdaptor_Curve_2(edge);
+  const curve = acquire(new k.BRepAdaptor_Curve_2(edge));
   if (curve.GetType() !== k.GeomAbs_CurveType.GeomAbs_Line) {
-    curve.delete();
     throw new Error(`edge ${ref.edge.edgeName} is not linear`);
   }
-  const pA = curve.Value(curve.FirstParameter());
-  const pB = curve.Value(curve.LastParameter());
+  const pA = acquire(curve.Value(curve.FirstParameter()));
+  const pB = acquire(curve.Value(curve.LastParameter()));
   const origin: Vec3 = [pA.X(), pA.Y(), pA.Z()];
   const target: Vec3 = [pB.X(), pB.Y(), pB.Z()];
-  pA.delete();
-  pB.delete();
-  curve.delete();
   return { origin, direction: V.normalize(V.sub(target, origin)) };
 }
 
@@ -198,32 +194,29 @@ function registerNewBodies(
   regions: ProfileFace[],
 ): void {
   const unified = tools.map((t) => unifyTool(t, featureId));
-  try {
-    if (unified[0]?.names.version === 2) {
-      registerPieces(
-        state,
-        `b:${featureId}`,
-        unified.flatMap((u, i) =>
-          solids(u.shape).map((shape) => ({
-            shape,
-            names: u.names,
-            region: regions[i]!.profileId,
-          })),
-        ),
-      );
-      return;
-    }
-    unified.forEach((u, i) =>
-      registerBodySolids(
-        state,
-        i === 0 ? `b:${featureId}` : `b:${featureId}:${i + 1}`,
-        u.shape,
-        u.names,
+
+  if (unified[0]?.names.version === 2) {
+    registerPieces(
+      state,
+      `b:${featureId}`,
+      unified.flatMap((u, i) =>
+        solids(u.shape).map((shape) => ({
+          shape,
+          names: u.names,
+          region: regions[i]!.profileId,
+        })),
       ),
     );
-  } finally {
-    release(new Set([...tools, ...unified].map((t) => t.shape)));
+    return;
   }
+  unified.forEach((u, i) =>
+    registerBodySolids(
+      state,
+      i === 0 ? `b:${featureId}` : `b:${featureId}:${i + 1}`,
+      u.shape,
+      u.names,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +284,7 @@ function buildPrism(
     let face = profileFace.face;
     let offsetEdgeEntity = profileFace.edgeEntity;
     if (baseOffset !== 0) {
-      const trsf = new k.gp_Trsf_1();
+      const trsf = acquire(new k.gp_Trsf_1());
       trsf.SetTranslation_1(
         vec(
           direction[0] * baseOffset,
@@ -300,36 +293,35 @@ function buildPrism(
         ),
       );
       const tr = transformOp(face, trsf);
-      const moved = tr.Shape();
+      const moved = acquire(tr.Shape());
       // remap edge->entity through the transform
       const newMap = new ShapeMap<string>();
       for (const e of edgesOf(face)) {
         const id = profileFace.edgeEntity.get(e);
         if (!id) continue;
         try {
-          const me = tr.ModifiedShape(e);
+          const me = acquire(tr.ModifiedShape(e));
           newMap.set(me, id);
         } catch {
           // ignore
         }
       }
       offsetEdgeEntity = newMap;
-      face = k.TopoDS.Face_1(moved);
-      tr.delete();
-      trsf.delete();
+      face = acquire(k.TopoDS.Face_1(moved));
     }
     const v = vec(
       direction[0] * distance,
       direction[1] * distance,
       direction[2] * distance,
     );
-    const prism = new k.BRepPrimAPI_MakePrism_1(face, v, copyBase, true);
+    const prism = acquire(
+      new k.BRepPrimAPI_MakePrism_1(face, v, copyBase, true),
+    );
     prism.Build(progress());
     if (!prism.IsDone()) {
-      prism.delete();
       throw new Error("prism generation failed: is the profile closed?");
     }
-    const shape = prism.Shape();
+    const shape = acquire(prism.Shape());
 
     const provisional = new ShapeMap<string>();
     // side faces from profile edges
@@ -343,24 +335,21 @@ function buildPrism(
           provisional.set(g, `f:${featureId}:s:${entityId}`);
         }
       }
-      release(gen);
     }
-    release(faceEdges);
+
     // caps
-    const firstShape = prism.FirstShape_1();
+    const firstShape = acquire(prism.FirstShape_1());
     const startCaps = facesOf(firstShape);
     for (const cap of startCaps) {
       provisional.set(cap, `f:${featureId}:cap:start`);
     }
-    const lastShape = prism.LastShape_1();
+    const lastShape = acquire(prism.LastShape_1());
     const endCaps = facesOf(lastShape);
     for (const cap of endCaps) {
       provisional.set(cap, `f:${featureId}:cap:end`);
     }
-    release([firstShape, lastShape, ...startCaps, ...endCaps]);
+
     const names = finalizeNames(shape, provisional, featureId);
-    prism.delete();
-    v.delete();
     return { shape, names };
   });
 }
@@ -426,7 +415,6 @@ export function evalExtrude(state: EvalState, f: ExtrudeFeature) {
       tools.push(buildPrism(f.id, pf, n, dist + d2, base - d2, copy));
     }
   }
-  release(new Set(sources.map(({ pf }) => pf.face)));
 
   return applyProfileTools(
     state,
@@ -450,24 +438,20 @@ function applyProfileTools(
     registerNewBodies(state, featureId, tools, regions);
     return;
   }
-  const made = new Set(tools.map((t) => t.shape));
-  try {
-    const tool = tools.slice(1).reduce((acc, next) => {
-      const fused = fuseNamed(
-        acc,
-        next,
-        featureId,
-        "failed to merge profile solids",
-      );
-      made.add(fused.shape);
-      return fused;
-    }, tools[0]!);
-    const unified = unifyTool(tool, featureId);
-    made.add(unified.shape);
-    return applyToolOperation(state, featureId, unified, operation, targets);
-  } finally {
-    release(made);
-  }
+
+  const tool = tools.slice(1).reduce((acc, next) => {
+    const fused = fuseNamed(
+      acc,
+      next,
+      featureId,
+      "failed to merge profile solids",
+    );
+
+    return fused;
+  }, tools[0]!);
+  const unified = unifyTool(tool, featureId);
+
+  return applyToolOperation(state, featureId, unified, operation, targets);
 }
 
 function revolveSources(state: EvalState, f: RevolveFeature) {
@@ -520,7 +504,6 @@ export function evalRevolve(state: EvalState, f: RevolveFeature) {
   const profileFaces = sources.map((s) => s.pf);
   const axis = resolveAxis(state, f.axis);
   if (profileFaces.some((pf) => crossesAxis(pf.face, axis))) {
-    release(profileFaces.map((pf) => pf.face));
     throw new Error(REVOLVE_CROSSES_AXIS);
   }
   const k = getKernel();
@@ -531,42 +514,38 @@ export function evalRevolve(state: EvalState, f: RevolveFeature) {
   const tools: ToolResult[] = [];
   for (const { pf, copy } of sources) {
     const tool = kernelCall("revolve", () => {
-      const ax1 = scoped(
-        (own) =>
-          new k.gp_Ax1_2(
-            own(pnt(axis.origin[0], axis.origin[1], axis.origin[2])),
-            own(
-              dir(
-                sign * axis.direction[0],
-                sign * axis.direction[1],
-                sign * axis.direction[2],
-              ),
-            ),
+      const ax1 = acquire(
+        new k.gp_Ax1_2(
+          pnt(...axis.origin),
+          dir(
+            sign * axis.direction[0],
+            sign * axis.direction[1],
+            sign * axis.direction[2],
           ),
+        ),
       );
       const revol = full
-        ? new k.BRepPrimAPI_MakeRevol_2(pf.face, ax1, copy)
-        : new k.BRepPrimAPI_MakeRevol_1(pf.face, ax1, angleRad, copy);
+        ? acquire(new k.BRepPrimAPI_MakeRevol_2(pf.face, ax1, copy))
+        : acquire(new k.BRepPrimAPI_MakeRevol_1(pf.face, ax1, angleRad, copy));
       revol.Build(progress());
       if (!revol.IsDone()) {
-        revol.delete();
         throw new Error("the kernel could not revolve the profile");
       }
-      const shape = revol.Shape();
+      const shape = acquire(revol.Shape());
       const names = sweptNames(
         shape,
         f.id,
         sideEdgeNames(f.id, pf),
         (e) => revol.Generated(e),
-        full ? [] : [revol.FirstShape_1(), revol.LastShape_1()],
+        full
+          ? []
+          : [acquire(revol.FirstShape_1()), acquire(revol.LastShape_1())],
       );
-      revol.delete();
-      ax1.delete();
       return { shape, names };
     });
     tools.push(tool);
   }
-  release(profileFaces.map((pf) => pf.face));
+
   return applyProfileTools(
     state,
     f.id,
@@ -590,32 +569,33 @@ export function evalSweep(state: EvalState, f: SweepFeature) {
     if (e.kind === "point") points.set(e.id, { x: e.x, y: e.y });
   }
   const chain = orderOpenChain(pathSketch.entities, points);
-  const wire = kernelCall("sweep path", () =>
-    scoped((own) => {
-      if (chain.length === 0)
-        throw new Error("path sketch contains no usable curves");
-      const wireMaker = own(new k.BRepBuilderAPI_MakeWire_1());
-      for (const seg of chain) {
-        const edge = sketchEntityToEdge(seg, pathSketch, points);
-        if (edge) wireMaker.Add_1(own(edge));
-        if (!wireMaker.IsDone())
-          throw new Error("sweep path is not a connected chain");
-      }
-      return wireMaker.Wire();
-    }),
+  const wire = acquire(
+    kernelCall("sweep path", () =>
+      scoped((own) => {
+        if (chain.length === 0)
+          throw new Error("path sketch contains no usable curves");
+        const wireMaker = own(new k.BRepBuilderAPI_MakeWire_1());
+        for (const seg of chain) {
+          const edge = sketchEntityToEdge(seg, pathSketch, points);
+          if (edge) wireMaker.Add_1(own(edge));
+          if (!wireMaker.IsDone())
+            throw new Error("sweep path is not a connected chain");
+        }
+        return own.keep(own(wireMaker.Wire()));
+      }),
+    ),
   );
 
   const tools = profileFaces.map((pf) =>
     kernelCall("sweep", (): ToolResult => {
-      const pipe = new k.BRepOffsetAPI_MakePipe_1(wire, pf.face);
+      const pipe = acquire(new k.BRepOffsetAPI_MakePipe_1(wire, pf.face));
       pipe.Build(progress());
       if (!pipe.IsDone()) {
-        pipe.delete();
         throw new Error(
           "sweep failed: check that the profile lies on the path start",
         );
       }
-      const shape = pipe.Shape();
+      const shape = acquire(pipe.Shape());
       const names =
         namingVersion() === 1
           ? finalizeNames(shape, new ShapeMap(), f.id)
@@ -624,13 +604,12 @@ export function evalSweep(state: EvalState, f: SweepFeature) {
               f.id,
               sideEdgeNames(f.id, pf),
               (e) => pipe.Generated_1(e),
-              [pipe.FirstShape(), pipe.LastShape()],
+              [acquire(pipe.FirstShape()), acquire(pipe.LastShape())],
             );
-      pipe.delete();
       return { shape, names };
     }),
   );
-  release([wire, ...profileFaces.map((pf) => pf.face)]);
+
   if (tools.length > 1)
     return applyProfileTools(
       state,
@@ -640,11 +619,8 @@ export function evalSweep(state: EvalState, f: SweepFeature) {
       f.operation,
       f.targets,
     );
-  try {
-    return applyToolOperation(state, f.id, tools[0]!, f.operation, f.targets);
-  } finally {
-    tools[0]!.shape.delete();
-  }
+
+  return applyToolOperation(state, f.id, tools[0]!, f.operation, f.targets);
 }
 
 function orderOpenChain(
@@ -695,10 +671,16 @@ function sketchEntityToEdge(
     const b = points.get(e.p2)!;
     const p1 = to3d(a.x, a.y);
     const p2 = to3d(b.x, b.y);
-    return scoped((own) =>
-      own(
-        new k.BRepBuilderAPI_MakeEdge_3(own(pnt(...p1)), own(pnt(...p2))),
-      ).Edge(),
+    return acquire(
+      scoped((own) =>
+        own.keep(
+          own(
+            own(
+              new k.BRepBuilderAPI_MakeEdge_3(own(pnt(...p1)), own(pnt(...p2))),
+            ).Edge(),
+          ),
+        ),
+      ),
     );
   }
   if (e.kind === "arc") {
@@ -716,14 +698,15 @@ function sketchEntityToEdge(
 
 function mirrorTrsfFor(frame: PlaneFrame): any {
   const k = getKernel();
-  const trsf = new k.gp_Trsf_1();
-  const ax2 = new k.gp_Ax2_2(
-    pnt(frame.origin[0], frame.origin[1], frame.origin[2]),
-    dir(frame.normal[0], frame.normal[1], frame.normal[2]),
-    dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2]),
+  const trsf = acquire(new k.gp_Trsf_1());
+  const ax2 = acquire(
+    new k.gp_Ax2_2(
+      pnt(frame.origin[0], frame.origin[1], frame.origin[2]),
+      dir(frame.normal[0], frame.normal[1], frame.normal[2]),
+      dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2]),
+    ),
   );
   trsf.SetMirror_3(ax2);
-  ax2.delete();
   return trsf;
 }
 
@@ -736,9 +719,8 @@ export function evalMirror(state: EvalState, f: MirrorFeature) {
       const body = state.bodies.get(bodyId);
       if (!body) throw new Error(`body ${bodyId} not found`);
       const tr = transformOp(body.shape, trsf);
-      const mirrored = tr.Shape();
+      const mirrored = acquire(tr.Shape());
       const mirroredNames = transformNames(tr, body, `m:${f.id}`);
-      tr.delete();
       if (f.combine) {
         const fused = fuseNamed(
           body,
@@ -755,7 +737,6 @@ export function evalMirror(state: EvalState, f: MirrorFeature) {
         registerBodySolids(state, newId, mirrored, finalNames);
       }
     }
-    trsf.delete();
     return warned(warnings);
   });
 }
@@ -778,11 +759,9 @@ export function evalMove(
       if (!body) throw new Error(`body ${bodyId} not found`);
       const trsf = placementToTrsf(placement);
       const tr = transformOp(body.shape, trsf);
-      const moved = tr.Shape();
+      const moved = acquire(tr.Shape());
       // empty prefix: keep the original persistent names
       const names = transformNames(tr, body, "");
-      tr.delete();
-      trsf.delete();
       registerBodySolids(state, bodyId, moved, names);
     }
   });
@@ -844,10 +823,8 @@ export function evalLinearPattern(state: EvalState, f: LinearPatternFeature) {
         const prefix = `p${i}:${f.id}`;
         const trsf = placementToTrsf(Placement.fromTranslation(offset));
         const tr = transformOp(body.shape, trsf);
-        const instance = tr.Shape();
+        const instance = acquire(tr.Shape());
         const instNames = transformNames(tr, body, prefix);
-        tr.delete();
-        trsf.delete();
         if (f.combine) {
           copies.push({ shape: instance });
           combined = {
@@ -903,10 +880,8 @@ export function evalCircularPattern(
           Placement.fromAxisAngle(axis.direction, step * i, axis.origin),
         );
         const tr = transformOp(body.shape, trsf);
-        const instance = tr.Shape();
+        const instance = acquire(tr.Shape());
         const instNames = transformNames(tr, body, `p${i}:${f.id}`);
-        tr.delete();
-        trsf.delete();
         if (f.combine) {
           copies.push({ shape: instance });
           combined = {
@@ -1101,23 +1076,7 @@ export function evalImportMesh(
   return { warning };
 }
 
-// ---------------------------------------------------------------------------
-// Dispatcher
-// ---------------------------------------------------------------------------
-
-export function evaluateFeature(
-  state: EvalState,
-  feature: Feature,
-  earlier: Feature[],
-  sources: Sources = new Map(),
-): FeatureOutcome | void {
-  const kind = featureKind(feature.type);
-  if (!kind) throw new Error(`unknown feature type ${feature.type}`);
-  return kind.evaluate(
-    { state, earlier, index: earlier.length, sources },
-    feature,
-  );
-}
+export { evaluateFeature } from "./featureKinds.js";
 
 export {
   cloneState,

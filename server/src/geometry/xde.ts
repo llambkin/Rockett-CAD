@@ -1,5 +1,11 @@
 import crypto from "node:crypto";
-import { getKernel, release, transformOp, type Shape } from "./kernel.js";
+import {
+  acquire,
+  getKernel,
+  HandleScope,
+  transformOp,
+  type Shape,
+} from "./kernel.js";
 
 export interface XdePart {
   shape: Shape;
@@ -18,18 +24,17 @@ export type XdeNode =
   | { name: string | null; body: number }
   | { name: string | null; children: XdeNode[] };
 
-type Owned = { delete(): void };
-
 function session() {
   const k = getKernel();
-  const owned: Owned[] = [];
-  const own = <T extends Owned>(handle: T): T => {
-    owned.push(handle);
-    return handle;
-  };
-  const app = own(k.XCAFApp_Application.GetApplication());
-  const docs: unknown[] = [];
+  const scope = new HandleScope();
+  const own = scope.acquire;
   const file = `/rockett-xde-${crypto.randomUUID()}.step`;
+  own({
+    delete: () => {
+      if (k.FS.analyzePath(file).exists) k.FS.unlink(file);
+    },
+  });
+  const app = own(k.XCAFApp_Application.GetApplication());
   const newDocument = () => {
     const doc = own(new k.Handle_TDocStd_Document_1());
     app
@@ -38,7 +43,7 @@ function session() {
         own(new k.TCollection_ExtendedString_2("MDTV-XCAF", true)),
         doc,
       );
-    docs.push(doc);
+    own({ delete: () => app.get().Close(doc) });
     const main = own(doc.get().Main());
     const tool = (name: string) =>
       own(k.XCAFDoc_DocumentTool[name](main)).get();
@@ -52,13 +57,17 @@ function session() {
     );
   };
   const progress = () => own(new k.Message_ProgressRange_1());
-  const close = () => {
-    for (const doc of docs) app.get().Close(doc);
-    if (k.FS.analyzePath(file).exists) k.FS.unlink(file);
-    for (let handle = owned.pop(); handle; handle = owned.pop())
-      handle.delete();
+  const close = (failed = false) => scope.close(failed);
+  return {
+    k,
+    own,
+    keep: scope.keep,
+    file,
+    newDocument,
+    labels,
+    progress,
+    close,
   };
-  return { k, own, file, newDocument, labels, progress, close };
 }
 
 type Session = ReturnType<typeof session>;
@@ -106,6 +115,7 @@ function buildXdeDocument(xde: Session, parts: readonly XdePart[]) {
 export function writeXdeStep(parts: readonly XdePart[]): Buffer {
   const xde = session();
   const { k, own } = xde;
+  let failed = true;
   try {
     const doc = buildXdeDocument(xde, parts);
     const writer = own(new k.STEPCAFControl_Writer_1());
@@ -119,9 +129,11 @@ export function writeXdeStep(parts: readonly XdePart[]): Buffer {
         xde.progress(),
       ) && writer.Write(xde.file) === k.IFSelect_ReturnStatus.IFSelect_RetDone;
     if (!done) throw new Error("STEP export failed in the kernel");
-    return Buffer.from(k.FS.readFile(xde.file) as Uint8Array);
+    const bytes = Buffer.from(k.FS.readFile(xde.file) as Uint8Array);
+    failed = false;
+    return bytes;
   } finally {
-    xde.close();
+    xde.close(failed);
   }
 }
 
@@ -170,10 +182,11 @@ export function readXdeStep(bytes: Uint8Array): {
       name: k.labelName(label),
       ...(color ? { color } : {}),
       path,
-      shape: own(ST.GetShape_2(label)).Moved(location, false),
+      shape: own(own(ST.GetShape_2(label)).Moved(location, false)),
     });
     return { name, body: bodies.length - 1 };
   };
+  let failed = true;
   try {
     k.FS.writeFile(xde.file, bytes);
     const reader = own(new k.STEPCAFControl_Reader_1());
@@ -191,11 +204,10 @@ export function readXdeStep(bytes: Uint8Array): {
         const name = k.labelName(label);
         return walk(label, name, [name], own(new k.TopLoc_Location_1()));
       });
+    for (const body of bodies) body.shape = acquire(xde.keep(body.shape));
+    failed = false;
     return { bodies, tree };
-  } catch (error) {
-    release(bodies.map((b) => b.shape));
-    throw error;
   } finally {
-    xde.close();
+    xde.close(failed);
   }
 }

@@ -7,7 +7,7 @@ import {
   type Vec3,
 } from "@rockett/shared";
 import { pointToUV, V } from "./frames.js";
-import { getKernel, release, scoped, type Shape } from "./kernel.js";
+import { acquire, getKernel, scoped, type Shape } from "./kernel.js";
 import { computeEdgeNames, findFace, type NamedBody } from "./naming.js";
 import { curveInfo } from "./tessellate.js";
 
@@ -177,12 +177,13 @@ export function faceDrawing(
   frame: PlaneFrame,
   quality: number,
 ): Drawing {
-  const k = getKernel();
-  const face = findFace(body, faceName);
-  if (!face) throw new Error(`face ${faceName} not found`);
-  const onFace = new k.TopTools_IndexedMapOfShape_1();
-  const named = computeEdgeNames(body).byName;
-  try {
+  return scoped(() => {
+    const k = getKernel();
+    const face = findFace(body, faceName);
+    if (!face) throw new Error(`face ${faceName} not found`);
+    const onFace = acquire(new k.TopTools_IndexedMapOfShape_1());
+    const named = computeEdgeNames(body).byName;
+
     k.TopExp.MapShapes_1(face, k.TopAbs_ShapeEnum.TopAbs_EDGE, onFace);
     const drawing: Drawing = { sketch: [], polylines: [] };
     for (const [edgeName, edge] of named) {
@@ -207,11 +208,7 @@ export function faceDrawing(
         );
     }
     return drawing;
-  } finally {
-    release(named.values());
-    onFace.delete();
-    face.delete();
-  }
+  });
 }
 
 export function writeDxf(

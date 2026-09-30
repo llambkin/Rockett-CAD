@@ -9,11 +9,12 @@ import { TIMING_MS, TRIAL_BUDGET } from "../tunables.js";
 import { trialBuild } from "./engine.js";
 import { NoCorner, type EvalState } from "./features.js";
 import {
+  acquire,
+  scoped,
   areaOf,
   getKernel,
   lengthOf,
   listToArray,
-  release,
   volumeOf,
 } from "./kernel.js";
 import { computeEdgeNames } from "./naming.js";
@@ -23,14 +24,15 @@ const CLOSE_ENOUGH = 1.25;
 const STEP = 4;
 
 function edgeRoom(state: EvalState, refs: EdgeRef[]): number {
-  const k = getKernel();
-  let room = Infinity;
-  for (const ref of refs) {
-    const body = state.bodies.get(ref.bodyId);
-    if (!body) throw new ValidationError(`body ${ref.bodyId} not found`);
-    const byName = computeEdgeNames(body).byName;
-    const map = new k.TopTools_IndexedDataMapOfShapeListOfShape_1();
-    try {
+  return scoped(() => {
+    const k = getKernel();
+    let room = Infinity;
+    for (const ref of refs) {
+      const body = state.bodies.get(ref.bodyId);
+      if (!body) throw new ValidationError(`body ${ref.bodyId} not found`);
+      const byName = computeEdgeNames(body).byName;
+      const map = acquire(new k.TopTools_IndexedDataMapOfShapeListOfShape_1());
+
       const edge = byName.get(ref.edgeName);
       if (!edge)
         throw new ValidationError(`edge ${ref.edgeName} no longer exists`);
@@ -43,13 +45,9 @@ function edgeRoom(state: EvalState, refs: EdgeRef[]): number {
       const faces = listToArray(map.FindFromIndex_2(map.FindIndex(edge)));
       const length = lengthOf(edge);
       for (const face of faces) room = Math.min(room, areaOf(face) / length);
-      release(faces);
-    } finally {
-      map.delete();
-      release(byName.values());
     }
-  }
-  return room;
+    return room;
+  });
 }
 
 function estimate(state: EvalState, feature: SizedFeature): number {
