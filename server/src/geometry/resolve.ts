@@ -195,6 +195,11 @@ function resolveRef(
 ): RefResolution {
   const name = nameOf(ref);
   const body = bodies.get(ref.bodyId);
+  const tied =
+    ref.kind === "edge" &&
+    name.includes("~?") &&
+    namingVersion() === 2 &&
+    ref.sig;
   const named =
     body && !name.includes("~?")
       ? topology.of(body, ref.kind).get(name)
@@ -204,9 +209,29 @@ function resolveRef(
   const lineal =
     moved.length > 0 || !body ? moved : lineage(topology, body, ref.kind, name);
   const candidates =
-    lineal.length === 0 && body && ref.sig
-      ? nearest(topology, body, ref.kind, ref.sig)
-      : lineal;
+    tied && body
+      ? lineal
+          .filter(
+            ({ name: other }) =>
+              gap(
+                ref.kind,
+                topology.signature(
+                  ref.kind,
+                  topology.of(body, ref.kind).get(other)!,
+                ),
+                tied,
+              ) <= LINEAR_TOL,
+          )
+          .map(({ bodyId, name: other }) => ({
+            bodyId,
+            name: other,
+            basis: "signature" as const,
+          }))
+      : lineal.length === 0 && body && ref.sig
+        ? nearest(topology, body, ref.kind, ref.sig)
+        : lineal;
+  if (tied && candidates.length === 1 && candidates[0]!.name === name)
+    return { status: "resolved" };
   candidates.sort(byBodyAndName);
   const status =
     candidates.length === 0
@@ -262,10 +287,10 @@ export function unresolvedRefs(
   );
 }
 
-export const describeRef = ({ ref, status }: UnresolvedRef) =>
+export const describeRef = ({ ref, status, candidates }: UnresolvedRef) =>
   status === "missing"
     ? `${ref.kind} ${nameOf(ref)} no longer exists on ${ref.bodyId}`
-    : `${ref.kind} ${nameOf(ref)} on ${ref.bodyId} is ${status}`;
+    : `${ref.kind} ${nameOf(ref)} on ${ref.bodyId} is ${status}${ref.kind === "edge" && ref.sig && nameOf(ref).includes("~?") && status === "ambiguous" ? `: ${candidates.map((candidate) => candidate.name).join(", ")}` : ""}`;
 
 export class BlockedFeature extends Error {
   constructor(

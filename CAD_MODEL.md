@@ -138,7 +138,9 @@ imports of one file name faces alike. Mesh imports keep
 `resolveRefs` in `server/src/geometry/resolve.ts` sorts each reference into
 `resolved`, `candidate`, `ambiguous` or `missing`.
 
-- A name its body still bears is `resolved`. A `~?n` name never is.
+- A name its body still bears is `resolved`. Under version 2, a picked `~?n`
+  edge also resolves when its stored signature uniquely matches that name.
+  Unsigned ties require repair; coincident matches report both edge names.
 - Version 2: a name whose `sig` now matches a renumbered sibling is a
   `candidate`, not followed.
 - Otherwise lineage decides, then the `sig` on the referenced body. Other
