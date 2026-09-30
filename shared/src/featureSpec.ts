@@ -69,7 +69,11 @@ export function featureInputs(f: Feature) {
   const topology: Array<[string, FaceRef | EdgeRef]> = [];
   const topo = (path: string, ref: FaceRef | EdgeRef) => {
     bodies.add(ref.bodyId);
-    topology.push([path, ref]);
+    if (
+      (ref.kind === "face" && typeof ref.faceName === "string") ||
+      (ref.kind === "edge" && typeof ref.edgeName === "string")
+    )
+      topology.push([path, ref]);
   };
   for (const ref of featureSpec(f.type)?.refs(f) ?? []) {
     switch (ref.kind) {

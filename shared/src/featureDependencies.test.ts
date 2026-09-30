@@ -8,6 +8,8 @@ import {
   refAt,
   topoRefPaths,
   type Feature,
+  type FaceRef,
+  type EdgeRef,
 } from "./index.js";
 
 it("uses registered references and ignores opaque feature parameters", () => {
@@ -102,4 +104,35 @@ it("leaves unknown module parameters opaque for the evaluator to report", () => 
   expect(collectTopoRefs(feature)).toEqual([]);
   expect(inputBodies(feature)).toEqual([]);
   expect(inputFeatures(feature)).toEqual([]);
+});
+
+it("keeps kindless legacy inputs out of signed topology without changing them", () => {
+  const face = { bodyId: "face-body", faceName: "top" };
+  const edge = { bodyId: "edge-body", edgeName: "side" };
+  const feature = {
+    id: "legacy",
+    name: "Legacy",
+    suppressed: false,
+    type: "shell",
+    faces: [face],
+    edges: [edge],
+    thickness: 1,
+  } as unknown as Feature;
+  const original = structuredClone(feature);
+  const dispose = registerFeatureSpec({
+    ...featureSpec("shell")!,
+    type: "test.legacy",
+    refs: () => [
+      refAt("face", "/faces/0", face as FaceRef),
+      refAt("edge", "/edges/0", edge as EdgeRef),
+    ],
+  });
+  try {
+    const input = { ...feature, type: "test.legacy" } as Feature;
+    expect(collectTopoRefs(input)).toEqual([]);
+    expect(inputBodies(input)).toEqual(["face-body", "edge-body"]);
+    expect(feature).toEqual(original);
+  } finally {
+    dispose();
+  }
 });
