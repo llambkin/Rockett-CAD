@@ -40,7 +40,7 @@ function SketchRepair({ onClose }: FeaturePanelProps) {
       <div className="dialog-body">
         <RefRepair />
       </div>
-      <DialogFooter onCancel={onClose} escapeAnywhere />
+      <DialogFooter onOk={onClose} onCancel={onClose} escapeAnywhere />
     </DraggablePanel>
   );
 }

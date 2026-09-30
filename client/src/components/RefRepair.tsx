@@ -22,6 +22,7 @@ import {
   type Selection,
 } from "../store";
 import { dialogTargets } from "../toolTargets";
+import { loadPreviewBase } from "../previewBase";
 import type { MenuItem } from "./ContextMenu";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
@@ -127,7 +128,21 @@ async function accept(fid: string, ref: Ref, to: Selection): Promise<void> {
   } catch {
     return;
   }
-  s.setMode({ name: "idle" });
+  const current = useStore.getState();
+  if (current.mode.name !== "dialog" || current.mode.editFeatureId !== fid)
+    return;
+  useStore.setState({
+    selection: current.selection.map(
+      (pick) => swapRef(pick, ref, to) as Selection,
+    ),
+    dialogParams: swapRef(
+      current.dialogParams,
+      ref,
+      to,
+    ) as typeof current.dialogParams,
+    hover: null,
+  });
+  await loadPreviewBase(fid, useStore.getState);
 }
 
 export function repick(pick: Selection | null): boolean {

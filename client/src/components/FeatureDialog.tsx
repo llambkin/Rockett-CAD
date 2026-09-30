@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Feature } from "@rockett/shared";
+import type { CadDocument, Feature } from "@rockett/shared";
 import { featurePatch, useStore, type Mode } from "../store";
 import { takesAxis } from "../dialogPicks";
 import { createLivePreview } from "../livePreview";
@@ -58,6 +58,19 @@ function useLivePreview(editId: string | undefined, draft: Feature | null) {
   return live;
 }
 
+function useStoredFeature(
+  document: CadDocument | null,
+  id: string | undefined,
+) {
+  const snapshot = () => ({
+    revision: document?.revision,
+    feature: document?.features.find((f) => f.id === id),
+  });
+  const [stored, setStored] = useState(snapshot);
+  if (stored.revision !== document?.revision) setStored(snapshot());
+  return stored.feature;
+}
+
 export function FeatureDialog() {
   const mode = useStore((s) => s.mode) as DialogMode;
   return (
@@ -85,14 +98,12 @@ function DialogBody({
   const addFeature = useStore((s) => s.addFeature);
   const updateFeature = useStore((s) => s.updateFeature);
   const setError = useStore((s) => s.setError);
-  const document_ = useStore((s) => s.document);
-  const [stored] = useState(() =>
-    document_?.features.find((f) => f.id === editId),
-  );
+  const document = useStore((s) => s.document);
+  const stored = useStoredFeature(document, editId);
   const [pending, setPending] = useState(false);
 
   const axisDialog = takesAxis(dialog, params);
-  const axisPicked = axisPicks(selection, document_).length > 0;
+  const axisPicked = axisPicks(selection, document).length > 0;
   useEffect(() => {
     if (axisDialog && axisPicked && params.axisSource !== "edge")
       setParams({ axisSource: "edge" });
@@ -103,7 +114,6 @@ function DialogBody({
       setParams({ axisSource: "origin", axis: originAxis });
   }, [originAxis, dialog]);
 
-  const noAxis = axisDialog && axisMissing(params, selection, document_);
   const close = () => setMode({ name: "idle" });
 
   useEffect(() => {
@@ -166,7 +176,7 @@ function DialogBody({
         onOk={() => void ok()}
         onCancel={cancel}
         pending={pending}
-        okDisabled={noAxis}
+        okDisabled={axisDialog && axisMissing(params, selection, document)}
         escapeAnywhere
       />
     </DraggablePanel>
