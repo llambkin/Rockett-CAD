@@ -168,7 +168,6 @@ interface State {
 
   openProject: (id: string, path?: string) => Promise<void>;
   closeProject: () => void;
-  applyMutation: (m: MutationResponse) => void;
   mutate: (fn: (tx: string) => Promise<MutationResponse>) => Promise<void>;
   recover: (choice: "reapply" | "discard") => Promise<void>;
   undo: () => Promise<void>;
@@ -578,10 +577,6 @@ export const useStore = create<State>((set, get) => ({
       job: null,
       jobStartedAt: null,
     });
-  },
-
-  applyMutation(m) {
-    set({ document: m.document, evaluation: m.evaluation });
   },
 
   async mutate(fn) {

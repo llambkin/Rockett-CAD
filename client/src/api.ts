@@ -1,4 +1,3 @@
-/** Typed client for the Rockett CAD REST API. */
 import {
   DOCUMENT_EDITS,
   AUTH_ROUTES,
@@ -341,16 +340,14 @@ export function send<P extends string, Req, Res>(
   const query = position === undefined ? "" : `?position=${position}`;
   const id: string | undefined = (params as Partial<Record<string, string>>).id;
   const revision =
-    DOCUMENT_EDITS.has(route) && id !== undefined
-      ? revisions.get(id)
-      : undefined;
+    DOCUMENT_EDITS(route) && id !== undefined ? revisions.get(id) : undefined;
   const match =
     ifMatch ?? (revision === undefined ? undefined : `"${revision}"`);
   return request<Res>(route.method, pathFor(route, params) + query, {
     body,
     signal,
     ...(onEtag && { onEtag }),
-    ...((DOCUMENT_EDITS.has(route) || route === ROUTES.importProject) && {
+    ...((DOCUMENT_EDITS(route) || route === ROUTES.importProject) && {
       jobId: crypto.randomUUID(),
     }),
     headers: {
@@ -396,6 +393,7 @@ async function sendHeld<P extends string, Req, Res>(
   return [await send(route, params, options), held];
 }
 
+export { holding as sendMutation };
 async function holding<P extends string, Req, Res extends WireMutationResponse>(
   route: Route<P, Req & HeldMeshes, Res>,
   params: PathParams<P>,

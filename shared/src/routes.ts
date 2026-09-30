@@ -1,4 +1,4 @@
-import { Type, type Static, type TSchema } from "typebox";
+import { Type, type Static } from "typebox";
 import type { SignInStep, TotpEnrolment, User } from "./auth.js";
 import type { HealthResponse } from "./health.js";
 export type { Health, HealthResponse } from "./health.js";
@@ -97,38 +97,14 @@ export const projectFileEnvelope = Type.Object({
   assets: Type.Record(Type.String(), Type.String()),
 });
 
-export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
-declare const exchange: unique symbol;
-
-export interface Route<
-  P extends string = string,
-  Req = unknown,
-  Res = unknown,
-> {
-  readonly method: Method;
-  readonly path: P;
-  readonly body?: TSchema;
-  readonly [exchange]?: { request: Req; response: Res };
-}
-
-type ParamNames<P extends string> =
-  P extends `${string}:${infer Name}/${infer Rest}`
-    ? Name | ParamNames<Rest>
-    : P extends `${string}:${infer Name}`
-      ? Name
-      : never;
-
-export type PathParams<P extends string> = Record<ParamNames<P>, string>;
-
-export const route =
-  <Req, Res>() =>
-  <const P extends string, S extends TSchema>(
-    method: Method,
-    path: P,
-    body?: S & (Static<S> extends Req ? unknown : never),
-  ): Route<P, Req, Res> =>
-    body ? { method, path, body } : { method, path };
+import { route } from "./routeContract.js";
+export {
+  route,
+  pathFor,
+  DOCUMENT_EDITS,
+  VIEWER_WRITES,
+} from "./routeContract.js";
+export type { Method, Route, PathParams } from "./routeContract.js";
 
 export const loginBody = Type.Object(
   {
@@ -360,6 +336,7 @@ export const ROUTES = {
     "POST",
     "/projects/:id/rename",
     name,
+    "document",
   ),
   placeProject: route<{ folderId: string | null }, { ok: true }>()(
     "PUT",
@@ -371,21 +348,27 @@ export const ROUTES = {
   evaluate: route<HeldMeshes, WireEvaluateResult>()(
     "POST",
     "/projects/:id/evaluate",
+    undefined,
+    "viewer",
   ),
   jobEvents: route<never, never>()("GET", "/jobs/:jobId/events"),
   cancelJob: route<never, { ok: true }>()("DELETE", "/jobs/:jobId"),
   importInto: route<FormData, MutationResponse>()(
     "POST",
     "/projects/:id/import",
+    undefined,
+    "document",
   ),
   addFeature: route<{ feature: Feature } & HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/features",
+    undefined,
+    "document",
   ),
   updateFeature: route<
     { feature: Partial<Feature> } & HeldMeshes,
     WireMutationResponse
-  >()("PUT", "/projects/:id/features/:fid"),
+  >()("PUT", "/projects/:id/features/:fid", undefined, "document"),
   projectEdge: route<
     { edge: EdgeRef; entityId: string },
     { entities: SketchEntity[] }
@@ -396,15 +379,19 @@ export const ROUTES = {
       edge: edgeRef,
       entityId: Type.String({ minLength: 1, maxLength: 100 }),
     }),
+    "viewer",
   ),
   deleteFeature: route<HeldMeshes, WireMutationResponse>()(
     "DELETE",
     "/projects/:id/features/:fid",
+    undefined,
+    "document",
   ),
   setTimeline: route<{ position: number } & HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/timeline",
     Type.Object({ position: Type.Integer({ minimum: 0 }) }),
+    "document",
   ),
   tangentEdges: route<
     { edge: EdgeRef; beforeFeatureId?: string | undefined },
@@ -416,9 +403,20 @@ export const ROUTES = {
       edge: edgeRef,
       beforeFeatureId: Type.Optional(Type.String()),
     }),
+    "viewer",
   ),
-  undo: route<HeldMeshes, WireMutationResponse>()("POST", "/projects/:id/undo"),
-  redo: route<HeldMeshes, WireMutationResponse>()("POST", "/projects/:id/redo"),
+  undo: route<HeldMeshes, WireMutationResponse>()(
+    "POST",
+    "/projects/:id/undo",
+    undefined,
+    "document",
+  ),
+  redo: route<HeldMeshes, WireMutationResponse>()(
+    "POST",
+    "/projects/:id/redo",
+    undefined,
+    "document",
+  ),
   commitPreview: route<HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/previews/:tx/commit",
@@ -448,6 +446,7 @@ export const ROUTES = {
       },
       { additionalProperties: false },
     ),
+    "document",
   ),
   updateBody: route<{ name: string } & HeldMeshes, WireMutationResponse>()(
     "PUT",
@@ -459,11 +458,17 @@ export const ROUTES = {
       },
       { additionalProperties: false },
     ),
+    "document",
   ),
   updateGroups: route<
     { groups: TreeGroup[] } & HeldMeshes,
     WireMutationResponse
-  >()("PUT", "/projects/:id/groups", Type.Object({ groups: groupsSchema })),
+  >()(
+    "PUT",
+    "/projects/:id/groups",
+    Type.Object({ groups: groupsSchema }),
+    "document",
+  ),
   stageNamingUpgrade: route<
     { accept?: NamingDecision[] },
     NamingUpgradeProposal
@@ -471,7 +476,12 @@ export const ROUTES = {
   commitNamingUpgrade: route<
     { accept?: NamingDecision[] } & HeldMeshes,
     NamingUpgradeResponse
-  >()("POST", "/projects/:id/upgrade-naming/commit", namingUpgradeBody),
+  >()(
+    "POST",
+    "/projects/:id/upgrade-naming/commit",
+    namingUpgradeBody,
+    "document",
+  ),
   collectBlobs: route<{ dryRun?: boolean }, BlobCollection>()(
     "POST",
     "/projects/:id/maintenance/gc",
@@ -484,10 +494,13 @@ export const ROUTES = {
     "PUT",
     "/projects/:id/view",
     projectView,
+    "viewer",
   ),
   sizeLimit: route<SizeLimitRequest, SizeLimit>()(
     "POST",
     "/projects/:id/size-limit",
+    undefined,
+    "viewer",
   ),
   measure: route<MeasureRequest, MeasureResult>()(
     "POST",
@@ -495,6 +508,7 @@ export const ROUTES = {
     Type.Object({
       refs: Type.Array(topoRef, { minItems: 1, maxItems: 2 }),
     }),
+    "viewer",
   ),
   exportModel: route<ExportRequest, Blob>()(
     "POST",
@@ -507,6 +521,7 @@ export const ROUTES = {
       quality: Type.Optional(Type.Number()),
       retain: Type.Optional(Type.Boolean()),
     }),
+    "viewer",
   ),
   uploadImage: route<FormData, { assetId: string }>()(
     "POST",
@@ -535,30 +550,3 @@ export const ROUTES = {
 };
 
 export const PREVIEW_HEADER = "X-Rockett-Preview";
-
-export const DOCUMENT_EDITS: ReadonlySet<Route> = new Set<Route>([
-  ROUTES.renameProject,
-  ROUTES.importInto,
-  ROUTES.addFeature,
-  ROUTES.updateFeature,
-  ROUTES.deleteFeature,
-  ROUTES.setTimeline,
-  ROUTES.undo,
-  ROUTES.redo,
-  ROUTES.restoreHistory,
-  ROUTES.updateBody,
-  ROUTES.updateGroups,
-  ROUTES.commitNamingUpgrade,
-]);
-
-export function pathFor<P extends string>(
-  target: Route<P>,
-  params: PathParams<P>,
-): string {
-  const values: Partial<Record<string, string>> = params;
-  return target.path.replace(/:(\w+)/g, (_match, key: string) => {
-    const value = values[key];
-    if (value === undefined) throw new Error(`${target.path} needs :${key}`);
-    return encodeURIComponent(value);
-  });
-}
