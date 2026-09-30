@@ -45,8 +45,7 @@ export const bodyRoutes: RouteModule = {
       const meta = doc.bodyMeta[req.params.bodyId];
       if (!meta) throw new StoreError("body not found", "not_found");
       const label = `Rename ${meta.name}`;
-      if (req.body.name !== undefined)
-        meta.name = req.body.name.slice(0, NAME_LENGTH);
+      meta.name = req.body.name.slice(0, NAME_LENGTH);
       return { label };
     });
   },

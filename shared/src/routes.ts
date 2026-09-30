@@ -452,12 +452,12 @@ export const ROUTES = {
       { additionalProperties: false },
     ),
   ),
-  updateBody: route<{ name?: string } & HeldMeshes, WireMutationResponse>()(
+  updateBody: route<{ name: string } & HeldMeshes, WireMutationResponse>()(
     "PUT",
     "/projects/:id/bodies/:bodyId",
     Type.Object(
       {
-        name: Type.Optional(Type.String()),
+        name: Type.String(),
         held: Type.Optional(Type.Array(Type.String())),
       },
       { additionalProperties: false },
