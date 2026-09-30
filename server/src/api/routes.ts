@@ -404,6 +404,7 @@ export function createApiRouter(
     );
 
   on(ROUTES.health, (_req, res) => {
+    if (!res.locals.user) return res.json({ ok: true });
     res.json({
       ok: true,
       ...build(),

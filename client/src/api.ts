@@ -14,7 +14,6 @@ import {
   type EvaluateResult,
   type ExportRequest,
   type Feature,
-  type Health,
   type HeldMeshes,
   type MeasureRequest,
   type MutationResponse,
@@ -34,7 +33,6 @@ import { TIMING_MS } from "./tunables";
 export type { Health, MutationResponse } from "@rockett/shared";
 const API = "/api";
 
-let health: Promise<Health> | undefined;
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -468,7 +466,7 @@ export const api = {
       email?: string | null;
     },
   ) => send(AUTH_ROUTES.userPatch, { id }, { body: patch }),
-  health: () => (health ??= send(ROUTES.health, {})),
+  health: () => send(ROUTES.health, {}),
   formats: () => send(ROUTES.formats, {}),
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
     const options = { body: fileForm("file", file), signal };

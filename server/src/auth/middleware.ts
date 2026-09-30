@@ -51,7 +51,8 @@ export function requireSession(
 ): RequestHandler {
   return async (req, res, next) => {
     const key = `${req.method} ${req.baseUrl}${req.path}`;
-    if (PUBLIC_ROUTES.has(key)) return next();
+    const publicRoute = PUBLIC_ROUTES.has(key);
+    if (publicRoute && key !== "GET /api/health") return next();
     const token = readSessionCookie(req.headers.cookie, cookie.name);
     let credential = token;
     try {
@@ -79,8 +80,10 @@ export function requireSession(
       if (
         record?.status !== "active" ||
         (scope !== "full" && !STEP_ROUTES[scope].has(key))
-      )
+      ) {
+        if (publicRoute) return next();
         return res.status(401).json({ error: "unauthenticated" });
+      }
       if (token && credential === token && scope === "full")
         res.set("Set-Cookie", sessionCookie(cookie, token));
       res.locals.user = toPublicUser(record);

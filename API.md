@@ -87,6 +87,9 @@ notice routes.
   other route needs a session cookie or, when `ROCKETT_CF_ACCESS_TEAM` and
   `ROCKETT_CF_ACCESS_AUD` are set, a verified `Cf-Access-Jwt-Assertion` whose
   email matches an active user: `server/src/auth/cfAccess.ts`.
+- `GET /health` returns only `{ ok: true }` without a full signed-in identity.
+  Build, schema and kernel diagnostics require that identity; health stays
+  available to anonymous and step-session callers.
 - Admins must use TOTP; members may opt in. A sign-in that needs a code or
   enrolment gets a step session limited to `STEP_ROUTES` in
   `server/src/auth/middleware.ts`.

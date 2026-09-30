@@ -1,5 +1,7 @@
 import { Type, type Static, type TSchema } from "typebox";
 import type { SignInStep, TotpEnrolment, User } from "./auth.js";
+import type { HealthResponse } from "./health.js";
+export type { Health, HealthResponse } from "./health.js";
 import type {
   CadDocument,
   EdgeRef,
@@ -97,15 +99,6 @@ export const projectFileEnvelope = Type.Object({
   document: Type.Object({ schemaVersion: Type.Integer({ minimum: 1 }) }),
   assets: Type.Record(Type.String(), Type.String()),
 });
-
-export interface Health {
-  version: string;
-  schemaVersion: number;
-  commit: string | null;
-  describe: string | null;
-  kernelVersion: { occt: string; commit: string } | null;
-  kernel: "starting" | "ready" | "restarting" | "failed";
-}
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -330,7 +323,7 @@ export interface ProjectMembersRoster extends ProjectMembersResponse {
 }
 
 export const ROUTES = {
-  health: route<never, Health>()("GET", "/health"),
+  health: route<never, HealthResponse>()("GET", "/health"),
   ...settingsRoutes(route),
   formats: route<never, Formats>()("GET", "/formats"),
   listProjects: route<never, ProjectSummary[]>()("GET", "/projects"),
