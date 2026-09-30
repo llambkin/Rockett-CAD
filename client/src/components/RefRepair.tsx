@@ -129,7 +129,11 @@ async function accept(fid: string, ref: Ref, to: Selection): Promise<void> {
     return;
   }
   const current = useStore.getState();
-  if (current.mode.name !== "dialog" || current.mode.editFeatureId !== fid)
+  if (
+    current.projectId !== s.projectId ||
+    current.mode.name !== "dialog" ||
+    current.mode.editFeatureId !== fid
+  )
     return;
   useStore.setState({
     selection: current.selection.map(
