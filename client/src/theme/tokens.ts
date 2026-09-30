@@ -174,7 +174,10 @@ export const ACCENT_MIN_CONTRAST = 3;
 const ACCENT_FILL_DARKEN = 0.65;
 
 export function accentContrast(accent: string, theme: ThemeTokens): number {
-  return contrastRatio(accent, theme.bg0);
+  return Math.min(
+    contrastRatio(accent, theme.bg0),
+    contrastRatio(accent, theme["viewport-bg"]),
+  );
 }
 
 export function accentFits(accent: string, theme: ThemeTokens): boolean {
