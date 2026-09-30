@@ -6,6 +6,7 @@ import {
   type ReferenceImageFeature,
 } from "@rockett/shared";
 import { api } from "../api";
+import { RefRepair } from "../components/RefRepair";
 import { DraggablePanel } from "../components/DraggablePanel";
 import { DialogFooter } from "../components/form/DialogFooter";
 import { AngleField, LengthField, SelInfo } from "../components/form/fields";
@@ -65,6 +66,15 @@ function prefill(f: ReferenceImageFeature) {
   };
 }
 
+function imageDimensions(file: File): Promise<{ w: number; h: number }> {
+  const img = new Image();
+  return new Promise((resolve, reject) => {
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 function ReferenceImagePanel({
   editId,
   onClose,
@@ -113,15 +123,7 @@ function ReferenceImagePanel({
       }
       const { selection } = useStore.getState();
       const { assetId } = await api.uploadImage(doc!.id, file);
-      const img = new Image();
-      const dims = await new Promise<{ w: number; h: number }>(
-        (resolve, reject) => {
-          img.onload = () =>
-            resolve({ w: img.naturalWidth, h: img.naturalHeight });
-          img.onerror = reject;
-          img.src = URL.createObjectURL(file);
-        },
-      );
+      const dims = await imageDimensions(file);
       const built = build(
         {
           ...params,
@@ -187,6 +189,7 @@ function ReferenceImagePanel({
   return (
     <DraggablePanel title="Reference Image">
       <div className="dialog-body">
+        <RefRepair />
         {!existing && (
           <>
             <SelInfo

@@ -44,7 +44,7 @@ everything downstream against persistent topology references.
 - **Feature timeline**: wheel scrolling; keyboard chip selection/actions; rename, edit, quick edit, preview, suppress, delete, rollback, insert; broken references flagged.
 - **Job progress**: long model changes show Working, feature counts when available, and Cancel in the viewport.
 - **Crash recovery**: a crashed kernel flags the running feature and blocks dependent geometry and exports until that feature is edited.
-- **Reference repair**: in the feature's dialog, accept or choose a proposed face or edge for a broken reference, or re-pick it.
+- **Reference repair**: accept proposed faces and edges, including sketch projections and image planes, or re-pick broken feature references.
 - **Naming upgrade**: from a version 1 project's timeline menu or feature dialog, review every reference mapping, choose uncertain ones, apply, and undo.
 
 ### Inspect

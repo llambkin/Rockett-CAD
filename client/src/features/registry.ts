@@ -39,6 +39,7 @@ interface FeatureUIBase<F extends Feature> {
 }
 
 interface DialogUI<F extends Feature> {
+  open?(f: F): Promise<void>;
   type: F["type"] & FeatureType;
   prefill(f: F): { params: DialogParams; selection: Selection[] };
 }
@@ -66,7 +67,10 @@ export type FeatureUI<F extends Feature = Feature> = FeatureUIBase<F> &
 
 export type DialogFeatureUI = Extract<FeatureUI, { prefill: unknown }>;
 
-async function openInDialog(ui: DialogFeatureUI, f: Feature): Promise<void> {
+export async function openInDialog(
+  ui: DialogFeatureUI,
+  f: Feature,
+): Promise<void> {
   if (useStore.getState().mode.name === "sketch") {
     await useStore.getState().finishSketch();
     if (useStore.getState().mode.name === "sketch") return;
@@ -84,7 +88,10 @@ const featureUIs = createRegistry<
 
 export function registerFeatureUI(ui: FeatureUI): () => void {
   if (!ui.prefill) return featureUIs.register(ui);
-  return featureUIs.register({ ...ui, open: (f) => openInDialog(ui, f) });
+  return featureUIs.register({
+    ...ui,
+    open: ui.open ?? ((f) => openInDialog(ui, f)),
+  });
 }
 
 export const featureUI = featureUIs.get;
