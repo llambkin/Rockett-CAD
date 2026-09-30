@@ -30,6 +30,7 @@
     "test": "npm run typecheck && vitest run --project node --project dom",
     "test:browser": "vitest run --project browser",
     "test:client": "vitest run --project node --project dom client/test",
+    "test:focused": "node scripts/test-focused.mjs",
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client && tsc -p modules/cam"
   },
   "devDependencies": {

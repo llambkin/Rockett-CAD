@@ -41,5 +41,6 @@ Brief.md
 docs/internals/
 scripts/check-work-order.sh
 scripts/test-work-order.sh
+scripts/test-focused.test.ts
 server/test/
 client/test/

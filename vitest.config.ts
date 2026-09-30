@@ -8,14 +8,16 @@ export const projects = [
     environment: "node",
     include: [
       "shared/test/**/*.test.ts",
+      "scripts/*.test.ts",
       "server/test/**/*.test.ts",
-      "server/src/**/*.test.ts",
+      "{shared,server,client}/src/**/*.test.ts",
+      "modules/*/**/*.test.ts",
       "client/test/**/*.test.ts",
-      "modules/*/test/**/*.test.ts",
     ],
     exclude: [
       "**/test/dom/**",
       "**/test/browser/**",
+      "**/node_modules/**",
       "server/test/memorySoak.test.ts",
     ],
     testTimeout: 30_000,
@@ -26,10 +28,12 @@ export const projects = [
     environment: "happy-dom",
     include: [
       "client/test/*.test.tsx",
+      "client/src/**/*.test.tsx",
+      "modules/*/**/*.test.tsx",
       "client/test/dom/**/*.test.{ts,tsx}",
       "modules/*/test/dom/**/*.test.{ts,tsx}",
     ],
-    exclude: [],
+    exclude: ["**/node_modules/**"],
     setupFiles: ["client/test/dom/setup.ts"],
     testTimeout: 30_000,
     benchmark: { include: ["client/test/**/*.bench.ts"] },
@@ -55,5 +59,9 @@ export const projects = [
 ];
 
 export default defineConfig({
-  test: { projects: projects.map((test) => ({ test })) },
+  test: {
+    allowOnly: false,
+    passWithNoTests: false,
+    projects: projects.map((test) => ({ test })),
+  },
 });
