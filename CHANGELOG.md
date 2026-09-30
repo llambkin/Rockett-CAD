@@ -30,8 +30,9 @@ release workflow remain under development.
 - Server-owned undo/redo, preview transactions, history attribution, checkpoints
   and confirmed restore. Admins can collect orphan project blobs.
 - Reference signatures, explicit tool targets and reference repair in feature
-  dialogs, including sketch projections and reference-image planes. Existing
-  naming-version 1 projects can review and apply a backed-up,
+  dialogs, including sketch projections and reference-image planes. Repairs keep
+  the edit dialog open and refresh its preview base; OK finishes the edit.
+  Existing naming-version 1 projects can review and apply a backed-up,
   undoable upgrade to version 2.
 - Planar-face revolve, construction planes by angle, three points or two edges,
   plane flip and midplane offset, origin-axis picking, active dialog pick rows
