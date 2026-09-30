@@ -78,9 +78,10 @@ release workflow remain under development.
   and view-only members can save their own view.
 - Construction-plane visibility belongs to each user view; hidden planes remain
   active supports. Shape lookup compares identity even when kernel hashes collide.
-- Readable and unreadable project deletion requires confirmation and a matching
-  revision or content tag; stale requests are refused. The naming report refuses
-  projects that still need document, manifest or naming migration.
+- Deleting saved server projects, readable or unreadable, requires confirmation
+  and a matching revision or content tag; stale requests are refused. The naming
+  report skips
+  projects with an interrupted migration and exits nonzero.
 - Sign-in/setup failures are rate-limited by address, including behind an
   explicitly trusted proxy. Common passwords are refused, malformed sessions
   are moved aside, health diagnostics require access and request contents stay
