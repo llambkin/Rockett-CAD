@@ -1,3 +1,6 @@
+import type { Static } from "typebox";
+import type { FEATURE_SCHEMAS } from "./schema/features.js";
+
 /**
  * Rockett CAD — parametric document model.
  *
@@ -331,11 +334,7 @@ export interface SplitBodyFeature extends FeatureBase {
   tool: PlaneRef;
 }
 
-export interface OffsetFaceFeature extends FeatureBase {
-  type: "offsetFace";
-  faces: FaceRef[];
-  distance: number;
-}
+export type OffsetFaceFeature = Static<typeof FEATURE_SCHEMAS.offsetFace>;
 
 export interface MirrorFeature extends FeatureBase {
   type: "mirror";

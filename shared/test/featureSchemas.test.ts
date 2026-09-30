@@ -15,7 +15,6 @@ import type {
   LoftFeature,
   MirrorFeature,
   MoveFeature,
-  OffsetFaceFeature,
   ReferenceImageFeature,
   RevolveFeature,
   ShellFeature,
@@ -57,7 +56,6 @@ const typesMatch: {
   shell: Equal<Static<Schemas["shell"]>, ShellFeature>;
   combine: Equal<Static<Schemas["combine"]>, CombineFeature>;
   splitBody: Equal<Static<Schemas["splitBody"]>, SplitBodyFeature>;
-  offsetFace: Equal<Static<Schemas["offsetFace"]>, OffsetFaceFeature>;
   mirror: Equal<Static<Schemas["mirror"]>, MirrorFeature>;
   linearPattern: Equal<Static<Schemas["linearPattern"]>, LinearPatternFeature>;
   circularPattern: Equal<
@@ -85,7 +83,6 @@ const typesMatch: {
   shell: true,
   combine: true,
   splitBody: true,
-  offsetFace: true,
   mirror: true,
   linearPattern: true,
   circularPattern: true,
