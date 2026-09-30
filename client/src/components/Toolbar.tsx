@@ -59,6 +59,7 @@ export async function addSketchConstraints(constraints: SketchConstraint[]) {
 export function Toolbar() {
   const mode = useStore((s) => s.mode);
   useStore((s) => s.busy);
+  useStore((s) => s.active?.id);
   useRegistrations();
 
   if (mode.name === "sketch") return <SketchToolbar />;

@@ -8,6 +8,7 @@ import {
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { createRegistry } from "@rockett/shared";
+import { activeCommand } from "../commands/active";
 import type { CommandContext } from "../commands/registry";
 import { featureUI } from "../features/registry";
 import { useStore } from "../store";
@@ -103,7 +104,7 @@ registerPanel({
 registerPanel({
   id: "inspect.measure",
   title: "Measure",
-  when: (s) => s.mode.name === "measure",
+  when: (s) => activeCommand(s)?.panel === "inspect.measure",
   component: MeasurePanel,
 });
 registerPanel({

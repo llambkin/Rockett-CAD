@@ -1,11 +1,11 @@
 import { create } from "zustand";
+import type { Active } from "./commands/active";
 import type {
   CadDocument,
   EvaluateResult,
   Feature,
   FeatureType,
   HistoryStatus,
-  MeasureResult,
   OpenedProject,
   OriginAxis,
   PlaneRef,
@@ -14,7 +14,6 @@ import type {
   SketchEntity,
   SketchFeature,
   SketchImport,
-  TopoRef,
   TrimTarget,
   ViewCamera,
   Visibility,
@@ -80,9 +79,6 @@ export function selectionKey(s: Selection): string {
   }
 }
 
-const measurable = (s: Selection): s is TopoRef =>
-  s.kind === "face" || s.kind === "edge" || s.kind === "vertex";
-
 export type SketchTool =
   | "select"
   | "line"
@@ -110,8 +106,7 @@ export type Mode =
       tool: SketchTool;
       constructionMode: boolean;
     }
-  | { name: "dialog"; dialog: DialogType; editFeatureId?: string }
-  | { name: "measure" };
+  | { name: "dialog"; dialog: DialogType; editFeatureId?: string };
 
 function historyEditingState(
   mode: Mode,
@@ -169,7 +164,7 @@ interface State {
 
   draftSketch: SketchFeature | null;
 
-  measureResult: MeasureResult | null;
+  active: Active | null;
 
   openProject: (id: string, path?: string) => Promise<void>;
   closeProject: () => void;
@@ -227,9 +222,10 @@ interface State {
   setBodyMeta: (bodyId: string, patch: { name: string }) => Promise<void>;
   setVisible: (shown: Visibility) => Promise<void>;
   moveCamera: (camera: ViewCamera) => void;
-
-  runMeasure: () => Promise<void>;
 }
+
+export const isIdle = (s: Pick<State, "mode" | "active">) =>
+  s.mode.name === "idle" && !s.active;
 
 export function featurePatch(feature: Feature): Partial<Feature> {
   const { id: _id, suppressed: _suppressed, ...patch } = feature as any;
@@ -511,13 +507,19 @@ export const useStore = create<State>((set, get) => ({
   selection: [],
   hover: null,
   draftSketch: null,
-  measureResult: null,
+  active: null,
 
   async openProject(id, path = projectPath(id)) {
     cameraSave.dropCameraSave();
     void get().cancelPreview();
     api.forgetJob?.();
-    set({ busy: true, error: null, job: null, jobStartedAt: null });
+    set({
+      active: null,
+      busy: true,
+      error: null,
+      job: null,
+      jobStartedAt: null,
+    });
     try {
       const [{ document, access }, view] = await Promise.all([
         api.getProject(id),
@@ -562,6 +564,7 @@ export const useStore = create<State>((set, get) => ({
       savedAt: null,
       error: null,
       projectId: null,
+      active: null,
       access: null,
       document: null,
       evaluation: null,
@@ -716,7 +719,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  setSelection: (s) => set({ selection: s, measureResult: null }),
+  setSelection: (s) => set({ selection: s }),
   toggleSelection(s, additive) {
     const { selection } = get();
     const key = selectionKey(s);
@@ -741,9 +744,8 @@ export const useStore = create<State>((set, get) => ({
       mode: m,
       dialogParams: {},
       pickInput: null,
-      measureResult: null,
-      selection:
-        m.name === "measure" ? selection.filter(measurable) : selection,
+      active: null,
+      selection,
     });
   },
   cancelDialog() {
@@ -1239,22 +1241,6 @@ export const useStore = create<State>((set, get) => ({
       cameraSave.scheduleCameraSave(
         () => void saveView(projectId, (view) => ({ ...view, camera })),
       );
-  },
-
-  async runMeasure() {
-    const { selection, document } = get();
-    if (!document) return;
-    const refs = selection.filter(measurable).slice(0, 2);
-    if (refs.length === 0) {
-      set({ measureResult: null });
-      return;
-    }
-    try {
-      const result = await api.measure(document.id, refs);
-      set({ measureResult: result });
-    } catch (e: any) {
-      set({ error: e.message });
-    }
   },
 }));
 

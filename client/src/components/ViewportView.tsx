@@ -61,6 +61,7 @@ import {
   previewBodies,
   previewedFeature,
   useStore,
+  isIdle,
   type Selection,
 } from "../store";
 import {
@@ -71,6 +72,7 @@ import {
 } from "../previewBase";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { activeCommand } from "../commands/active";
 import { registerHoldKey } from "../commands/keymap";
 import { watchSnapshots } from "../snapshot";
 import * as tools from "../sketchTools";
@@ -141,6 +143,7 @@ export function ViewportView() {
   const savedCamera = useStore((s) => s.view.camera);
   const shownCamera = useRef({ key: "", camera: null as ViewCamera | null });
   const mode = useStore((s) => s.mode);
+  const idle = useStore(isIdle);
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
   const peeked = usePeekedFeature();
@@ -416,7 +419,7 @@ export function ViewportView() {
       mode.name === "dialog" && takes(mode.dialog, "profile");
     // Fusion-style select-then-command: in idle, unused sketch regions shade
     // and are selectable before any tool is chosen.
-    const idleProfiles = mode.name === "idle";
+    const idleProfiles = idle;
 
     const inputs: SketchRenderInput[] = [];
     for (const sk of evaluation.sketches) {
@@ -518,6 +521,7 @@ export function ViewportView() {
     hiddenFeatures,
     mode,
     selection,
+    idle,
     hover,
     peeked,
     draftSketch,
@@ -1620,7 +1624,11 @@ export function ViewportView() {
     );
     const s = useStore.getState();
     let picked: Selection | null = null;
-    if (s.mode.name === "pickPlane") {
+    const command = activeCommand();
+    if (command) {
+      const r = vp.pick(e.clientX, e.clientY, command.pickFilter);
+      picked = command.onHover(r?.selection ?? null, e);
+    } else if (s.mode.name === "pickPlane") {
       const r = vp.pick(e.clientX, e.clientY, {
         originPlanes: true,
         constructionPlanes: true,
@@ -1715,13 +1723,6 @@ export function ViewportView() {
     } else if (s.mode.name === "dialog") {
       const r = vp.pick(e.clientX, e.clientY, dialogPickOptions(s));
       picked = hoverPick(s, r?.selection ?? null);
-    } else if (s.mode.name === "measure") {
-      const r = vp.pick(e.clientX, e.clientY, {
-        faces: true,
-        edges: true,
-        vertices: true,
-      });
-      picked = r?.selection ?? null;
     } else {
       // idle: hover also previews sketch regions/curves (selectable now)
       const r = vp.pick(e.clientX, e.clientY, {
@@ -2155,6 +2156,16 @@ export function ViewportView() {
       e.altKey && samePos ? toolState.current.pickDepth + 1 : 0;
     toolState.current.lastPickPos = { x: e.clientX, y: e.clientY };
 
+    const command = activeCommand();
+    if (command) {
+      const r = vp.pick(e.clientX, e.clientY, {
+        ...command.pickFilter,
+        depth: toolState.current.pickDepth,
+      });
+      await command.onClick(r?.selection ?? null, e);
+      return;
+    }
+
     if (s.mode.name === "pickPlane") {
       const r = vp.pick(e.clientX, e.clientY, {
         originPlanes: true,
@@ -2194,24 +2205,6 @@ export function ViewportView() {
       const taken = sel && featureUI(s.mode.dialog)?.onPick?.(sel, s);
       if (taken) return taken;
       if (sel) pickInto([sel], e.ctrlKey || e.metaKey || e.shiftKey);
-      return;
-    }
-
-    if (s.mode.name === "measure") {
-      const r = vp.pick(e.clientX, e.clientY, {
-        faces: true,
-        edges: true,
-        vertices: true,
-        depth: toolState.current.pickDepth,
-      });
-      if (r) {
-        const cur = s.selection;
-        const next = cur.length >= 2 ? [r.selection] : [...cur, r.selection];
-        s.setSelection(next);
-        await s.runMeasure();
-      } else {
-        s.setSelection([]);
-      }
       return;
     }
 
@@ -2457,6 +2450,12 @@ export function ViewportView() {
     const s = useStore.getState();
     const vp = viewportRef.current;
     if (!vp) return;
+    const command = activeCommand();
+    if (command) {
+      const r = vp.pick(e.clientX, e.clientY, command.pickFilter);
+      command.onContextMenu(r?.selection ?? null, e);
+      return;
+    }
     if (s.mode.name === "sketch") {
       // right-click sketch geometry → delete / construction / dimension
       const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
@@ -2568,6 +2567,7 @@ export function ViewportView() {
 
   function handleDoubleClick(e: MouseEvent) {
     const s = useStore.getState();
+    if (s.active) return;
     if (s.mode.name === "idle") {
       // double-click a sketch curve → edit that sketch
       const vp = viewportRef.current!;
@@ -3100,6 +3100,7 @@ export function ViewportView() {
 
 function ViewportHud() {
   const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active?.id);
   const job = useStore((s) => s.job);
   const jobStartedAt = useStore((s) => s.jobStartedAt);
   const cancelJob = useStore((s) => s.cancelJob);
@@ -3116,10 +3117,10 @@ function ViewportHud() {
     return () => window.clearTimeout(timer);
   }, [jobStartedAt]);
 
-  let hint = "";
-  if (mode.name === "pickPlane")
+  let hint = active ? (activeCommand()?.hint ?? "") : "";
+  if (!active && mode.name === "pickPlane")
     hint = "Select a plane or planar face to sketch on";
-  else if (mode.name === "sketch") {
+  else if (!active && mode.name === "sketch") {
     const toolHints: Record<string, string> = {
       select: "Drag points to adjust · click to select",
       line: "Click points to chain lines · double-click / Esc to end",
@@ -3141,8 +3142,7 @@ function ViewportHud() {
         "Ctrl-click to add/remove curves · select a connected chain · preview then Create offset",
     };
     hint = toolHints[(mode as any).tool] ?? "";
-  } else if (mode.name === "measure")
-    hint = "Select up to two faces / edges / vertices";
+  }
 
   return (
     <>

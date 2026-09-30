@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createRegistry } from "@rockett/shared";
+import type { ActiveCommand } from "./active";
 import type { IconId } from "../icons";
 import { useStore } from "../store";
 
@@ -13,6 +14,7 @@ interface Anchored {
 
 interface CommandBase extends Anchored {
   label: string;
+  interaction?: ActiveCommand;
   when?(ctx: CommandContext): boolean;
   enabled?(ctx: CommandContext): true | string;
 }
@@ -65,6 +67,7 @@ const groupRegistry = createRegistry<ToolbarGroup>(
 );
 
 export const registerCommand = commandRegistry.register;
+export const commandById = commandRegistry.get;
 export const registerToolbarGroup = groupRegistry.register;
 export const commands = commandRegistry.list;
 export const toolbarGroups = groupRegistry.list;

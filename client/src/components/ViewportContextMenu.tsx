@@ -1,3 +1,4 @@
+import { runCommand } from "../commands/registry";
 import { useMemo } from "react";
 import { useStore, type Selection } from "../store";
 import { viewportHandle } from "../viewportRef";
@@ -182,9 +183,8 @@ export function ViewportContextMenu({
     items.push({
       label: "Measure",
       action: () => {
-        s.setMode({ name: "measure" });
         s.setSelection([sel]);
-        void s.runMeasure();
+        void runCommand("inspect.measure");
       },
     });
   }

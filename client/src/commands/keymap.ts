@@ -1,4 +1,5 @@
 import { createRegistry } from "@rockett/shared";
+import { activeCommand } from "./active";
 import { sketchToolFor } from "../shortcuts";
 import { useStore } from "../store";
 import {
@@ -100,6 +101,7 @@ function chordOf(e: KeyEvent): string {
 }
 
 function keyContexts(s: CommandContext): string[] {
+  if (s.active) return [activeCommand(s)?.keyContext ?? s.active.id, "global"];
   return s.mode.name === "idle" ? ["design", "global"] : ["global"];
 }
 
@@ -141,7 +143,11 @@ export function handleKey(e: KeyEvent): void {
   for (const context of keyContexts(s)) {
     const command = bound().find(
       (c) =>
-        c.keyContext === context && c.keys.includes(chord) && runnable(c, s),
+        (c.keyContext === context ||
+          (c.id === s.active?.id &&
+            context === activeCommand(s)?.keyContext)) &&
+        c.keys.includes(chord) &&
+        runnable(c, s),
     );
     if (!command) continue;
     e.preventDefault();

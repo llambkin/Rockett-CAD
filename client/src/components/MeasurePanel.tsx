@@ -1,15 +1,15 @@
-/** Measure results panel (shown in measure mode). */
-
 import { formatAngle, formatLength, UNIT_TO_MM } from "@rockett/shared";
 import { useSetting } from "../settings";
+import { exitActive } from "../commands/active";
 import { useStore } from "../store";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 
 export function MeasurePanel() {
   const units = useSetting("units.length");
-  const result = useStore((s) => s.measureResult);
-  const selection = useStore((s) => s.selection);
+  const state = useStore((s) => s.active?.state);
+  const result = state?.result;
+  const selection = state?.picks ?? [];
   const fmt = (v: number | undefined) =>
     v === undefined ? "-" : formatLength(v, units);
 
@@ -62,10 +62,7 @@ export function MeasurePanel() {
           </div>
         )}
       </div>
-      <DialogFooter
-        onCancel={() => useStore.getState().setMode({ name: "idle" })}
-        cancelLabel="Done"
-      />
+      <DialogFooter onCancel={exitActive} cancelLabel="Done" />
     </DraggablePanel>
   );
 }

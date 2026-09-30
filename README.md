@@ -49,7 +49,7 @@ everything downstream against persistent topology references.
 
 ### Inspect
 
-- **Measure**: distance, ΔXYZ, angle, radius, area and length between points, edges and faces.
+- **Measure**: distance, ΔXYZ, angle, radius, area and length between points, edges and faces; changing picks or closing Measure discards stale results.
 
 ### Files
 

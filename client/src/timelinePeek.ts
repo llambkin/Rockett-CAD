@@ -3,7 +3,7 @@ import { create } from "zustand";
 import type { EvaluateResult } from "@rockett/shared";
 import { api } from "./api";
 import { createLivePreview } from "./livePreview";
-import { useStore, type Selection } from "./store";
+import { useStore, isIdle, type Selection } from "./store";
 import { TIMING_MS } from "./tunables";
 
 const peeked = create<{ featureId: string | null }>(() => ({
@@ -87,7 +87,7 @@ function createTimelinePeek(blocked: () => boolean) {
 
 export function useTimelinePeek(quickEditOpen: boolean) {
   const busy = useStore((s) => s.busy);
-  const idle = useStore((s) => s.mode.name === "idle");
+  const idle = useStore(isIdle);
   const blocked = busy || !idle || quickEditOpen;
   const block = useRef(blocked);
   block.current = blocked;

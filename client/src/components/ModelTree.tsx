@@ -12,7 +12,7 @@ import { ORIGIN_AXES, UNITS_LENGTH } from "@rockett/shared";
 import { pickInto } from "../dialogPicks";
 import "../commands/design";
 import { runCommand } from "../commands/registry";
-import { useStore, selectionKey, type Selection } from "../store";
+import { useStore, selectionKey, isIdle, type Selection } from "../store";
 import {
   viewportHandle,
   alignCameraToActiveSketch as alignToSketch,
@@ -167,7 +167,7 @@ export const ModelTree = memo(function ModelTree() {
       const tag = (e.target as HTMLElement).tagName;
       const s = useStore.getState();
       if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || s.busy) return;
-      if (s.mode.name !== "idle") return;
+      if (!isIdle(s)) return;
       const kind = treeIds(s.selection, "body").length > 0 ? "body" : "sketch";
       const ids = treeIds(s.selection, kind);
       if (ids.length === 0) return;

@@ -13,6 +13,7 @@ import { pickInto } from "../dialogPicks";
 import { featureUI } from "../features/registry";
 import {
   useStore,
+  isIdle,
   selectionKey,
   sketchEditingPosition,
   type Selection,
@@ -65,7 +66,7 @@ function selectFeatureBodies(featureId: string, additive: boolean) {
   const s = useStore.getState();
   const bodies = featureBodies(s.evaluation, featureId);
   if (s.mode.name === "dialog") return pickInto(bodies, additive);
-  if (s.mode.name !== "idle" || bodies.length === 0) return;
+  if (!isIdle(s) || bodies.length === 0) return;
   const had = new Set(s.selection.map(selectionKey));
   s.setSelection(
     additive
@@ -124,6 +125,7 @@ export function Timeline() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const mode = useStore((s) => s.mode);
+  const idle = useStore(isIdle);
   const selection = useStore((s) => s.selection);
   const busy = useStore((s) => s.busy);
   const rollTimeline = useStore((s) => s.rollTimeline);
@@ -258,7 +260,7 @@ export function Timeline() {
               label: "Edit",
               action: () => void openFeatureEditor(menu.feature),
             },
-            ...(mode.name === "idle" && quickValues(menu.feature).length > 0
+            ...(idle && quickValues(menu.feature).length > 0
               ? [{ label: "Quick edit", action: () => setQuick(menu) }]
               : []),
             {

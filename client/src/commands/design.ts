@@ -1,3 +1,5 @@
+import { measureCommand } from "./measure";
+import { exitActive } from "./active";
 import { filterSelectionFor } from "../dialogPicks";
 import type { IconId } from "../icons";
 import { useStore, type DialogType } from "../store";
@@ -159,9 +161,9 @@ registerCommand({
   group: "design.group.inspect",
   keys: ["I"],
   keyContext: "design",
-  active: (s) => s.mode.name === "measure",
-  run: (s) =>
-    s.setMode({ name: s.mode.name === "measure" ? "idle" : "measure" }),
+  interaction: measureCommand,
+  active: (s) => s.active?.id === "inspect.measure",
+  run: (s) => (s.active ? exitActive() : measureCommand.enter()),
 });
 
 registerCommand({
