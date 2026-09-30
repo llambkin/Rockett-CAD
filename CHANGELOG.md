@@ -97,10 +97,11 @@ release workflow remain under development.
 - Missing assets return 404, API fallbacks return coded errors, history
   decompression is bounded and interrupted uploads are cleared at startup.
   Startup reports recovered writes as interrupted writes rather than migrations.
-- Reduced kernel-handle retention in extrude, sweep, loft, fillet and export
-  paths. Mesh, highlight and preview resources are reused or released on project
-  closure. Sketch solving touches only affected components; history reads one
-  snapshot and appends one record.
+- Explicit scope ownership reduces native-handle retention across tested feature,
+  import and export paths. Failed features restore the previous state; retained
+  meshes remain usable after temporary handles close. Mesh, highlight and preview
+  resources are reused or released on project closure. Sketch solving touches only
+  affected components; history reads one snapshot and appends one record.
 - The server shuts down gracefully on SIGTERM and the viewport redraws after
   WebGL context recovery.
 
