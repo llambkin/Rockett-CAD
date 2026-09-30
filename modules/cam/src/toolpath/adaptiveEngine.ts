@@ -103,29 +103,86 @@ function encode(input: AdaptiveInput): number[] {
   return values;
 }
 
+function outputError(): never {
+  throw new Error("adaptive engine returned malformed output");
+}
+
+function span(memory: WebAssembly.Memory, pointer: bigint, length: number) {
+  const address = Number(pointer);
+  if (
+    !Number.isSafeInteger(address) ||
+    address < 0 ||
+    address % 8 !== 0 ||
+    !Number.isSafeInteger(length) ||
+    length < 1 ||
+    length > (memory.buffer.byteLength - address) / 8
+  ) {
+    outputError();
+  }
+  return new Float64Array(memory.buffer, address, length);
+}
+
 function decode(values: Float64Array): AdaptiveRegion[] {
   let at = 1;
-  const next = () => values[at++]!;
+  const next = () => {
+    const value = values[at++];
+    if (value === undefined || !Number.isFinite(value)) outputError();
+    return value;
+  };
+  const count = (width: number) => {
+    const value = next();
+    if (
+      !Number.isSafeInteger(value) ||
+      value < 0 ||
+      value > (values.length - at) / width
+    ) {
+      outputError();
+    }
+    return value;
+  };
   const point = () => ({ x: next(), y: next() });
   const motion = () => {
     const code = next();
     const found = MOTIONS[code];
-    if (!found) throw new Error(`adaptive engine returned motion ${code}`);
+    if (!Number.isInteger(code) || !found) outputError();
     return found;
   };
-  return Array.from({ length: next() }, () => {
+  const regions: AdaptiveRegion[] = [];
+  const regionCount = count(8);
+  for (let i = 0; i < regionCount; i++) {
     const helixCentre = point();
     const start = point();
     const returnMotion = motion();
     const clearedArea = next();
     const flags = next();
+    if (
+      !Number.isInteger(flags) ||
+      flags < 0 ||
+      flags >= 2 ** WARNINGS.length
+    ) {
+      outputError();
+    }
     const warnings = WARNINGS.filter((_, bit) => flags & (1 << bit));
-    const paths = Array.from({ length: next() }, () => ({
-      motion: motion(),
-      points: Array.from({ length: next() }, point),
-    }));
-    return { helixCentre, start, returnMotion, clearedArea, warnings, paths };
-  });
+    const paths: AdaptiveRegion["paths"] = [];
+    const pathCount = count(2);
+    for (let j = 0; j < pathCount; j++) {
+      const pathMotion = motion();
+      const pointCount = count(2);
+      const points: Point[] = [];
+      for (let k = 0; k < pointCount; k++) points.push(point());
+      paths.push({ motion: pathMotion, points });
+    }
+    regions.push({
+      helixCentre,
+      start,
+      returnMotion,
+      clearedArea,
+      warnings,
+      paths,
+    });
+  }
+  if (at !== values.length) outputError();
+  return regions;
 }
 
 export function adaptiveClear(
@@ -137,10 +194,9 @@ export function adaptiveClear(
     .exports as unknown as Engine;
   wasm["_initialize"]();
   const address = wasm.malloc(BigInt(values.length * 8));
-  new Float64Array(wasm.memory.buffer, Number(address), values.length).set(
-    values,
-  );
-  const result = Number(wasm.adaptive(address));
-  const length = new Float64Array(wasm.memory.buffer, result, 1)[0]!;
-  return decode(new Float64Array(wasm.memory.buffer, result, length));
+  span(wasm.memory, address, values.length).set(values);
+  const result = wasm.adaptive(address);
+  const length = span(wasm.memory, result, 1)[0]!;
+  if (length < 2) outputError();
+  return decode(span(wasm.memory, result, length));
 }

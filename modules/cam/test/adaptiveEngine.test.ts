@@ -36,35 +36,46 @@ const pocket: AdaptiveInput = {
 };
 
 describe("adaptive engine", () => {
-  it("clears a 40 by 30 mm rectangle with a 10 mm tool inside it", () => {
-    const regions = adaptiveClear(engine, pocket);
+  it.each([
+    { x: 0, y: 0, tolerance: 0.1 },
+    { x: 10_000, y: -20_000, tolerance: 0.001 },
+  ])(
+    "clears a 40 by 30 mm pocket at $x, $y with tolerance $tolerance",
+    ({ x: offsetX, y: offsetY, tolerance }) => {
+      const regions = adaptiveClear(engine, {
+        ...pocket,
+        stock: [rectangle(offsetX - 10, offsetY - 10, 60, 50)],
+        region: [rectangle(offsetX, offsetY, 40, 30)],
+        tolerance,
+      });
 
-    expect(regions).toHaveLength(1);
-    const [region] = regions;
-    expect(region!.warnings).toEqual([]);
-    expect(region!.clearedArea).toBeGreaterThan(0);
+      expect(regions).toHaveLength(1);
+      const [region] = regions;
+      expect(region!.warnings).toEqual([]);
+      expect(region!.clearedArea).toBeGreaterThan(0);
 
-    const cuts = region!.paths.filter((path) => path.motion === "cut");
-    expect(cuts.length).toBeGreaterThan(0);
-    for (const path of region!.paths) {
-      for (const { x, y } of path.points) {
-        expect(x).toBeGreaterThanOrEqual(5 - 0.01);
-        expect(x).toBeLessThanOrEqual(35 + 0.01);
-        expect(y).toBeGreaterThanOrEqual(5 - 0.01);
-        expect(y).toBeLessThanOrEqual(25 + 0.01);
+      const cuts = region!.paths.filter((path) => path.motion === "cut");
+      expect(cuts.length).toBeGreaterThan(0);
+      for (const path of region!.paths) {
+        for (const { x, y } of path.points) {
+          expect(x - offsetX).toBeGreaterThanOrEqual(5 - 0.01);
+          expect(x - offsetX).toBeLessThanOrEqual(35 + 0.01);
+          expect(y - offsetY).toBeGreaterThanOrEqual(5 - 0.01);
+          expect(y - offsetY).toBeLessThanOrEqual(25 + 0.01);
+        }
       }
-    }
 
-    const closed = cuts.filter((path) => {
-      const first = path.points[0]!;
-      const last = path.points.at(-1)!;
-      return (
-        path.points.length > 3 &&
-        Math.hypot(first.x - last.x, first.y - last.y) < 0.01
-      );
-    });
-    expect(closed.length).toBeGreaterThan(0);
-  });
+      const closed = cuts.filter((path) => {
+        const first = path.points[0]!;
+        const last = path.points.at(-1)!;
+        return (
+          path.points.length > 3 &&
+          Math.hypot(first.x - last.x, first.y - last.y) < 0.01
+        );
+      });
+      expect(closed.length).toBeGreaterThan(0);
+    },
+  );
 
   it("rejects coordinates that are not finite", () => {
     expect(() =>

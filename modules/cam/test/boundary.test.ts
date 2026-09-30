@@ -36,7 +36,10 @@ function outside(file: string, source: string, allowed: Set<string>) {
 function sources(): string[] {
   if (!existsSync(src)) return [];
   return readdirSync(src, { recursive: true, encoding: "utf8" })
-    .filter((name) => /\.[cm]?[jt]sx?$/.test(name))
+    .filter(
+      (name) =>
+        /\.[cm]?[jt]sx?$/.test(name) && !/\.test\.[cm]?[jt]sx?$/.test(name),
+    )
     .map((name) => join(src, name));
 }
 
