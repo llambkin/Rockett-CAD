@@ -1,5 +1,7 @@
 import {
   derivedBodyId,
+  type AxisRef,
+  type PointRef,
   type FeatureStatus,
   type PlaneFrame,
   type PlaneRef,
@@ -22,12 +24,14 @@ import {
 } from "./kernel.js";
 import {
   orderBodyPieces,
+  computeEdgeNames,
+  computeVertexNames,
   findFace,
   type BodyPiece,
   type NameMap,
   type NamedBody,
 } from "./naming.js";
-import { ORIGIN_FRAMES, V, frameFromPlane } from "./frames.js";
+import { ORIGIN_FRAMES, V, uvTo3d, frameFromPlane } from "./frames.js";
 
 export interface EvaluatedSketch {
   featureId: string;
@@ -215,4 +219,61 @@ export function registerSplitBodies(
     const id = i === 0 ? bodyId : derivedBodyId(featureId, i + 1);
     state.bodies.set(id, { bodyId: id, shape: item.s, names });
   });
+}
+
+function sketchPoint(state: EvalState, sketchId: string, pointId: string) {
+  const sketch = state.sketches.get(sketchId);
+  if (!sketch) throw new Error(`sketch ${sketchId} not found`);
+  const point = sketch.entities.find((e) => e.id === pointId);
+  if (point?.kind !== "point") throw new Error(`point ${pointId} not found`);
+  return uvTo3d(sketch.frame, point.x, point.y);
+}
+
+export function resolvePoint(state: EvalState, ref: PointRef): Vec3 {
+  if (ref.kind === "sketchPoint")
+    return sketchPoint(state, ref.sketchId, ref.entityId);
+  const body = state.bodies.get(ref.bodyId);
+  if (!body) throw new Error(`body ${ref.bodyId} no longer exists`);
+  const vertex = computeVertexNames(body).byName.get(ref.vertexName);
+  if (!vertex) throw new Error(`vertex ${ref.vertexName} no longer exists`);
+  return vertexPoint(vertex);
+}
+
+export function resolveAxis(
+  state: EvalState,
+  ref: AxisRef,
+): { origin: Vec3; direction: Vec3 } {
+  if (ref.kind === "originAxis") {
+    const dirs: Record<"X" | "Y" | "Z", Vec3> = {
+      X: [1, 0, 0],
+      Y: [0, 1, 0],
+      Z: [0, 0, 1],
+    };
+    return { origin: [0, 0, 0], direction: dirs[ref.axis] };
+  }
+  if (ref.kind === "sketchLine") {
+    const line = state.sketches
+      .get(ref.sketchId)
+      ?.entities.find((e) => e.id === ref.entityId && e.kind === "line");
+    if (line?.kind !== "line")
+      throw new Error(`axis line ${ref.entityId} not found`);
+    const a = sketchPoint(state, ref.sketchId, line.p1);
+    const b = sketchPoint(state, ref.sketchId, line.p2);
+    return { origin: a, direction: V.normalize(V.sub(b, a)) };
+  }
+  const body = state.bodies.get(ref.edge.bodyId);
+  if (!body) throw new Error(`body ${ref.edge.bodyId} not found`);
+  const edgeNames = computeEdgeNames(body);
+  const edge = edgeNames.byName.get(ref.edge.edgeName);
+  if (!edge) throw new Error(`edge ${ref.edge.edgeName} no longer exists`);
+  const k = getKernel();
+  const curve = acquire(new k.BRepAdaptor_Curve_2(edge));
+  if (curve.GetType() !== k.GeomAbs_CurveType.GeomAbs_Line) {
+    throw new Error(`edge ${ref.edge.edgeName} is not linear`);
+  }
+  const pA = acquire(curve.Value(curve.FirstParameter()));
+  const pB = acquire(curve.Value(curve.LastParameter()));
+  const origin: Vec3 = [pA.X(), pA.Y(), pA.Z()];
+  const target: Vec3 = [pB.X(), pB.Y(), pB.Z()];
+  return { origin, direction: V.normalize(V.sub(target, origin)) };
 }
