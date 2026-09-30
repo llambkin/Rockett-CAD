@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  useState,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type {
   CadDocument,
   EvaluateResult,
@@ -99,6 +103,41 @@ function scrollTimeline(strip: HTMLDivElement) {
   return () => strip.removeEventListener("wheel", onWheel);
 }
 
+function chipKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+  if (e.target !== e.currentTarget) return;
+  if (e.key === "Enter") {
+    e.preventDefault();
+    e.currentTarget.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+      }),
+    );
+  } else if (e.key === "F10" && e.shiftKey) {
+    e.preventDefault();
+    const { left, top } = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: left,
+        clientY: top,
+      }),
+    );
+  }
+}
+
+function chipMenu(feature: Feature, event: ReactMouseEvent<HTMLDivElement>) {
+  event.preventDefault();
+  return {
+    x: event.clientX,
+    y: event.clientY,
+    feature,
+    anchor: event.currentTarget.getBoundingClientRect(),
+  };
+}
+
 export function Timeline() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
@@ -172,6 +211,9 @@ export function Timeline() {
           return (
             <span key={f.id} style={{ display: "contents" }}>
               <div
+                role="button"
+                tabIndex={0}
+                onKeyDown={chipKeyDown}
                 className={chipClass(
                   f,
                   st,
@@ -184,16 +226,7 @@ export function Timeline() {
                 onDoubleClick={() => void openFeatureEditor(f)}
                 onMouseEnter={() => peek.enter(f.id)}
                 onMouseLeave={peek.leave}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  const { left, top } = e.currentTarget.getBoundingClientRect();
-                  setMenu({
-                    x: e.clientX,
-                    y: e.clientY,
-                    feature: f,
-                    anchor: { left, top },
-                  });
-                }}
+                onContextMenu={(e) => setMenu(chipMenu(f, e))}
               >
                 <span className="tl-icon">{typeIcon(f.type)}</span>
                 {renaming?.id === f.id ? (
