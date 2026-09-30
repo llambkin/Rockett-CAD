@@ -1,4 +1,5 @@
 import { ShapeUtils, Vector2 } from "three";
+import { extrudeOverlapsSolid } from "./extrudeOverlap";
 import {
   findProfile,
   LINEAR_TOL,
@@ -15,6 +16,7 @@ import { previewBodies, previewedFeature, useStore } from "./store";
 
 interface Base {
   points: Vec3[];
+  triangles?: Vec3[][];
   normal: Vec3;
 }
 
@@ -47,8 +49,22 @@ function profileBase(
   const sketch = sketches.find((s) => s.featureId === sel.sketchId);
   const profile = sketch && findProfile(sketch, sel.profileId);
   if (!sketch || !profile) return null;
+  const rings = [profile.polygon, ...profile.holePolygons].map((p) =>
+    Array.from(
+      { length: p.length / 2 },
+      (_, i) => new Vector2(p[i * 2]!, p[i * 2 + 1]!),
+    ),
+  );
+  const points = rings.flat();
   return {
     points: framePoints(sketch.frame, profile.polygon),
+    triangles: ShapeUtils.triangulateShape(rings[0]!, rings.slice(1)).map(
+      (tri) =>
+        framePoints(
+          sketch.frame,
+          tri.flatMap((i) => [points[i]!.x, points[i]!.y]),
+        ),
+    ),
     normal: sketch.frame.normal,
   };
 }
@@ -109,14 +125,13 @@ function span(
 
 type ToolOperation = "newBody" | "join" | "cut";
 
-export function toolOperation(tools?: Bounds[], into = false): ToolOperation {
+export function toolOperation(tools?: Bounds[]): ToolOperation {
   const bodies = previewBodies(useStore.getState());
-  const meets = (margin: number) =>
-    bodies.length > 0 &&
-    (!tools ||
-      tools.some((t) => bodies.some((b) => overlaps(t, b.bbox, margin))));
-  if (into && meets(LINEAR_TOL)) return "cut";
-  return meets(-LINEAR_TOL) ? "join" : "newBody";
+  return bodies.some(
+    (b) => !tools || tools.some((t) => overlaps(t, b.bbox, -LINEAR_TOL)),
+  )
+    ? "join"
+    : "newBody";
 }
 
 export function autoOperation(
@@ -147,9 +162,29 @@ export function extrudeOperation(
         : sel.kind === "face"
           ? faceBase(sel, bodies)
           : null;
-    return base ? [swept(base, from, to)] : [];
+    return base ? [{ base, bounds: swept(base, from, to) }] : [];
   });
-  return toolOperation(tools, into);
+  if (
+    into &&
+    tools.some(({ base, bounds }) =>
+      bodies.some(
+        (body) =>
+          overlaps(bounds, body.bbox, LINEAR_TOL) &&
+          extrudeOverlapsSolid(
+            base.triangles ??
+              Array.from({ length: base.points.length / 3 }, (_, i) =>
+                base.points.slice(i * 3, i * 3 + 3),
+              ),
+            base.normal,
+            [from, to],
+            body,
+            bounds,
+          ),
+      ),
+    )
+  )
+    return "cut";
+  return toolOperation(tools.map((tool) => tool.bounds));
 }
 
 function across([a, b, c]: Vec3[]): Vec3 {
