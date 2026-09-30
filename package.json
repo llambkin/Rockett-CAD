@@ -1,6 +1,6 @@
 {
   "name": "rockett-cad",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Self-hosted parametric CAD with a B-Rep kernel and feature timeline, aimed at CNC, PCB and electrical manufacture workspaces",
   "workspaces": [

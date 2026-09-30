@@ -2,11 +2,139 @@
 
 Versions follow semver. The root `package.json` owns the one app version;
 the workspace versions stay `0.1.0`. `SCHEMA_VERSION` (document format) is
-versioned separately in `shared/src/model.ts`; `/api/health` reports both.
+versioned separately in `shared/src/model.ts`; `/api/health` reports both to
+signed-in users.
 
 A release moves `Unreleased` into a dated `## X.Y.Z` section and gets an
 annotated tag `vX.Y.Z` on that `origin/main` commit. Every `SCHEMA_VERSION`
 change gets a `Schema N` line in the section that ships it.
+
+## 0.3.0 (Unreleased)
+
+This snapshot extends 0.2.0. CAD foundations and the complete CAD-to-CAM
+release workflow remain under development.
+
+### Added
+
+- Accounts with first-admin setup, username or email sign-in, password changes,
+  TOTP, persistent sessions and an offline password-reset command. Cloudflare
+  Access can map a verified identity to an existing account.
+- Per-user project ownership, view or edit sharing, friend requests, in-app
+  notices and shared folders. Sharing a browser project first moves it to the
+  server.
+- Layered app, personal and project settings, personal settings import/export,
+  grey or black themes, accent colours, display units and typed unit suffixes.
+  Camera, pick tolerance, snap angles and preview appearance are configurable.
+- Per-user saved project views and cameras, a synced model-tree splitter,
+  project snapshots, project-list sorting/filtering and keyboard move navigation.
+- Server-owned undo/redo, preview transactions, history attribution, checkpoints
+  and confirmed restore. Admins can collect orphan project blobs.
+- Reference signatures, explicit tool targets and reference repair in feature
+  dialogs. Existing naming-version 1 projects can review and apply a backed-up,
+  undoable upgrade to version 2.
+- Planar-face revolve, construction planes by angle, three points or two edges,
+  plane flip and midplane offset, origin-axis picking, active dialog pick rows
+  and drag handles for features with a main value.
+- Loft accepts ordered sketch profiles and planar body faces, including mixed
+  sections. Join includes the selected source bodies.
+- Sketch regions from linked planar face boundaries, regular polygons at a set
+  angle, point-to-line and line-to-line dimensions, driven dimensions,
+  over-constraint refusal and drag-to-trim.
+- Timeline wheel scrolling, keyboard actions, body selection and feature peeks
+  highlighting created or modified faces. Design and sketch toolbars scroll
+  with the wheel; the viewport reads out hovered and selected items.
+- Named STEP solid export and sketch or planar-face DXF R12 export through
+  format registries.
+- Cancellable kernel jobs, progress reporting and crash recovery that blocks
+  dependent geometry and exports until the failed feature is edited.
+- CAM building blocks: setups, stock, WCS, tools, presets, validated IR,
+  facing, polygon operations, a mesh drop-cutter and an adaptive WASM bridge.
+  Declarative posts include GRBL 1.1, grblHAL, LinuxCNC, FluidNC, Mach3,
+  Mach4 and Marlin. These are implementation pieces, not a qualified machining
+  workflow or permission to run a machine.
+
+### Fixed
+
+- Naming-version 2 gives joins, mirrors, patterns, split bodies, press/pull,
+  full revolves, sweeps, lofts and imported faces more stable identities.
+  Tied references use live geometry; added join/cut pieces keep feature identity.
+- Join and Cut use actual contact instead of bounding-box overlap. Joins retain
+  the picked body; automatic Cut requires solid overlap. Edge-only contact and
+  zero-thickness results report warnings or errors as appropriate.
+- Fillet, chamfer and shell reject invalid, loose or inside-out results and keep
+  the previous body. Shallow planar folds can blend; some rounded-face shell
+  openings work. Size searches report incomplete results instead of claiming a
+  proven maximum, and a revolve crossing its axis is refused.
+- Sweep handles every picked profile; angled midplanes bisect their faces.
+  Press/Pull accepts planar faces only.
+- Previews and handles use the pre-feature model, keep all deboss targets,
+  preview revolve face edits and retain the current extrude operation. Cancel,
+  unchanged OK, conflicts, late replies and project closure restore or discard
+  the right state without an extra undo step.
+- Trim ends at its actual cutter; deleting constraints moves no geometry.
+  Old region IDs still render, and unsettled sketches warn before the next edit.
+- View saves survive project closure; deleted features lose stale view IDs;
+  blocked bodies keep their groups. View/settings writes accept weak ETags,
+  and view-only members can save their own view.
+- Construction-plane visibility belongs to each user view; hidden planes remain
+  active supports. Shape lookup compares identity even when kernel hashes collide.
+- Readable and unreadable project deletion requires confirmation and a matching
+  revision or content tag; stale requests are refused. The naming report refuses
+  projects that still need document, manifest or naming migration.
+- Sign-in/setup failures are rate-limited by address, including behind an
+  explicitly trusted proxy. Common passwords are refused, malformed sessions
+  are moved aside, health diagnostics require access and request contents stay
+  out of authentication logs.
+- Missing assets return 404, API fallbacks return coded errors, history
+  decompression is bounded and interrupted uploads are cleared at startup.
+- Kernel, mesh, highlight and preview resources are released or reused across
+  regeneration, export, errors and project closure. Sketch solving touches only
+  affected components; history reads one snapshot and appends one record.
+- The server shuts down gracefully on SIGTERM and the viewport redraws after
+  WebGL context recovery.
+
+### Changed
+
+- Adopted the OCCT 8.0.1 kernel fork and a separate blend-surface WASM module.
+  Kernel work runs through one client boundary with worker cancellation and
+  byte-based engine/cache budgets.
+- Feature definitions, dependencies, dialogs, commands, panels, import/export
+  formats and settings use registries. Dotted extension features carry their
+  own version and preserve unknown module data.
+- Project storage separates manifests, document blobs, views and history;
+  migrations take backups before writing, and retained backups are pruned.
+- The image carries third-party notices, licence texts and a base inventory;
+  server and client builds use separate cached stages. Dependencies remain
+  exactly pinned. Local focused checks require every proving file, and cost
+  checks include untracked source without increasing existing ceilings.
+- Schema 12: documents record their naming version; old projects start at 1.
+- Schema 13: stale document visibility fields are removed.
+- Schema 14: face and edge references can carry geometric signatures.
+- Schema 15: tool features can record explicit body targets.
+- Schema 16: revolve can use planar body faces.
+- Schema 17: sketch dimensions add point/line distance and axis-angle kinds.
+- Schema 18: construction planes add angle, three-point, two-edge, flip and
+  midplane-offset methods.
+- Schema 19: display units move from the document to project settings;
+  geometry remains in millimetres.
+- Schema 20: naming-version 2 join targets are sorted consistently.
+- Schema 21: documents record the user responsible for their last edit.
+- Schema 22: Loft adds planar-face sections. Imported upstream schema 12
+  documents without a naming version retain version 1; schema 21 documents
+  migrate without changing their geometry. Project manifests and views have
+  independent versioned migrations.
+
+### Known limits
+
+- CAD foundation acceptance is unfinished. Shell and blend failures remain on
+  some composed parts; a fillet meeting two earlier fillets can fail.
+- Loft face sections must be planar and have one outline; faces with holes and
+  face-based lofts that fail solid validation are refused.
+- CAM operation coverage, the manufacture workflow, simulation, qualified
+  machine output and complete CAD-to-CAM release acceptance remain unfinished.
+- Assemblies, PCB/electrical workbenches, additive workflows beyond current
+  export, broader collaboration and full Fusion capability parity remain later
+  work. This snapshot does not claim their completion.
 
 ## 0.2.0 (2026-09-23)
 
