@@ -187,9 +187,12 @@ imports of one file name faces alike. Mesh imports keep
 A kernel success is not trusted. Each guard errors and keeps the previous
 body.
 
-- Every cut runs through `checkedCut` in `server/src/geometry/cutCheck.ts`.
-- Every join ends in `finishJoin` in `server/src/geometry/features.ts`. Two
-  guards warn instead, both in `server/src/geometry/joinCheck.ts`. A join, or
+- Cut tool operations, Combine cuts, Press/Pull cuts and Shell hollow cuts
+  run through `checkedCut` in `server/src/geometry/boolean.ts`.
+- Every join ends in `finishJoin` in `server/src/geometry/booleanNaming.ts`.
+  Two guards warn instead: zero-thickness detection in
+  `server/src/geometry/joinCheck.ts` and contact-only joins in
+  `server/src/geometry/boolean.ts`. A join, or
   an extrude, revolve, sweep, loft or emboss cut, that leaves a zero-thickness
   edge its inputs lacked builds, and the feature status is `warning` naming
   the edge length. A join tool that touches a body only along an edge or at a

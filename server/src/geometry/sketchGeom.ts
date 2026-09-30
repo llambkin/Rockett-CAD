@@ -8,13 +8,12 @@
  */
 
 import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
-import { arcAngles, LINEAR_TOL, UNIT_DOT_TOL } from "@rockett/shared";
+import { arcAngles, LINEAR_TOL } from "@rockett/shared";
 import {
   getKernel,
   kernelCall,
   pnt,
   dir,
-  progress,
   release,
   scoped,
   shapeHash,
@@ -36,7 +35,7 @@ interface EntityMaps {
   arcs: Map<string, { center: string; start: string; end: string }>;
 }
 
-function buildMaps(entities: SketchEntity[]): EntityMaps {
+export function buildMaps(entities: SketchEntity[]): EntityMaps {
   const points = new Map<string, { x: number; y: number }>();
   const lines = new Map<string, { p1: string; p2: string }>();
   const circles = new Map<string, { center: string; radius: number }>();
@@ -196,7 +195,7 @@ function buildWire(
  * by geometry (wire building can rebuild edge shapes, so hashes from
  * construction time are unreliable).
  */
-function matchEdgesToEntities(
+export function matchEdgesToEntities(
   face: Shape,
   chainIds: string[],
   maps: EntityMaps,
@@ -287,141 +286,6 @@ export interface SketchOnPlane {
  * or crosses the face boundary leaves the face untouched. Any kernel
  * failure falls back to the unmodified face.
  */
-export function subtractSketchRegionsFromFace(
-  face: Shape,
-  sketches: Iterable<SketchOnPlane>,
-): { face: Shape; edgeEntity: Map<number, string> } {
-  const noop = { face, edgeEntity: new Map<number, string>() };
-  try {
-    const k = getKernel();
-    const faceT = k.TopoDS.Face_1(face);
-
-    // Plane of the target face.
-    const surf = new k.BRepAdaptor_Surface_2(faceT, false);
-    if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Plane) {
-      surf.delete();
-      return noop;
-    }
-    const pln = surf.Plane();
-    const loc = pln.Location();
-    const axd = pln.Axis().Direction();
-    const fp: Vec3 = [loc.X(), loc.Y(), loc.Z()];
-    const fn: Vec3 = [axd.X(), axd.Y(), axd.Z()];
-    surf.delete();
-
-    // Sample points of a profile's outer polygon (flat [u,v,...]).
-    const samples = (polygon: number[]): [number, number][] => {
-      const n = polygon.length / 2;
-      const out: [number, number][] = [];
-      const step = Math.max(1, Math.ceil(n / 48));
-      for (let i = 0; i < n; i += step) {
-        out.push([polygon[i * 2]!, polygon[i * 2 + 1]!]);
-      }
-      return out;
-    };
-
-    const strictlyInside = (frame: PlaneFrame, polygon: number[]): boolean => {
-      const pts = samples(polygon);
-      if (pts.length === 0) return false;
-      for (const [u, v] of pts) {
-        const w = uvTo3d(frame, u, v);
-        const cls = new k.BRepClass_FaceClassifier_4(
-          faceT,
-          pnt(w[0], w[1], w[2]),
-          LINEAR_TOL,
-          false,
-          0.1,
-        );
-        const st = cls.State();
-        cls.delete();
-        if (st !== k.TopAbs_State.TopAbs_IN) return false;
-      }
-      return true;
-    };
-
-    // Collect coplanar sketch regions fully inside the face.
-    const regions: { sk: SketchOnPlane; profile: Profile }[] = [];
-    for (const sk of sketches) {
-      const n = sk.frame.normal;
-      const o = sk.frame.origin;
-      const ndot = Math.abs(n[0] * fn[0] + n[1] * fn[1] + n[2] * fn[2]);
-      if (ndot < 1 - UNIT_DOT_TOL) continue;
-      const doff = Math.abs(
-        (o[0] - fp[0]) * fn[0] +
-          (o[1] - fp[1]) * fn[1] +
-          (o[2] - fp[2]) * fn[2],
-      );
-      if (doff > 1e-5) continue;
-      for (const p of sk.profiles) {
-        if (p.area <= 1e-9) continue;
-        if (strictlyInside(sk.frame, p.polygon))
-          regions.push({ sk, profile: p });
-      }
-    }
-    if (regions.length === 0) return noop;
-
-    return kernelCall("face region subtraction", () => {
-      // One boolean cut with all region faces as a compound tool (regions
-      // may nest — e.g. a rect region containing a circle region — and the
-      // union of all of them is what gets removed).
-      const builder = new k.BRep_Builder();
-      const comp = new k.TopoDS_Compound();
-      builder.MakeCompound(comp);
-      for (const { sk, profile } of regions) {
-        const pf = buildProfileFace(profile, sk.entities, sk.frame);
-        builder.Add(comp, pf.face);
-      }
-      const op = new k.BRepAlgoAPI_Cut_3(faceT, comp, progress());
-      op.Build(progress());
-      if (!op.IsDone()) {
-        op.delete();
-        return noop;
-      }
-      const result = op.Shape();
-      op.delete();
-
-      // Expect exactly one face back (regions are strictly interior).
-      const ex = new k.TopExp_Explorer_2(
-        result,
-        k.TopAbs_ShapeEnum.TopAbs_FACE,
-        k.TopAbs_ShapeEnum.TopAbs_SHAPE,
-      );
-      const cutFaces: Shape[] = [];
-      while (ex.More()) {
-        cutFaces.push(k.TopoDS.Face_1(ex.Current()));
-        ex.Next();
-      }
-      ex.delete();
-      if (cutFaces.length !== 1) return noop;
-      const cutFace = cutFaces[0];
-
-      // Name the new hole edges after the sketch entities they came from,
-      // so hole side-walls get stable persistent names.
-      const edgeEntity = new Map<number, string>();
-      const bySketch = new Map<SketchOnPlane, Set<string>>();
-      for (const { sk, profile } of regions) {
-        let ids = bySketch.get(sk);
-        if (!ids) bySketch.set(sk, (ids = new Set()));
-        for (const c of profile.outer) ids.add(c.entityId);
-        for (const h of profile.holes) for (const c of h) ids.add(c.entityId);
-      }
-      for (const [sk, ids] of bySketch) {
-        const matched = matchEdgesToEntities(
-          cutFace,
-          [...ids],
-          buildMaps(sk.entities),
-          sk.frame,
-        );
-        for (const [h, id] of matched) edgeEntity.set(h, id);
-      }
-      return { face: cutFace, edgeEntity };
-    });
-  } catch {
-    return noop;
-  }
-}
-
-/** Build a planar OCCT face for a detected profile. */
 export function buildProfileFace(
   profile: Profile,
   entities: SketchEntity[],

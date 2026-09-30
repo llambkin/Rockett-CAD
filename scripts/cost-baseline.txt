@@ -46,13 +46,12 @@ client/src/three/revolveGhost.ts buildRevolveGhost 99
 client/src/three/sketchRender.ts buildSketch 177
 client/src/three/toolPreview.ts updateToolPreview 153
 server/src/api/jobRoutes.ts createJobRoutes 119
-server/src/geometry/blend.ts 923
-server/src/geometry/blend.ts built 226
-server/src/geometry/blend.ts chamferByEnvelope 240
-server/src/geometry/features.ts 1813
+server/src/geometry/blend.ts 866
+server/src/geometry/blend.ts built 222
+server/src/geometry/blend.ts chamferByEnvelope 236
+server/src/geometry/features.ts 1206
 server/src/geometry/features.ts buildPrism 86
 server/src/geometry/sketchGeom.ts buildWire 84
-server/src/geometry/sketchGeom.ts subtractSketchRegionsFromFace 133
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 104
 server/src/store/historyStore.ts 593

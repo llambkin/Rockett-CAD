@@ -1,3 +1,4 @@
+import { evalCombine, evalOffsetFace, evalSplitBody } from "./boolean.js";
 import type { Feature, FeatureType } from "@rockett/shared";
 import {
   registerFeatureKind,
@@ -6,7 +7,6 @@ import {
 } from "./featureKinds.js";
 import {
   evalCircularPattern,
-  evalCombine,
   evalConstructionPlane,
   evalEmboss,
   evalExtrude,
@@ -16,11 +16,9 @@ import {
   evalLoft,
   evalMirror,
   evalMove,
-  evalOffsetFace,
   evalReferenceImage,
   evalRevolve,
   evalSketch,
-  evalSplitBody,
   evalSweep,
   type FeatureOutcome,
 } from "./features.js";

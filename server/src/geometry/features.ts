@@ -1,3 +1,20 @@
+import {
+  resolvePlaneFrame,
+  vertexPoint,
+  registerBodySolids,
+  registerPieces,
+  type EvaluatedSketch,
+  type EvalState,
+  type ToolResult,
+  type FeatureOutcome,
+} from "./featureState.js";
+import {
+  unifyTool,
+  fuseNamed,
+  applyToolOperation,
+  subtractSketchRegionsFromFace,
+} from "./boolean.js";
+import { finishJoin, warned } from "./booleanNaming.js";
 /**
  * Feature evaluators — each timeline feature type maps to a function that
  * transforms the evaluation state using the OCCT kernel.
@@ -12,18 +29,15 @@ import {
   bodyMadeBy,
   derivedBodyId,
   featureRefs,
-  compareNames,
   ANGULAR_TOL_DEG,
   LINEAR_TOL,
   UNIT_DOT_TOL,
   type AxisRef,
-  type CombineFeature,
   type ConstructionPlaneFeature,
   type EmbossFeature,
   type ExtrudeFeature,
   type FaceRef,
   type Feature,
-  type FeatureStatus,
   type ImportMeshFeature,
   type ImportStepFeature,
   type LinearPatternFeature,
@@ -32,17 +46,12 @@ import {
   type MoveFeature,
   type ReferenceImageFeature,
   type CircularPatternFeature,
-  type OffsetFaceFeature,
   type PlaneFrame,
-  type PlaneRef,
   type PointRef,
-  type Profile,
   type ProfileRef,
   type RevolveFeature,
   type SketchEntity,
   type SketchFeature,
-  type SketchSolveStatus,
-  type SplitBodyFeature,
   type SweepFeature,
   type Vec3,
   Placement,
@@ -62,43 +71,25 @@ import {
   release,
   scoped,
   shapeHash,
-  shapeList,
   solids,
   transformOp,
   vec,
-  vertices as verticesOf,
   wires as wiresOf,
   type Shape,
 } from "./kernel.js";
 import {
-  orderBodyPieces,
   computeEdgeNames,
   computeVertexNames,
   finalizeNames,
   findFace,
-  historyNames,
   namingVersion,
-  propagateNames,
   sweptNames,
   transformNames,
-  type BodyPiece,
-  type NameMap,
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { checkedCut } from "./cutCheck.js";
-import {
-  bboxOverlap,
-  contactGroups,
-  zeroThicknessWarning,
-} from "./joinCheck.js";
-import {
-  ORIGIN_FRAMES,
-  V,
-  frameFromPlane,
-  offsetFrame,
-  uvTo3d,
-} from "./frames.js";
+
+import { V, frameFromPlane, offsetFrame, uvTo3d } from "./frames.js";
 import { geometryNames } from "./signature.js";
 import { curveInfo } from "./tessellate.js";
 import { readImport, readMesh, type Sources } from "./importers.js";
@@ -107,85 +98,12 @@ import {
   arcEdge,
   buildProfileFace,
   snapper,
-  subtractSketchRegionsFromFace,
   type ProfileFace,
 } from "./sketchGeom.js";
-
-export interface EvaluatedSketch {
-  featureId: string;
-  frame: PlaneFrame;
-  entities: SketchEntity[];
-  solveStatus: SketchSolveStatus;
-  dof: number;
-  profiles: Profile[];
-}
-
-export interface StateBody extends NamedBody {
-  copyOf?: { source: NamedBody; offset: Vec3; prefix: string };
-}
-
-export interface EvalState {
-  bodies: Map<string, StateBody>;
-  sketches: Map<string, EvaluatedSketch>;
-  planes: Map<string, { frame: PlaneFrame; size: number }>;
-  blocked: ReadonlySet<string>;
-  hidden?: ReadonlySet<string>;
-}
-
-export function cloneState(state: EvalState): EvalState {
-  return {
-    bodies: new Map(state.bodies),
-    sketches: new Map(state.sketches),
-    planes: new Map(state.planes),
-    blocked: state.blocked,
-  };
-}
-
-export function emptyState(): EvalState {
-  return {
-    bodies: new Map(),
-    sketches: new Map(),
-    planes: new Map(),
-    blocked: new Set(),
-  };
-}
-
-export class NoCorner extends Error {}
 
 // ---------------------------------------------------------------------------
 // Reference resolution
 // ---------------------------------------------------------------------------
-
-export function resolvePlaneFrame(state: EvalState, ref: PlaneRef): PlaneFrame {
-  if (ref.kind === "origin") {
-    return ORIGIN_FRAMES[ref.plane];
-  }
-  if (ref.kind === "construction") {
-    const p = state.planes.get(ref.featureId);
-    if (!p) throw new Error(`construction plane ${ref.featureId} not found`);
-    return p.frame;
-  }
-  // face
-  const body = state.bodies.get(ref.face.bodyId);
-  if (!body) throw new Error(`body ${ref.face.bodyId} no longer exists`);
-  const face = findFace(body, ref.face.faceName);
-  if (!face) {
-    throw new Error(
-      `face ${ref.face.faceName} no longer exists on ${ref.face.bodyId}`,
-    );
-  }
-  const plane = planarFacePlane(face);
-  face.delete();
-  if (!plane) throw new Error(`face ${ref.face.faceName} is not planar`);
-  return frameFromPlane(plane.origin, plane.normal);
-}
-
-export function vertexPoint(vertex: Shape): Vec3 {
-  const p = getKernel().BRep_Tool.Pnt(vertex);
-  const out: Vec3 = [p.X(), p.Y(), p.Z()];
-  p.delete();
-  return out;
-}
 
 function sketchPoint(state: EvalState, sketchId: string, pointId: string) {
   const sketch = state.sketches.get(sketchId);
@@ -275,58 +193,6 @@ function resolveProfiles(
 // Body bookkeeping
 // ---------------------------------------------------------------------------
 
-export function registerBodySolids(
-  state: EvalState,
-  bodyId: string,
-  shape: Shape,
-  names: NameMap,
-  madeBy?: string,
-): void {
-  registerSolids(state, bodyId, solids(shape), names, madeBy);
-}
-
-function registerSolids(
-  state: EvalState,
-  bodyId: string,
-  sols: Shape[],
-  names: NameMap,
-  madeBy?: string,
-): void {
-  if (sols.length === 0) state.bodies.delete(bodyId);
-  else
-    registerPieces(
-      state,
-      bodyId,
-      sols.map((shape) => ({ shape, names })),
-      names.version === 2 ? madeBy : undefined,
-    );
-}
-
-function registerPieces(
-  state: EvalState,
-  bodyId: string,
-  pieces: BodyPiece[],
-  madeBy?: string,
-): void {
-  let ordered: BodyPiece[];
-  try {
-    ordered = orderBodyPieces(bodyId, pieces);
-  } catch (err) {
-    release(pieces.map((p) => p.shape));
-    throw err;
-  }
-  let n = 2;
-  const extraId = (i: number) => {
-    if (!madeBy) return `${bodyId}:${i + 1}`;
-    while (state.bodies.has(derivedBodyId(madeBy, n))) n++;
-    return derivedBodyId(madeBy, n);
-  };
-  ordered.forEach(({ shape, names }, i) => {
-    const id = i === 0 ? bodyId : extraId(i);
-    state.bodies.set(id, { bodyId: id, shape, names });
-  });
-}
-
 function registerNewBodies(
   state: EvalState,
   featureId: string,
@@ -364,296 +230,6 @@ function registerNewBodies(
 
 // ---------------------------------------------------------------------------
 // Tool-solid creation (extrude / revolve / sweep / loft share this plumbing)
-// ---------------------------------------------------------------------------
-
-export interface ToolResult {
-  shape: Shape;
-  names: NameMap;
-}
-
-function cylinderAxes(face: Shape): Vec3[] | null {
-  const k = getKernel();
-  return scoped((own) => {
-    const surf = own(
-      new k.BRepAdaptor_Surface_2(own(k.TopoDS.Face_1(face)), false),
-    );
-    if (surf.GetType() !== k.GeomAbs_SurfaceType.GeomAbs_Cylinder) return null;
-    const frame = own(own(surf.Cylinder()).Position());
-    return [own(frame.XDirection()), own(frame.YDirection())].map((d): Vec3 => [
-      d.X(),
-      d.Y(),
-      d.Z(),
-    ]);
-  });
-}
-
-function reparametrisedCylinderEdges(shape: Shape): Shape[] {
-  const k = getKernel();
-  const map = new k.TopTools_IndexedDataMapOfShapeListOfShape_1();
-  k.TopExp.MapShapesAndAncestors(
-    shape,
-    k.TopAbs_ShapeEnum.TopAbs_EDGE,
-    k.TopAbs_ShapeEnum.TopAbs_FACE,
-    map,
-  );
-  const keep: Shape[] = [];
-  for (let i = 1; i <= map.Extent(); i++) {
-    const adjacent = listToArray(map.FindFromIndex_2(i));
-    const [a, b] = adjacent.map(cylinderAxes);
-    release(adjacent);
-    if (a && b && a.some((d, j) => V.dot(d, b[j]!) < 1 - UNIT_DOT_TOL))
-      keep.push(map.FindKey_2(i));
-  }
-  map.delete();
-  return keep;
-}
-
-/**
- * Merge coplanar faces and collinear edges of a tool solid, so a body made
- * from several adjacent sketch regions reads as one solid instead of showing
- * the sketch's internal boundaries as edges. On any kernel failure the
- * unmerged tool is kept.
- */
-export function unifyTool(tool: ToolResult, featureId: string): ToolResult {
-  const k = getKernel();
-  try {
-    const uni = new k.ShapeUpgrade_UnifySameDomain_2(
-      tool.shape,
-      true,
-      true,
-      false,
-    );
-    if (tool.names.version === 2) {
-      const { min, max } = bboxOf(tool.shape);
-      uni.SetLinearTolerance(LINEAR_TOL);
-      uni.SetAngularTolerance(
-        LINEAR_TOL / Math.max(1, V.norm(V.sub(max, min))),
-      );
-    }
-    const seams = reparametrisedCylinderEdges(tool.shape);
-    for (const edge of seams) uni.KeepShape(edge);
-    release(seams);
-    uni.Build();
-    const merged = uni.Shape();
-    const mergedFaces = facesOf(merged);
-    release(mergedFaces);
-    if (mergedFaces.length === 0) {
-      release([merged, uni]);
-      return tool;
-    }
-    const history = uni.History_1();
-    const names = historyNames(history.get(), tool, merged, featureId);
-    history.delete?.();
-    uni.delete();
-    return { shape: merged, names };
-  } catch {
-    return tool;
-  }
-}
-
-type JoinResult = ToolResult & { warning?: string | undefined };
-
-function finishJoin(
-  fused: ToolResult,
-  featureId: string,
-  parts: { shape: Shape }[],
-  unify = fused.names.version === 2,
-): JoinResult {
-  const joined = unify ? unifyTool(fused, featureId) : fused;
-  const warning = zeroThicknessWarning(
-    "join",
-    joined.shape,
-    parts.map((p) => p.shape),
-  );
-  return { ...joined, warning };
-}
-
-function warned(warnings: (string | undefined)[]): FeatureOutcome | undefined {
-  const found = warnings.filter((w) => w !== undefined);
-  return found.length > 0 ? { warning: found.join("; ") } : undefined;
-}
-
-export function fuseNamed(
-  a: ToolResult,
-  b: ToolResult,
-  featureId: string,
-  failure: string,
-): ToolResult {
-  const op = new (getKernel().BRepAlgoAPI_Fuse_3)(a.shape, b.shape, progress());
-  op.Build(progress());
-  if (op.IsDone()) return namedFuse(op, a, b, featureId);
-  op.delete();
-  throw new Error(failure);
-}
-
-function namedFuse(
-  op: any,
-  a: ToolResult,
-  b: ToolResult,
-  featureId: string,
-): ToolResult {
-  try {
-    const shape = op.Shape();
-    return { shape, names: propagateNames(op, [a, b], shape, featureId) };
-  } finally {
-    op.delete();
-  }
-}
-
-export type FeatureOutcome = Pick<FeatureStatus, "warning" | "targets">;
-
-function targetBody(
-  state: EvalState,
-  operation: string,
-  id: string,
-  tool: Shape,
-): StateBody {
-  const body = state.bodies.get(id);
-  if (!body) throw new Error(`${operation} target ${id} no longer exists`);
-  if (!bboxOverlap(body.shape, tool)) throw missedTarget(operation, id);
-  return body;
-}
-
-function missedTarget(operation: string, id: string): Error {
-  return new Error(`${operation} target ${id} does not overlap the tool`);
-}
-
-function overlapping(state: EvalState, tool: Shape): StateBody[] {
-  return [...state.bodies.values()].filter(
-    (b) => !state.hidden?.has(b.bodyId) && bboxOverlap(b.shape, tool),
-  );
-}
-
-function joinEvery(
-  state: EvalState,
-  featureId: string,
-  tool: ToolResult,
-  targets?: string[],
-): FeatureOutcome {
-  const bodies = targets
-    ? targets.map((id) => targetBody(state, "join", id, tool.shape))
-    : overlapping(state, tool.shape).sort((a, b) =>
-        compareNames(a.bodyId, b.bodyId),
-      );
-  const held = new Set<any>();
-  try {
-    const { groups, loose, warning } = contactGroups(bodies, tool, held);
-    const touched = new Set(groups.flatMap((g) => g.bodies));
-    const used = bodies.filter((b) => touched.has(b)).map((b) => b.bodyId);
-    const missed = targets?.find((id) => !used.includes(id));
-    if (missed) {
-      release([
-        ...loose,
-        ...groups.flatMap((g) => g.pieces.map((p) => p.shape)),
-      ]);
-      throw missedTarget("join", missed);
-    }
-    if (loose.length > 0)
-      registerSolids(state, `b:${featureId}`, loose, tool.names);
-    const warnings: (string | undefined)[] = [warning];
-    const join = (acc: ToolResult, next: ToolResult) =>
-      fuseNamed(acc, next, featureId, "boolean join failed");
-    for (const {
-      bodies: [first, ...rest],
-      pieces,
-      fuse,
-    } of groups) {
-      held.delete(fuse);
-      const fused = fuse
-        ? pieces
-            .slice(1)
-            .reduce(join, namedFuse(fuse, first!, pieces[0]!, featureId))
-        : [...pieces, ...rest].reduce<ToolResult>(join, first!);
-      for (const b of rest) state.bodies.delete(b.bodyId);
-      const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
-      warnings.push(joined.warning);
-      const { shape, names } = joined;
-      registerBodySolids(state, first!.bodyId, shape, names, featureId);
-    }
-    return { targets: used, ...warned(warnings) };
-  } finally {
-    release(held);
-  }
-}
-
-function applyToolOperation(
-  state: EvalState,
-  featureId: string,
-  tool: ToolResult,
-  operation: "newBody" | "join" | "cut" | "intersect",
-  targets?: string[],
-): FeatureOutcome | void {
-  const k = getKernel();
-  if (operation === "newBody") {
-    registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
-    return;
-  }
-  if (targets?.length === 0 || (!targets && state.bodies.size === 0)) {
-    registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
-    return { targets: [] };
-  }
-
-  if (operation === "join" && tool.names.version === 2)
-    return joinEvery(state, featureId, tool, targets);
-
-  if (operation === "cut") {
-    const bodies = targets
-      ? targets.map((id) => targetBody(state, "cut", id, tool.shape))
-      : overlapping(state, tool.shape);
-    if (bodies.length === 0)
-      throw new Error("cut tool does not intersect any body");
-    const warnings = bodies.map((body) => {
-      const op = checkedCut(body.shape, tool.shape, "boolean cut failed");
-      if (!op) return undefined;
-      const result = op.Shape();
-      const names = propagateNames(op, [body, tool], result, featureId);
-      op.delete();
-      const inputs = [body.shape, tool.shape];
-      const warning = zeroThicknessWarning("cut", result, inputs);
-      registerBodySolids(state, body.bodyId, result, names, featureId);
-      result.delete();
-      return warning;
-    });
-    return { targets: bodies.map((b) => b.bodyId), ...warned(warnings) };
-  }
-
-  const target = targets
-    ? targetBody(state, operation, targets[0]!, tool.shape)
-    : overlapping(state, tool.shape)[0];
-
-  if (operation === "join") {
-    if (!target) {
-      registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
-      return { targets: [] };
-    }
-    const fused = fuseNamed(target, tool, featureId, "boolean join failed");
-    const joined = finishJoin(fused, featureId, [target, tool], true);
-    const { shape, names } = joined;
-    registerBodySolids(state, target.bodyId, shape, names, featureId);
-    return { targets: [target.bodyId], ...warned([joined.warning]) };
-  }
-
-  if (!target) throw new Error("intersect tool does not overlap any body");
-  const op = new k.BRepAlgoAPI_Common_3(target.shape, tool.shape, progress());
-  op.Build(progress());
-  if (!op.IsDone()) {
-    op.delete();
-    throw new Error("boolean intersect failed");
-  }
-  const result = op.Shape();
-  const names = propagateNames(
-    op,
-    [target, { shape: tool.shape, names: tool.names }],
-    result,
-    featureId,
-  );
-  op.delete();
-  registerBodySolids(state, target.bodyId, result, names, featureId);
-  return { targets: [target.bodyId] };
-}
-
-// ---------------------------------------------------------------------------
-// Individual feature evaluators
 // ---------------------------------------------------------------------------
 
 export function evalSketch(state: EvalState, f: SketchFeature): void {
@@ -1199,210 +775,6 @@ function sketchEntityToEdge(
   return null;
 }
 
-export function rejectInvalid(
-  result: Shape,
-  before: Shape,
-  kind: string,
-  size: string,
-  advice: string,
-): void {
-  const broken = invalidPart(result);
-  if (!broken) return;
-  const earlier = invalidPart(before);
-  throw new Error(
-    earlier
-      ? `${kind} of ${size} cannot be published: the body was already invalid before this ${kind} (the kernel check rejects a ${earlier}), so the fault comes from an earlier feature; the previous body has been kept`
-      : `${kind} of ${size} left an invalid shape (the kernel check rejects a ${broken}): ${advice}; the previous body has been kept`,
-  );
-}
-
-export function invalidPart(shape: Shape): string | null {
-  const check = new (getKernel().BRepCheck_Analyzer)(shape, true, false, false);
-  try {
-    if (check.IsValid_2()) return null;
-    for (const [part, of] of [
-      ["face", facesOf],
-      ["edge", edgesOf],
-      ["vertex", verticesOf],
-    ] as const) {
-      const shapes = of(shape);
-      try {
-        if (shapes.some((s) => !check.IsValid_1(s))) return part;
-      } finally {
-        release(shapes);
-      }
-    }
-    return "solid";
-  } finally {
-    check.delete();
-  }
-}
-
-export function evalCombine(state: EvalState, f: CombineFeature) {
-  const target = state.bodies.get(f.targetBody);
-  if (!target) throw new Error(`target body ${f.targetBody} not found`);
-  const tools = f.toolBodies.map((id) => {
-    const b = state.bodies.get(id);
-    if (!b) throw new Error(`tool body ${id} not found`);
-    return b;
-  });
-  if (tools.length === 0) throw new Error("no tool bodies selected");
-  const k = getKernel();
-  return kernelCall("combine", () => {
-    let current: NamedBody = target;
-    for (const tool of tools) {
-      let op: any;
-      if (f.operation === "join") {
-        op = new k.BRepAlgoAPI_Fuse_3(current.shape, tool.shape, progress());
-      } else if (f.operation === "cut") {
-        op = checkedCut(current.shape, tool.shape, "boolean cut failed");
-      } else {
-        op = new k.BRepAlgoAPI_Common_3(current.shape, tool.shape, progress());
-      }
-      if (!op) continue;
-      if (!op.IsDone()) {
-        op.delete();
-        throw new Error(`boolean ${f.operation} failed`);
-      }
-      const result = op.Shape();
-      const names = propagateNames(op, [current, tool], result, f.id);
-      op.delete();
-      current = { bodyId: target.bodyId, shape: result, names };
-    }
-    const joined: JoinResult =
-      f.operation === "join"
-        ? finishJoin(current, f.id, [target, ...tools])
-        : current;
-    registerBodySolids(state, target.bodyId, joined.shape, joined.names);
-    if (!f.keepTools) {
-      for (const tool of tools) state.bodies.delete(tool.bodyId);
-    }
-    return warned([joined.warning]);
-  });
-}
-
-export function evalOffsetFace(state: EvalState, f: OffsetFaceFeature) {
-  if (f.faces.length === 0) throw new Error("no faces selected");
-  if (f.distance === 0) throw new Error("offset distance must be non-zero");
-  const bodyId = f.faces[0]!.bodyId;
-  const body = state.bodies.get(bodyId);
-  if (!body) throw new Error(`body ${bodyId} not found`);
-  const k = getKernel();
-  return kernelCall("offsetFace", () => {
-    let current = body;
-    for (const ref of f.faces) {
-      const face = findFace(current, ref.faceName);
-      if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
-      const plane = planarFacePlane(face);
-      if (!plane) throw new Error("offset face requires a planar face");
-      const normal = plane.normal;
-
-      // Press-pull: prism the face by |distance| outward (fuse) or inward (cut)
-      const outward = f.distance > 0;
-      const dist = Math.abs(f.distance);
-      const dirVec: Vec3 = outward
-        ? normal
-        : [-normal[0], -normal[1], -normal[2]];
-      const v = vec(dirVec[0] * dist, dirVec[1] * dist, dirVec[2] * dist);
-      const prism = new k.BRepPrimAPI_MakePrism_1(face, v, false, true);
-      prism.Build(progress());
-      if (!prism.IsDone()) {
-        prism.delete();
-        throw new Error("offset face prism failed");
-      }
-      const toolShape = prism.Shape();
-      const moved = new ShapeMap<string>();
-      if (current.names.version === 2) {
-        const last = prism.LastShape_1();
-        const caps = facesOf(last);
-        for (const cap of caps) moved.set(cap, ref.faceName);
-        release([...caps, last]);
-      }
-      const toolNames = finalizeNames(toolShape, moved, f.id);
-      prism.delete();
-      v.delete();
-
-      const op = outward
-        ? new k.BRepAlgoAPI_Fuse_3(current.shape, toolShape, progress())
-        : checkedCut(current.shape, toolShape, "offset face boolean failed");
-      if (!op) continue;
-      if (!op.IsDone()) {
-        op.delete();
-        throw new Error("offset face boolean failed");
-      }
-      const result = op.Shape();
-      const names = propagateNames(
-        op,
-        [current, { shape: toolShape, names: toolNames }],
-        result,
-        f.id,
-      );
-      op.delete();
-      current = { bodyId, shape: result, names };
-    }
-    const joined: JoinResult =
-      f.distance > 0 ? finishJoin(current, f.id, [body]) : current;
-    registerBodySolids(state, bodyId, joined.shape, joined.names);
-    return warned([joined.warning]);
-  });
-}
-
-export function evalSplitBody(state: EvalState, f: SplitBodyFeature): void {
-  const body = state.bodies.get(f.body);
-  if (!body) throw new Error(`body ${f.body} not found`);
-  const frame = resolvePlaneFrame(state, f.tool);
-  const k = getKernel();
-  kernelCall("splitBody", () => {
-    const bbox = bboxOf(body.shape);
-    const diag =
-      Math.hypot(
-        bbox.max[0] - bbox.min[0],
-        bbox.max[1] - bbox.min[1],
-        bbox.max[2] - bbox.min[2],
-      ) + 10;
-    const { sols, names } = scoped((own) => {
-      const pln = own(
-        new k.gp_Pln_3(
-          own(pnt(frame.origin[0], frame.origin[1], frame.origin[2])),
-          own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
-        ),
-      );
-      const faceMk = own(
-        new k.BRepBuilderAPI_MakeFace_9(pln, -diag, diag, -diag, diag),
-      );
-      const splitter = own(new k.BRepAlgoAPI_Splitter_1());
-      splitter.SetArguments(own(shapeList([body.shape])));
-      splitter.SetTools(own(shapeList([own(faceMk.Face())])));
-      splitter.Build(progress());
-      if (!splitter.IsDone()) throw new Error("split failed");
-      const result = own(splitter.Shape());
-      const names = propagateNames(splitter, [body], result, f.id);
-      return { sols: solids(result), names };
-    });
-    if (sols.length < 2) {
-      release(sols);
-      throw new Error("split plane does not intersect the body");
-    }
-    // Deterministic ordering along the split normal.
-    const sorted = sols
-      .map((s) => {
-        const bb = bboxOf(s);
-        const c: Vec3 = [
-          (bb.min[0] + bb.max[0]) / 2,
-          (bb.min[1] + bb.max[1]) / 2,
-          (bb.min[2] + bb.max[2]) / 2,
-        ];
-        return { s, key: V.dot(c, frame.normal) };
-      })
-      .sort((a, b) => a.key - b.key);
-    state.bodies.delete(f.body);
-    sorted.forEach((item, i) => {
-      const id = i === 0 ? f.body : derivedBodyId(f.id, i + 1);
-      state.bodies.set(id, { bodyId: id, shape: item.s, names });
-    });
-  });
-}
-
 function mirrorTrsfFor(frame: PlaneFrame): any {
   const k = getKernel();
   const trsf = new k.gp_Trsf_1();
@@ -1807,3 +1179,28 @@ export function evaluateFeature(
     feature,
   );
 }
+
+export {
+  cloneState,
+  emptyState,
+  resolvePlaneFrame,
+  vertexPoint,
+  registerBodySolids,
+  NoCorner,
+  rejectInvalid,
+  invalidPart,
+} from "./featureState.js";
+export type {
+  EvaluatedSketch,
+  StateBody,
+  EvalState,
+  ToolResult,
+  FeatureOutcome,
+} from "./featureState.js";
+export {
+  unifyTool,
+  fuseNamed,
+  evalCombine,
+  evalOffsetFace,
+  evalSplitBody,
+} from "./boolean.js";

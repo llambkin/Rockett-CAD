@@ -1,4 +1,11 @@
 import {
+  fuseNamed,
+  unifyTool,
+  splitAtEnds,
+  fuseOperation,
+  commonOperation,
+} from "./boolean.js";
+import {
   LINEAR_TOL,
   UNIT_DOT_TOL,
   type ChamferFeature,
@@ -8,7 +15,6 @@ import {
 } from "@rockett/shared";
 import {
   bboxOf,
-  dir,
   edgeCentroid,
   edges as edgesOf,
   explore,
@@ -16,7 +22,6 @@ import {
   faces as facesOf,
   getKernel,
   kernelCall,
-  lengthOf,
   listToArray,
   planarFacePlane,
   pnt,
@@ -40,18 +45,16 @@ import {
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { V, frameFromPlane } from "./frames.js";
+import { V } from "./frames.js";
 import { tangentEdges } from "./tangentEdges.js";
 import {
   NoCorner,
-  fuseNamed,
   registerBodySolids,
   rejectInvalid,
-  unifyTool,
   vertexPoint,
   type EvalState,
   type ToolResult,
-} from "./features.js";
+} from "./featureState.js";
 function blendPerBody(
   state: EvalState,
   refs: EdgeRef[],
@@ -277,62 +280,6 @@ function openEnds(
   for (const list of touches.values())
     release(list.map(({ vertex }) => vertex));
   return ends;
-}
-
-function splitAtEnds(
-  body: NamedBody,
-  sourceEdges: { edge: Shape }[],
-  ends: OpenEnd[],
-  featureId: string,
-  own: <H extends { delete(): void }>(handle: H) => H,
-) {
-  const k = getKernel();
-  const { min, max } = bboxOf(body.shape);
-  const reach = 2 * V.norm(V.sub(max, min)) + 1;
-  const beyond = ends
-    .map((end) => {
-      const { xAxis, yAxis, normal } = frameFromPlane(end.at, end.out);
-      const corner = V.sub(end.at, V.scale(V.add(xAxis, yAxis), reach));
-      const axes = own(
-        new k.gp_Ax2_2(
-          own(pnt(...corner)),
-          own(dir(...normal)),
-          own(dir(...xAxis)),
-        ),
-      );
-      const box = own(
-        new k.BRepPrimAPI_MakeBox_5(axes, 2 * reach, 2 * reach, reach),
-      );
-      return own(box.Shape());
-    })
-    .reduce((a, b) =>
-      own(own(new k.BRepAlgoAPI_Fuse_3(a, b, progress())).Shape()),
-    );
-  const cut = own(new k.BRepAlgoAPI_Cut_3(body.shape, beyond, progress()));
-  const common = own(
-    new k.BRepAlgoAPI_Common_3(body.shape, beyond, progress()),
-  );
-  if (!cut.IsDone() || !common.IsDone()) return null;
-  const kept = sourceEdges.map(({ edge }) => {
-    const split = cut.IsDeleted(edge) ? [] : listToArray(cut.Modified(edge));
-    const image = split.length === 1 ? own(k.TopoDS.Edge_1(split[0])) : edge;
-    release(split);
-    const whole = !cut.IsDeleted(edge) && split.length <= 1;
-    return whole && Math.abs(lengthOf(image) - lengthOf(edge)) < LINEAR_TOL
-      ? { edge: image }
-      : null;
-  });
-  if (kept.some((image) => !image)) return null;
-  const blank = { shape: beyond, names: new ShapeMap<string>() };
-  const [piece, rest] = [cut, common].map((op) => {
-    const shape = own(op.Shape());
-    return {
-      bodyId: body.bodyId,
-      shape,
-      names: propagateNames(op, [body, blank], shape, featureId),
-    };
-  });
-  return { piece: piece!, rest: rest!, kept: kept as { edge: Shape }[] };
 }
 
 function filletClipped(
@@ -640,9 +587,7 @@ function chamferByEnvelope(
           ),
         );
         prism.Build(progress());
-        const fuse = own(
-          new k.BRepAlgoAPI_Fuse_3(band, own(prism.Shape()), progress()),
-        );
+        const fuse = own(fuseOperation(band, own(prism.Shape())));
         fuse.Build(progress());
         if (!fuse.IsDone()) return false;
         const envelope = own(fuse.Shape());
@@ -685,9 +630,7 @@ function chamferByEnvelope(
           envNames.set(face, `f:${featureId}:fe:${idx + 1}`);
         }
 
-        const common = own(
-          new k.BRepAlgoAPI_Common_3(current.shape, envelope, progress()),
-        );
+        const common = own(commonOperation(current.shape, envelope));
         common.Build(progress());
         if (!common.IsDone()) return false;
         const result = common.Shape();

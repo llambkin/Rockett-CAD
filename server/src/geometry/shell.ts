@@ -17,16 +17,15 @@ import {
 } from "./kernel.js";
 import { finalizeNames, findFace, propagateNames } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { checkedCut } from "./cutCheck.js";
+import { fuseNamed, hollowedByCut } from "./boolean.js";
 import type { EvalContext } from "./featureKinds.js";
 import {
-  fuseNamed,
   invalidPart,
   registerBodySolids,
   rejectInvalid,
   type StateBody,
   type ToolResult,
-} from "./features.js";
+} from "./featureState.js";
 
 function hollowed(before: Shape, after: Shape): boolean {
   const skin = LINEAR_TOL * areaOf(before);
@@ -58,23 +57,6 @@ function thickSolid(shape: Shape, closing: Shape[], thickness: number): any {
   if (op.IsDone()) return op;
   op.delete();
   throw new Error("shell failed: thickness may be too large");
-}
-
-function hollowedByCut(
-  body: StateBody,
-  inner: ToolResult,
-  featureId: string,
-): ToolResult | null {
-  const cut = checkedCut(
-    body.shape,
-    inner.shape,
-    "shell failed: could not hollow the closed body",
-  );
-  if (!cut) return null;
-  const shape = cut.Shape();
-  const names = propagateNames(cut, [body, inner], shape, featureId);
-  cut.delete();
-  return { shape, names };
 }
 
 function offsetInside(
