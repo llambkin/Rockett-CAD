@@ -7,8 +7,14 @@ cd "$here"
 
 grep -v ' adaptive.wasm$' SHA256SUMS | sha256sum --quiet -c -
 
+output=$(mktemp adaptive.wasm.XXXXXX)
+trap 'rm -f -- "$output"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 tar -cf - entry.cpp freecad/src |
-    podman run --rm -i --network=none "$image" sh -eu -c '
+    podman run --rm -i --network=none --pull=never "$image" sh -eu -c '
 mkdir -p /build/include/clipper2
 cd /build
 tar -xf -
@@ -25,6 +31,8 @@ em++ -O2 -std=c++20 -DUSINGZ -DCLIPPER2_MAX_DECIMAL_PRECISION=8 \
     $clipper2/Clipper2Lib/src/clipper.offset.cpp \
     -o adaptive.wasm >&2
 cat adaptive.wasm
-' >adaptive.wasm
+' >"$output"
 
-sha256sum -c SHA256SUMS
+sed "s/ adaptive.wasm$/ $output/" SHA256SUMS | sha256sum -c -
+chmod 644 "$output"
+mv -f -- "$output" adaptive.wasm

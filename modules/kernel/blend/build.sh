@@ -7,8 +7,14 @@ cd "$here"
 
 grep -v ' blend.wasm$' SHA256SUMS | sha256sum --quiet -c -
 
+output=$(mktemp blend.wasm.XXXXXX)
+trap 'rm -f -- "$output"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 tar -cf - entry.cpp |
-    podman run --rm -i --network=none "$image" sh -eu -c '
+    podman run --rm -i --network=none --pull=never "$image" sh -eu -c '
 mkdir -p /build
 cd /build
 tar -xf -
@@ -16,6 +22,8 @@ em++ -O2 -std=c++20 -sSTANDALONE_WASM --no-entry \
     -sEXPORTED_FUNCTIONS=_fillet_planes,_buffer \
     entry.cpp -o blend.wasm >&2
 cat blend.wasm
-' >blend.wasm
+' >"$output"
 
-sha256sum -c SHA256SUMS
+sed "s/ blend.wasm$/ $output/" SHA256SUMS | sha256sum -c -
+chmod 644 "$output"
+mv -f -- "$output" blend.wasm
