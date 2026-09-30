@@ -1,19 +1,13 @@
+import { evalExtrude } from "./extrude.js";
 import {
   resolvePlaneFrame,
-  vertexPoint,
+  resolveAxis,
+  resolvePoint,
   registerBodySolids,
-  registerPieces,
-  type EvaluatedSketch,
   type EvalState,
-  type ToolResult,
   type FeatureOutcome,
 } from "./featureState.js";
-import {
-  unifyTool,
-  fuseNamed,
-  applyToolOperation,
-  subtractSketchRegionsFromFace,
-} from "./boolean.js";
+import { fuseNamed } from "./boolean.js";
 import { finishJoin, warned } from "./booleanNaming.js";
 /**
  * Feature evaluators — each timeline feature type maps to a function that
@@ -22,7 +16,6 @@ import { finishJoin, warned } from "./booleanNaming.js";
 
 import {
   detectProfiles,
-  findProfile,
   solveSketch,
   settledEntities,
   projectEdge,
@@ -32,11 +25,9 @@ import {
   ANGULAR_TOL_DEG,
   LINEAR_TOL,
   UNIT_DOT_TOL,
-  type AxisRef,
   type ConstructionPlaneFeature,
   type EmbossFeature,
   type ExtrudeFeature,
-  type FaceRef,
   type Feature,
   type ImportMeshFeature,
   type ImportStepFeature,
@@ -46,12 +37,8 @@ import {
   type ReferenceImageFeature,
   type CircularPatternFeature,
   type PlaneFrame,
-  type PointRef,
-  type ProfileRef,
-  type RevolveFeature,
   type SketchEntity,
   type SketchFeature,
-  type SweepFeature,
   type Vec3,
   Placement,
 } from "@rockett/shared";
@@ -59,168 +46,30 @@ import {
   acquire,
   bboxOf,
   dir,
-  edges as edgesOf,
-  faces as facesOf,
   getKernel,
   kernelCall,
-  listToArray,
   placementToTrsf,
-  planarFacePlane,
   pnt,
-  progress,
-  scoped,
-  solids,
   transformOp,
-  vec,
   type Shape,
 } from "./kernel.js";
 import {
   computeEdgeNames,
-  computeVertexNames,
   finalizeNames,
-  findFace,
   namingVersion,
-  sweptNames,
   transformNames,
   type NamedBody,
 } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 
-import { V, frameFromPlane, offsetFrame, uvTo3d } from "./frames.js";
+import { V, frameFromPlane, offsetFrame } from "./frames.js";
 import { geometryNames } from "./signature.js";
 import { curveInfo } from "./tessellate.js";
 import { readImport, readMesh } from "./importers.js";
 import { type EvalContext } from "./featureKinds.js";
-import {
-  arcEdge,
-  buildProfileFace,
-  snapper,
-  sideEdgeNames,
-  type ProfileFace,
-} from "./sketchGeom.js";
 
 // ---------------------------------------------------------------------------
 // Reference resolution
-// ---------------------------------------------------------------------------
-
-function sketchPoint(state: EvalState, sketchId: string, pointId: string) {
-  const sketch = state.sketches.get(sketchId);
-  if (!sketch) throw new Error(`sketch ${sketchId} not found`);
-  const point = sketch.entities.find((e) => e.id === pointId);
-  if (point?.kind !== "point") throw new Error(`point ${pointId} not found`);
-  return uvTo3d(sketch.frame, point.x, point.y);
-}
-
-function resolvePoint(state: EvalState, ref: PointRef): Vec3 {
-  if (ref.kind === "sketchPoint")
-    return sketchPoint(state, ref.sketchId, ref.entityId);
-  const body = state.bodies.get(ref.bodyId);
-  if (!body) throw new Error(`body ${ref.bodyId} no longer exists`);
-  const vertex = computeVertexNames(body).byName.get(ref.vertexName);
-  if (!vertex) throw new Error(`vertex ${ref.vertexName} no longer exists`);
-  return vertexPoint(vertex);
-}
-
-function resolveAxis(
-  state: EvalState,
-  ref: AxisRef,
-): { origin: Vec3; direction: Vec3 } {
-  if (ref.kind === "originAxis") {
-    const dirs: Record<"X" | "Y" | "Z", Vec3> = {
-      X: [1, 0, 0],
-      Y: [0, 1, 0],
-      Z: [0, 0, 1],
-    };
-    return { origin: [0, 0, 0], direction: dirs[ref.axis] };
-  }
-  if (ref.kind === "sketchLine") {
-    const line = state.sketches
-      .get(ref.sketchId)
-      ?.entities.find((e) => e.id === ref.entityId && e.kind === "line");
-    if (line?.kind !== "line")
-      throw new Error(`axis line ${ref.entityId} not found`);
-    const a = sketchPoint(state, ref.sketchId, line.p1);
-    const b = sketchPoint(state, ref.sketchId, line.p2);
-    return { origin: a, direction: V.normalize(V.sub(b, a)) };
-  }
-  // model edge
-  const body = state.bodies.get(ref.edge.bodyId);
-  if (!body) throw new Error(`body ${ref.edge.bodyId} not found`);
-  const edgeNames = computeEdgeNames(body);
-  const edge = edgeNames.byName.get(ref.edge.edgeName);
-  if (!edge) throw new Error(`edge ${ref.edge.edgeName} no longer exists`);
-  const k = getKernel();
-  const curve = acquire(new k.BRepAdaptor_Curve_2(edge));
-  if (curve.GetType() !== k.GeomAbs_CurveType.GeomAbs_Line) {
-    throw new Error(`edge ${ref.edge.edgeName} is not linear`);
-  }
-  const pA = acquire(curve.Value(curve.FirstParameter()));
-  const pB = acquire(curve.Value(curve.LastParameter()));
-  const origin: Vec3 = [pA.X(), pA.Y(), pA.Z()];
-  const target: Vec3 = [pB.X(), pB.Y(), pB.Z()];
-  return { origin, direction: V.normalize(V.sub(target, origin)) };
-}
-
-function resolveProfiles(
-  state: EvalState,
-  refs: ProfileRef[],
-): { faces: ProfileFace[]; sketch: EvaluatedSketch } {
-  if (refs.length === 0) throw new Error("no profiles selected");
-  const sketch = state.sketches.get(refs[0]!.sketchId);
-  if (!sketch) throw new Error(`sketch ${refs[0]!.sketchId} not found`);
-  const out: ProfileFace[] = [];
-  for (const ref of refs) {
-    const s = state.sketches.get(ref.sketchId);
-    if (!s) throw new Error(`sketch ${ref.sketchId} not found`);
-    const profile = findProfile(s, ref.profileId);
-    if (!profile) {
-      throw new Error(
-        `profile ${ref.profileId} no longer exists in ${ref.sketchId}: the sketch region may have changed`,
-      );
-    }
-    out.push(buildProfileFace(profile, s.entities, s.frame));
-  }
-  return { faces: out, sketch };
-}
-
-// ---------------------------------------------------------------------------
-// Body bookkeeping
-// ---------------------------------------------------------------------------
-
-function registerNewBodies(
-  state: EvalState,
-  featureId: string,
-  tools: ToolResult[],
-  regions: ProfileFace[],
-): void {
-  const unified = tools.map((t) => unifyTool(t, featureId));
-
-  if (unified[0]?.names.version === 2) {
-    registerPieces(
-      state,
-      `b:${featureId}`,
-      unified.flatMap((u, i) =>
-        solids(u.shape).map((shape) => ({
-          shape,
-          names: u.names,
-          region: regions[i]!.profileId,
-        })),
-      ),
-    );
-    return;
-  }
-  unified.forEach((u, i) =>
-    registerBodySolids(
-      state,
-      i === 0 ? `b:${featureId}` : `b:${featureId}:${i + 1}`,
-      u.shape,
-      u.names,
-    ),
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Tool-solid creation (extrude / revolve / sweep / loft share this plumbing)
 // ---------------------------------------------------------------------------
 
 export function evalSketch(state: EvalState, f: SketchFeature): void {
@@ -271,431 +120,6 @@ export function evalSketch(state: EvalState, f: SketchFeature): void {
 }
 
 /** Build prism tool(s) for extrude-like features. */
-function buildPrism(
-  featureId: string,
-  profileFace: ProfileFace,
-  direction: Vec3,
-  distance: number,
-  baseOffset: number,
-  copyBase = false,
-): ToolResult {
-  const k = getKernel();
-  return kernelCall("extrude", () => {
-    let face = profileFace.face;
-    let offsetEdgeEntity = profileFace.edgeEntity;
-    if (baseOffset !== 0) {
-      const trsf = acquire(new k.gp_Trsf_1());
-      trsf.SetTranslation_1(
-        vec(
-          direction[0] * baseOffset,
-          direction[1] * baseOffset,
-          direction[2] * baseOffset,
-        ),
-      );
-      const tr = transformOp(face, trsf);
-      const moved = acquire(tr.Shape());
-      // remap edge->entity through the transform
-      const newMap = new ShapeMap<string>();
-      for (const e of edgesOf(face)) {
-        const id = profileFace.edgeEntity.get(e);
-        if (!id) continue;
-        try {
-          const me = acquire(tr.ModifiedShape(e));
-          newMap.set(me, id);
-        } catch {
-          // ignore
-        }
-      }
-      offsetEdgeEntity = newMap;
-      face = acquire(k.TopoDS.Face_1(moved));
-    }
-    const v = vec(
-      direction[0] * distance,
-      direction[1] * distance,
-      direction[2] * distance,
-    );
-    const prism = acquire(
-      new k.BRepPrimAPI_MakePrism_1(face, v, copyBase, true),
-    );
-    prism.Build(progress());
-    if (!prism.IsDone()) {
-      throw new Error("prism generation failed: is the profile closed?");
-    }
-    const shape = acquire(prism.Shape());
-
-    const provisional = new ShapeMap<string>();
-    // side faces from profile edges
-    const faceEdges = edgesOf(face);
-    for (const e of faceEdges) {
-      const entityId = offsetEdgeEntity.get(e);
-      if (!entityId) continue;
-      const gen = listToArray(prism.Generated(e));
-      for (const g of gen) {
-        if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(g, `f:${featureId}:s:${entityId}`);
-        }
-      }
-    }
-
-    // caps
-    const firstShape = acquire(prism.FirstShape_1());
-    const startCaps = facesOf(firstShape);
-    for (const cap of startCaps) {
-      provisional.set(cap, `f:${featureId}:cap:start`);
-    }
-    const lastShape = acquire(prism.LastShape_1());
-    const endCaps = facesOf(lastShape);
-    for (const cap of endCaps) {
-      provisional.set(cap, `f:${featureId}:cap:end`);
-    }
-
-    const names = finalizeNames(shape, provisional, featureId);
-    return { shape, names };
-  });
-}
-
-function faceProfile(
-  state: EvalState,
-  ref: FaceRef,
-): { pf: ProfileFace; n: Vec3 } {
-  const body = state.bodies.get(ref.bodyId);
-  if (!body) throw new Error(`body ${ref.bodyId} no longer exists`);
-  const face = findFace(body, ref.faceName);
-  if (!face) throw new Error(`face ${ref.faceName} no longer exists`);
-  const plane = planarFacePlane(face);
-  if (!plane) throw new Error(`face ${ref.faceName} is not planar`);
-  const cut = subtractSketchRegionsFromFace(face, state.sketches.values());
-  return {
-    pf: { face: cut.face, edgeEntity: cut.edgeEntity, profileId: ref.faceName },
-    n: plane.normal,
-  };
-}
-
-export function evalExtrude(state: EvalState, f: ExtrudeFeature) {
-  const dist = Math.abs(f.distance);
-  if (dist <= 0) throw new Error("extrude distance must be non-zero");
-  const faceRefs = f.faces ?? [];
-  if (f.profiles.length === 0 && faceRefs.length === 0) {
-    throw new Error("select at least one profile or planar face");
-  }
-
-  // Each extrusion source: a face shape + the direction it extrudes along.
-  const sources: { pf: ProfileFace; n: Vec3; copy: boolean }[] = [];
-
-  if (f.profiles.length > 0) {
-    const { faces: profileFaces, sketch } = resolveProfiles(state, f.profiles);
-    for (const pf of profileFaces) {
-      sources.push({ pf, n: sketch.frame.normal, copy: false });
-    }
-  }
-
-  for (const ref of faceRefs)
-    sources.push({ ...faceProfile(state, ref), copy: true });
-
-  // A negative distance flips the side (typing -5 in the dialog extrudes
-  // 5 mm the other way — the usual way to start a cut into a body).
-  const flip = f.distance < 0 ? -1 : 1;
-  // "Start → Offset": the extrusion begins on a plane `startOffset` along the
-  // profile's own normal (independent of direction / sign of distance).
-  const startOffset = f.startOffset ?? 0;
-  const tools: ToolResult[] = [];
-  for (const { pf, n: n0, copy } of sources) {
-    const sgn = (f.direction === "reverse" ? -1 : 1) * flip;
-    const n: Vec3 = [sgn * n0[0], sgn * n0[1], sgn * n0[2]];
-    // buildPrism's base offset is measured along `n`, so convert the offset
-    // along n0 into that frame
-    const base = startOffset * sgn;
-    if (f.direction === "normal" || f.direction === "reverse") {
-      tools.push(buildPrism(f.id, pf, n, dist, base, copy));
-    } else if (f.direction === "symmetric") {
-      tools.push(buildPrism(f.id, pf, n, dist, base - dist / 2, copy));
-    } else {
-      // twoSided: `distance` on the (possibly flipped) primary side, distance2 behind
-      const d2 = Math.abs(f.distance2 ?? 0);
-      tools.push(buildPrism(f.id, pf, n, dist + d2, base - d2, copy));
-    }
-  }
-
-  return applyProfileTools(
-    state,
-    f.id,
-    tools,
-    sources.map((s) => s.pf),
-    f.operation,
-    f.targets,
-  );
-}
-
-function applyProfileTools(
-  state: EvalState,
-  featureId: string,
-  tools: ToolResult[],
-  regions: ProfileFace[],
-  operation: "newBody" | "join" | "cut" | "intersect",
-  targets?: string[],
-): FeatureOutcome | void {
-  if (operation === "newBody") {
-    registerNewBodies(state, featureId, tools, regions);
-    return;
-  }
-
-  const tool = tools.slice(1).reduce((acc, next) => {
-    const fused = fuseNamed(
-      acc,
-      next,
-      featureId,
-      "failed to merge profile solids",
-    );
-
-    return fused;
-  }, tools[0]!);
-  const unified = unifyTool(tool, featureId);
-
-  return applyToolOperation(state, featureId, unified, operation, targets);
-}
-
-function revolveSources(state: EvalState, f: RevolveFeature) {
-  const faceRefs = f.faces ?? [];
-  const profiles =
-    f.profiles.length > 0 || faceRefs.length === 0
-      ? resolveProfiles(state, f.profiles).faces
-      : [];
-  return [
-    ...profiles.map((pf) => ({ pf, copy: false })),
-    ...faceRefs.map((ref) => ({ pf: faceProfile(state, ref).pf, copy: true })),
-  ];
-}
-
-const REVOLVE_CROSSES_AXIS =
-  "revolve profile crosses the axis of revolution: keep the profile on one side of the axis; the previous state has been kept";
-
-function crossesAxis(
-  face: Shape,
-  axis: { origin: Vec3; direction: Vec3 },
-): boolean {
-  const plane = planarFacePlane(face);
-  if (!plane) return false;
-  const d = axis.direction;
-  const across = V.cross(d, plane.normal);
-  if (V.norm(across) < UNIT_DOT_TOL) return false;
-  const u = V.normalize(across);
-  const w = V.cross(u, d);
-  const o = axis.origin;
-  const k = getKernel();
-  return scoped((own) => {
-    const trsf = own(new k.gp_Trsf_1());
-    trsf.SetValues(...u, -V.dot(u, o), ...d, -V.dot(d, o), ...w, -V.dot(w, o));
-    const box = own(new k.Bnd_Box_1());
-    const moved = own(face.Moved(own(new k.TopLoc_Location_4(trsf)), false));
-    k.BRepBndLib.AddOptimal(moved, box, false, false);
-    const tolerance = Math.max(
-      LINEAR_TOL,
-      k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum.TopAbs_VERTEX),
-    );
-    return (
-      own(box.CornerMin()).X() < -tolerance &&
-      own(box.CornerMax()).X() > tolerance
-    );
-  });
-}
-
-export function evalRevolve(state: EvalState, f: RevolveFeature) {
-  const sources = revolveSources(state, f);
-  const profileFaces = sources.map((s) => s.pf);
-  const axis = resolveAxis(state, f.axis);
-  if (profileFaces.some((pf) => crossesAxis(pf.face, axis))) {
-    throw new Error(REVOLVE_CROSSES_AXIS);
-  }
-  const k = getKernel();
-  const angleRad = (Math.min(Math.abs(f.angle), 360) * Math.PI) / 180;
-  const full = Math.abs(f.angle) >= 360 - ANGULAR_TOL_DEG;
-  const sign = f.angle >= 0 ? 1 : -1;
-
-  const tools: ToolResult[] = [];
-  for (const { pf, copy } of sources) {
-    const tool = kernelCall("revolve", () => {
-      const ax1 = acquire(
-        new k.gp_Ax1_2(
-          pnt(...axis.origin),
-          dir(
-            sign * axis.direction[0],
-            sign * axis.direction[1],
-            sign * axis.direction[2],
-          ),
-        ),
-      );
-      const revol = full
-        ? acquire(new k.BRepPrimAPI_MakeRevol_2(pf.face, ax1, copy))
-        : acquire(new k.BRepPrimAPI_MakeRevol_1(pf.face, ax1, angleRad, copy));
-      revol.Build(progress());
-      if (!revol.IsDone()) {
-        throw new Error("the kernel could not revolve the profile");
-      }
-      const shape = acquire(revol.Shape());
-      const names = sweptNames(
-        shape,
-        f.id,
-        sideEdgeNames(f.id, pf),
-        (e) => revol.Generated(e),
-        full
-          ? []
-          : [acquire(revol.FirstShape_1()), acquire(revol.LastShape_1())],
-      );
-      return { shape, names };
-    });
-    tools.push(tool);
-  }
-
-  return applyProfileTools(
-    state,
-    f.id,
-    tools,
-    profileFaces,
-    f.operation,
-    f.targets,
-  );
-}
-
-export function evalSweep(state: EvalState, f: SweepFeature) {
-  const { faces: profileFaces } = resolveProfiles(state, f.profiles);
-  const pathSketch = state.sketches.get(f.pathSketchId);
-  if (!pathSketch) throw new Error(`path sketch ${f.pathSketchId} not found`);
-  const k = getKernel();
-
-  // Build the spine wire from all non-construction curves of the path sketch,
-  // ordered into a connected chain.
-  const points = new Map<string, { x: number; y: number }>();
-  for (const e of pathSketch.entities) {
-    if (e.kind === "point") points.set(e.id, { x: e.x, y: e.y });
-  }
-  const chain = orderOpenChain(pathSketch.entities, points);
-  const wire = acquire(
-    kernelCall("sweep path", () =>
-      scoped((own) => {
-        if (chain.length === 0)
-          throw new Error("path sketch contains no usable curves");
-        const wireMaker = own(new k.BRepBuilderAPI_MakeWire_1());
-        for (const seg of chain) {
-          const edge = sketchEntityToEdge(seg, pathSketch, points);
-          if (edge) wireMaker.Add_1(own(edge));
-          if (!wireMaker.IsDone())
-            throw new Error("sweep path is not a connected chain");
-        }
-        return own.keep(own(wireMaker.Wire()));
-      }),
-    ),
-  );
-
-  const tools = profileFaces.map((pf) =>
-    kernelCall("sweep", (): ToolResult => {
-      const pipe = acquire(new k.BRepOffsetAPI_MakePipe_1(wire, pf.face));
-      pipe.Build(progress());
-      if (!pipe.IsDone()) {
-        throw new Error(
-          "sweep failed: check that the profile lies on the path start",
-        );
-      }
-      const shape = acquire(pipe.Shape());
-      const names =
-        namingVersion() === 1
-          ? finalizeNames(shape, new ShapeMap(), f.id)
-          : sweptNames(
-              shape,
-              f.id,
-              sideEdgeNames(f.id, pf),
-              (e) => pipe.Generated_1(e),
-              [acquire(pipe.FirstShape()), acquire(pipe.LastShape())],
-            );
-      return { shape, names };
-    }),
-  );
-
-  if (tools.length > 1)
-    return applyProfileTools(
-      state,
-      f.id,
-      tools,
-      profileFaces,
-      f.operation,
-      f.targets,
-    );
-
-  return applyToolOperation(state, f.id, tools[0]!, f.operation, f.targets);
-}
-
-function orderOpenChain(
-  entities: SketchEntity[],
-  points: Map<string, { x: number; y: number }>,
-): SketchEntity[] {
-  const snap = snapper();
-  const ends = new Map<SketchEntity, [number, number][]>();
-  const at = new Map<[number, number], SketchEntity[]>();
-  for (const e of entities) {
-    if ((e.kind !== "line" && e.kind !== "arc") || e.construction) continue;
-    const ids = e.kind === "line" ? [e.p1, e.p2] : [e.start, e.end];
-    const keys = ids.map((id) => {
-      const p = points.get(id)!;
-      return snap(p.x, p.y);
-    });
-    ends.set(e, keys);
-    for (const key of keys) at.set(key, [...(at.get(key) ?? []), e]);
-  }
-  const notChain = new Error("sweep path is not a connected chain");
-  if ([...at.values()].some((es) => es.length > 2)) throw notChain;
-  const isEnd = (key: [number, number]) => at.get(key)!.length === 1;
-  const curves = [...ends.keys()];
-  const first = curves.find((e) => ends.get(e)!.some(isEnd)) ?? curves[0];
-  if (!first) return [];
-  const chain: SketchEntity[] = [];
-  let cur: SketchEntity | undefined = first;
-  let from = ends.get(first)!.find(isEnd) ?? ends.get(first)![0]!;
-  while (cur) {
-    chain.push(cur);
-    const [a, b] = ends.get(cur)!;
-    from = from === a ? b! : a!;
-    cur = at.get(from)!.find((e) => !chain.includes(e));
-  }
-  if (chain.length !== curves.length) throw notChain;
-  return chain;
-}
-
-function sketchEntityToEdge(
-  e: SketchEntity,
-  sketch: EvaluatedSketch,
-  points: Map<string, { x: number; y: number }>,
-): Shape | null {
-  const k = getKernel();
-  const to3d = (u: number, v: number): Vec3 => uvTo3d(sketch.frame, u, v);
-  if (e.kind === "line") {
-    const a = points.get(e.p1)!;
-    const b = points.get(e.p2)!;
-    const p1 = to3d(a.x, a.y);
-    const p2 = to3d(b.x, b.y);
-    return acquire(
-      scoped((own) =>
-        own.keep(
-          own(
-            own(
-              new k.BRepBuilderAPI_MakeEdge_3(own(pnt(...p1)), own(pnt(...p2))),
-            ).Edge(),
-          ),
-        ),
-      ),
-    );
-  }
-  if (e.kind === "arc") {
-    const s = points.get(e.start)!;
-    const en = points.get(e.end)!;
-    return arcEdge(
-      sketch.frame,
-      points.get(e.center)!,
-      [s.x, s.y],
-      [en.x, en.y],
-    );
-  }
-  return null;
-}
-
 function mirrorTrsfFor(frame: PlaneFrame): any {
   const k = getKernel();
   const trsf = acquire(new k.gp_Trsf_1());
