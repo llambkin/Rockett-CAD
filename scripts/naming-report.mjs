@@ -23,6 +23,7 @@ const [
   { ProjectStore },
   { validateDocument },
   { LocalStorage },
+  { backupNamespace, BACKUP_RECORD },
 ] = await Promise.all(
   [
     "geometry/kernel.ts",
@@ -31,6 +32,7 @@ const [
     "store/projectStore.ts",
     "api/validate.ts",
     "store/storage.ts",
+    "store/jsonStore.ts",
   ].map(server),
 );
 
@@ -57,18 +59,21 @@ const line = (m) =>
   listed("suggestions", m.suggestions);
 
 await initKernel();
-const store = new ProjectStore(
-  new LocalStorage(path.resolve(dataDir), readOnly),
-  validateDocument,
-);
+const storage = new LocalStorage(path.resolve(dataDir), readOnly);
+const store = new ProjectStore(storage, validateDocument);
 let pending = 0;
-for (const { id, status, error } of await store.list()) {
-  if (status !== "ok") {
-    pending++;
-    console.log(`${id} ${status} ${error}`);
-    continue;
-  }
+for (const id of await store.documents.keys()) {
   try {
+    if (await store.isTemporary(id)) continue;
+    const names = await backupNamespace(
+      storage,
+      store.documents.dir(id),
+    ).names();
+    if (names.includes(BACKUP_RECORD)) {
+      pending++;
+      console.log(`${id} pending migration`);
+      continue;
+    }
     const doc = await store.load(id);
     console.log(`${id} namingVersion ${doc.namingVersion}`);
     if (doc.namingVersion === 2) continue;
