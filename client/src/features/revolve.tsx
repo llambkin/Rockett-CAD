@@ -19,6 +19,7 @@ import {
   facePicks,
   handleValue,
   profilePicks,
+  profileHint,
   profileSources,
   storedFeature,
 } from "./inputs";
@@ -33,11 +34,7 @@ function RevolveForm({ params, setParams }: FeatureFormProps) {
   const document = useStore((s) => s.document);
   return (
     <>
-      <SelInfo
-        label="Profiles / faces"
-        input="profiles"
-        hint="click sketch regions or Shift-click planar faces"
-      />
+      <SelInfo label="Profiles / faces" input="profiles" hint={profileHint} />
       <SelInfo
         label="Axis"
         input="axis"

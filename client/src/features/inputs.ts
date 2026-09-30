@@ -12,6 +12,8 @@ import { HANDLE_VALUES, type HandleDialog } from "../three/featureHandles";
 import { toolTargets } from "../toolTargets";
 import type { DialogParams } from "./registry";
 
+export const profileHint = "click sketch regions or Shift-click planar faces";
+
 export const num = (params: DialogParams, key: string, dflt: number) => {
   const v = Number(params[key]);
   return Number.isFinite(v) ? v : dflt;

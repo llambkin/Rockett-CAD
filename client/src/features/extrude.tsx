@@ -14,6 +14,7 @@ import {
   handleValue,
   num,
   profilePicks,
+  profileHint,
   profileSources,
   storedFeature,
 } from "./inputs";
@@ -30,11 +31,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps) {
   const units = useSetting("units.length");
   return (
     <>
-      <SelInfo
-        label="Profiles / faces"
-        input="profiles"
-        hint="click sketch regions or planar faces"
-      />
+      <SelInfo label="Profiles / faces" input="profiles" hint={profileHint} />
       <LengthField
         label="Start offset"
         units={units}
