@@ -195,6 +195,7 @@ export function pickOptions(i: PickInput | undefined, shift?: boolean) {
     constructionPlanes: has("plane"),
     originAxes: has("axis"),
     sketchEntities: has("sketchEntity") || has("sketchPoint"),
+    sketchPoints: has("sketchPoint"),
   };
 }
 
