@@ -402,6 +402,7 @@ const landed = (m: MutationResponse) => ({
   document: m.document,
   evaluation: m.evaluation,
   history: m.history ?? null,
+  error: m.warning ?? null,
 });
 
 async function loadHistory(document: CadDocument): Promise<void> {
@@ -766,8 +767,7 @@ export const useStore = create<State>((set, get) => ({
       constraints: [],
     };
     await get().mutate((tx) => api.addFeature(document.id, feature, tx));
-    const doc = get().document!;
-    const created = doc.features.find(
+    const created = get().document!.features.find(
       (f) => f.id === feature.id,
     ) as SketchFeature;
     set({

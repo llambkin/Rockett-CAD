@@ -47,17 +47,14 @@ import {
   updateFolderBody,
 } from "./schema/folders.js";
 
-export interface MutationResponse {
+export interface MutationResponse<Evaluation = EvaluateResult> {
   document: CadDocument;
-  evaluation: EvaluateResult;
+  evaluation: Evaluation;
   history?: HistoryStatus;
+  warning?: string;
 }
 
-export interface WireMutationResponse {
-  document: CadDocument;
-  evaluation: WireEvaluateResult;
-  history?: HistoryStatus;
-}
+export type WireMutationResponse = MutationResponse<WireEvaluateResult>;
 
 export interface NamingUpgradeResponse extends WireMutationResponse {
   backup: string;

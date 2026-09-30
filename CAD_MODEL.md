@@ -236,6 +236,13 @@ input bound, not a tolerance.
 - A profile id hashes its bounding entity ids. `findProfile` in
   `shared/src/profiles.ts` still finds ids saved before tangent splitting
   (DEC-101): `shared/test/profiles.test.ts`.
+- A planar face supports a sketch independently of its boundary curves.
+  Automatic boundary import retains exact straight edges, circles and circular
+  arcs. If any curve is unsupported, the sketch starts empty and reports that
+  limit instead of importing a partial profile. Reference import classifies
+  unsupported curves without sampling them; DXF export still samples them.
+  Project can import supported edges individually; unsupported edges report
+  their limit.
 - Projections (`shared/src/projection.ts`) keep child ids `:a`, `:b` across
   regeneration. A missing source fails the sketch rather
   than keep stale points.

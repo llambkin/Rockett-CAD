@@ -20,6 +20,10 @@ export interface Drawing {
   polylines: Polyline[];
 }
 
+interface FaceDrawing extends Drawing {
+  unsupported: boolean;
+}
+
 const MIN_SPLITS = 3;
 const MAX_SPLITS = 16;
 
@@ -175,8 +179,8 @@ export function faceDrawing(
   body: NamedBody,
   faceName: string,
   frame: PlaneFrame,
-  quality: number,
-): Drawing {
+  quality?: number,
+): FaceDrawing {
   return scoped(() => {
     const k = getKernel();
     const face = findFace(body, faceName);
@@ -185,18 +189,24 @@ export function faceDrawing(
     const named = computeEdgeNames(body).byName;
 
     k.TopExp.MapShapes_1(face, k.TopAbs_ShapeEnum.TopAbs_EDGE, onFace);
-    const drawing: Drawing = { sketch: [], polylines: [] };
+    const drawing: FaceDrawing = {
+      sketch: [],
+      polylines: [],
+      unsupported: false,
+    };
     for (const [edgeName, edge] of named) {
       if (!onFace.Contains(edge)) continue;
       const curve = curveInfo(edge);
-      if (curve.type === "other")
-        drawing.polylines.push(
-          sampleCurve(edge, quality).map((p) => {
-            const { u, v } = pointToUV(frame, p);
-            return [u, v];
-          }),
-        );
-      else
+      if (curve.type === "other") {
+        drawing.unsupported = true;
+        if (quality !== undefined)
+          drawing.polylines.push(
+            sampleCurve(edge, quality).map((p) => {
+              const { u, v } = pointToUV(frame, p);
+              return [u, v];
+            }),
+          );
+      } else
         drawing.sketch.push(
           ...projectEdge(
             curve,

@@ -73,7 +73,7 @@ export interface StateAnswers {
   measure: MeasureResult;
   tangentEdges: EdgeRef[];
   projectEdge: SketchEntity[];
-  projectFace: SketchEntity[];
+  projectFace: { entities: SketchEntity[]; warning?: string };
   sign: Array<RefSignature | undefined>;
   sizeLimit: SizeLimit;
 }
@@ -179,12 +179,14 @@ const ANSWERS: {
       );
     return asValidation(() => {
       const frame = resolvePlaneFrame(state, { kind: "face", face: ref });
-      const drawing = faceDrawing(body, ref.faceName, frame, 0.1);
-      if (drawing.polylines.length > 0)
-        throw new Error(
-          "This face has unsupported boundary curves. Choose a construction plane or a face with straight or circular edges.",
-        );
-      return drawing.sketch;
+      const drawing = faceDrawing(body, ref.faceName, frame);
+      return drawing.unsupported
+        ? {
+            entities: [],
+            warning:
+              "Sketch created without its boundary. Boundary import supports straight edges, circles and circular arcs.",
+          }
+        : { entities: drawing.sketch };
     });
   },
   sign(state, { refs }) {
