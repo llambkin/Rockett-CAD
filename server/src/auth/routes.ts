@@ -81,16 +81,17 @@ function registerSetupGuard(router: Router, limiter: AuthRateLimiter): void {
     json({ limit: "1kb" }),
     (req, res, next) => {
       if (req.method !== "POST") return next();
-      const username = req.body?.username;
+      const supplied = req.body?.username;
+      const username =
+        typeof supplied === "string" && supplied.length <= 32
+          ? supplied
+          : undefined;
       const ip = req.ip ?? "";
-      const wait = limiter.check(
-        typeof username === "string" ? username : "",
-        ip,
-      );
+      const wait = limiter.check(username, ip);
       if (wait !== null) return refused(res, wait);
-      if (typeof username !== "string" || username.length > 32) return next();
       res.once("finish", () => {
-        if (res.statusCode === 201) limiter.success(username, ip);
+        if (res.statusCode === 201 && username !== undefined)
+          limiter.success(username, ip);
         else if (res.statusCode === 403) limiter.failure(username, ip);
       });
       next();

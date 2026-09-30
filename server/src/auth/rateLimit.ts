@@ -61,9 +61,10 @@ export class AuthRateLimiter {
     );
   }
 
-  check(username: string, ip: string): number | null {
+  check(username: string | undefined, ip: string): number | null {
     this.expire();
-    const keys = [this.userKey(username, ip), this.ipKey(ip)];
+    const keys = [this.ipKey(ip)];
+    if (username !== undefined) keys.push(this.userKey(username, ip));
     let wait = 0;
     for (const key of keys) {
       const counter = this.counters.get(key);
@@ -91,9 +92,10 @@ export class AuthRateLimiter {
       this.counters.set(key, { count: 1, since: this.now(), limit });
   }
 
-  failure(username: string, ip: string): void {
+  failure(username: string | undefined, ip: string): void {
     this.expire();
-    this.add(this.userKey(username, ip), USER_LIMIT);
+    if (username !== undefined)
+      this.add(this.userKey(username, ip), USER_LIMIT);
     this.add(this.ipKey(ip), IP_LIMIT);
   }
 
