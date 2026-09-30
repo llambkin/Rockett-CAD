@@ -1,10 +1,10 @@
-import { defineConfig } from "vite";
+import { defineConfig, runnerImport } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { DEFAULT_PORT } from "../shared/src/routes.ts";
-import { PALETTES } from "./src/theme/palette.ts";
 
 const alias = {
+  // Import shared TS source directly so Vite transpiles it.
   "@rockett/shared": path.resolve(
     import.meta.dirname,
     "../shared/src/index.ts",
@@ -16,11 +16,18 @@ export default defineConfig({
     react(),
     {
       name: "paint-bg0",
-      transformIndexHtml() {
+      async transformIndexHtml() {
+        const { module } = await runnerImport<
+          typeof import("./src/theme/tokens.ts")
+        >(path.resolve(import.meta.dirname, "src/theme/tokens.ts"), {
+          configFile: false,
+          logLevel: "silent",
+          resolve: { alias },
+        });
         return [
           {
             tag: "style",
-            children: `html{--bg0:${PALETTES.grey.bg0};background:var(--bg0)}`,
+            children: `html{--bg0:${module.THEME_TOKENS.bg0};background:var(--bg0)}`,
             injectTo: "head",
           },
         ];
