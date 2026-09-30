@@ -194,10 +194,26 @@ body.
   vertex stays a separate body, and the status is `warning` saying so.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
-- Shell must leave a hollow (`server/src/geometry/shell.ts`). When the kernel
-  cannot open a face, Shell cuts the kernel's inner offset joined to a slab
-  over each opened face's inner image: a prism for a flat face, the inner face
-  thickened outward for a rounded one.
+- Shell currently accepts valid geometry with significant volume loss
+  (`server/src/geometry/shell.ts`); this does not qualify openings or thickness.
+  Closed and top-open synthetic boxes qualify independently. A 20 mm cube
+  with one vertical 2 mm corner fillet, shelled inward 1 mm at that cylinder,
+  reports success but retains material across the selected opening. Its cavity
+  is square, leaving a 0.586 mm diagonal wall. The direct kernel result passes
+  the volume guard, so the fallback is never reached. At a 2 mm wall the same
+  filleted body's top-face offset throws; the previous body survives, but its
+  error has no explanation. These are distinct failures.
+- The Shell fallback cuts the inner offset joined to a slab over each selected
+  inner face: a prism for a flat face, thickening for a rounded one. References
+  computed with that same offset cannot independently qualify its geometry.
+- Shell rebuild acceptance requires independent opening probes, inner and outer
+  dimensions, retained wall thickness and analytic volume, separately from
+  feature status and kernel validity. The rounded cylinder fixture requires
+  an unobstructed radial path through the wall between its inner top and bottom
+  planes; those end collars remain. Inside, outside and both-sides offsets must
+  qualify separately; an outside 2 mm box wall grows each dimension by 4 mm.
+  Refused, partial or unqualified results keep the previous body and explain
+  the error. Cold regeneration and previous-schema loading must also pass.
 - Tangent chains: `server/src/geometry/tangentEdges.ts`.
 - Mesh imports cap at `MAX_MESH_TRIANGLES` in
   `server/src/geometry/importers.ts`.
