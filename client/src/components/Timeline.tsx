@@ -11,7 +11,6 @@ import type {
 } from "@rockett/shared";
 import { pickInto } from "../dialogPicks";
 import { featureUI } from "../features/registry";
-import "../features/core";
 import {
   useStore,
   selectionKey,

@@ -6,7 +6,6 @@ import { createLivePreview } from "../livePreview";
 import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
 import { DialogFooter } from "./form/DialogFooter";
-import "../features/core";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI, type DialogFeatureUI } from "../features/registry";
 import { axisMissing, axisPicks } from "../features/inputs";
