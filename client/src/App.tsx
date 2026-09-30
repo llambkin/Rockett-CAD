@@ -9,9 +9,13 @@ import { registerCommand } from "./commands/registry";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
-import { ExportPanel } from "./components/ExportPanel";
-import { HELP_PANEL, Panels, togglePanel, usePanelOpen } from "./shell/panels";
-import { HistoryPanel } from "./components/HistoryPanel";
+import {
+  HELP_PANEL,
+  HISTORY_PANEL,
+  Panels,
+  togglePanel,
+  usePanelOpen,
+} from "./shell/panels";
 import { useSplitter } from "./components/Splitter";
 import { ProjectList, backToProjects } from "./components/ProjectList";
 import { AccountTotp, LoginScreen } from "./components/LoginScreen";
@@ -244,7 +248,7 @@ export function TreePane() {
 
 function Workspace({ onUsers }: { onUsers: () => void }) {
   const showHelp = usePanelOpen(HELP_PANEL);
-  const [showHistory, setShowHistory] = useState(false);
+  const showHistory = usePanelOpen(HISTORY_PANEL);
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
   const busy = useStore((s) => s.busy);
@@ -283,7 +287,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
           className="icon-btn"
           title="Undo history and checkpoints"
           aria-expanded={showHistory}
-          onClick={() => setShowHistory((v) => !v)}
+          onClick={() => togglePanel(HISTORY_PANEL)}
         >
           History
         </button>
@@ -302,10 +306,8 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
       <div className="main-row">
         <TreePane />
         <ViewportView />
-        <ExportPanel />
         <VersionLabel />
         <Panels />
-        {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}
       </div>
       <Timeline />
       {error && (

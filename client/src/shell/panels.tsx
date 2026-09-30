@@ -11,6 +11,8 @@ import { createRegistry } from "@rockett/shared";
 import type { CommandContext } from "../commands/registry";
 import { featureUI } from "../features/registry";
 import { useStore } from "../store";
+import { ExportPanel } from "../components/ExportPanel";
+import { HistoryPanel } from "../components/HistoryPanel";
 import { ControlsHelp } from "../components/ControlsHelp";
 import { DraggablePanel } from "../components/DraggablePanel";
 import { FeatureDialog } from "../components/FeatureDialog";
@@ -29,6 +31,7 @@ const opened = create<{ open: readonly string[] }>(() => ({ open: [] }));
 
 export const registerPanel = panels.register;
 export const HELP_PANEL = "design.help";
+export const HISTORY_PANEL = "design.history";
 
 export function togglePanel(id: string): void {
   opened.setState(({ open }) => ({
@@ -80,6 +83,12 @@ export function Panels() {
 }
 
 registerPanel({
+  id: "design.export",
+  title: "Export for 3D printing",
+  when: () => true,
+  component: ExportPanel,
+});
+registerPanel({
   id: "design.feature",
   title: "Feature",
   when: (s) => s.mode.name === "dialog" && !!featureUI(s.mode.dialog)?.prefill,
@@ -102,4 +111,10 @@ registerPanel({
   title: "Keyboard & mouse controls",
   when: (_, open) => open.includes(HELP_PANEL),
   component: () => <ControlsHelp onClose={() => togglePanel(HELP_PANEL)} />,
+});
+registerPanel({
+  id: HISTORY_PANEL,
+  title: "History",
+  when: (_, open) => open.includes(HISTORY_PANEL),
+  component: () => <HistoryPanel onClose={() => togglePanel(HISTORY_PANEL)} />,
 });
