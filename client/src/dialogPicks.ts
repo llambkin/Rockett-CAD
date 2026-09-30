@@ -80,8 +80,15 @@ export function filterSelectionFor(
   selection: Selection[],
 ): Selection[] {
   const s = useStore.getState();
+  const inputs = picksOf(dialog).filter(
+    (i) =>
+      inSelection(i) &&
+      (!i.straight || !i.one || held(i, selection).length === 1),
+  );
   return selection.filter((sel) =>
-    picksOf(dialog).some((i) => inSelection(i) && fits(i, sel, s)),
+    inputs.some(
+      (i) => i.kinds.includes(sel.kind) && accepted(i, sel, s).length > 0,
+    ),
   );
 }
 
