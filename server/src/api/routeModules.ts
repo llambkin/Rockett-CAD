@@ -44,6 +44,8 @@ export const routeModules = createRegistry<RouteModule>(
 
 export const registerRouteModule = routeModules.register;
 
+export const BODY_ROUTE_MODULE = "bodies";
+
 const MODULE_ID = /^([a-z][a-z0-9-]*)[.][A-Za-z0-9.-]+$/;
 
 function prefix(id: string): string {
@@ -53,37 +55,42 @@ function prefix(id: string): string {
   return `/projects/:id/m/${moduleId}/`;
 }
 
-export function mountRouteModules(router: {
+type RouterApi = {
   kernel: KernelClient;
   store: ProjectStore;
   edits: Set<Route>;
   on(route: Route, ...handlers: RequestHandler[]): void;
   wrap(fn: (req: any, res: any, ctx: Context) => Promise<void>): RequestHandler;
   mutateProject(edit: Edit): RequestHandler;
-}): void {
+};
+
+export function mountRouteModule(router: RouterApi, module: RouteModule): void {
   const { kernel, store, edits, on, wrap, mutateProject } = router;
-  for (const module of routeModules.list()) {
-    const start = prefix(module.id);
-    const inside = (route: Route) => {
-      if (!route.path.startsWith(start))
-        throw new Error(
-          `route module ${module.id} must mount ${route.path} under ${start}`,
-        );
-      return route;
-    };
-    module.mount({
-      kernel,
-      projectRoute: (route, read) =>
-        on(
-          inside(route),
-          wrap(async (req, res, ctx) => {
-            res.json(await read(await store.load(req.params.id), req, ctx));
-          }),
-        ),
-      projectMutation: (route, edit) => {
-        edits.add(inside(route));
-        on(route, mutateProject(edit));
-      },
-    });
-  }
+  const start = prefix(module.id);
+  const inside = (route: Route) => {
+    if (!route.path.startsWith(start))
+      throw new Error(
+        `route module ${module.id} must mount ${route.path} under ${start}`,
+      );
+    return route;
+  };
+  module.mount({
+    kernel,
+    projectRoute: (route, read) =>
+      on(
+        inside(route),
+        wrap(async (req, res, ctx) => {
+          res.json(await read(await store.load(req.params.id), req, ctx));
+        }),
+      ),
+    projectMutation: (route, edit) => {
+      edits.add(inside(route));
+      on(route, mutateProject(edit));
+    },
+  });
+}
+
+export function mountRouteModules(router: RouterApi): void {
+  for (const module of routeModules.list())
+    if (module.id !== BODY_ROUTE_MODULE) mountRouteModule(router, module);
 }

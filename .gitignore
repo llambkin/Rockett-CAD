@@ -44,3 +44,4 @@ scripts/test-work-order.sh
 scripts/test-focused.test.ts
 server/test/
 client/test/
+server/src/api/routeModuleOrder.test.ts

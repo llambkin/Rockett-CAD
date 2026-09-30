@@ -1,0 +1,108 @@
+import {
+  PREVIEW_HEADER,
+  TX_HEADER,
+  ValidationError,
+  type User,
+} from "@rockett/shared";
+import { StoreError } from "../store/projectStore.js";
+import { discarding } from "./uploads.js";
+import { previewSequence, reply, transactionId } from "./revision.js";
+import type { Edit } from "./routeModules.js";
+import type { RouterContext } from "./routerContext.js";
+import { evaluationPosition } from "./evaluationPosition.js";
+const previewOwner = (res: any, user: User): string => {
+  const session: string | undefined = res.locals.session;
+  if (!session) throw new Error("auth middleware missing");
+  return `${user.id}/${session}`;
+};
+
+const ended = () =>
+  new StoreError("This preview has ended. Start it again.", "not_found");
+
+function previewStage(context: RouterContext) {
+  const {
+    previews,
+    editable,
+    evaluateAndSync,
+    meshCache,
+    history,
+    store,
+    send,
+    evaluate,
+  } = context;
+  const stage = async function stage(
+    req: any,
+    res: any,
+    user: User,
+    tx: string,
+    seq: number,
+    edit: Edit,
+  ) {
+    const { id } = req.params;
+    const owner = previewOwner(res, user);
+    const open = previews.find(id, tx, owner);
+    if (!open && seq !== 1) throw ended();
+    let staged = open;
+    if (!staged || seq > staged.seq) {
+      const loaded = staged
+        ? structuredClone(staged.document)
+        : await editable(req, res);
+      const { label, document = loaded } = await edit(loaded, req);
+      staged = { owner, seq, label: staged?.label ?? label!, document };
+    }
+    const { document } = staged;
+    const evaluation = await evaluateAndSync(
+      document,
+      evaluationPosition(req, document),
+    );
+    previews.keep(id, tx, staged);
+    meshCache.publish(id, document.revision, evaluation.bodies, false);
+    reply(res, { document, evaluation, history: await history.status(id) });
+  };
+
+  async function sendStored(req: any, res: any) {
+    const doc = await store.load(req.params.id);
+    const position = evaluationPosition(req, doc);
+    await send(res, doc, await evaluate(doc, position), undefined, position);
+  }
+
+  return { stage, sendStored };
+}
+
+export function createProjectMutations(context: RouterContext) {
+  const { store, history, jobs, wrap, editable, send, evaluateAndSync } =
+    context;
+  const { stage, sendStored } = previewStage(context);
+  const mutateProject = (edit: Edit, previewable = false) =>
+    wrap(
+      discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
+        const tx = transactionId(req.get(TX_HEADER));
+        const seq = req.get(PREVIEW_HEADER);
+        if (seq !== undefined) {
+          if (!previewable || tx === undefined)
+            throw new ValidationError(
+              `A preview needs ${TX_HEADER} on a feature add or edit.`,
+            );
+          return stage(req, res, ctx.user, tx, previewSequence(seq), edit);
+        }
+        const loaded = await editable(req, res);
+        const {
+          label,
+          cursor,
+          position,
+          document = loaded,
+          ...extra
+        } = await edit(loaded, req);
+        const evaluation = await evaluateAndSync(document, position);
+        await (label === undefined
+          ? history.move(document, cursor, ctx.user.id)
+          : history.save(document, label, tx, ctx.user.id));
+        jobs.committed();
+        await send(res, document, evaluation, extra, position);
+      }),
+    );
+  return { mutateProject, previewOwner, ended, sendStored };
+}
+
+export type ApiRoutes = RouterContext &
+  ReturnType<typeof createProjectMutations>;
