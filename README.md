@@ -37,7 +37,7 @@ everything downstream against persistent topology references.
 - **Tangent chains**: fillet and chamfer pick smooth connected edges in one click, on one or several bodies.
 - **Size hints**: fillet, chamfer and shell show the largest size that builds for the current picks.
 - **Replicate**: mirror, rectangular pattern and circular pattern.
-- **Construction**: planes by offset, midplane, angle, three points or two edges, with flip; sketch on any planar face.
+- **Construction**: offset, midplane, angled, three-point or two-edge planes, with flip; sketch on planar faces; hide planes without breaking sketches.
 - **Origin axes**: pick X, Y or Z in the model tree or at the origin as a revolve or pattern axis.
 - **Drag handles**: every feature with a main value, from extrude distance to pattern spacing, has an arrow or arc to drag.
 - **Reference images**: place PNG, JPEG or WebP images on planes and calibrate them to real size.

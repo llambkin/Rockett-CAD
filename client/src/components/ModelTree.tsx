@@ -53,8 +53,6 @@ const deleteItem = (id: string): MenuItem => ({
   danger: true,
   action: () => void useStore.getState().deleteFeature(id),
 });
-const togglePlane = (f: Feature) =>
-  void useStore.getState().suppressFeature(f.id, !f.suppressed);
 const toggleFeature = (f: Feature) =>
   void setFeaturesVisible(
     [f.id],
@@ -64,7 +62,7 @@ const toggleFeature = (f: Feature) =>
 const constructionMenu = (f: Feature): MenuItem[] => [
   ...planeMenu({ kind: "construction", featureId: f.id }),
   { label: "Edit", action: () => void openFeatureEditor(f) },
-  { label: "Show / Hide", action: () => togglePlane(f) },
+  { label: "Show / Hide", action: () => toggleFeature(f) },
   deleteItem(f.id),
 ];
 
@@ -558,13 +556,13 @@ export const ModelTree = memo(function ModelTree() {
             >
               <span
                 className="tree-icon eye"
-                title={f.suppressed ? "Show" : "Hide"}
+                title={hiddenFeatures.has(f.id) ? "Show" : "Hide"}
                 onClick={(e) => {
                   e.stopPropagation();
-                  togglePlane(f);
+                  toggleFeature(f);
                 }}
               >
-                {f.suppressed ? "◌" : "👁"}
+                {hiddenFeatures.has(f.id) ? "◌" : "👁"}
               </span>
               {f.name}
             </div>

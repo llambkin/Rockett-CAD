@@ -33,6 +33,7 @@ import { ViewCube } from "../three/ViewCube";
 import type { LayerHandle } from "../three/sceneLayers";
 import { worldToClient } from "../three/screen";
 import { syncReferenceImages } from "../three/referenceImages";
+import { syncConstructionPlanes } from "../constructionPlaneView";
 import {
   hoverPiece,
   renderSketches,
@@ -394,14 +395,9 @@ export function ViewportView() {
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp || !evaluation) return;
-    const names = new Map<string, string>();
-    const visible = new Set<string>();
-    for (const f of document_?.features ?? []) {
-      names.set(f.id, f.name);
-      if (f.type === "constructionPlane" && !f.suppressed) visible.add(f.id);
-    }
-    vp.syncConstructionPlanes(evaluation.planes, names, visible);
-    syncReferenceImages(vp, document_, evaluation, new Set(hiddenFeatures));
+    const hidden = new Set(hiddenFeatures);
+    syncConstructionPlanes(vp, document_, evaluation, hidden);
+    syncReferenceImages(vp, document_, evaluation, hidden);
   }, [evaluation, document_, hiddenFeatures]);
 
   // ---- sync sketches / profiles / highlights ----
