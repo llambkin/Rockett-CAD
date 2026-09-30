@@ -20,7 +20,7 @@ import {
 } from "../store";
 import { useTimelinePeek } from "../timelinePeek";
 import { featureBodies } from "../treeSelection";
-import { wheelPan } from "../three/wheel";
+import { HorizontalScroll } from "./HorizontalScroll";
 import { ContextMenu } from "./ContextMenu";
 import { refNotes, useNamingUpgradePanel } from "./RefRepair";
 import { QuickEdit, quickValues } from "./QuickEdit";
@@ -84,23 +84,6 @@ function chipSelected(
   const keys = new Set(selection.map(selectionKey));
   const bodies = featureBodies(evaluation, featureId);
   return bodies.length > 0 && bodies.every((b) => keys.has(selectionKey(b)));
-}
-
-function scrollTimeline(strip: HTMLDivElement) {
-  const onWheel = (event: WheelEvent) => {
-    if (
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.deltaX !== 0 ||
-      event.deltaY === 0 ||
-      strip.scrollWidth <= strip.clientWidth
-    )
-      return;
-    event.preventDefault();
-    strip.scrollLeft -= wheelPan(event)[1];
-  };
-  strip.addEventListener("wheel", onWheel, { passive: false });
-  return () => strip.removeEventListener("wheel", onWheel);
 }
 
 function chipKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -200,7 +183,7 @@ export function Timeline() {
           ⏭
         </button>
       </fieldset>
-      <div className="tl-strip" ref={scrollTimeline}>
+      <HorizontalScroll className="tl-strip">
         <div
           className={`tl-marker ${pos === 0 ? "current" : ""}`}
           title="Roll to start"
@@ -264,7 +247,7 @@ export function Timeline() {
             </span>
           );
         })}
-      </div>
+      </HorizontalScroll>
       {menu && (
         <ContextMenu
           x={menu.x}

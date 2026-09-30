@@ -13,6 +13,7 @@ import {
 import { SketchInsertButtons } from "./SketchInsertButtons";
 import { SKETCH_SHORTCUTS } from "../shortcuts";
 import { ToolButton } from "./ToolButton";
+import { HorizontalScroll } from "./HorizontalScroll";
 import { NumField } from "./form/fields";
 import {
   CONSTRAINTS,
@@ -68,11 +69,11 @@ export function Toolbar() {
     <DesignGroup key={g.id} group={g} commands={commands} ctx={ctx} />
   );
   return (
-    <div className="toolbar">
+    <HorizontalScroll className="toolbar">
       {rows.filter((r) => !r.group.end).map(group)}
       <div className="tb-spacer" />
       {rows.filter((r) => r.group.end).map(group)}
-    </div>
+    </HorizontalScroll>
   );
 }
 
@@ -197,7 +198,7 @@ function SketchToolbar() {
   };
 
   return (
-    <div className="toolbar sketch">
+    <HorizontalScroll className="toolbar sketch">
       <ToolGroup title="SKETCH">
         {SKETCH_TOOLS.map((t) => (
           <ToolButton
@@ -261,6 +262,6 @@ function SketchToolbar() {
           onClick={() => void finishSketch()}
         />
       </div>
-    </div>
+    </HorizontalScroll>
   );
 }

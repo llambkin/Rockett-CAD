@@ -156,11 +156,13 @@ button.doc-name:hover .doc-name-pen {
   border-bottom: 1px solid var(--border);
   padding: 2px 6px;
   min-height: 46px;
+  flex-shrink: 0;
   overflow-x: auto;
 }
 
 .tb-group {
   display: grid;
+  flex-shrink: 0;
   grid-auto-flow: column;
   align-items: center;
   gap: 2px;
@@ -179,17 +181,8 @@ button.doc-name:hover .doc-name-pen {
   border-right: none;
 }
 
-.toolbar.sketch {
-  flex-wrap: wrap;
-  overflow-x: hidden;
-  flex-shrink: 0;
-}
 .toolbar.sketch .tb-group {
   min-height: 40px;
-  max-width: 100%;
-}
-.toolbar.sketch .tb-row {
-  flex-wrap: wrap;
 }
 .toolbar.sketch label {
   display: flex;
