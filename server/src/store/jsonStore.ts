@@ -178,6 +178,8 @@ export class NamespaceBackup {
     }
     await this.restore(backup);
     await this.storage.remove(this.record);
+    if (backup.startsWith("tx-"))
+      await this.storage.remove(path.posix.join(this.root, backup));
     return true;
   }
 
