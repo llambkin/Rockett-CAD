@@ -16,6 +16,7 @@ import {
 } from "../store";
 import { useTimelinePeek } from "../timelinePeek";
 import { featureBodies } from "../treeSelection";
+import { wheelPan } from "../three/wheel";
 import { ContextMenu } from "./ContextMenu";
 import { refNotes, useNamingUpgradePanel } from "./RefRepair";
 import { QuickEdit, quickValues } from "./QuickEdit";
@@ -81,6 +82,23 @@ function chipSelected(
   return bodies.length > 0 && bodies.every((b) => keys.has(selectionKey(b)));
 }
 
+function scrollTimeline(strip: HTMLDivElement) {
+  const onWheel = (event: WheelEvent) => {
+    if (
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.deltaX !== 0 ||
+      event.deltaY === 0 ||
+      strip.scrollWidth <= strip.clientWidth
+    )
+      return;
+    event.preventDefault();
+    strip.scrollLeft -= wheelPan(event)[1];
+  };
+  strip.addEventListener("wheel", onWheel, { passive: false });
+  return () => strip.removeEventListener("wheel", onWheel);
+}
+
 export function Timeline() {
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
@@ -143,7 +161,7 @@ export function Timeline() {
           ⏭
         </button>
       </fieldset>
-      <div className="tl-strip">
+      <div className="tl-strip" ref={scrollTimeline}>
         <div
           className={`tl-marker ${pos === 0 ? "current" : ""}`}
           title="Roll to start"
