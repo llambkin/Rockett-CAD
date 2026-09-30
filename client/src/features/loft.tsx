@@ -1,8 +1,19 @@
-import { newId, type LoftFeature } from "@rockett/shared";
+import {
+  newId,
+  type LoftFeature,
+  type ProfileRef,
+  type FaceRef,
+} from "@rockett/shared";
 import { OperationField, SelInfo } from "../components/form/fields";
-import { profiles, targets } from "../dialogPicks";
+import { sections, targets } from "../dialogPicks";
 import { autoOperation, toolOperation } from "../extrudeReach";
-import { bodyTargets, profilePicks, profileRefs } from "./inputs";
+import {
+  bodyTargets,
+  facePicks,
+  faceRefs,
+  profilePicks,
+  profileRefs,
+} from "./inputs";
 import { registerFeatureUI, type FeatureUI } from "./registry";
 
 function LoftForm() {
@@ -11,7 +22,7 @@ function LoftForm() {
       <SelInfo
         label="Sections (in order)"
         input="profiles"
-        hint="click 2+ profiles"
+        hint="click 2+ profiles or planar faces in order"
       />
       <OperationField />
     </>
@@ -23,12 +34,16 @@ const loft: FeatureUI<LoftFeature> = {
   icon: "◆",
   title: "Loft",
   group: "create",
-  picks: [profiles, targets],
+  picks: [sections, targets],
   Form: LoftForm,
   build: (params, selection) => {
-    const sections = profileRefs(selection);
+    const sections: (ProfileRef | FaceRef)[] = selection.flatMap<
+      ProfileRef | FaceRef
+    >((pick) =>
+      pick.kind === "face" ? faceRefs([pick]) : profileRefs([pick]),
+    );
     if (sections.length < 2)
-      return { error: "Select at least two section profiles" };
+      return { error: "Select at least two profiles or planar faces" };
     const operation = params.operation ?? "join";
     return {
       id: params.id ?? newId("loft"),
@@ -47,7 +62,9 @@ const loft: FeatureUI<LoftFeature> = {
       targets: f.targets,
       operation: f.operation,
     },
-    selection: profilePicks(f.sections),
+    selection: f.sections.flatMap((section) =>
+      "kind" in section ? facePicks([section]) : profilePicks([section]),
+    ),
   }),
   onParamsChange: (params) => autoOperation(params, () => toolOperation()),
 };

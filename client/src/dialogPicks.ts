@@ -20,6 +20,7 @@ export interface PickInput {
   straight?: true;
   optional?: true;
   shiftFaces?: true;
+  accumulate?: true;
   param?: {
     read: (s: Store) => Selection[];
     write: (next: Selection[], s: Store) => void;
@@ -36,6 +37,10 @@ export const profiles = input("profiles", ["profile"]);
 export const profilesOrFaces = input("profiles", ["profile", "face"], {
   planar: true,
   shiftFaces: true,
+});
+export const sections = input("profiles", ["profile", "face"], {
+  planar: true,
+  accumulate: true,
 });
 export const targets = input("targets", ["body"], {
   optional: true,
@@ -268,7 +273,8 @@ export function pickInto(picks: readonly Selection[], additive: boolean) {
   if (!i || taken.length === 0) return;
   const had = inputPicks(i, s);
   const toggles =
-    !i.one && (additive || taken.some((t) => t.kind !== "profile"));
+    !i.one &&
+    (i.accumulate || additive || taken.some((t) => t.kind !== "profile"));
   const next = toggles ? toggled(had, taken) : replaced(i, had, taken);
   write(i, next, s);
   const after = useStore.getState();
