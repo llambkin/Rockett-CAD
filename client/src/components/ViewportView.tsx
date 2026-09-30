@@ -2683,11 +2683,10 @@ export function ViewportView() {
   // ----- editing an extrude/revolve: live selection preview + Ctrl/⌘ peek -----
 
   /** Feature refs implied by a selection, for an extrude/revolve patch. */
-  function selectionRefs(dialog: string, sel: Selection[]) {
+  function selectionRefs(sel: Selection[]) {
     const profiles = sel
       .filter((x) => x.kind === "profile")
       .map((x: any) => ({ sketchId: x.sketchId, profileId: x.profileId }));
-    if (dialog !== "extrude") return { profiles };
     const faces = sel
       .filter((x) => x.kind === "face")
       .map((x: any) => ({
@@ -2706,7 +2705,7 @@ export function ViewportView() {
   useEffect(() => {
     if (!editingProfiles || mode.name !== "dialog" || peekRef.current) return;
     const editId = mode.editFeatureId!;
-    const refs = selectionRefs(mode.dialog, selection);
+    const refs = selectionRefs(selection);
     if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
     const current = document_?.features.find((f) => f.id === editId);
     if (!current?.suppressed) return;
@@ -2729,7 +2728,7 @@ export function ViewportView() {
         if (!peekRef.current) return;
         peekRef.current = false;
         if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
-        const refs = selectionRefs(s.mode.dialog, s.selection);
+        const refs = selectionRefs(s.selection);
         if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
         void previewEdit(s.mode.editFeatureId, { ...refs, suppressed: false });
       },
