@@ -279,7 +279,7 @@ function writableScopes(
   return scopes.filter(
     (scope) =>
       pageOf(section).some((definition) => definition.scopes.includes(scope)) &&
-      (scope !== "project" || projectOpen) &&
+      (scope !== "project" || (section === "project" && projectOpen)) &&
       (scope !== "app" || admin) &&
       (section !== "project" || scope === "project"),
   );
