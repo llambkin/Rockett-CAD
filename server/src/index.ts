@@ -82,9 +82,7 @@ async function main(allowedOrigins: string[], cookie: CookieConfig) {
   console.log(`[rockett] data dir: ${DATA_DIR}`);
   const { recovered, outdated, failed } = await store.inventory();
   for (const id of recovered)
-    console.log(
-      `[rockett] project ${id}: rolled back an interrupted migration`,
-    );
+    console.log(`[rockett] project ${id}: rolled back an interrupted write`);
   for (const { key, error } of failed)
     console.error(`[rockett] project ${key}: ${error}`);
   if (outdated.length)
