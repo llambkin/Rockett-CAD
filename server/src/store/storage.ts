@@ -34,6 +34,23 @@ export function storagePath(target: string, allowRoot = false): string {
   return parts.join("/");
 }
 
+export async function readFirst(storage: Storage, files: string[]) {
+  for (const file of files) {
+    try {
+      return { file, data: await storage.read(file) };
+    } catch (error) {
+      if (
+        typeof error !== "object" ||
+        error === null ||
+        !("code" in error) ||
+        error.code !== "ENOENT"
+      )
+        throw error;
+    }
+  }
+  return undefined;
+}
+
 export class LocalStorage implements Storage {
   constructor(
     private readonly root: string,

@@ -28,6 +28,8 @@ import {
   type WireEvaluateResult,
   type WireMutationResponse,
 } from "@rockett/shared";
+import type { Download } from "./download";
+export { saveDownload, type Download } from "./download";
 import { TIMING_MS } from "./tunables";
 
 export type { Health, MutationResponse } from "@rockett/shared";
@@ -237,11 +239,6 @@ function watching(path: string): ProjectWatch | null {
     : null;
 }
 
-export interface Download {
-  blob: Blob;
-  fileName: string | undefined;
-}
-
 export function request<T>(
   method: string,
   path: string,
@@ -315,14 +312,6 @@ export async function request(
       ? decodeURIComponent(encoded)
       : disposition.match(/filename="([^"]+)"/)?.[1],
   };
-}
-
-export function saveDownload({ blob, fileName }: Download): void {
-  const a = window.document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = fileName ?? "";
-  a.click();
-  URL.revokeObjectURL(a.href);
 }
 
 interface Stamp {
@@ -492,11 +481,19 @@ export const api = {
     owner: string | null,
     members: ProjectMember[],
   ) => send(ROUTES.projectMembers, { id }, { body: { owner, members } }),
-  deleteProject: (id: string, keepalive = false) =>
+  deleteProject: (id: string, keepalive = false, revision?: number | string) =>
     request<{ ok: true }>(
       ROUTES.deleteProject.method,
       pathFor(ROUTES.deleteProject, { id }),
-      { keepalive },
+      {
+        keepalive,
+        ...(revision !== undefined && {
+          headers: {
+            "If-Match":
+              typeof revision === "number" ? `"${revision}"` : revision,
+          },
+        }),
+      },
     ),
   duplicateProject: (id: string, name?: string) =>
     send(ROUTES.duplicateProject, { id }, { body: { name } }),

@@ -3,7 +3,9 @@ import { downloadProjectFile, uploadProjectFile } from "./projectFile.js";
 import { folderRoutes, requireFolderDestination } from "./folderRoutes.js";
 import { projectMemberHandlers } from "./projectMembers.js";
 import { receiveProjectFile } from "./uploads.js";
+import { checkRevision, ifMatchRevision } from "./revision.js";
 import { visibleProjects } from "./projectAccess.js";
+import { checkDeleteTag } from "../store/projectInventory.js";
 import type { UserStore } from "../auth/userStore.js";
 import type { ApiRoutes } from "./projectMutations.js";
 
@@ -96,6 +98,15 @@ function projectDocumentRoutes(context: ApiRoutes) {
   on(
     ROUTES.deleteProject,
     wrap(async (req, res) => {
+      if (!(await store.isTemporary(req.params.id))) {
+        const header: string | undefined = req.get("If-Match");
+        if (header !== undefined && /^"[a-f0-9]{64}"$/.test(header))
+          await checkDeleteTag(store, req.params.id, header);
+        else {
+          const revision = ifMatchRevision(header);
+          checkRevision(await store.load(req.params.id), revision);
+        }
+      }
       await history.remove(req.params.id);
       kernel.drop(req.params.id);
       meshCache.drop(req.params.id);

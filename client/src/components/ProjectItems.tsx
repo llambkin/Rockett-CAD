@@ -1,6 +1,6 @@
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import type { FolderTree, ProjectSummary } from "@rockett/shared";
-import { api, saveDownload, type Download } from "../api";
+import { api } from "../api";
 import {
   deleteBrowserProject,
   downloadBrowserProject,
@@ -32,19 +32,16 @@ import {
   useSnapshotPeek,
   type SnapshotTarget,
 } from "./SnapshotPopover";
+import {
+  deleteAction,
+  projectActions,
+  type Point,
+  type RowAction,
+  type Run,
+} from "./projectActions";
 import { BrowserShareDialog, ShareDialog } from "./ShareDialog";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
-
-type Point = { x: number; y: number };
-
-interface RowAction {
-  label: string;
-  glyph: string;
-  title?: string;
-  danger?: boolean;
-  run: (at: Point) => void;
-}
 
 type Moving = { item: Item; at: Point } | null;
 
@@ -203,46 +200,6 @@ const unreadable = (p: ProjectSummary) =>
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-type Run = (work: Promise<unknown>) => void;
-
-const deleteAction = (
-  name: string,
-  run: Run,
-  remove: () => Promise<unknown>,
-): RowAction => ({
-  label: "Delete",
-  glyph: "✕",
-  danger: true,
-  run: () => {
-    if (window.confirm(`Delete project "${name}"?`)) run(remove());
-  },
-});
-
-function projectActions(
-  name: string,
-  run: Run,
-  ops: {
-    rename: () => void;
-    duplicate: () => Promise<unknown>;
-    download: () => Promise<Download>;
-    remove: () => Promise<unknown>;
-  },
-  moveTo: RowAction[] = [],
-): RowAction[] {
-  return [
-    { label: "Rename", glyph: "✎", run: ops.rename },
-    { label: "Duplicate", glyph: "⎘", run: () => run(ops.duplicate()) },
-    {
-      label: "Download",
-      glyph: "⤓",
-      title: "Download project file",
-      run: () => run(ops.download().then(saveDownload)),
-    },
-    ...moveTo,
-    deleteAction(name, run, ops.remove),
-  ];
-}
-
 const BrowserGlyph = ICONS.browser;
 
 const confirmIntoBrowser = (name: string) =>
@@ -393,7 +350,9 @@ export function ProjectItems({
               dimmed
               snapshot={p}
               actions={[
-                deleteAction(p.name, run, () => api.deleteProject(p.id)),
+                deleteAction(p.name, run, () =>
+                  api.deleteProject(p.id, false, p.deleteTag ?? p.revision),
+                ),
               ]}
               onMenu={setMenu}
             />
@@ -408,7 +367,8 @@ export function ProjectItems({
               rename: () => setRenaming(item),
               duplicate: () => api.duplicateProject(p.id),
               download: () => api.downloadProjectFile(p.id),
-              remove: () => api.deleteProject(p.id),
+              remove: () =>
+                api.deleteProject(p.id, false, p.deleteTag ?? p.revision),
             },
             [
               ...(actor && (actor.role === "admin" || p.owner === actor.id)

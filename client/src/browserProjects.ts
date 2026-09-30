@@ -297,8 +297,9 @@ export async function moveToBrowser(id: string, name: string): Promise<void> {
     throw new Error(
       `"${name}" is over the ${PROJECT_FILE_LIMIT_MB} MB project file limit, so it could not open from this browser.`,
     );
-  await keepBrowserProject(fromProjectFile(JSON.parse(await blob.text())));
-  await api.deleteProject(id).catch(() => {
+  const file: ProjectFile = JSON.parse(await blob.text());
+  await keepBrowserProject(fromProjectFile(file));
+  await api.deleteProject(id, false, file.document.revision).catch(() => {
     throw new Error(
       `"${name}" is in this browser, but the server copy was not removed.`,
     );

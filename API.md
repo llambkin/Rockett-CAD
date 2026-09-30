@@ -115,6 +115,10 @@ module mutation, needs `If-Match: "<revision>"`, checked inside the project
 queue: missing is 428, malformed is 400, stale is 409, and none writes:
 `server/src/api/revision.ts`. Other writes (view, thumbnail, checkpoints,
 folders, members, settings, assets, export `retain`) take no revision.
+Project deletion also requires the revision shown in the project list; a stale
+request leaves the project intact. Unreadable projects list a `deleteTag`, a
+quoted SHA256 of the stored document bytes; deletion needs that exact tag and
+refuses changed or now-readable contents. Temporary cleanup needs no revision.
 
 ## History
 

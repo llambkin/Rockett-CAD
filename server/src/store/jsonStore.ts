@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import path from "node:path";
 import type { ApiErrorCode } from "@rockett/shared";
 import {
@@ -9,7 +8,9 @@ import {
 } from "./migrations.js";
 import { BACKUP_LIMITS, TIMING_MS } from "../tunables.js";
 import { ProjectQueue } from "./projectQueue.js";
-import { storagePath, type Storage } from "./storage.js";
+import { sha256 } from "./storeTags.js";
+export { sha256, etag, sameTag } from "./storeTags.js";
+import { readFirst, storagePath, type Storage } from "./storage.js";
 
 export const BACKUP_RECORD = "migrating.json";
 export const BACKUP_DELETED = "deleted.json";
@@ -50,18 +51,6 @@ export interface Inventory {
   recovered: string[];
   outdated: string[];
   failed: Array<{ key: string; error: string }>;
-}
-
-export function sha256(data: string | Uint8Array): string {
-  return crypto.createHash("sha256").update(data).digest("hex");
-}
-
-export function etag(value: unknown): string {
-  return `"${sha256(JSON.stringify(value))}"`;
-}
-
-export function sameTag(header: string, value: unknown): boolean {
-  return header.replace(/^W\//, "") === etag(value);
 }
 
 export class NamespaceBackup {
@@ -304,24 +293,29 @@ export class JsonStore<T, C extends MigrationContext = MigrationContext> {
     return (await this.found(key, item)).value;
   }
 
-  private async found(
-    key: string,
-    item = key,
-  ): Promise<{ file: string; value: unknown }> {
+  async source(key: string, item = key) {
     const { storage, legacy, name } = this.options;
     const files = [this.file(key, item)];
     if (legacy && item === key)
       files.push(path.posix.join(this.dir(key), legacy));
-    for (const file of files) {
-      const raw = await storage.read(file).catch(() => undefined);
-      if (!raw) continue;
-      try {
-        return { file, value: JSON.parse(raw.toString("utf8")) };
-      } catch {
-        throw new StoreError(`${name} ${key} is corrupted`, "internal");
-      }
+    const source = await readFirst(storage, files);
+    if (!source) throw new StoreError(`${name} ${key} not found`, "not_found");
+    return source;
+  }
+
+  private async found(
+    key: string,
+    item = key,
+  ): Promise<{ file: string; value: unknown }> {
+    const { file, data } = await this.source(key, item);
+    try {
+      return { file, value: JSON.parse(data.toString("utf8")) };
+    } catch {
+      throw new StoreError(
+        `${this.options.name} ${key} is corrupted`,
+        "internal",
+      );
     }
-    throw new StoreError(`${name} ${key} not found`, "not_found");
   }
 
   private context(key: string, stored: unknown): Promise<C> | C {

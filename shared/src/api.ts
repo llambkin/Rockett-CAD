@@ -187,6 +187,7 @@ export interface ProjectSummary {
   createdAt: string;
   featureCount: number;
   revision?: number;
+  deleteTag?: string;
   status: "ok" | "invalid" | "tooNew";
   error?: string;
   schemaVersion?: number;
