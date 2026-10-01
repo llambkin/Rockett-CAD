@@ -49,7 +49,8 @@ server/src/api/jobRoutes.ts createJobRoutes 119
 server/src/geometry/blend.ts 866
 server/src/geometry/blend.ts built 222
 server/src/geometry/blend.ts chamferByEnvelope 236
-server/src/geometry/features.ts 528
+server/src/geometry/features.ts 1206
+server/src/geometry/features.ts buildPrism 86
 server/src/geometry/sketchGeom.ts buildWire 84
 server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 104

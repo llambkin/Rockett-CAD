@@ -1,6 +1,3 @@
-import { evalExtrude } from "./extrude.js";
-import { evalRevolve } from "./revolve.js";
-import { evalSweep } from "./sweep.js";
 import { evalCombine, evalOffsetFace, evalSplitBody } from "./boolean.js";
 import type { Feature, FeatureType } from "@rockett/shared";
 import {
@@ -12,13 +9,16 @@ import {
   evalCircularPattern,
   evalConstructionPlane,
   evalEmboss,
+  evalExtrude,
   evalImportMesh,
   evalImportStep,
   evalLinearPattern,
   evalMirror,
   evalMove,
   evalReferenceImage,
+  evalRevolve,
   evalSketch,
+  evalSweep,
   type FeatureOutcome,
 } from "./features.js";
 import { evalChamfer, evalFillet } from "./blend.js";
