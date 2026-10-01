@@ -1,10 +1,13 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createRegistry } from "@rockett/shared";
 import type { ActiveCommand } from "./active";
+import type { ViewportRef } from "../viewportRef";
 import type { IconId } from "../icons";
 import { useStore } from "../store";
 
-export type CommandContext = ReturnType<typeof useStore.getState>;
+export type CommandContext = ReturnType<typeof useStore.getState> & {
+  viewport?: ViewportRef;
+};
 
 interface Anchored {
   id: string;
@@ -77,9 +80,12 @@ export function runnable(command: Command, ctx: CommandContext): boolean {
   return (command.enabled?.(ctx) ?? true) === true;
 }
 
-export function runCommand(id: string): unknown {
+export function runCommand(id: string, viewport?: ViewportRef): unknown {
   const command = commandRegistry.get(id);
-  const ctx = useStore.getState();
+  const ctx: CommandContext = {
+    ...useStore.getState(),
+    ...(viewport && { viewport }),
+  };
   if (!command?.run || !runnable(command, ctx)) return;
   return command.run(ctx);
 }

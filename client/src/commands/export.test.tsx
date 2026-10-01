@@ -8,7 +8,7 @@ import { createEmptyDocument, emptyView } from "@rockett/shared";
 import { api, saveDownload } from "../api";
 import { runCommand } from "./registry";
 import { useStore } from "../store";
-import { viewportHandle } from "../viewportRef";
+import { sceneViewport } from "../../test/helpers/boxScene";
 import {
   box,
   mountScene,
@@ -86,8 +86,8 @@ it("clicks one visible body through the viewport and exports only that body", as
     runCommand("design.export");
   });
   await wait(0);
-  viewportHandle.current!.setView([0, 0, 1], [0, 1, 0]);
-  viewportHandle.current!.zoomToFit();
+  sceneViewport().setView([0, 0, 1], [0, 1, 0]);
+  sceneViewport().zoomToFit();
   await wait(0);
   await act(async () => {
     pointer("pointermove", new THREE.Vector3(5, 5, 10));

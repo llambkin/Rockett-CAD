@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { ViewportContext } from "../viewportRef";
 import { useStore, type SketchTool } from "../store";
 import { useWorkbench } from "../shell/workbench";
 import type { SketchConstraint } from "@rockett/shared";
@@ -64,9 +66,10 @@ export function Toolbar() {
   useStore((s) => s.active?.id);
   useRegistrations();
 
+  const viewport = useContext(ViewportContext);
   if (mode.name === "sketch") return <SketchToolbar />;
 
-  const ctx = useStore.getState();
+  const ctx = { ...useStore.getState(), viewport };
   const rows = toolbarFor(workbench, ctx);
   const group = ({ group: g, commands }: (typeof rows)[number]) => (
     <DesignGroup key={g.id} group={g} commands={commands} ctx={ctx} />
@@ -103,7 +106,7 @@ function DesignGroup({
             {...(c.primary && { className: "primary" })}
             {...(c.active && { className: c.active(ctx) ? "active" : "" })}
             disabled={(c.enabled?.(ctx) ?? true) !== true}
-            onClick={() => void runCommand(c.id)}
+            onClick={() => void runCommand(c.id, ctx.viewport)}
           />
         ),
       )}

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { importLabels, type ImportFormat } from "@rockett/shared";
 import { api } from "../api";
 import { useStore } from "../store";
-import { viewportHandle } from "../viewportRef";
+import { ViewportContext } from "../viewportRef";
 import { ToolButton } from "./ToolButton";
 
 export function StepImportButton({
@@ -12,6 +12,7 @@ export function StepImportButton({
   newProject?: boolean;
   onError?: (message: string) => void;
 }) {
+  const viewport = useContext(ViewportContext);
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(false);
   const [formats, setFormats] = useState<ImportFormat[]>([]);
@@ -33,14 +34,11 @@ export function StepImportButton({
       if (newProject) {
         const result = await api.importStep(file);
         await s.openProject(result.document.id);
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => viewportHandle.current?.zoomToFit()),
-        );
       } else if (s.projectId) {
         await s.mutate(() => api.importStep(file, s.projectId!));
         s.setMode({ name: "idle" });
         s.setSelection([]);
-        requestAnimationFrame(() => viewportHandle.current?.zoomToFit());
+        requestAnimationFrame(() => viewport.current?.zoomToFit());
       }
     } catch (error) {
       report((error as Error).message);

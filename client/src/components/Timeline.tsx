@@ -1,5 +1,7 @@
+import { ViewportContext, type ViewportRef } from "../viewportRef";
 import {
   useState,
+  useContext,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -124,6 +126,7 @@ function chipMenu(feature: Feature, event: ReactMouseEvent<HTMLDivElement>) {
 }
 
 export function Timeline() {
+  const viewport = useContext(ViewportContext);
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const mode = useStore((s) => s.mode);
@@ -209,7 +212,7 @@ export function Timeline() {
                 onClick={(e) =>
                   selectFeatureBodies(f.id, e.ctrlKey || e.metaKey)
                 }
-                onDoubleClick={() => void openFeatureEditor(f)}
+                onDoubleClick={() => void openFeatureEditor(f, viewport)}
                 onMouseEnter={() => peek.enter(f.id)}
                 onMouseLeave={peek.leave}
                 onContextMenu={(e) => setMenu(chipMenu(f, e))}
@@ -260,7 +263,7 @@ export function Timeline() {
           items={[
             {
               label: "Edit",
-              action: () => void openFeatureEditor(menu.feature),
+              action: () => void openFeatureEditor(menu.feature, viewport),
             },
             ...(idle && quickValues(menu.feature).length > 0
               ? [{ label: "Quick edit", action: () => setQuick(menu) }]
@@ -299,9 +302,14 @@ export function Timeline() {
   );
 }
 
-export async function openFeatureEditor(f: Feature): Promise<void> {
+export async function openFeatureEditor(
+  f: Feature,
+  viewport?: ViewportRef,
+): Promise<void> {
   if (useStore.getState().busy) return;
   const ui = featureUI(f.type);
-  if (ui?.open) await ui.open(f);
-  else if (ui?.prefill) await openInDialog(ui, f);
+  if (ui?.open) {
+    if (viewport) await ui.open(f, viewport);
+    else await ui.open(f);
+  } else if (ui?.prefill) await openInDialog(ui, f);
 }

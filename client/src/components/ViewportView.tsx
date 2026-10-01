@@ -5,7 +5,7 @@ import { refsOf } from "../selection/kinds";
  * sketch tool interaction (with live constraint solving), and dimensions.
  */
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import type {
   DimensionConstraint,
@@ -40,7 +40,7 @@ import {
 } from "../three/sketchRender";
 import { ExtrudeGizmo } from "../three/ExtrudeGizmo";
 import { themeColor } from "../theme/tokens";
-import { SKETCH_APPEARANCE, TIMING_MS } from "../tunables";
+import { SKETCH_APPEARANCE } from "../tunables";
 import { RevolveGizmo, ringThrough, featureAxis } from "../three/RevolveGizmo";
 import {
   featureHandle,
@@ -56,7 +56,7 @@ import { extrudeGhosts } from "../extrudeReach";
 import { previewBodies, useStore, isIdle, type Selection } from "../store";
 import { loadPreviewBase, previewScene, usePreviewBase } from "../previewBase";
 import { api } from "../api";
-import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
+import { ViewportContext, alignCameraToActiveSketch } from "../viewportRef";
 import { activeCommand } from "../commands/active";
 import { registerHoldKey } from "../commands/keymap";
 import { watchSnapshots } from "../snapshot";
@@ -75,8 +75,7 @@ import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
-import { SketchStatus } from "./SketchStatus";
-import { PickReadout } from "./PickReadout";
+import { ViewportHud } from "./ViewportHud";
 
 interface DimEditField {
   constraintId: string;
@@ -116,7 +115,11 @@ const SKETCH_PICKS = ["sketch.entity", "sketch.point"];
 
 const NUDGE_EVENTS = ["pointerdown", "pointerup", "wheel"];
 
-export function ViewportView() {
+export function ViewportView({
+  children,
+}: {
+  children?: (viewport: ReactNode) => ReactNode;
+}) {
   const units = useSetting("units.length");
   const containerRef = useRef<HTMLDivElement>(null);
   const cubeRef = useRef<HTMLDivElement>(null);
@@ -310,7 +313,6 @@ export function ViewportView() {
     const vp = new CadViewport(container);
     viewportRef.current = vp;
     commandGizmo.current = new FeatureGizmos(vp, setGizmoLabel);
-    viewportHandle.current = vp;
     if ((import.meta as any).env?.DEV) {
       // console debugging handle (dev only)
       (window as any).__rockett = { vp, store: useStore };
@@ -366,7 +368,6 @@ export function ViewportView() {
       featureSlot.release();
       vp.dispose();
       viewportRef.current = null;
-      viewportHandle.current = null;
     };
   }, []);
 
@@ -1675,7 +1676,7 @@ export function ViewportView() {
         command.pickFilter(e),
         toolState.current.pickDepth,
       );
-      await command.onClick(r?.selection ?? null, e);
+      await command.onClick(r?.selection ?? null, e, viewportRef);
       return;
     }
 
@@ -2040,7 +2041,7 @@ export function ViewportView() {
       ) {
         void s
           .editSketch((r.selection as any).sketchId)
-          .then(alignCameraToActiveSketch);
+          .then(() => alignCameraToActiveSketch(viewportRef));
       }
     } else if (s.mode.name === "sketch") {
       // double-click a curve → edit its size
@@ -2315,7 +2316,7 @@ export function ViewportView() {
     setDimEdit(null);
   }
 
-  return (
+  const viewport = (
     <div
       className="viewport-container"
       ref={containerRef}
@@ -2542,7 +2543,6 @@ export function ViewportView() {
           menu={ctxMenu}
           onClose={() => setCtxMenu(null)}
           isPlanarFace={planarFace}
-          alignToSketch={alignCameraToActiveSketch}
           onDimension={(entityId, pos) =>
             void openDimensionEditor(entityId, pos)
           }
@@ -2551,75 +2551,10 @@ export function ViewportView() {
       <ViewportHud />
     </div>
   );
-}
-
-function ViewportHud() {
-  const mode = useStore((s) => s.mode);
-  const active = useStore((s) => s.active?.id);
-  const job = useStore((s) => s.job);
-  const jobStartedAt = useStore((s) => s.jobStartedAt);
-  const cancelJob = useStore((s) => s.cancelJob);
-  const [showJob, setShowJob] = useState(false);
-
-  useEffect(() => {
-    setShowJob(false);
-    if (jobStartedAt === null) return;
-    const remaining = Math.max(
-      0,
-      jobStartedAt + TIMING_MS.jobHintDelay - Date.now(),
-    );
-    const timer = window.setTimeout(() => setShowJob(true), remaining);
-    return () => window.clearTimeout(timer);
-  }, [jobStartedAt]);
-
-  let hint = active ? (activeCommand()?.hint ?? "") : "";
-  if (!active && mode.name === "sketch") {
-    const toolHints: Record<string, string> = {
-      select: "Drag points to adjust · click to select",
-      line: "Click points to chain lines · double-click / Esc to end",
-      rect: "Click two corners",
-      centerRect: "Click centre, then a corner",
-      circle: "Click centre, then a point on the circle",
-      arc3: "Click start, end, then a point on the arc",
-      polygon: "Click centre, then a vertex",
-      slot: "Click two centres, then the radius",
-      point: "Click to place points",
-      dimension:
-        "Click an entity or two points · Ctrl-click a line, then a line or point · right-click a dimension to change its kind",
-      project:
-        "Click a model edge to create a linked purple reference · source must precede this sketch",
-      trim: "Click a section between intersections, or drag across sections, to remove · Esc cancels",
-      extend:
-        "Click near the endpoint to extend to the next boundary · Esc cancels",
-      offset:
-        "Ctrl-click to add/remove curves · select a connected chain · preview then Create offset",
-    };
-    hint = toolHints[(mode as any).tool] ?? "";
-  }
-
   return (
-    <>
-      {(showJob && jobStartedAt !== null) || hint ? (
-        <div className="viewport-hint">
-          {showJob && jobStartedAt !== null ? (
-            <>
-              {job ? `${job.label} · ${job.done} of ${job.total}` : "Working…"}{" "}
-              <button
-                className="btn"
-                style={{ pointerEvents: "auto" }}
-                onClick={() => void cancelJob()}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            hint
-          )}
-        </div>
-      ) : null}
-      <SketchStatus />
-      <PickReadout />
-    </>
+    <ViewportContext value={viewportRef}>
+      {children ? children(viewport) : viewport}
+    </ViewportContext>
   );
 }
 

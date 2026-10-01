@@ -1,6 +1,7 @@
 import { createRegistry } from "@rockett/shared";
 import { activeCommand } from "./active";
 import { sketchToolFor } from "../shortcuts";
+import type { ViewportRef } from "../viewportRef";
 import { useStore } from "../store";
 import { useWorkbench } from "../shell/workbench";
 import {
@@ -137,7 +138,7 @@ function sketchKey(e: KeyEvent, s: CommandContext): boolean {
   return true;
 }
 
-export function handleKey(e: KeyEvent): void {
+export function handleKey(e: KeyEvent, viewport?: ViewportRef): void {
   if (e.repeat || pressHold(e) || inText(e.target)) return;
   const s = useStore.getState();
   const plain = !(e.ctrlKey || e.metaKey || e.altKey || e.shiftKey);
@@ -154,19 +155,20 @@ export function handleKey(e: KeyEvent): void {
     );
     if (!command) continue;
     e.preventDefault();
-    void runCommand(command.id);
+    void runCommand(command.id, viewport);
     return;
   }
 }
 
 const releaseAll = () => releaseHolds();
 
-export function installKeymap(): () => void {
-  document.addEventListener("keydown", handleKey, true);
+export function installKeymap(viewport?: ViewportRef): () => void {
+  const onKey = (event: KeyboardEvent) => handleKey(event, viewport);
+  document.addEventListener("keydown", onKey, true);
   document.addEventListener("keyup", handleKeyUp, true);
   window.addEventListener("blur", releaseAll);
   return () => {
-    document.removeEventListener("keydown", handleKey, true);
+    document.removeEventListener("keydown", onKey, true);
     document.removeEventListener("keyup", handleKeyUp, true);
     window.removeEventListener("blur", releaseAll);
     releaseAll();

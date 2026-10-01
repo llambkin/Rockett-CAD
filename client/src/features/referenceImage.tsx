@@ -1,3 +1,4 @@
+import { useContext } from "react";
 import { useState, useRef } from "react";
 import {
   newId,
@@ -13,7 +14,7 @@ import { AngleField, LengthField, SelInfo } from "../components/form/fields";
 import { planar } from "../commands/featureCommand";
 import { useStore, type Selection } from "../store";
 import { useSetting } from "../settings";
-import { viewportHandle } from "../viewportRef";
+import { ViewportContext } from "../viewportRef";
 import { selectedPlane, num } from "./inputs";
 import {
   registerFeatureUI,
@@ -98,6 +99,7 @@ function ReferenceImagePanel({
   params,
   setParams,
 }: FeaturePanelProps<ReferenceImageParams>) {
+  const viewport = useContext(ViewportContext);
   const doc = useStore((s) => s.document);
   const latestParams = useRef(params);
   latestParams.current = params;
@@ -165,7 +167,7 @@ function ReferenceImagePanel({
 
   const calibrate = async () => {
     setCalibrating(true);
-    const vp = viewportHandle.current;
+    const vp = viewport.current;
     if (!vp || !existing) {
       setCalibrating(false);
       return;

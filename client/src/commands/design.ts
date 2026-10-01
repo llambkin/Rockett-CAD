@@ -5,7 +5,6 @@ import { featureCommand } from "./featureCommand";
 import { exportCommand } from "./export";
 import type { IconId } from "../icons";
 import type { DialogType } from "../store";
-import { viewportHandle } from "../viewportRef";
 import { NamedViewSelect } from "../components/NamedViewSelect";
 import { StepImportButton } from "../components/StepImportButton";
 import {
@@ -19,8 +18,8 @@ export function openDialog(dialog: DialogType) {
   featureCommand.enter(dialog);
 }
 
-export function toggleProjection() {
-  const vp = viewportHandle.current;
+export function toggleProjection(ctx: CommandContext) {
+  const vp = ctx.viewport?.current;
   if (!vp) return;
   vp.setProjection(
     vp.projection === "orthographic" ? "perspective" : "orthographic",
@@ -73,7 +72,7 @@ registerCommand({
   enabled: idle,
   interaction: sketchCreateCommand,
   active: (s) => s.active?.id === "design.sketch.create",
-  run: () => sketchCreateCommand.enter(),
+  run: (ctx) => sketchCreateCommand.enter(ctx.viewport),
 });
 
 registerCommand({
@@ -194,7 +193,7 @@ registerCommand({
   tooltip: "Zoom to fit",
   keys: ["Shift+F"],
   keyContext: "global",
-  run: () => viewportHandle.current?.zoomToFit(),
+  run: (ctx) => ctx.viewport?.current?.zoomToFit(),
 });
 
 registerCommand({

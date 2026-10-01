@@ -3,9 +3,13 @@ import {
   type FeatureCommandState,
 } from "../commands/featureCommand";
 import { runCommand } from "../commands/registry";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { useStore, type Selection } from "../store";
-import { viewportHandle } from "../viewportRef";
+import {
+  ViewportContext,
+  alignCameraToActiveSketch,
+  type ViewportRef,
+} from "../viewportRef";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { NAMED_VIEWS } from "../three/camera";
 import { addSketchConstraints } from "./Toolbar";
@@ -27,19 +31,19 @@ async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   await s.updateFeature(sketchId, { entities } as any);
 }
 
-function viewItems(): MenuItem[] {
+function viewItems(viewport: ViewportRef): MenuItem[] {
   return [
-    { label: "Fit", action: () => viewportHandle.current?.zoomToFit() },
+    { label: "Fit", action: () => viewport.current?.zoomToFit() },
     ...NAMED_VIEWS.map((v) => ({
       label: v.label,
-      action: () => viewportHandle.current?.setView(v.dir, v.up),
+      action: () => viewport.current?.setView(v.dir, v.up),
     })),
     {
       label:
-        viewportHandle.current?.projection === "orthographic"
+        viewport.current?.projection === "orthographic"
           ? "Perspective"
           : "Orthographic",
-      action: toggleProjection,
+      action: () => toggleProjection({ ...useStore.getState(), viewport }),
     },
   ];
 }
@@ -63,18 +67,18 @@ export function ViewportContextMenu({
   menu,
   onClose,
   isPlanarFace,
-  alignToSketch,
   onDimension,
 }: {
   menu: { x: number; y: number; sel: Selection | null };
   onClose: () => void;
   isPlanarFace: (sel: Selection) => boolean;
-  alignToSketch: () => void;
   onDimension: (
     entityId: string,
     pos: { clientX: number; clientY: number },
   ) => void;
 }) {
+  const viewport = useContext(ViewportContext);
+  const alignToSketch = () => alignCameraToActiveSketch(viewport);
   const { sel } = menu;
   const s = useStore.getState();
   const items = useRelationItems();
@@ -83,7 +87,7 @@ export function ViewportContextMenu({
   );
 
   if (!sel) {
-    items.push(...viewItems());
+    items.push(...viewItems(viewport));
     return shown();
   }
 
@@ -189,7 +193,7 @@ export function ViewportContextMenu({
       label: "Measure",
       action: () => {
         s.setSelection([sel]);
-        void runCommand("inspect.measure");
+        void runCommand("inspect.measure", viewport);
       },
     });
   }

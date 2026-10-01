@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { ViewportContext } from "./viewportRef";
 import { useStore } from "./store";
 import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
@@ -96,7 +97,11 @@ export function App() {
   if (usersOpen && session.user.role === "admin")
     return <UsersPage onClose={() => setUsersOpen(false)} />;
   return projectId ? (
-    <Workspace onUsers={() => setUsersOpen(true)} />
+    <ViewportView>
+      {(viewport) => (
+        <Workspace onUsers={() => setUsersOpen(true)} viewport={viewport} />
+      )}
+    </ViewportView>
   ) : (
     <ProjectList onUsers={() => setUsersOpen(true)} />
   );
@@ -247,17 +252,20 @@ export function TreePane() {
   );
 }
 
-function Workspace({ onUsers }: { onUsers: () => void }) {
-  const showHelp = usePanelOpen(HELP_PANEL);
-  const showHistory = usePanelOpen(HISTORY_PANEL);
+function Workspace({
+  onUsers,
+  viewport,
+}: {
+  onUsers: () => void;
+  viewport: React.ReactNode;
+}) {
+  const viewportRef = useContext(ViewportContext);
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
-  const busy = useStore((s) => s.busy);
-  const projectName = useStore((s) => s.document?.name ?? "");
   const active = useStore((s) => s.active);
   const banner = active && activeCommand()?.banner;
 
-  useEffect(installKeymap, []);
+  useEffect(() => installKeymap(viewportRef), [viewportRef]);
   useEffect(
     () =>
       registerCommand({
@@ -272,43 +280,13 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
 
   return (
     <div className="workspace">
-      <div className="top-bar">
-        <button
-          className="app-title"
-          onClick={() => void backToProjects()}
-          title="Back to projects"
-        >
-          ⬢ Rockett CAD
-        </button>
-        <ProjectName name={projectName} />
-        <UndoRedoButtons />
-        <WorkbenchSwitcher />
-        {busy && <span className="busy-indicator">⟳ working…</span>}
-        <SaveIndicator />
-        <UserMenu onUsers={onUsers} />
-        <button
-          className="icon-btn"
-          title="Undo history and checkpoints"
-          aria-expanded={showHistory}
-          onClick={() => togglePanel(HISTORY_PANEL)}
-        >
-          History
-        </button>
-        <button
-          className="icon-btn"
-          title="Keyboard and mouse controls (?)"
-          aria-expanded={showHelp}
-          onClick={() => togglePanel(HELP_PANEL)}
-        >
-          Controls
-        </button>
-      </div>
+      <WorkspaceTopbar onUsers={onUsers} />
       <Toolbar />
       <RecoveryBanner />
       <NotSavedBanner />
       <div className="main-row">
         <TreePane />
-        <ViewportView />
+        {viewport}
         <VersionLabel />
         <Panels />
       </div>
@@ -326,6 +304,46 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
         </div>
       )}
       {banner && <div className="mode-banner">{banner}</div>}
+    </div>
+  );
+}
+
+function WorkspaceTopbar({ onUsers }: { onUsers: () => void }) {
+  const showHelp = usePanelOpen(HELP_PANEL);
+  const showHistory = usePanelOpen(HISTORY_PANEL);
+  const busy = useStore((s) => s.busy);
+  const projectName = useStore((s) => s.document?.name ?? "");
+  return (
+    <div className="top-bar">
+      <button
+        className="app-title"
+        onClick={() => void backToProjects()}
+        title="Back to projects"
+      >
+        ⬢ Rockett CAD
+      </button>
+      <ProjectName name={projectName} />
+      <UndoRedoButtons />
+      <WorkbenchSwitcher />
+      {busy && <span className="busy-indicator">⟳ working…</span>}
+      <SaveIndicator />
+      <UserMenu onUsers={onUsers} />
+      <button
+        className="icon-btn"
+        title="Undo history and checkpoints"
+        aria-expanded={showHistory}
+        onClick={() => togglePanel(HISTORY_PANEL)}
+      >
+        History
+      </button>
+      <button
+        className="icon-btn"
+        title="Keyboard and mouse controls (?)"
+        aria-expanded={showHelp}
+        onClick={() => togglePanel(HELP_PANEL)}
+      >
+        Controls
+      </button>
     </div>
   );
 }

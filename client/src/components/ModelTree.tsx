@@ -1,13 +1,22 @@
 import {
+  planeMenu,
+  sketchOn,
+  toggleFeature,
+  constructionMenu,
+  canvasMenu,
+  deleteItem,
+} from "./treeFeatureMenus";
+import {
   Fragment,
   memo,
   useEffect,
+  useContext,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import type { Feature, PlaneRef, TreeGroup } from "@rockett/shared";
+import type { Feature, TreeGroup } from "@rockett/shared";
 import { ORIGIN_AXES, UNITS_LENGTH } from "@rockett/shared";
 import { moveBodies } from "../commands/treeMove";
 import { activeCommand } from "../commands/active";
@@ -15,7 +24,7 @@ import "../commands/design";
 import { runCommand } from "../commands/registry";
 import { useStore, selectionKey, isIdle, type Selection } from "../store";
 import {
-  viewportHandle,
+  ViewportContext,
   alignCameraToActiveSketch as alignToSketch,
 } from "../viewportRef";
 import { openFeatureEditor } from "./Timeline";
@@ -39,38 +48,6 @@ import {
 
 type PlaneSelection = Extract<Selection, { kind: "plane" }>;
 type Kind = TreeGroup["kind"];
-
-const sketchOn = (ref: PlaneRef) => {
-  useStore.getState().setSelection([{ kind: "plane", ref, label: "Plane" }]);
-  void runCommand("design.sketch.create");
-};
-const planeMenu = (ref: PlaneRef): MenuItem[] =>
-  useStore.getState().mode.name === "idle"
-    ? [{ label: "Create sketch", action: () => sketchOn(ref) }]
-    : [];
-const deleteItem = (id: string): MenuItem => ({
-  label: "Delete",
-  danger: true,
-  action: () => void useStore.getState().deleteFeature(id),
-});
-const toggleFeature = (f: Feature) =>
-  void setFeaturesVisible(
-    [f.id],
-    useStore.getState().view.hidden.features.includes(f.id),
-  );
-
-const constructionMenu = (f: Feature): MenuItem[] => [
-  ...planeMenu({ kind: "construction", featureId: f.id }),
-  { label: "Edit", action: () => void openFeatureEditor(f) },
-  { label: "Show / Hide", action: () => toggleFeature(f) },
-  deleteItem(f.id),
-];
-
-const canvasMenu = (f: Feature): MenuItem[] => [
-  { label: "Edit", action: () => void openFeatureEditor(f) },
-  { label: "Show / Hide", action: () => toggleFeature(f) },
-  deleteItem(f.id),
-];
 
 type BodyActions = {
   click: (e: React.MouseEvent, bodyId: string) => void;
@@ -129,6 +106,7 @@ const BodyRow = memo(function BodyRow({
 });
 
 export const ModelTree = memo(function ModelTree() {
+  const viewport = useContext(ViewportContext);
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const view = useStore((s) => s.view);
@@ -254,12 +232,12 @@ export const ModelTree = memo(function ModelTree() {
       className={`tree-item ${selKeys.has(selectionKey(sel)) ? "selected" : ""}`}
       onClick={(e) => {
         if (useStore.getState().active?.id === "design.sketch.create") {
-          sketchOn(sel.ref);
+          sketchOn(sel.ref, viewport);
           return;
         }
         pick(e, sel, origins);
       }}
-      onContextMenu={(e) => openMenu(e, planeMenu(sel.ref))}
+      onContextMenu={(e) => openMenu(e, planeMenu(sel.ref, viewport))}
     >
       <span className="tree-icon">▱</span>
       {sel.label}
@@ -340,7 +318,10 @@ export const ModelTree = memo(function ModelTree() {
       {
         label: "Edit sketch",
         action: () =>
-          void useStore.getState().editSketch(f.id).then(alignToSketch),
+          void useStore
+            .getState()
+            .editSketch(f.id)
+            .then(() => alignToSketch(viewport)),
       },
       {
         label: "Extrude regions…",
@@ -455,7 +436,10 @@ export const ModelTree = memo(function ModelTree() {
           pick(e, sel, sketchParts.order, () => selectSketchRegions(f.id))
         }
         onDoubleClick={() => {
-          void useStore.getState().editSketch(f.id).then(alignToSketch);
+          void useStore
+            .getState()
+            .editSketch(f.id)
+            .then(() => alignToSketch(viewport));
         }}
         onContextMenu={(e) => openMenu(e, sketchMenu(f))}
         title="Click to select regions · double-click to edit"
@@ -523,7 +507,7 @@ export const ModelTree = memo(function ModelTree() {
             onClick={() => {
               const v = !originVisible;
               setOriginVisible(v);
-              viewportHandle.current?.setOriginVisible(v);
+              viewport.current?.setOriginVisible(v);
             }}
           >
             <span className="tree-icon">{originVisible ? "👁" : "◌"}</span>
@@ -543,8 +527,8 @@ export const ModelTree = memo(function ModelTree() {
               key={f.id}
               className={`tree-item ${selKeys.has(selectionKey(planeSels[i]!)) ? "selected" : ""}`}
               onClick={(e) => pick(e, planeSels[i]!, planeSels)}
-              onDoubleClick={() => openFeatureEditor(f)}
-              onContextMenu={(e) => openMenu(e, constructionMenu(f))}
+              onDoubleClick={() => openFeatureEditor(f, viewport)}
+              onContextMenu={(e) => openMenu(e, constructionMenu(f, viewport))}
             >
               <span
                 className="tree-icon eye"
@@ -569,8 +553,8 @@ export const ModelTree = memo(function ModelTree() {
             <div
               key={f.id}
               className="tree-item"
-              onDoubleClick={() => openFeatureEditor(f)}
-              onContextMenu={(e) => openMenu(e, canvasMenu(f))}
+              onDoubleClick={() => openFeatureEditor(f, viewport)}
+              onContextMenu={(e) => openMenu(e, canvasMenu(f, viewport))}
             >
               <span
                 className="tree-icon eye"

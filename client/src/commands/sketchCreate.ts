@@ -1,7 +1,7 @@
 import type { PlaneRef } from "@rockett/shared";
 import { isPlanarFace } from "./featureCommand";
 import { useStore, type Selection } from "../store";
-import { alignCameraToActiveSketch } from "../viewportRef";
+import { alignCameraToActiveSketch, type ViewportRef } from "../viewportRef";
 import { exitActive, type ActiveCommand } from "./active";
 
 function planeFor(selection: Selection | null): PlaneRef | undefined {
@@ -13,7 +13,7 @@ function planeFor(selection: Selection | null): PlaneRef | undefined {
     return { kind: "face", face: selection };
 }
 
-async function pick(selection: Selection | null) {
+async function pick(selection: Selection | null, viewport?: ViewportRef) {
   const s = useStore.getState();
   if (s.active?.id !== "design.sketch.create" || s.busy) return;
   const plane = planeFor(selection);
@@ -21,11 +21,11 @@ async function pick(selection: Selection | null) {
   await s.startSketchOnPlane(plane);
   if (useStore.getState().active?.id === "design.sketch.create")
     sketchCreateCommand.exit();
-  alignCameraToActiveSketch();
+  if (viewport) alignCameraToActiveSketch(viewport);
 }
 
-export const sketchCreateCommand: ActiveCommand = {
-  async enter() {
+export const sketchCreateCommand = {
+  async enter(viewport?: ViewportRef) {
     const selection = useStore.getState().selection;
     exitActive();
     useStore.getState().setMode({ name: "idle" });
@@ -33,7 +33,7 @@ export const sketchCreateCommand: ActiveCommand = {
     const selected =
       selection.find((s) => s.kind === "plane") ??
       selection.find((s) => planeFor(s));
-    if (selected) await pick(selected);
+    if (selected) await pick(selected, viewport);
   },
   exit() {
     useStore.setState({ active: null, hover: null });
@@ -44,9 +44,9 @@ export const sketchCreateCommand: ActiveCommand = {
     "design.face",
   ],
   onHover: (selection) => (planeFor(selection) ? selection : null),
-  onClick: pick,
+  onClick: (selection, _event, viewport) => pick(selection, viewport),
   onContextMenu() {},
   hint: "Select a plane or planar face to sketch on",
   banner: "Select a plane or planar face for the sketch (Esc to cancel)",
   keyContext: "design.sketch.create",
-};
+} satisfies ActiveCommand;

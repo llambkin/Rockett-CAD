@@ -1,3 +1,4 @@
+import { ViewportContext } from "../viewportRef";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import * as THREE from "three";
@@ -15,7 +16,7 @@ import { api } from "../api";
 import { ModelTree } from "../components/ModelTree";
 
 import { useStore, type Mode, type Selection } from "../store";
-import { viewportHandle } from "../viewportRef";
+import { sceneViewport } from "../../test/helpers/boxScene";
 
 import {
   box,
@@ -170,8 +171,14 @@ export async function open(
   });
   treeHost = document.body.appendChild(document.createElement("div"));
   treeRoot = createRoot(treeHost);
-  await act(async () => treeRoot!.render(<ModelTree />));
-  const vp = viewportHandle.current!;
+  await act(async () =>
+    treeRoot!.render(
+      <ViewportContext value={{ current: sceneViewport() }}>
+        <ModelTree />
+      </ViewportContext>,
+    ),
+  );
+  const vp = sceneViewport();
   vp.setView([1, -1, 0.6], [0, 0, 1], false);
   vp.render();
   await wait(0);

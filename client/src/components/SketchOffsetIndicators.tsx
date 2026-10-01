@@ -1,13 +1,15 @@
+import { useContext } from "react";
 import { useEffect, useRef } from "react";
 import { formatLength, sketchOffsetAnchor } from "@rockett/shared";
 import { useSetting } from "../settings";
 import { useStore } from "../store";
-import { viewportHandle } from "../viewportRef";
+import { ViewportContext } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
 import { worldToClient } from "../three/screen";
 
 /** Screen-space badges remain attached to the sketch while panning and zooming. */
 export function SketchOffsetIndicators() {
+  const viewport = useContext(ViewportContext);
   const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
   const mode = useStore((s) => s.mode);
@@ -19,7 +21,7 @@ export function SketchOffsetIndicators() {
     const frame = evaluation?.sketches.find(
       (s) => s.featureId === draft.id,
     )?.frame;
-    const vp = viewportHandle.current;
+    const vp = viewport.current;
     if (!frame || !vp) return;
     const update = () => {
       if (!layer.current) return;
@@ -43,7 +45,7 @@ export function SketchOffsetIndicators() {
     };
     vp.requestRender();
     return vp.onRender(update);
-  }, [draft, mode.name, evaluation]);
+  }, [draft, mode.name, evaluation, viewport]);
   if (mode.name !== "sketch" || !draft) return null;
   return (
     <div className="dim-label-layer" ref={layer}>

@@ -22,7 +22,7 @@ const sketch = {
   initialParams: {},
   prefill: () => ({ params: {}, selection: [] }),
   Panel: SketchRepair,
-  open: async (f): Promise<void> => {
+  open: async (f, viewport): Promise<void> => {
     const s = useStore.getState();
     if (
       s.evaluation?.featureStatuses.find((st) => st.featureId === f.id)?.refs
@@ -33,7 +33,7 @@ const sketch = {
       return;
     }
     await s.editSketch(f.id);
-    alignCameraToActiveSketch();
+    if (viewport) alignCameraToActiveSketch(viewport);
   },
 } satisfies FeatureUI<SketchFeature, InputParams<{}>>;
 

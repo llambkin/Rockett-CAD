@@ -1,5 +1,6 @@
 import { useStore, type Selection } from "../store";
 import { commandById, type CommandContext } from "./registry";
+import type { ViewportRef } from "../viewportRef";
 import type { FeatureCommandState } from "./featureCommand";
 import type { MeasureState } from "./measure";
 
@@ -19,7 +20,11 @@ export interface ActiveCommand {
   exit(): void;
   pickFilter(event?: Pick<PointerEvent, "shiftKey">): readonly string[];
   onHover(selection: Selection | null, event: PickModifiers): Selection | null;
-  onClick(selection: Selection | null, event: PickModifiers): Promise<void>;
+  onClick(
+    selection: Selection | null,
+    event: PickModifiers,
+    viewport?: ViewportRef,
+  ): Promise<void>;
   onSelection?(selection: readonly Selection[], additive: boolean): void;
   onContextMenu(selection: Selection | null, event: PointerEvent): void;
   hint: string;

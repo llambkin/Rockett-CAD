@@ -1,7 +1,9 @@
+import { useContext } from "react";
 import { NAMED_VIEWS } from "../three/camera";
-import { viewportHandle } from "../viewportRef";
+import { ViewportContext } from "../viewportRef";
 
 export function NamedViewSelect() {
+  const viewport = useContext(ViewportContext);
   return (
     <select
       className="tb-select"
@@ -9,7 +11,7 @@ export function NamedViewSelect() {
       value=""
       onChange={(e) => {
         const v = NAMED_VIEWS.find((x) => x.label === e.target.value);
-        if (v) viewportHandle.current?.setView(v.dir, v.up);
+        if (v) viewport.current?.setView(v.dir, v.up);
       }}
     >
       <option value="" disabled>

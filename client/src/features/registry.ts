@@ -1,3 +1,4 @@
+import type { ViewportRef } from "../viewportRef";
 import { createElement, type ComponentType, type ReactNode } from "react";
 import {
   createRegistry,
@@ -97,7 +98,7 @@ interface FeatureUIBase<F extends Feature, P> {
 }
 
 interface DialogUI<F extends Feature, P> {
-  open?(f: F): Promise<void>;
+  open?(f: F, viewport?: ViewportRef): Promise<void>;
   type: F["type"];
   prefill(f: F): { params: P; selection: Selection[] };
 }
@@ -118,7 +119,7 @@ export type FeatureUI<
         Form?: never;
       })
     | {
-        open(f: F): Promise<void>;
+        open(f: F, viewport?: ViewportRef): Promise<void>;
         prefill?: never;
         Form?: never;
         Panel?: never;
@@ -139,7 +140,7 @@ export interface RegisteredFeatureUI {
   hasBuild: boolean;
   hasForm: boolean;
   hasPanel: boolean;
-  open?: (f: Feature) => Promise<void>;
+  open?: (f: Feature, viewport?: ViewportRef) => Promise<void>;
   create(): FeatureInputs;
   prefill?: (f: Feature) => { inputs: FeatureInputs; selection: Selection[] };
 }
@@ -243,8 +244,10 @@ export function registerFeatureUI<
       return createFeatureInputs(ui, ui.initialParams);
     },
     ...(ui.open && {
-      open: async (f: Feature) => {
-        if (owns(f)) await ui.open?.(f);
+      open: async (f: Feature, viewport?: ViewportRef) => {
+        if (!owns(f)) return;
+        if (viewport) await ui.open?.(f, viewport);
+        else await ui.open?.(f);
       },
     }),
     ...(ui.prefill && {
