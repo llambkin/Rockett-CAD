@@ -1,4 +1,5 @@
 import { useStore, type SketchTool } from "../store";
+import { useWorkbench } from "../shell/workbench";
 import type { SketchConstraint } from "@rockett/shared";
 import { openDialog } from "../commands/design";
 import {
@@ -58,6 +59,7 @@ export async function addSketchConstraints(constraints: SketchConstraint[]) {
 
 export function Toolbar() {
   const mode = useStore((s) => s.mode);
+  const workbench = useWorkbench((s) => s.current);
   useStore((s) => s.busy);
   useStore((s) => s.active?.id);
   useRegistrations();
@@ -65,7 +67,7 @@ export function Toolbar() {
   if (mode.name === "sketch") return <SketchToolbar />;
 
   const ctx = useStore.getState();
-  const rows = toolbarFor("design", ctx);
+  const rows = toolbarFor(workbench, ctx);
   const group = ({ group: g, commands }: (typeof rows)[number]) => (
     <DesignGroup key={g.id} group={g} commands={commands} ctx={ctx} />
   );

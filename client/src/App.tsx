@@ -3,6 +3,7 @@ import { useStore } from "./store";
 import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
 import { Toolbar } from "./components/Toolbar";
+import { WorkbenchSwitcher } from "./shell/WorkbenchSwitcher";
 import "./commands/design";
 import { activeCommand } from "./commands/active";
 import { installKeymap } from "./commands/keymap";
@@ -282,6 +283,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
         </button>
         <ProjectName name={projectName} />
         <UndoRedoButtons />
+        <WorkbenchSwitcher />
         {busy && <span className="busy-indicator">⟳ working…</span>}
         <SaveIndicator />
         <UserMenu onUsers={onUsers} />

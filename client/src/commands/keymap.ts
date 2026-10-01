@@ -2,6 +2,7 @@ import { createRegistry } from "@rockett/shared";
 import { activeCommand } from "./active";
 import { sketchToolFor } from "../shortcuts";
 import { useStore } from "../store";
+import { useWorkbench } from "../shell/workbench";
 import {
   commands,
   runCommand,
@@ -102,7 +103,9 @@ function chordOf(e: KeyEvent): string {
 
 function keyContexts(s: CommandContext): string[] {
   if (s.active) return [activeCommand(s)?.keyContext ?? s.active.id, "global"];
-  return s.mode.name === "idle" ? ["design", "global"] : ["global"];
+  return s.mode.name === "idle"
+    ? [useWorkbench.getState().current, "global"]
+    : ["global"];
 }
 
 function inText(target: EventTarget | null): boolean {
