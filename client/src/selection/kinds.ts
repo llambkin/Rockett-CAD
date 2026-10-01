@@ -1,3 +1,4 @@
+import type { HighlightContext, HighlightStyle } from "./highlights";
 import {
   createRegistry,
   type EdgeRef,
@@ -55,6 +56,11 @@ export interface SelectionKind<K extends Kind = Kind> {
   key(s: SelectionOf<K>): string;
   toRef: (s: SelectionOf<K>) => RefOf<K>;
   fromRef(ref: RefOf<K>): SelectionOf<K>;
+  highlight(
+    s: SelectionOf<K>,
+    style: HighlightStyle,
+    ctx: HighlightContext,
+  ): void;
 }
 
 interface RegisteredKind {
@@ -62,6 +68,7 @@ interface RegisteredKind {
   key(s: Selection): string;
   toRef(s: Selection): unknown;
   fromRef(ref: unknown): Selection;
+  highlight(s: Selection, style: HighlightStyle, ctx: HighlightContext): void;
 }
 
 const registry = createRegistry<RegisteredKind>(
@@ -93,6 +100,8 @@ export function registerSelectionKind<K extends Kind>(
     key: (s) => entry.key(s as SelectionOf<K>),
     toRef: (s) => entry.toRef(s as SelectionOf<K>),
     fromRef: (ref) => entry.fromRef(ref as RefOf<K>),
+    highlight: (s, style, ctx) =>
+      entry.highlight(s as SelectionOf<K>, style, ctx),
   });
 }
 
@@ -130,12 +139,14 @@ export function refsOf<K extends Kind>(
 
 registerCore<"body">({
   kind: "body",
+  highlight: (s, style, ctx) => ctx.body(s.bodyId, null, style),
   key: (s) => `body:${s.bodyId}`,
   toRef: (s) => s.bodyId,
   fromRef: (bodyId) => ({ kind: "body", bodyId }),
 });
 registerCore<"face">({
   kind: "face",
+  highlight: (s, style, ctx) => ctx.face(s.bodyId, s.faceName, style),
   key: (s) => `face:${s.bodyId}:${s.faceName}`,
   toRef: (s) => ({ kind: "face", bodyId: s.bodyId, faceName: s.faceName }),
   fromRef: (ref) => ({
@@ -146,6 +157,13 @@ registerCore<"face">({
 });
 registerCore<"edge">({
   kind: "edge",
+  highlight: (s, style, ctx) =>
+    ctx.line(
+      ctx.sources.bodies
+        .get(s.bodyId)
+        ?.payload.edges.find((edge) => edge.name === s.edgeName)?.polyline,
+      style,
+    ),
   key: (s) => `edge:${s.bodyId}:${s.edgeName}`,
   toRef: (s) => ({ kind: "edge", bodyId: s.bodyId, edgeName: s.edgeName }),
   fromRef: (ref) => ({
@@ -156,6 +174,14 @@ registerCore<"edge">({
 });
 registerCore<"vertex">({
   kind: "vertex",
+  highlight: (s, style, ctx) =>
+    ctx.point(
+      ctx.sources.bodies
+        .get(s.bodyId)
+        ?.payload.vertices.find((vertex) => vertex.name === s.vertexName)
+        ?.position,
+      style,
+    ),
   key: (s) => `vertex:${s.bodyId}:${s.vertexName}`,
   toRef: (s) => ({
     kind: "vertex",
@@ -170,6 +196,7 @@ registerCore<"vertex">({
 });
 registerCore<"plane">({
   kind: "plane",
+  highlight: (s, style, ctx) => ctx.plane(s.ref, style),
   key: (s) => `plane:${JSON.stringify(s.ref)}`,
   toRef: (s) => s.ref,
   fromRef: (ref) => ({
@@ -180,12 +207,19 @@ registerCore<"plane">({
 });
 registerCore<"axis">({
   kind: "axis",
+  highlight: (s, style, ctx) =>
+    ctx.line(
+      ctx.sources.originAxisLines.get(s.axis)?.geometry.getAttribute("position")
+        .array,
+      style,
+    ),
   key: (s) => `axis:${s.axis}`,
   toRef: (s) => ({ kind: "originAxis", axis: s.axis }),
   fromRef: (ref) => ({ kind: "axis", axis: ref.axis }),
 });
 registerCore<"profile">({
   kind: "profile",
+  highlight: () => {},
   key: (s) => `profile:${s.sketchId}:${s.profileId}`,
   toRef: (s) => ({ sketchId: s.sketchId, profileId: s.profileId }),
   fromRef: (ref) => ({
@@ -196,12 +230,14 @@ registerCore<"profile">({
 });
 registerCore<"sketch">({
   kind: "sketch",
+  highlight: () => {},
   key: (s) => `sketch:${s.sketchId}`,
   toRef: (s) => s.sketchId,
   fromRef: (sketchId) => ({ kind: "sketch", sketchId }),
 });
 registerCore<"sketchEntity">({
   kind: "sketchEntity",
+  highlight: () => {},
   key: (s) => `se:${s.sketchId}:${s.entityId}`,
   toRef: (s) => ({
     sketchId: s.sketchId,
@@ -212,6 +248,7 @@ registerCore<"sketchEntity">({
 });
 registerCore<"sketchPoint">({
   kind: "sketchPoint",
+  highlight: () => {},
   key: (s) => `sp:${s.sketchId}:${s.entityId}`,
   toRef: (s) => ({
     kind: "sketchPoint",
@@ -224,3 +261,11 @@ registerCore<"sketchPoint">({
     entityId: ref.entityId,
   }),
 });
+
+export function highlightSelection(
+  s: Selection,
+  style: HighlightStyle,
+  ctx: HighlightContext,
+): void {
+  requiredKind(s.kind).highlight(s, style, ctx);
+}

@@ -18,6 +18,8 @@ import {
   type ViewCamera,
 } from "@rockett/shared";
 import type { Selection } from "../store";
+import { highlightSelection } from "../selection/kinds";
+import { HighlightContext, type HighlightStyle } from "../selection/highlights";
 import type { PreviewGhost, PreviewTint } from "../livePreview";
 import { clientRay } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
@@ -41,12 +43,7 @@ import {
 } from "./camera";
 import { frameScheduler } from "./frameScheduler";
 import { getSetting, subscribe } from "../settings";
-import {
-  BODY_APPEARANCE,
-  HIGHLIGHT_APPEARANCE,
-  PLANE_APPEARANCE,
-  TIMING_MS,
-} from "../tunables";
+import { BODY_APPEARANCE, PLANE_APPEARANCE, TIMING_MS } from "../tunables";
 
 export interface PickResult {
   selection: Selection;
@@ -1047,158 +1044,25 @@ export class CadViewport {
     return chosen;
   }
 
-  // -------------------------------------------------------------------------
-  // Highlights (selection / hover overlays)
-  // -------------------------------------------------------------------------
-
-  private highlightObjects: THREE.Object3D[] = [];
-
   clearHighlights() {
-    for (const o of this.highlightObjects) {
-      o.parent?.remove(o);
-      disposeObject(o);
-    }
-    this.highlightObjects = [];
+    clearGroup(this.overlayRoot);
     this.requestRender();
   }
 
-  addHighlights(sels: Selection[], kind: "select" | "hover") {
+  addHighlights(sels: Selection[], style: HighlightStyle) {
     this.requestRender();
-    const faces = new Map<string, Set<string>>();
-    for (const s of sels) {
-      if (s.kind !== "face") this.addHighlight(s, kind);
-      else
-        faces.set(s.bodyId, (faces.get(s.bodyId) ?? new Set()).add(s.faceName));
-    }
-    for (const [bodyId, names] of faces)
-      this.addFaceHighlight(bodyId, names, kind);
-  }
-
-  private addFaceHighlight(
-    bodyId: string,
-    names: ReadonlySet<string> | null,
-    kind: "select" | "hover",
-  ) {
-    const body = this.bodies.get(bodyId);
-    if (!body) return;
-    const src = body.payload;
-    const index = names
-      ? src.faces
-          .filter((f) => names.has(f.name))
-          .flatMap((f) => src.indices.slice(f.start, f.start + f.count))
-      : src.indices;
-    if (index.length === 0) return;
-    const token = kind === "select" ? "selection" : "hover";
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", body.mesh.geometry.getAttribute("position"));
-    geom.setAttribute("normal", body.mesh.geometry.getAttribute("normal"));
-    geom.setIndex(index);
-    geom.addEventListener("dispose", () => {
-      geom.deleteAttribute("position");
-      geom.deleteAttribute("normal");
+    const ctx = new HighlightContext(this.overlayRoot, {
+      bodies: this.bodies,
+      originAxisLines: this.originAxisLines,
+      originPlaneMeshes: this.originPlaneMeshes,
+      constructionPlanes: this.planes.group,
     });
-    const mesh = new THREE.Mesh(
-      geom,
-      new THREE.MeshBasicMaterial({
-        color: themeColor(token),
-        transparent: true,
-        opacity: HIGHLIGHT_APPEARANCE.faceOpacity[kind],
-        depthTest: true,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
-      }),
-    );
-    mesh.renderOrder = 5;
-    mesh.userData.themeToken = token;
-    this.overlayRoot.add(mesh);
-    this.highlightObjects.push(mesh);
+    for (const selection of sels) highlightSelection(selection, style, ctx);
+    ctx.flush();
   }
 
-  addHighlight(sel: Selection, kind: "select" | "hover") {
-    this.requestRender();
-    const token = kind === "select" ? "selection" : "hover";
-    const color = themeColor(token);
-    if (sel.kind === "face" || sel.kind === "body") {
-      this.addFaceHighlight(
-        sel.bodyId,
-        sel.kind === "face" ? new Set([sel.faceName]) : null,
-        kind,
-      );
-    } else if (sel.kind === "edge" || sel.kind === "axis") {
-      const points =
-        sel.kind === "axis"
-          ? this.originAxisLines
-              .get(sel.axis)
-              ?.geometry.getAttribute("position").array
-          : this.bodies
-              .get(sel.bodyId)
-              ?.payload.edges.find((x) => x.name === sel.edgeName)?.polyline;
-      if (!points) return;
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(points, 3),
-        ),
-        new THREE.LineBasicMaterial({
-          color,
-          linewidth: HIGHLIGHT_APPEARANCE.edgeLinewidth,
-          depthTest: false,
-        }),
-      );
-      line.renderOrder = 10;
-      line.userData.themeToken = token;
-      this.overlayRoot.add(line);
-      this.highlightObjects.push(line);
-    } else if (sel.kind === "vertex") {
-      const b = this.bodies.get(sel.bodyId);
-      if (!b) return;
-      const v = b.payload.vertices[b.vertexNames.indexOf(sel.vertexName)];
-      if (!v) return;
-      const pt = new THREE.Points(
-        new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(...v.position),
-        ]),
-        new THREE.PointsMaterial({
-          color,
-          size: HIGHLIGHT_APPEARANCE.vertexSizePx,
-          sizeAttenuation: false,
-          depthTest: false,
-        }),
-      );
-      pt.renderOrder = 11;
-      pt.userData.themeToken = token;
-      this.overlayRoot.add(pt);
-      this.highlightObjects.push(pt);
-    } else if (sel.kind === "plane" && sel.ref.kind !== "face") {
-      const ref = sel.ref;
-      const mesh =
-        ref.kind === "origin"
-          ? this.originPlaneMeshes.find(
-              (m) => m.userData.originPlane === ref.plane,
-            )
-          : (this.planes.group.children.find(
-              (m) => m.userData.constructionPlane === ref.featureId,
-            ) as THREE.Mesh | undefined);
-      if (mesh) {
-        mesh.updateWorldMatrix(true, false);
-        const clone = new THREE.Mesh(
-          (mesh.geometry as THREE.BufferGeometry).clone(),
-          new THREE.MeshBasicMaterial({
-            color,
-            transparent: true,
-            opacity: HIGHLIGHT_APPEARANCE.originPlaneOpacity,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-          }),
-        );
-        clone.applyMatrix4(mesh.matrixWorld);
-        clone.userData.themeToken = token;
-        this.overlayRoot.add(clone);
-        this.highlightObjects.push(clone);
-      }
-    }
-    // profile/sketch entity highlights handled by the sketch renderer
+  addHighlight(selection: Selection, style: HighlightStyle) {
+    this.addHighlights([selection], style);
   }
 
   syncConstructionPlanes(

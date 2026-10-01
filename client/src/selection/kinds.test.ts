@@ -1,8 +1,10 @@
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { createEmptyDocument, type BodyPayload } from "@rockett/shared";
 import { pickLabel } from "../components/form/fields";
 import {
   fromRef,
+  highlightSelection,
   refsOf,
   registerSelectionKind,
   selectionKey,
@@ -10,6 +12,10 @@ import {
   toRef,
   type Selection,
 } from "./kinds";
+import { HighlightContext } from "./highlights";
+import { clearGroup } from "../three/dispose";
+import { HIGHLIGHT_APPEARANCE } from "../tunables";
+import { themeColor } from "../theme/tokens";
 import {
   bodyIds,
   bodyPicks,
@@ -81,6 +87,7 @@ describe("selection kinds", () => {
     const node: Selection = { kind: "test.node", nodeId: "n" };
     const dispose = registerSelectionKind({
       kind: "test.node",
+      highlight: () => {},
       key: (s) => `test.node:${s.nodeId}`,
       toRef: (s) => ({ nodeId: s.nodeId }),
       fromRef: (ref: unknown) => ({
@@ -101,6 +108,7 @@ describe("selection kinds", () => {
       expect(() =>
         registerSelectionKind({
           kind: "test.node",
+          highlight: () => {},
           key: () => "duplicate",
           toRef: () => null,
           fromRef: () => node,
@@ -129,6 +137,7 @@ describe("selection kinds", () => {
     expect(() =>
       registerSelectionKind({
         kind: "bad" as "test.bad",
+        highlight: () => {},
         key: () => "bad",
         toRef: () => null,
         fromRef: () => ({ kind: "test.bad" }),
@@ -294,4 +303,217 @@ describe("selection kinds", () => {
       expect(selectionKey(fromRef("plane", ref))).toBe(selectionKey(selection));
     },
   );
+});
+
+function highlightFixture() {
+  const root = new THREE.Group();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3),
+  );
+  geometry.setAttribute(
+    "normal",
+    new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3),
+  );
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  const payload: BodyPayload = {
+    bodyId: "b",
+    name: "Body",
+    meshKey: "fixture",
+    positions: Array.from(geometry.getAttribute("position").array),
+    normals: Array.from(geometry.getAttribute("normal").array),
+    indices: [0, 1, 2],
+    faces: [
+      { name: "f", start: 0, count: 3, surface: { type: "other" }, area: 0.5 },
+    ],
+    edges: [
+      {
+        name: "e",
+        polyline: [0, 0, 0, 1, 0, 0],
+        length: 1,
+        curve: { type: "other" },
+      },
+    ],
+    vertices: [{ name: "v", position: [1, 0, 0] }],
+    bbox: { min: [0, 0, 0], max: [1, 1, 0] },
+  };
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(2, 2),
+    new THREE.MeshBasicMaterial(),
+  );
+  plane.userData.originPlane = "XY";
+  const construction = plane.clone();
+  construction.userData = { constructionPlane: "offset" };
+  construction.position.set(1, 2, 3);
+  construction.rotation.x = Math.PI / 2;
+  const constructionPlanes = new THREE.Group();
+  constructionPlanes.position.z = 4;
+  constructionPlanes.add(construction);
+  const axis = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(),
+      new THREE.Vector3(0, 0, 1),
+    ]),
+  );
+  const ctx = new HighlightContext(root, {
+    bodies: new Map([["b", { mesh, payload }]]),
+    originPlaneMeshes: [plane],
+    originAxisLines: new Map([["Z", axis]]),
+    constructionPlanes,
+  });
+  return { root, ctx, mesh, plane, construction };
+}
+
+describe("registered highlights", () => {
+  it.each(["select", "hover"] as const)(
+    "renders every core kind with existing %s appearance",
+    (style) => {
+      for (const [selection] of cases) {
+        const { root, ctx, mesh } = highlightFixture();
+        highlightSelection(selection, style, ctx);
+        ctx.flush();
+        const rendered = [
+          "body",
+          "face",
+          "edge",
+          "vertex",
+          "plane",
+          "axis",
+        ].includes(selection.kind);
+        expect(root.children).toHaveLength(rendered ? 1 : 0);
+        if (!rendered) continue;
+        const object = root.children[0]! as THREE.Mesh;
+        const material = object.material as THREE.MeshBasicMaterial;
+        expect(object.userData.themeToken).toBe(
+          style === "select" ? "selection" : "hover",
+        );
+        expect(material.color.getHex()).toBe(
+          new THREE.Color(themeColor(object.userData.themeToken)).getHex(),
+        );
+        if (selection.kind === "body" || selection.kind === "face") {
+          expect(object.geometry.getAttribute("position")).toBe(
+            mesh.geometry.getAttribute("position"),
+          );
+          expect(object.geometry.index!.array).toEqual(
+            new Uint16Array([0, 1, 2]),
+          );
+          expect(material.opacity).toBe(
+            HIGHLIGHT_APPEARANCE.faceOpacity[style],
+          );
+          expect(object.renderOrder).toBe(5);
+        } else if (selection.kind === "edge" || selection.kind === "axis") {
+          expect(object).toBeInstanceOf(THREE.Line);
+          expect(object.geometry.getAttribute("position").count).toBe(2);
+          expect(material.depthTest).toBe(false);
+          expect(object.renderOrder).toBe(10);
+        } else if (selection.kind === "vertex") {
+          expect(object).toBeInstanceOf(THREE.Points);
+          expect(
+            Array.from(object.geometry.getAttribute("position").array),
+          ).toEqual([1, 0, 0]);
+          expect(object.renderOrder).toBe(11);
+        } else {
+          expect(material.opacity).toBe(
+            HIGHLIGHT_APPEARANCE.originPlaneOpacity,
+          );
+          expect(material.side).toBe(THREE.DoubleSide);
+          expect(material.depthWrite).toBe(false);
+        }
+        clearGroup(root);
+        expect(mesh.geometry.getAttribute("position").count).toBe(3);
+      }
+    },
+  );
+
+  it("clones construction planes with their world transform and retains source resources", () => {
+    const { root, ctx, construction } = highlightFixture();
+    highlightSelection(
+      {
+        kind: "plane",
+        ref: { kind: "construction", featureId: "offset" },
+        label: "Plane",
+      },
+      "select",
+      ctx,
+    );
+    ctx.flush();
+    expect(root.children).toHaveLength(1);
+    const clone = root.children[0]! as THREE.Mesh;
+    expect(clone.geometry).not.toBe(construction.geometry);
+    expect(clone.matrix).toEqual(construction.matrixWorld);
+    const disposed: string[] = [];
+    construction.geometry.addEventListener("dispose", () =>
+      disposed.push("source geometry"),
+    );
+    construction.material.addEventListener("dispose", () =>
+      disposed.push("source material"),
+    );
+    clone.geometry.addEventListener("dispose", () =>
+      disposed.push("highlight geometry"),
+    );
+    (clone.material as THREE.Material).addEventListener("dispose", () =>
+      disposed.push("highlight material"),
+    );
+    clearGroup(root);
+    expect(disposed).toEqual(["highlight geometry", "highlight material"]);
+    expect(construction.parent).toBeTruthy();
+  });
+
+  it("uses registered extension highlights and refuses them after disposal", () => {
+    const node: Selection = { kind: "test.highlight", nodeId: "n" };
+    const { root, ctx } = highlightFixture();
+    const dispose = registerSelectionKind({
+      kind: "test.highlight",
+      key: () => "n",
+      toRef: () => "n",
+      fromRef: () => node,
+      highlight: (selection, style, context) => {
+        expect(selection.nodeId).toBe("n");
+        context.point([2, 3, 4], style);
+      },
+    });
+    try {
+      highlightSelection(node, "hover", ctx);
+      expect(root.children).toHaveLength(1);
+      expect(
+        Array.from(
+          (root.children[0]! as THREE.Points).geometry.getAttribute("position")
+            .array,
+        ),
+      ).toEqual([2, 3, 4]);
+    } finally {
+      dispose();
+    }
+    expect(() => highlightSelection(node, "hover", ctx)).toThrow(
+      "Unregistered selection kind: test.highlight",
+    );
+    clearGroup(root);
+  });
+
+  it("keeps absent geometry, face planes and sketch-renderer selections empty", () => {
+    const { root, ctx } = highlightFixture();
+    for (const selection of [
+      { kind: "body", bodyId: "missing" },
+      { kind: "face", bodyId: "b", faceName: "missing" },
+      { kind: "edge", bodyId: "b", edgeName: "missing" },
+      { kind: "vertex", bodyId: "b", vertexName: "missing" },
+      {
+        kind: "plane",
+        ref: { kind: "construction", featureId: "missing" },
+        label: "Plane",
+      },
+      {
+        kind: "plane",
+        ref: {
+          kind: "face",
+          face: { kind: "face", bodyId: "b", faceName: "f" },
+        },
+        label: "Face",
+      },
+    ] satisfies Selection[])
+      highlightSelection(selection, "select", ctx);
+    ctx.flush();
+    expect(root.children).toEqual([]);
+  });
 });
