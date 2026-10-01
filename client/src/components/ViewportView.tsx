@@ -1628,15 +1628,6 @@ export function ViewportView() {
     if (command) {
       const r = vp.pick(e.clientX, e.clientY, command.pickFilter);
       picked = command.onHover(r?.selection ?? null, e);
-    } else if (s.mode.name === "pickPlane") {
-      const r = vp.pick(e.clientX, e.clientY, {
-        originPlanes: true,
-        constructionPlanes: true,
-        faces: true,
-      });
-      if (r && (r.selection.kind === "plane" || planarFace(r.selection))) {
-        picked = r.selection;
-      }
     } else if (s.mode.name === "sketch") {
       const tool = (s.mode as any).tool as string;
       if (tool === "project") {
@@ -2163,30 +2154,6 @@ export function ViewportView() {
         depth: toolState.current.pickDepth,
       });
       await command.onClick(r?.selection ?? null, e);
-      return;
-    }
-
-    if (s.mode.name === "pickPlane") {
-      const r = vp.pick(e.clientX, e.clientY, {
-        originPlanes: true,
-        constructionPlanes: true,
-        faces: true,
-      });
-      if (!r) return;
-      if (r.selection.kind === "plane") {
-        await s.startSketchOnPlane(r.selection.ref);
-        alignCameraToActiveSketch();
-      } else if (r.selection.kind === "face" && planarFace(r.selection)) {
-        await s.startSketchOnPlane({
-          kind: "face",
-          face: {
-            kind: "face",
-            bodyId: r.selection.bodyId,
-            faceName: r.selection.faceName,
-          },
-        });
-        alignCameraToActiveSketch();
-      }
       return;
     }
 
@@ -3118,9 +3085,7 @@ function ViewportHud() {
   }, [jobStartedAt]);
 
   let hint = active ? (activeCommand()?.hint ?? "") : "";
-  if (!active && mode.name === "pickPlane")
-    hint = "Select a plane or planar face to sketch on";
-  else if (!active && mode.name === "sketch") {
+  if (!active && mode.name === "sketch") {
     const toolHints: Record<string, string> = {
       select: "Drag points to adjust · click to select",
       line: "Click points to chain lines · double-click / Esc to end",

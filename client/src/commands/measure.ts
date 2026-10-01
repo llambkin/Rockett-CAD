@@ -16,7 +16,7 @@ let unsubscribe: (() => void) | undefined;
 
 function picksChanged(selection: Selection[]) {
   const { active } = useStore.getState();
-  if (!active) return;
+  if (active?.id !== "inspect.measure") return;
   const picks = selection.filter(measurable).slice(0, 2);
   useStore.setState({
     selection: picks,
@@ -33,7 +33,12 @@ function picksChanged(selection: Selection[]) {
 
 async function measure() {
   const { active, document, projectId } = useStore.getState();
-  if (!active || !document || active.state.picks.length === 0) return;
+  if (
+    active?.id !== "inspect.measure" ||
+    !document ||
+    active.state.picks.length === 0
+  )
+    return;
   const state = { ...active.state, pending: true };
   useStore.setState({ active: { ...active, state } });
   const current = () => {
@@ -75,7 +80,7 @@ export const measureCommand: ActiveCommand = {
     });
     unsubscribe = useStore.subscribe((next, previous) => {
       if (
-        !next.active ||
+        next.active?.id !== "inspect.measure" ||
         next.projectId !== previous.projectId ||
         next.document !== previous.document ||
         next.mode.name !== "idle"
@@ -97,7 +102,7 @@ export const measureCommand: ActiveCommand = {
     selection && measurable(selection) ? selection : null,
   async onClick(selection) {
     const { active } = useStore.getState();
-    if (!active) return;
+    if (active?.id !== "inspect.measure") return;
     if (!selection) picksChanged([]);
     else if (measurable(selection)) {
       picksChanged(

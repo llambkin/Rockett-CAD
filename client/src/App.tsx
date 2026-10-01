@@ -4,6 +4,7 @@ import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
 import { Toolbar } from "./components/Toolbar";
 import "./commands/design";
+import { activeCommand } from "./commands/active";
 import { installKeymap } from "./commands/keymap";
 import { registerCommand } from "./commands/registry";
 import { ModelTree } from "./components/ModelTree";
@@ -253,7 +254,8 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
   const setError = useStore((s) => s.setError);
   const busy = useStore((s) => s.busy);
   const projectName = useStore((s) => s.document?.name ?? "");
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
+  const banner = active && activeCommand()?.banner;
 
   useEffect(installKeymap, []);
   useEffect(
@@ -322,11 +324,7 @@ function Workspace({ onUsers }: { onUsers: () => void }) {
           </button>
         </div>
       )}
-      {mode.name === "pickPlane" && (
-        <div className="mode-banner">
-          Select a plane or planar face for the sketch (Esc to cancel)
-        </div>
-      )}
+      {banner && <div className="mode-banner">{banner}</div>}
     </div>
   );
 }

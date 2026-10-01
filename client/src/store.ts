@@ -99,7 +99,6 @@ export type DialogType = FeatureType | "export";
 
 export type Mode =
   | { name: "idle" }
-  | { name: "pickPlane"; purpose: "sketch" }
   | {
       name: "sketch";
       sketchId: string;

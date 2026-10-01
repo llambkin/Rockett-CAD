@@ -39,13 +39,12 @@ import {
 type PlaneSelection = Extract<Selection, { kind: "plane" }>;
 type Kind = TreeGroup["kind"];
 
-const sketchOn = (ref: PlaneRef) =>
-  void useStore
-    .getState()
-    .startSketchOnPlane(ref)
-    .then(() => alignToSketch());
+const sketchOn = (ref: PlaneRef) => {
+  useStore.getState().setSelection([{ kind: "plane", ref, label: "Plane" }]);
+  void runCommand("design.sketch.create");
+};
 const planeMenu = (ref: PlaneRef): MenuItem[] =>
-  ["idle", "pickPlane"].includes(useStore.getState().mode.name)
+  useStore.getState().mode.name === "idle"
     ? [{ label: "Create sketch", action: () => sketchOn(ref) }]
     : [];
 const deleteItem = (id: string): MenuItem => ({
@@ -252,7 +251,7 @@ export const ModelTree = memo(function ModelTree() {
       key={sel.label}
       className={`tree-item ${selKeys.has(selectionKey(sel)) ? "selected" : ""}`}
       onClick={(e) => {
-        if (useStore.getState().mode.name === "pickPlane") {
+        if (useStore.getState().active?.id === "design.sketch.create") {
           sketchOn(sel.ref);
           return;
         }

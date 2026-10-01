@@ -1,9 +1,10 @@
+import { sketchCreateCommand } from "./sketchCreate";
 import { measureCommand } from "./measure";
 import { exitActive } from "./active";
 import { filterSelectionFor } from "../dialogPicks";
 import type { IconId } from "../icons";
 import { useStore, type DialogType } from "../store";
-import { alignCameraToActiveSketch, viewportHandle } from "../viewportRef";
+import { viewportHandle } from "../viewportRef";
 import { NamedViewSelect } from "../components/NamedViewSelect";
 import { StepImportButton } from "../components/StepImportButton";
 import {
@@ -27,36 +28,13 @@ export function toggleProjection() {
   );
 }
 
-async function createSketch(s: CommandContext) {
-  const plane = s.selection.find((x) => x.kind === "plane");
-  if (plane) {
-    await s.startSketchOnPlane(plane.ref);
-    alignCameraToActiveSketch();
-    return;
-  }
-  const face = s.selection.find((x) => x.kind === "face");
-  if (face) {
-    const body = s.evaluation?.bodies.find((b) => b.bodyId === face.bodyId);
-    const surf = body?.faces.find((f) => f.name === face.faceName)?.surface;
-    if (surf?.type === "plane") {
-      await s.startSketchOnPlane({
-        kind: "face",
-        face: { kind: "face", bodyId: face.bodyId, faceName: face.faceName },
-      });
-      alignCameraToActiveSketch();
-      return;
-    }
-  }
-  s.setMode({ name: "pickPlane", purpose: "sketch" });
-}
-
 const idle = (s: CommandContext) => !s.busy || "Wait for the current job";
 
 function cancel(s: CommandContext) {
   const { mode } = s;
   if (mode.name === "sketch" && mode.tool !== "select")
     return s.setSketchTool("select");
-  if (mode.name === "pickPlane") return s.setMode({ name: "idle" });
+  if (s.active?.id === "design.sketch.create") return exitActive();
   if (mode.name === "dialog") return s.cancelDialog();
   s.setSelection([]);
 }
@@ -86,7 +64,7 @@ registerToolbarGroup({
 });
 
 registerCommand({
-  id: "design.sketch",
+  id: "design.sketch.create",
   label: "Create Sketch",
   icon: "sketch",
   group: "design.group.sketch",
@@ -95,7 +73,9 @@ registerCommand({
   keyContext: "design",
   primary: true,
   enabled: idle,
-  run: createSketch,
+  interaction: sketchCreateCommand,
+  active: (s) => s.active?.id === "design.sketch.create",
+  run: () => sketchCreateCommand.enter(),
 });
 
 const DIALOG_KEYS: Partial<Record<DialogType, string>> = {

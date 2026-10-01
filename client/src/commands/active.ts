@@ -3,11 +3,9 @@ import { useStore, type Selection } from "../store";
 import { commandById, type CommandContext } from "./registry";
 import type { MeasureState } from "./measure";
 
-export interface Active {
-  id: "inspect.measure";
-  state: MeasureState;
-  editTarget?: string;
-}
+export type Active =
+  | { id: "inspect.measure"; state: MeasureState; editTarget?: string }
+  | { id: "design.sketch.create"; state?: never };
 
 export interface ActiveCommand {
   enter(): void;
@@ -17,7 +15,8 @@ export interface ActiveCommand {
   onClick(selection: Selection | null, event: PointerEvent): Promise<void>;
   onContextMenu(selection: Selection | null, event: PointerEvent): void;
   hint: string;
-  panel: string;
+  panel?: string;
+  banner?: string;
   keyContext: string;
 }
 
