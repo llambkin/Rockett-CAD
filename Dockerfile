@@ -16,6 +16,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 FROM deps AS server
 COPY shared shared
 COPY server server
+COPY modules/kernel/blend/blend.wasm modules/kernel/blend/blend.wasm
 RUN npm run build --workspace server
 
 FROM deps AS client
@@ -53,7 +54,7 @@ COPY THIRD-PARTY-NOTICES.md ./
 RUN --mount=type=bind,from=notices,source=/app,target=/build \
   sh /build/scripts/check-notices.sh --collect /app/licences
 
-COPY --from=server /app/server/dist/server.mjs /app/server/dist/kernel-worker.mjs ./
+COPY --from=server /app/server/dist/server.mjs /app/server/dist/kernel-worker.mjs /app/server/dist/blend.wasm ./
 COPY --from=client /app/client/dist client/dist
 
 # Non-root user; /data is the single persistent volume.

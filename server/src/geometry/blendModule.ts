@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import type { Vec3 } from "@rockett/shared";
 
+declare const BLEND_WASM_URL: string;
+
 type Exports = {
   memory: WebAssembly.Memory;
   _initialize(): void;
@@ -16,7 +18,12 @@ let compiled: WebAssembly.Module | undefined;
 export function blendModule(): WebAssembly.Module {
   compiled ??= new WebAssembly.Module(
     readFileSync(
-      new URL("../../../modules/kernel/blend/blend.wasm", import.meta.url),
+      new URL(
+        typeof BLEND_WASM_URL === "string"
+          ? BLEND_WASM_URL
+          : "../../../modules/kernel/blend/blend.wasm",
+        import.meta.url,
+      ),
     ),
   );
   return compiled;
