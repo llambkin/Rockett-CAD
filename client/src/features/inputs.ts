@@ -10,23 +10,12 @@ import type {
 } from "@rockett/shared";
 import { useStore, type Selection } from "../store";
 import { fromRef, refsOf, toRef } from "../selection/kinds";
-import { HANDLE_VALUES, type HandleDialog } from "../three/featureHandles";
 import { toolTargets } from "../toolTargets";
 import type { SharedInputParams } from "./registry";
 
 export const profileHint = "click sketch regions or Shift-click planar faces";
 
-export const num = <P extends object>(
-  params: P,
-  key: keyof P,
-  dflt: number,
-) => {
-  const v = Number(params[key]);
-  return Number.isFinite(v) ? v : dflt;
-};
-
-export const handleValue = (params: SharedInputParams, d: HandleDialog) =>
-  num(params, HANDLE_VALUES[d].param, HANDLE_VALUES[d].fallback);
+export { num } from "./registry";
 
 export const profileRefs = (selection: Selection[]): ProfileRef[] =>
   refsOf(selection, "profile");

@@ -1,3 +1,4 @@
+import type { FeatureHandleDefinition } from "../three/featureHandles";
 import { newId, type ExtrudeFeature } from "@rockett/shared";
 import {
   LengthField,
@@ -16,7 +17,6 @@ import { getSetting, useSetting } from "../settings";
 import {
   bodyTargets,
   facePicks,
-  handleValue,
   num,
   profilePicks,
   profileHint,
@@ -44,7 +44,13 @@ export type ExtrudeParams = InputParams<
   >
 > & { autoOperation?: boolean | undefined };
 
-const distance = (params: ExtrudeParams) => handleValue(params, "extrude");
+const handle = {
+  param: "distance",
+  fallback: 10,
+} satisfies FeatureHandleDefinition<ExtrudeParams>;
+
+const distance = (params: ExtrudeParams) =>
+  num(params, handle.param, handle.fallback);
 
 function ExtrudeForm({ params, setParams }: FeatureFormProps<ExtrudeParams>) {
   const units = useSetting("units.length");
@@ -214,6 +220,7 @@ function extrudeGizmo({
 
 export const extrude: FeatureUI<ExtrudeFeature, ExtrudeParams> = {
   type: "extrude",
+  handle,
   initialParams: {},
   gizmo: extrudeGizmo,
   icon: "⬆",

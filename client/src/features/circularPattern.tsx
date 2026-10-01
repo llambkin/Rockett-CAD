@@ -1,3 +1,7 @@
+import {
+  bodyCenter,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { newId, type CircularPatternFeature } from "@rockett/shared";
 import {
   AxisField,
@@ -16,7 +20,6 @@ import {
   axisSelection,
   bodyIds,
   bodyPicks,
-  handleValue,
   num,
   type AxisParams,
 } from "./inputs";
@@ -34,6 +37,16 @@ export type CircularPatternParams = InputParams<
   >
 > &
   AxisParams;
+
+const handle = {
+  param: "totalAngle",
+  fallback: 360,
+  signed: true,
+  place: (input) => {
+    const through = bodyCenter(input);
+    return through && { kind: "arc", through };
+  },
+} satisfies FeatureHandleDefinition<CircularPatternParams>;
 
 function CircularPatternForm({
   params,
@@ -67,7 +80,7 @@ function CircularPatternForm({
       />
       <NumField
         label="Total angle (°)"
-        value={handleValue(params, "circularPattern")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ totalAngle: v })}
       />
       <CheckField
@@ -84,6 +97,7 @@ export const circularPattern: FeatureUI<
   CircularPatternParams
 > = {
   type: "circularPattern",
+  handle,
   initialParams: {},
   icon: "❋",
   title: "Circular Pattern",
@@ -103,7 +117,7 @@ export const circularPattern: FeatureUI<
       bodies: ids,
       axis: axisOf,
       count: Math.round(num(params, "count", 6)),
-      totalAngle: handleValue(params, "circularPattern"),
+      totalAngle: num(params, handle.param, handle.fallback),
       combine: !!(params.combine ?? false),
     };
   },

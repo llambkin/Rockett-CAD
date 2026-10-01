@@ -15,7 +15,10 @@ import { autoOperation, toolOperation } from "../extrudeReach";
 import { findProfile, formatAngle } from "@rockett/shared";
 import { RevolveGizmo, ringThrough, featureAxis } from "../three/RevolveGizmo";
 import { uv3 } from "../three/CadViewport";
-import { profileCentroid } from "../three/featureHandles";
+import {
+  profileCentroid,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { previewedFeature } from "../store";
 import { dragPreview } from "../toolTargets";
 import type { FeatureGizmoContext, GizmoPointer } from "../three/featureGizmos";
@@ -29,12 +32,12 @@ import {
   axisSelection,
   bodyTargets,
   facePicks,
-  handleValue,
   profilePicks,
   profileHint,
   profileSources,
   storedFeature,
   type AxisParams,
+  num,
 } from "./inputs";
 import {
   registerFeatureUI,
@@ -47,6 +50,11 @@ export type RevolveParams = InputParams<
   Pick<RevolveFeature, "id" | "name" | "angle" | "operation" | "targets">
 > &
   AxisParams & { autoOperation?: boolean | undefined };
+
+const handle = {
+  param: "angle",
+  fallback: 360,
+} satisfies FeatureHandleDefinition<RevolveParams>;
 
 function RevolveForm({ params, setParams }: FeatureFormProps<RevolveParams>) {
   const selection = useStore((s) => s.selection);
@@ -71,7 +79,7 @@ function RevolveForm({ params, setParams }: FeatureFormProps<RevolveParams>) {
       <NumField
         label="Angle (°)"
         autoFocus
-        value={handleValue(params, "revolve")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ angle: v })}
       />
       <OperationField intersect />
@@ -146,11 +154,11 @@ class RevolveLayer {
           ring.dir,
           ring.zeroDir,
           ring.radius,
-          handleValue(params, "revolve"),
+          num(params, handle.param, handle.fallback),
         );
       }
     }
-    this.gizmo?.update(handleValue(params, "revolve"));
+    this.gizmo?.update(num(params, handle.param, handle.fallback));
     this.syncGhost();
   }
   private syncGhost() {
@@ -162,7 +170,7 @@ class RevolveLayer {
             sketch: this.sketch,
             profile: this.profile,
             axis: resolvedAxis,
-            angle: handleValue(this.context.params(), "revolve"),
+            angle: num(this.context.params(), handle.param, handle.fallback),
           },
     );
   }
@@ -220,6 +228,7 @@ class RevolveLayer {
 
 export const revolve: FeatureUI<RevolveFeature, RevolveParams> = {
   type: "revolve",
+  handle,
   initialParams: {},
   gizmo: revolveGizmo,
   icon: "↻",
@@ -240,7 +249,7 @@ export const revolve: FeatureUI<RevolveFeature, RevolveParams> = {
       suppressed: false,
       ...sources,
       axis: axisOf,
-      angle: handleValue(params, "revolve"),
+      angle: num(params, handle.param, handle.fallback),
       operation,
       ...bodyTargets(operation, params),
     };

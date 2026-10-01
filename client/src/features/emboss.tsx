@@ -1,3 +1,13 @@
+import * as THREE from "three";
+import { uv3 } from "../three/CadViewport";
+import {
+  arrow,
+  sketchOf,
+  first,
+  profileCentroid,
+  type HandleInput,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { newId, type EmbossFeature } from "@rockett/shared";
 import {
   LengthField,
@@ -8,7 +18,7 @@ import {
 import { profiles, targets } from "../commands/featureCommand";
 import { targetOperation } from "../toolTargets";
 import { useSetting } from "../settings";
-import { bodyTargets, handleValue, profilePicks, profileRefs } from "./inputs";
+import { bodyTargets, profilePicks, profileRefs, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -20,6 +30,24 @@ export type EmbossParams = InputParams<
   Pick<EmbossFeature, "id" | "name" | "depth" | "targets">
 > &
   InputParams<{ embossMode: EmbossFeature["mode"] }>;
+
+function embossRay(input: HandleInput) {
+  const found = sketchOf(input.evaluation, first(input, "profile"));
+  if (!found) return null;
+  const [u, v] = profileCentroid(found.profile);
+  const sign = input.params.embossMode === "deboss" ? -1 : 1;
+  return {
+    origin: uv3(found.sketch.frame, u, v),
+    axis: new THREE.Vector3(...found.sketch.frame.normal).multiplyScalar(sign),
+  };
+}
+
+const handle = {
+  param: "depth",
+  fallback: 1,
+  signed: false,
+  place: (input) => arrow(embossRay(input)),
+} satisfies FeatureHandleDefinition<EmbossParams>;
 
 function EmbossForm({ params, setParams }: FeatureFormProps<EmbossParams>) {
   const units = useSetting("units.length");
@@ -34,7 +62,7 @@ function EmbossForm({ params, setParams }: FeatureFormProps<EmbossParams>) {
         label="Depth"
         units={units}
         autoFocus
-        value={handleValue(params, "emboss")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ depth: v })}
       />
       <SelectField
@@ -53,6 +81,7 @@ function EmbossForm({ params, setParams }: FeatureFormProps<EmbossParams>) {
 
 export const emboss: FeatureUI<EmbossFeature, EmbossParams> = {
   type: "emboss",
+  handle,
   initialParams: {},
   icon: "℘",
   title: "Emboss",
@@ -68,7 +97,7 @@ export const emboss: FeatureUI<EmbossFeature, EmbossParams> = {
       name: params.name ?? "",
       suppressed: false,
       profiles: refs,
-      depth: handleValue(params, "emboss"),
+      depth: num(params, handle.param, handle.fallback),
       mode: params.embossMode ?? "emboss",
       ...bodyTargets(targetOperation("emboss", params), params),
     };

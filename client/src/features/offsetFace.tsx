@@ -1,7 +1,13 @@
+import {
+  arrow,
+  faceRay,
+  first,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { newId, type OffsetFaceFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
-import { facePicks, faceRefs, handleValue } from "./inputs";
+import { facePicks, faceRefs, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -12,6 +18,13 @@ import {
 export type OffsetFaceParams = InputParams<
   Pick<OffsetFaceFeature, "id" | "name" | "distance">
 >;
+
+const handle = {
+  param: "distance",
+  fallback: 5,
+  signed: true,
+  place: (input) => arrow(faceRay(input.bodies, first(input, "face"))),
+} satisfies FeatureHandleDefinition<OffsetFaceParams>;
 
 function OffsetFaceForm({
   params,
@@ -25,7 +38,7 @@ function OffsetFaceForm({
         label="Distance, − = inward"
         units={units}
         autoFocus
-        value={handleValue(params, "offsetFace")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ distance: v })}
       />
     </>
@@ -34,6 +47,7 @@ function OffsetFaceForm({
 
 export const offsetFace: FeatureUI<OffsetFaceFeature, OffsetFaceParams> = {
   type: "offsetFace",
+  handle,
   initialParams: {},
   icon: "⇱",
   title: "Press / Pull",
@@ -49,7 +63,7 @@ export const offsetFace: FeatureUI<OffsetFaceFeature, OffsetFaceParams> = {
       name: params.name ?? "",
       suppressed: false,
       faces,
-      distance: handleValue(params, "offsetFace"),
+      distance: num(params, handle.param, handle.fallback),
     };
   },
   prefill: (f) => ({

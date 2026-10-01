@@ -1,4 +1,4 @@
-import type { SharedInputParams } from "../features/registry";
+import { featureUI, type SharedInputParams } from "../features/registry";
 import * as THREE from "three";
 import type {
   BodyPayload,
@@ -10,72 +10,19 @@ import type {
 } from "@rockett/shared";
 import { findProfile } from "@rockett/shared";
 import type { Selection } from "../store";
-import { ORIGIN_PLANE_DEFS, uv3 } from "./CadViewport";
+import { ORIGIN_PLANE_DEFS } from "./CadViewport";
 
-export const HANDLE_VALUES = {
-  extrude: { param: "distance", fallback: 10 },
-  revolve: { param: "angle", fallback: 360 },
-  fillet: {
-    param: "radius",
-    fallback: 2,
-    signed: false,
-    place: (i: HandleInput) => arrow(edgeRay(i.bodies, first(i, "edge"))),
-  },
-  chamfer: {
-    param: "distance",
-    fallback: 1,
-    signed: false,
-    place: (i: HandleInput) => arrow(edgeRay(i.bodies, first(i, "edge"))),
-  },
-  shell: {
-    param: "thickness",
-    fallback: 2,
-    signed: false,
-    place: (i: HandleInput) => {
-      const ray = faceRay(i.bodies, first(i, "face"));
-      return arrow(ray && { origin: ray.origin, axis: ray.axis.negate() });
-    },
-  },
-  offsetFace: {
-    param: "distance",
-    fallback: 5,
-    signed: true,
-    place: (i: HandleInput) => arrow(faceRay(i.bodies, first(i, "face"))),
-  },
-  emboss: {
-    param: "depth",
-    fallback: 1,
-    signed: false,
-    place: (i: HandleInput) => arrow(embossRay(i)),
-  },
-  constructionPlane: {
-    param: "distance",
-    fallback: 10,
-    signed: true,
-    place: (i: HandleInput) => arrow(offsetPlaneRay(i)),
-  },
-  linearPattern: {
-    param: "spacing",
-    fallback: 20,
-    signed: true,
-    place: (i: HandleInput) => {
-      const origin = bodyCenter(i);
-      const axis = patternDirection(i);
-      return arrow(origin && axis && { origin, axis });
-    },
-  },
-  circularPattern: {
-    param: "totalAngle",
-    fallback: 360,
-    signed: true,
-    place: (i: HandleInput): Placement | null => {
-      const through = bodyCenter(i);
-      return through && { kind: "arc", through };
-    },
-  },
-} as const;
+export type NumericParam<P> = {
+  [K in keyof P]-?: number extends NonNullable<P[K]> ? K : never;
+}[keyof P] &
+  string;
 
-export type HandleDialog = keyof typeof HANDLE_VALUES;
+export interface FeatureHandleDefinition<P> {
+  param: NumericParam<P>;
+  fallback: number;
+  signed?: boolean;
+  place?: (input: HandleInput<P>) => Placement | null;
+}
 
 interface Ray {
   origin: THREE.Vector3;
@@ -85,21 +32,21 @@ interface Ray {
 type Placement =
   ({ kind: "arrow" } & Ray) | { kind: "arc"; through: THREE.Vector3 };
 
-const arrow = (ray: Ray | null): Placement | null =>
+export const arrow = (ray: Ray | null): Placement | null =>
   ray && { kind: "arrow", ...ray };
 
-const first = (input: HandleInput, kind: Selection["kind"]) =>
+export const first = (input: HandleInput, kind: Selection["kind"]) =>
   input.selection.find((s) => s.kind === kind);
 
 export type FeatureHandle = {
-  param: (typeof HANDLE_VALUES)[HandleDialog]["param"];
+  param: string;
   value: number;
   signed: boolean;
 } & Placement;
 
-export interface HandleInput {
+export interface HandleInput<P = SharedInputParams> {
   dialog: string;
-  params: SharedInputParams;
+  params: P;
   selection: Selection[];
   bodies: BodyPayload[];
   evaluation: EvaluateResult | null;
@@ -164,7 +111,7 @@ function faceNormal(body: BodyPayload, face: FaceInfo): THREE.Vector3 | null {
   return sum.lengthSq() > 1e-12 ? sum.normalize() : null;
 }
 
-function faceRay(
+export function faceRay(
   bodies: BodyPayload[],
   sel: Selection | undefined,
 ): Ray | null {
@@ -177,7 +124,7 @@ function faceRay(
   return origin && axis ? { origin, axis } : null;
 }
 
-function edgeRay(
+export function edgeRay(
   bodies: BodyPayload[],
   sel: Selection | undefined,
 ): Ray | null {
@@ -227,7 +174,7 @@ function edgeRay(
     : null;
 }
 
-function sketchOf(
+export function sketchOf(
   evaluation: EvaluateResult | null,
   sel: Selection | undefined,
 ): { sketch: SketchPayload; profile: Profile } | null {
@@ -237,7 +184,7 @@ function sketchOf(
   return sketch && profile ? { sketch, profile } : null;
 }
 
-function planeRay(input: HandleInput): Ray | null {
+export function planeRay(input: HandleInput): Ray | null {
   const { selection, evaluation, bodies } = input;
   const plane = selection.find((s) => s.kind === "plane");
   if (!plane)
@@ -259,7 +206,7 @@ function planeRay(input: HandleInput): Ray | null {
     : null;
 }
 
-function bodyCenter(input: HandleInput): THREE.Vector3 | null {
+export function bodyCenter(input: HandleInput): THREE.Vector3 | null {
   const sel = input.selection.find((s) => s.kind === "body");
   const body = input.bodies.find(
     (b) => sel?.kind === "body" && b.bodyId === sel.bodyId,
@@ -271,55 +218,10 @@ function bodyCenter(input: HandleInput): THREE.Vector3 | null {
     : null;
 }
 
-function patternDirection(input: HandleInput): THREE.Vector3 | null {
-  const { params, selection, bodies } = input;
-  const edge = selection.find((s) => s.kind === "edge");
-  if ((params.axisSource ?? "origin") === "edge") {
-    if (edge?.kind !== "edge") return null;
-    const pl = bodies
-      .find((b) => b.bodyId === edge.bodyId)
-      ?.edges.find((e) => e.name === edge.edgeName)?.polyline;
-    if (!pl || pl.length < 6) return null;
-    const n = pl.length;
-    return new THREE.Vector3(
-      pl[n - 3]! - pl[0]!,
-      pl[n - 2]! - pl[1]!,
-      pl[n - 1]! - pl[2]!,
-    ).normalize();
-  }
-  const axis: string = params.axis ?? "X";
-  return new THREE.Vector3(
-    axis === "X" ? 1 : 0,
-    axis === "Y" ? 1 : 0,
-    axis === "Z" ? 1 : 0,
-  );
-}
-
-function embossRay(input: HandleInput): Ray | null {
-  const found = sketchOf(input.evaluation, first(input, "profile"));
-  if (!found) return null;
-  const [u, v] = profileCentroid(found.profile);
-  const sign = input.params.embossMode === "deboss" ? -1 : 1;
-  return {
-    origin: uv3(found.sketch.frame, u, v),
-    axis: new THREE.Vector3(...found.sketch.frame.normal).multiplyScalar(sign),
-  };
-}
-
-function offsetPlaneRay(input: HandleInput): Ray | null {
-  if ((input.params.method ?? "offset") !== "offset") return null;
-  const ray = planeRay(input);
-  if (ray && input.params.flip) ray.axis.negate();
-  return ray;
-}
-
-export function featureHandle(input: HandleInput): FeatureHandle | null {
-  if (!(input.dialog in HANDLE_VALUES)) return null;
-  const definition = HANDLE_VALUES[input.dialog as HandleDialog];
-  if (!("place" in definition)) return null;
-  const { param, fallback, signed, place } = definition;
-  const raw = Number(input.params[param]);
-  const value = Number.isFinite(raw) ? raw : fallback;
-  const at = place(input);
-  return at && { param, value, signed, ...at };
+export function featureHandle<P extends SharedInputParams>(
+  input: HandleInput<P>,
+): FeatureHandle | null {
+  const ui = featureUI(input.dialog);
+  if (!ui?.handle) return null;
+  return ui.create(input.params).handle(input);
 }

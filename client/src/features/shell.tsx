@@ -1,8 +1,13 @@
+import {
+  arrow,
+  faceRay,
+  first,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { newId, type ShellFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
-import { HANDLE_VALUES } from "../three/featureHandles";
-import { facePicks, faceRefs } from "./inputs";
+import { facePicks, faceRefs, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -14,10 +19,18 @@ export type ShellParams = InputParams<
   Pick<ShellFeature, "id" | "name" | "thickness">
 >;
 
-const thickness = (params: ShellParams) => {
-  const v = Number(params.thickness);
-  return Number.isFinite(v) ? v : HANDLE_VALUES.shell.fallback;
-};
+const handle = {
+  param: "thickness",
+  fallback: 2,
+  signed: false,
+  place: (input) => {
+    const ray = faceRay(input.bodies, first(input, "face"));
+    return arrow(ray && { origin: ray.origin, axis: ray.axis.negate() });
+  },
+} satisfies FeatureHandleDefinition<ShellParams>;
+
+const thickness = (params: ShellParams) =>
+  num(params, handle.param, handle.fallback);
 
 function ShellForm({ params, setParams }: FeatureFormProps<ShellParams>) {
   const units = useSetting("units.length");
@@ -41,6 +54,7 @@ function ShellForm({ params, setParams }: FeatureFormProps<ShellParams>) {
 
 export const shell: FeatureUI<ShellFeature, ShellParams> = {
   type: "shell",
+  handle,
   initialParams: {},
   icon: "▢",
   title: "Shell",

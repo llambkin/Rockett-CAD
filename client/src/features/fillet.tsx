@@ -1,8 +1,14 @@
+import {
+  arrow,
+  edgeRay,
+  first,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { newId, type FilletFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
 import { edges } from "../commands/featureCommand";
-import { edgePicks, edgeRefs, handleValue } from "./inputs";
+import { edgePicks, edgeRefs, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -15,6 +21,13 @@ export type FilletParams = InputParams<
   Pick<FilletFeature, "id" | "name" | "radius" | "tangentChain">
 >;
 
+const handle = {
+  param: "radius",
+  fallback: 2,
+  signed: false,
+  place: (input) => arrow(edgeRay(input.bodies, first(input, "edge"))),
+} satisfies FeatureHandleDefinition<FilletParams>;
+
 function FilletForm({ params, setParams }: FeatureFormProps<FilletParams>) {
   const units = useSetting("units.length");
   return (
@@ -25,7 +38,7 @@ function FilletForm({ params, setParams }: FeatureFormProps<FilletParams>) {
         label="Radius"
         units={units}
         autoFocus
-        value={handleValue(params, "fillet")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ radius: v })}
       />
     </>
@@ -34,6 +47,7 @@ function FilletForm({ params, setParams }: FeatureFormProps<FilletParams>) {
 
 export const fillet: FeatureUI<FilletFeature, FilletParams> = {
   type: "fillet",
+  handle,
   initialParams: {},
   icon: "◠",
   title: "Fillet",
@@ -49,7 +63,7 @@ export const fillet: FeatureUI<FilletFeature, FilletParams> = {
       name: params.name ?? "",
       suppressed: false,
       edges,
-      radius: handleValue(params, "fillet"),
+      radius: num(params, handle.param, handle.fallback),
       tangentChain: params.tangentChain ?? true,
     };
   },

@@ -1,8 +1,14 @@
+import {
+  arrow,
+  edgeRay,
+  first,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
 import { newId, type ChamferFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
 import { edges } from "../commands/featureCommand";
-import { edgePicks, edgeRefs, handleValue } from "./inputs";
+import { edgePicks, edgeRefs, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -15,6 +21,13 @@ export type ChamferParams = InputParams<
   Pick<ChamferFeature, "id" | "name" | "tangentChain" | "distance">
 >;
 
+const handle = {
+  param: "distance",
+  fallback: 1,
+  signed: false,
+  place: (input) => arrow(edgeRay(input.bodies, first(input, "edge"))),
+} satisfies FeatureHandleDefinition<ChamferParams>;
+
 function ChamferForm({ params, setParams }: FeatureFormProps<ChamferParams>) {
   const units = useSetting("units.length");
   return (
@@ -25,7 +38,7 @@ function ChamferForm({ params, setParams }: FeatureFormProps<ChamferParams>) {
         label="Distance"
         units={units}
         autoFocus
-        value={handleValue(params, "chamfer")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ distance: v })}
       />
     </>
@@ -34,6 +47,7 @@ function ChamferForm({ params, setParams }: FeatureFormProps<ChamferParams>) {
 
 export const chamfer: FeatureUI<ChamferFeature, ChamferParams> = {
   type: "chamfer",
+  handle,
   icon: "◣",
   title: "Chamfer",
   group: "modify",
@@ -49,7 +63,7 @@ export const chamfer: FeatureUI<ChamferFeature, ChamferParams> = {
       name: params.name ?? "",
       suppressed: false,
       edges,
-      distance: handleValue(params, "chamfer"),
+      distance: num(params, handle.param, handle.fallback),
       tangentChain: params.tangentChain ?? true,
     };
   },

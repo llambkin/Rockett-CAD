@@ -1,4 +1,10 @@
 import {
+  arrow,
+  planeRay,
+  type HandleInput,
+  type FeatureHandleDefinition,
+} from "../three/featureHandles";
+import {
   newId,
   type AxisRef,
   type ConstructionPlaneFeature,
@@ -29,7 +35,6 @@ import {
   axisPicks,
   axisRef,
   axisSelection,
-  handleValue,
   num,
 } from "./inputs";
 import {
@@ -47,6 +52,20 @@ export type PlaneParams = InputParams<{
   flip: boolean;
 }> &
   AxisParams;
+
+function offsetPlaneRay(input: HandleInput) {
+  if ((input.params.method ?? "offset") !== "offset") return null;
+  const ray = planeRay(input);
+  if (ray && input.params.flip) ray.axis.negate();
+  return ray;
+}
+
+const handle = {
+  param: "distance",
+  fallback: 10,
+  signed: true,
+  place: (input) => arrow(offsetPlaneRay(input)),
+} satisfies FeatureHandleDefinition<PlaneParams>;
 
 type Method = ConstructionPlaneFeature["method"];
 
@@ -124,7 +143,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps<PlaneParams>) {
             label="Offset"
             units={units}
             autoFocus
-            value={handleValue(params, "constructionPlane")}
+            value={num(params, handle.param, handle.fallback)}
             onChange={(v) => setParams({ distance: v })}
           />
           {flipField}
@@ -205,7 +224,7 @@ function planeMethod(
       return {
         kind: "offset",
         base: refs[0]!,
-        distance: handleValue(params, "constructionPlane"),
+        distance: num(params, handle.param, handle.fallback),
         ...(flip && { flip }),
       };
     case "midplane": {
@@ -298,6 +317,7 @@ function prefillMethod(m: Method) {
 
 const constructionPlane: FeatureUI<ConstructionPlaneFeature, PlaneParams> = {
   type: "constructionPlane",
+  handle,
   icon: "▱",
   title: "Construction Plane",
   group: "construct",

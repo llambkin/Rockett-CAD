@@ -1,3 +1,8 @@
+import type {
+  FeatureHandleDefinition,
+  FeatureHandle,
+  HandleInput,
+} from "../three/featureHandles";
 import type { ViewportRef } from "../viewportRef";
 import { createElement, type ComponentType, type ReactNode } from "react";
 import {
@@ -58,6 +63,15 @@ export type SharedInputParams = InputParams<{
   tz: number;
 }>;
 
+export const num = <P extends object>(
+  params: P,
+  key: keyof P,
+  dflt: number,
+) => {
+  const v = Number(params[key]);
+  return Number.isFinite(v) ? v : dflt;
+};
+
 export type PickState = ReturnType<typeof useStore.getState>;
 
 export interface FeatureFormProps<P> {
@@ -86,6 +100,7 @@ interface FeatureUIBase<F extends Feature, P> {
   group: string;
   picks: readonly PickInput[];
   initialParams?: P;
+  handle?: FeatureHandleDefinition<P>;
   gizmo?(context: FeatureGizmoContext<P>): FeatureGizmo | undefined;
   picksFor?: (params: P) => readonly PickInput[];
   onPick?(
@@ -137,11 +152,17 @@ export interface RegisteredFeatureUI {
   title: string;
   group: string;
   picks: readonly PickInput[];
+  handle?: Pick<
+    FeatureHandleDefinition<SharedInputParams>,
+    "fallback" | "signed"
+  > & {
+    param: string;
+  };
   hasBuild: boolean;
   hasForm: boolean;
   hasPanel: boolean;
   open?: (f: Feature, viewport?: ViewportRef) => Promise<void>;
-  create(): FeatureInputs;
+  create(params?: SharedInputParams): FeatureInputs;
   prefill?: (f: Feature) => { inputs: FeatureInputs; selection: Selection[] };
 }
 
@@ -151,6 +172,23 @@ const featureUIs = createRegistry<RegisteredFeatureUI>(
   (ui) => ui.type,
 );
 export const featureUI = featureUIs.get;
+
+function placeHandle<P extends object>(
+  definition: FeatureHandleDefinition<P> | undefined,
+  params: P,
+  input: Omit<HandleInput, "params">,
+): FeatureHandle | null {
+  if (!definition?.place) return null;
+  const placement = definition.place({ ...input, params });
+  return (
+    placement && {
+      ...placement,
+      param: definition.param,
+      value: num(params, definition.param, definition.fallback),
+      signed: definition.signed ?? false,
+    }
+  );
+}
 
 export function createFeatureInputs<
   F extends Feature,
@@ -202,6 +240,9 @@ export function createFeatureInputs<
         setParams: (patch) => setParams(patch),
       });
     },
+    handle(input: Omit<HandleInput, "params">) {
+      return placeHandle(ui.handle, state.params, input);
+    },
     picks() {
       return ui.picksFor?.(state.params) ?? ui.picks;
     },
@@ -235,13 +276,14 @@ export function registerFeatureUI<
     title: ui.title,
     group: ui.group,
     picks: ui.picks,
+    ...(ui.handle && { handle: ui.handle }),
     hasBuild: !!ui.build,
     hasForm: !!ui.Form,
     hasPanel: !!ui.Panel,
-    create() {
+    create(params?: SharedInputParams) {
       if (!ui.initialParams)
         throw new Error(`Feature ${ui.type} has no input defaults`);
-      return createFeatureInputs(ui, ui.initialParams);
+      return createFeatureInputs(ui, { ...ui.initialParams, ...params });
     },
     ...(ui.open && {
       open: async (f: Feature, viewport?: ViewportRef) => {

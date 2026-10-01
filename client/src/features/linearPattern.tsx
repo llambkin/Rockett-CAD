@@ -1,3 +1,10 @@
+import * as THREE from "three";
+import {
+  arrow,
+  bodyCenter,
+  type FeatureHandleDefinition,
+  type HandleInput,
+} from "../three/featureHandles";
 import { newId, type LinearPatternFeature } from "@rockett/shared";
 import {
   AxisField,
@@ -16,7 +23,6 @@ import {
   bodyIds,
   bodyPicks,
   edgeRefs,
-  handleValue,
   num,
   type AxisParams,
 } from "./inputs";
@@ -31,6 +37,41 @@ export type LinearPatternParams = InputParams<
   Pick<LinearPatternFeature, "id" | "name" | "count" | "spacing" | "combine">
 > &
   AxisParams;
+
+function patternDirection(input: HandleInput): THREE.Vector3 | null {
+  const { params, selection, bodies } = input;
+  const edge = selection.find((s) => s.kind === "edge");
+  if ((params.axisSource ?? "origin") === "edge") {
+    if (edge?.kind !== "edge") return null;
+    const pl = bodies
+      .find((b) => b.bodyId === edge.bodyId)
+      ?.edges.find((e) => e.name === edge.edgeName)?.polyline;
+    if (!pl || pl.length < 6) return null;
+    const n = pl.length;
+    return new THREE.Vector3(
+      pl[n - 3]! - pl[0]!,
+      pl[n - 2]! - pl[1]!,
+      pl[n - 1]! - pl[2]!,
+    ).normalize();
+  }
+  const axis: string = params.axis ?? "X";
+  return new THREE.Vector3(
+    axis === "X" ? 1 : 0,
+    axis === "Y" ? 1 : 0,
+    axis === "Z" ? 1 : 0,
+  );
+}
+
+const handle = {
+  param: "spacing",
+  fallback: 20,
+  signed: true,
+  place: (input) => {
+    const origin = bodyCenter(input);
+    const axis = patternDirection(input);
+    return arrow(origin && axis && { origin, axis });
+  },
+} satisfies FeatureHandleDefinition<LinearPatternParams>;
 
 const direction: PickInput = {
   key: "direction",
@@ -80,7 +121,7 @@ function LinearPatternForm({
         label="Spacing"
         units={units}
         autoFocus
-        value={handleValue(params, "linearPattern")}
+        value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ spacing: v })}
       />
       <CheckField
@@ -97,6 +138,7 @@ export const linearPattern: FeatureUI<
   LinearPatternParams
 > = {
   type: "linearPattern",
+  handle,
   initialParams: {},
   icon: "⋮⋮",
   title: "Rectangular Pattern",
@@ -120,7 +162,7 @@ export const linearPattern: FeatureUI<
           ? { kind: "edge", edge }
           : { kind: "axis", axis: params.axis ?? "X" },
       count: Math.round(num(params, "count", 3)),
-      spacing: handleValue(params, "linearPattern"),
+      spacing: num(params, handle.param, handle.fallback),
       combine: !!(params.combine ?? false),
     };
   },
