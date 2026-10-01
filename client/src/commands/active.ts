@@ -1,4 +1,3 @@
-import type { CadViewport } from "../three/CadViewport";
 import { useStore, type Selection } from "../store";
 import { commandById, type CommandContext } from "./registry";
 import type { MeasureState } from "./measure";
@@ -10,7 +9,7 @@ export type Active =
 export interface ActiveCommand {
   enter(): void;
   exit(): void;
-  pickFilter: Parameters<CadViewport["pick"]>[2];
+  pickFilter: readonly string[];
   onHover(selection: Selection | null, event: PointerEvent): Selection | null;
   onClick(selection: Selection | null, event: PointerEvent): Promise<void>;
   onContextMenu(selection: Selection | null, event: PointerEvent): void;

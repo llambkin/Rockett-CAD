@@ -1,3 +1,4 @@
+import { pickProviders } from "./three/pickProviders";
 import {
   previewBodies,
   selectionKey,
@@ -176,28 +177,35 @@ function isStraight(sel: Selection, s: Store): boolean {
   );
 }
 
-export function pickOptions(i: PickInput | undefined, shift?: boolean) {
+export function pickProviderIds(
+  i: PickInput | undefined,
+  shift?: boolean,
+): string[] {
   const has = (kind: Kind) => !!i?.kinds.includes(kind);
   const split = shift !== undefined && !!i?.shiftFaces;
-  return {
-    profiles: has("profile") && !(split && shift),
-    edges: has("edge"),
-    vertices: has("vertex"),
-    faces: has("face") && (!split || shift),
-    bodies: has("body") && !has("face"),
-    originPlanes: has("plane"),
-    constructionPlanes: has("plane"),
-    originAxes: has("axis"),
-    sketchEntities: has("sketchEntity") || has("sketchPoint"),
-    sketchPoints: has("sketchPoint"),
-  };
+  const kinds =
+    i?.kinds.filter((kind) =>
+      kind === "profile"
+        ? !(split && shift)
+        : kind === "face"
+          ? !split || shift
+          : kind === "body"
+            ? !has("face")
+            : true,
+    ) ?? [];
+  if (kinds.includes("sketchPoint") && !kinds.includes("sketchEntity"))
+    kinds.push("sketchEntity");
+  return pickProviders()
+    .filter((provider) => kinds.includes(provider.kind))
+    .map((provider) => provider.id);
 }
 
-export function dialogPickOptions(s: Store, shift?: boolean) {
+export function dialogPickProviders(s: Store, shift?: boolean): string[] {
   const repair: { kind: "face" | "edge" } | undefined = s.dialogParams.repick;
-  if (repair)
-    return { faces: repair.kind === "face", edges: repair.kind === "edge" };
-  return pickOptions(activeInput(s), shift);
+  return pickProviderIds(
+    repair ? { key: "repick", kinds: [repair.kind] } : activeInput(s),
+    shift,
+  );
 }
 
 export function accepted(

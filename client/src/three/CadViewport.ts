@@ -21,6 +21,12 @@ import type { Selection } from "../store";
 import { highlightSelection } from "../selection/kinds";
 import { HighlightContext, type HighlightStyle } from "../selection/highlights";
 import type { PreviewGhost, PreviewTint } from "../livePreview";
+import {
+  pickThresholds,
+  pickWithProviders,
+  type PickBody,
+  type PickResult,
+} from "./pickProviders";
 import { clientRay } from "./screen";
 import { clearGroup, disposeGroup, disposeObject } from "./dispose";
 import { fillGhost } from "./ghostGeometry";
@@ -44,19 +50,6 @@ import {
 import { frameScheduler } from "./frameScheduler";
 import { getSetting, subscribe } from "../settings";
 import { BODY_APPEARANCE, PLANE_APPEARANCE, TIMING_MS } from "../tunables";
-
-export interface PickResult {
-  selection: Selection;
-  distance: number;
-  point: THREE.Vector3;
-  /** sketch-region area — the tie-break when coplanar regions overlap */
-  area?: number | undefined;
-}
-
-export function pickThresholds(worldPerPixel: number, px: number) {
-  const line = worldPerPixel * px;
-  return { line, point: line * 1.4 };
-}
 
 export const ORIGIN_PLANE_DEFS: {
   name: "XY" | "XZ" | "YZ";
@@ -110,17 +103,9 @@ export function uv3(frame: PlaneFrame, u: number, v: number): THREE.Vector3 {
   );
 }
 
-interface BodyObjects {
-  group: THREE.Group;
-  mesh: THREE.Mesh;
+interface BodyObjects extends PickBody {
   material: THREE.MeshStandardMaterial;
   tint: THREE.MeshStandardMaterial | null;
-  edges: THREE.LineSegments;
-  /** segment index → edge name */
-  edgeSegments: string[];
-  vertices: THREE.Points;
-  vertexNames: string[];
-  payload: BodyPayload;
 }
 
 export class CadViewport {
@@ -841,207 +826,25 @@ export class CadViewport {
   pick(
     clientX: number,
     clientY: number,
-    opts: {
-      bodies?: boolean | undefined;
-      faces?: boolean | undefined;
-      edges?: boolean | undefined;
-      vertices?: boolean | undefined;
-      originPlanes?: boolean | undefined;
-      originAxes?: boolean | undefined;
-      constructionPlanes?: boolean | undefined;
-      profiles?: boolean | undefined;
-      sketchEntities?: boolean | undefined;
-      sketchPoints?: boolean | undefined;
-      depth?: number; // alt-click cycling
-    },
+    providerIds: readonly string[],
+    depth = 0,
   ): PickResult | null {
     this.rayFromClient(clientX, clientY);
-    const { line: pxTol, point } = pickThresholds(
-      this.worldPerPixel(),
-      this.pickTolerancePx,
+    const { line } = pickThresholds(this.worldPerPixel(), this.pickTolerancePx);
+    return pickWithProviders(
+      this.raycaster,
+      line,
+      {
+        bodies: this.bodies,
+        originRoot: this.originRoot,
+        originPlaneMeshes: this.originPlaneMeshes,
+        originAxisLines: this.originAxisLines,
+        constructionPlanes: this.planes.group,
+        sketches: this.sketches.group,
+        providerIds,
+      },
+      depth,
     );
-    this.raycaster.params.Line = { threshold: pxTol };
-    this.raycaster.params.Points = { threshold: point };
-
-    const results: PickResult[] = [];
-
-    // vertices (highest priority)
-    if (opts.vertices) {
-      for (const b of this.bodies.values()) {
-        if (!b.group.visible) continue;
-        b.vertices.visible = true;
-        const hits = this.raycaster.intersectObject(b.vertices, false);
-        b.vertices.visible = false;
-        for (const h of hits) {
-          if (h.index === undefined) continue;
-          const vertexName = b.vertexNames[h.index];
-          if (vertexName === undefined) continue;
-          results.push({
-            selection: {
-              kind: "vertex",
-              bodyId: b.payload.bodyId,
-              vertexName,
-            },
-            distance: h.distance - pxTol * 2.2,
-            point: h.point,
-          });
-        }
-      }
-    }
-
-    if (opts.edges) {
-      for (const b of this.bodies.values()) {
-        if (!b.group.visible) continue;
-        const hits = this.raycaster.intersectObject(b.edges, false);
-        for (const h of hits) {
-          if (h.index === undefined) continue;
-          const seg = Math.floor(h.index / 2);
-          const name = b.edgeSegments[seg];
-          if (!name) continue;
-          results.push({
-            selection: {
-              kind: "edge",
-              bodyId: b.payload.bodyId,
-              edgeName: name,
-            },
-            distance: h.distance - pxTol * 1.2,
-            point: h.point,
-          });
-        }
-      }
-    }
-
-    if (opts.faces || opts.bodies) {
-      for (const b of this.bodies.values()) {
-        if (!b.group.visible) continue;
-        const hits = this.raycaster.intersectObject(b.mesh, false);
-        for (const h of hits) {
-          if (h.faceIndex === undefined || h.faceIndex === null) continue;
-          const indexPos = h.faceIndex * 3;
-          const face = b.payload.faces.find(
-            (f) => indexPos >= f.start && indexPos < f.start + f.count,
-          );
-          if (opts.faces && face) {
-            results.push({
-              selection: {
-                kind: "face",
-                bodyId: b.payload.bodyId,
-                faceName: face.name,
-              },
-              distance: h.distance,
-              point: h.point,
-            });
-          } else if (opts.bodies) {
-            results.push({
-              selection: { kind: "body", bodyId: b.payload.bodyId },
-              distance: h.distance,
-              point: h.point,
-            });
-          }
-        }
-      }
-    }
-
-    if (opts.originPlanes) {
-      for (const mesh of this.originPlaneMeshes) {
-        if (!this.originRoot.visible) continue;
-        const hits = this.raycaster.intersectObject(mesh, false);
-        for (const h of hits) {
-          results.push({
-            selection: {
-              kind: "plane",
-              ref: { kind: "origin", plane: mesh.userData.originPlane },
-              label: `${mesh.userData.originPlane} Plane`,
-            },
-            distance: h.distance + pxTol, // lower priority than solid geometry
-            point: h.point,
-          });
-        }
-      }
-    }
-
-    if (opts.originAxes && this.originRoot.visible) {
-      for (const [axis, line] of this.originAxisLines) {
-        for (const h of this.raycaster.intersectObject(line, false)) {
-          results.push({
-            selection: { kind: "axis", axis },
-            distance: h.distance - pxTol * 1.2,
-            point: h.point,
-          });
-        }
-      }
-    }
-
-    if (opts.constructionPlanes || opts.profiles || opts.sketchEntities) {
-      const targets: THREE.Object3D[] = [];
-      if (opts.constructionPlanes) targets.push(this.planes.group);
-      if (opts.profiles || opts.sketchEntities)
-        targets.push(this.sketches.group);
-      const hits = this.raycaster.intersectObjects(targets, true);
-      for (const h of hits) {
-        const ud = h.object.userData;
-        if (opts.constructionPlanes && ud.constructionPlane) {
-          results.push({
-            selection: {
-              kind: "plane",
-              ref: { kind: "construction", featureId: ud.constructionPlane },
-              label: ud.label ?? "Plane",
-            },
-            distance: h.distance + pxTol,
-            point: h.point,
-          });
-        } else if (opts.profiles && ud.profileId) {
-          results.push({
-            selection: {
-              kind: "profile",
-              sketchId: ud.sketchId,
-              profileId: ud.profileId,
-            },
-            // profiles outrank faces/bodies at the same depth: clicking a
-            // sketch region on a face must select the region, not the face
-            distance: h.distance - pxTol * 1.1,
-            point: h.point,
-            area: ud.area as number | undefined,
-          });
-        } else if (
-          opts.sketchEntities &&
-          ud.sketchEntityId &&
-          (opts.sketchPoints !== false || !ud.isPoint)
-        ) {
-          results.push({
-            selection: {
-              kind: ud.isPoint ? "sketchPoint" : "sketchEntity",
-              sketchId: ud.sketchId,
-              entityId: ud.sketchEntityId,
-            },
-            // curves outrank profile regions (1.1) when actually hit;
-            // points outrank curves
-            distance: h.distance - (ud.isPoint ? pxTol * 2 : pxTol * 1.3),
-            point: h.point,
-          });
-        }
-      }
-    }
-
-    if (results.length === 0) return null;
-    results.sort((a, b) => a.distance - b.distance);
-    const depth = opts.depth ?? 0;
-    const chosen = results[Math.min(depth, results.length - 1)];
-    if (!chosen) return null;
-    // Coplanar regions can overlap (a disc drawn over a quadrant); the
-    // smallest one under the cursor is the one the user means.
-    if (chosen.selection.kind === "profile") {
-      const tied = results.filter(
-        (r) =>
-          r.selection.kind === "profile" &&
-          Math.abs(r.distance - chosen.distance) < pxTol * 0.1,
-      );
-      if (tied.length > 1) {
-        tied.sort((a, b) => (a.area ?? Infinity) - (b.area ?? Infinity));
-        return tied[0]!;
-      }
-    }
-    return chosen;
   }
 
   clearHighlights() {

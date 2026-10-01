@@ -38,7 +38,7 @@ export const sketchCreateCommand: ActiveCommand = {
   exit() {
     useStore.setState({ active: null, hover: null });
   },
-  pickFilter: { originPlanes: true, constructionPlanes: true, faces: true },
+  pickFilter: ["design.originPlane", "design.constructionPlane", "design.face"],
   onHover: (selection) => (planeFor(selection) ? selection : null),
   onClick: pick,
   onContextMenu() {},

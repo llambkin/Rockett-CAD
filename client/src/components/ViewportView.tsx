@@ -82,7 +82,7 @@ import { ANGLE_LOCK_KEY } from "../shortcuts";
 import {
   activeInput,
   accepted,
-  dialogPickOptions,
+  dialogPickProviders,
   hoverPick,
   isPlanarFace,
   pickInto,
@@ -125,6 +125,16 @@ interface DimLabel {
   anchorWorld: THREE.Vector3;
   reference?: [THREE.Vector3, THREE.Vector3];
 }
+
+const IDLE_PICKS = [
+  "design.face",
+  "design.edge",
+  "design.vertex",
+  "sketch.profile",
+  "sketch.entity",
+  "sketch.point",
+];
+const SKETCH_PICKS = ["sketch.entity", "sketch.point"];
 
 const NUDGE_EVENTS = ["pointerdown", "pointerup", "wheel"];
 
@@ -921,7 +931,7 @@ export function ViewportView() {
 
     const startOrbit = (e: PointerEvent) => {
       orbiting = true;
-      pivot = vp.pick(e.clientX, e.clientY, { bodies: true })?.point;
+      pivot = vp.pick(e.clientX, e.clientY, ["design.body"])?.point;
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -1317,10 +1327,9 @@ export function ViewportView() {
 
   function trimTarget(e: { clientX: number; clientY: number }) {
     const draft = useStore.getState().draftSketch;
-    const picked = viewportRef.current?.pick(e.clientX, e.clientY, {
-      sketchEntities: true,
-      sketchPoints: false,
-    })?.selection;
+    const picked = viewportRef.current?.pick(e.clientX, e.clientY, [
+      "sketch.entity",
+    ])?.selection;
     const at = planeUV(e);
     if (picked?.kind !== "sketchEntity" || picked.sketchId !== draft?.id)
       return null;
@@ -1633,7 +1642,7 @@ export function ViewportView() {
       const tool = (s.mode as any).tool as string;
       if (tool === "project") {
         picked =
-          vp.pick(e.clientX, e.clientY, { edges: true })?.selection ?? null;
+          vp.pick(e.clientX, e.clientY, ["design.edge"])?.selection ?? null;
       } else if (tool === "trim") {
         const target = trimTarget(e);
         if (target && !target.curve.external)
@@ -1646,10 +1655,7 @@ export function ViewportView() {
             ).samples,
           };
       } else if (["select", "dimension", "extend", "offset"].includes(tool)) {
-        const r = vp.pick(e.clientX, e.clientY, {
-          sketchEntities: true,
-          profiles: false,
-        });
+        const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
         picked = r?.selection ?? null;
       } else if (DRAW_TOOLS.has(tool) || tool === "point") {
         // rubber-band preview + snap glyph while drawing
@@ -1713,17 +1719,10 @@ export function ViewportView() {
         setSnapMarker(null);
       }
     } else if (s.mode.name === "dialog") {
-      const r = vp.pick(e.clientX, e.clientY, dialogPickOptions(s));
+      const r = vp.pick(e.clientX, e.clientY, dialogPickProviders(s));
       picked = hoverPick(s, r?.selection ?? null);
     } else {
-      // idle: hover also previews sketch regions/curves (selectable now)
-      const r = vp.pick(e.clientX, e.clientY, {
-        faces: true,
-        edges: true,
-        vertices: true,
-        profiles: true,
-        sketchEntities: true,
-      });
+      const r = vp.pick(e.clientX, e.clientY, IDLE_PICKS);
       picked = r?.selection ?? null;
     }
     const prevKey = s.hover ? JSON.stringify(s.hover) : null;
@@ -1742,7 +1741,7 @@ export function ViewportView() {
       if (t === "select") {
         // start dragging a point?
         const vp = viewportRef.current!;
-        const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
+        const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
         if (r?.selection.kind === "sketchPoint") {
           toolState.current.dragPointId = (r.selection as any).entityId;
         }
@@ -2150,10 +2149,12 @@ export function ViewportView() {
 
     const command = activeCommand();
     if (command) {
-      const r = vp.pick(e.clientX, e.clientY, {
-        ...command.pickFilter,
-        depth: toolState.current.pickDepth,
-      });
+      const r = vp.pick(
+        e.clientX,
+        e.clientY,
+        command.pickFilter,
+        toolState.current.pickDepth,
+      );
       await command.onClick(r?.selection ?? null, e);
       return;
     }
@@ -2164,10 +2165,12 @@ export function ViewportView() {
     }
 
     if (s.mode.name === "dialog") {
-      const r = vp.pick(e.clientX, e.clientY, {
-        ...dialogPickOptions(s, e.shiftKey),
-        depth: toolState.current.pickDepth,
-      });
+      const r = vp.pick(
+        e.clientX,
+        e.clientY,
+        dialogPickProviders(s, e.shiftKey),
+        toolState.current.pickDepth,
+      );
       if (repick(r?.selection ?? null)) return;
       const sel = accepted(activeInput(s), r?.selection ?? null, s)[0] ?? null;
       const taken = sel && featureUI(s.mode.dialog)?.onPick?.(sel, s);
@@ -2176,22 +2179,19 @@ export function ViewportView() {
       return;
     }
 
-    // idle: topology selection + unconsumed sketch regions/curves
-    // (select-then-command: pick a profile or axis line before the tool)
-    const r = vp.pick(e.clientX, e.clientY, {
-      faces: true,
-      edges: true,
-      vertices: true,
-      profiles: true,
-      sketchEntities: true,
-      depth: toolState.current.pickDepth,
-    });
+    const r = vp.pick(
+      e.clientX,
+      e.clientY,
+      IDLE_PICKS,
+      toolState.current.pickDepth,
+    );
     if (r) s.toggleSelection(r.selection, e.ctrlKey || e.metaKey || e.shiftKey);
     else if (!e.ctrlKey && !e.metaKey) s.setSelection([]);
   }
 
   async function handleSketchClick(e: PointerEvent) {
     const s = useStore.getState();
+    const vp = viewportRef.current!;
     if (s.mode.name !== "sketch") return;
     const tool = s.mode.tool;
     const construction = s.mode.constructionMode;
@@ -2214,9 +2214,7 @@ export function ViewportView() {
 
     if (s.busy) return;
     if (tool === "project") {
-      const picked = viewportRef.current!.pick(e.clientX, e.clientY, {
-        edges: true,
-      })?.selection;
+      const picked = vp.pick(e.clientX, e.clientY, ["design.edge"])?.selection;
       if (picked?.kind !== "edge") return;
       const edge = s.evaluation?.bodies
         .find((b) => b.bodyId === picked.bodyId)
@@ -2258,9 +2256,7 @@ export function ViewportView() {
       return;
     }
     if (tool === "extend" || tool === "offset") {
-      const picked = viewportRef.current!.pick(e.clientX, e.clientY, {
-        sketchEntities: true,
-      })?.selection;
+      const picked = vp.pick(e.clientX, e.clientY, SKETCH_PICKS)?.selection;
       if (
         !picked ||
         (picked.kind !== "sketchEntity" && picked.kind !== "sketchPoint") ||
@@ -2336,8 +2332,7 @@ export function ViewportView() {
 
     switch (tool) {
       case "select": {
-        const vp = viewportRef.current!;
-        const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
+        const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
         if (r)
           s.toggleSelection(r.selection, e.ctrlKey || e.metaKey || e.shiftKey);
         else if (!e.ctrlKey && !e.metaKey) s.setSelection([]);
@@ -2347,8 +2342,7 @@ export function ViewportView() {
         await applyCreated(tools.createPoint(uv, construction), false);
         return;
       case "dimension": {
-        const vp = viewportRef.current!;
-        const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
+        const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
         if (!r) {
           ts.dimTargets = [];
           return;
@@ -2426,7 +2420,7 @@ export function ViewportView() {
     }
     if (s.mode.name === "sketch") {
       // right-click sketch geometry → delete / construction / dimension
-      const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
+      const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
       if (
         r &&
         (r.selection.kind === "sketchEntity" ||
@@ -2443,13 +2437,7 @@ export function ViewportView() {
       return;
     }
     if (s.mode.name !== "idle") return;
-    const r = vp.pick(e.clientX, e.clientY, {
-      faces: true,
-      edges: true,
-      vertices: true,
-      profiles: true,
-      sketchEntities: true,
-    });
+    const r = vp.pick(e.clientX, e.clientY, IDLE_PICKS);
     if (r) {
       // keep an existing multi-selection when right-clicking inside it
       const key = JSON.stringify(r.selection);
@@ -2539,7 +2527,7 @@ export function ViewportView() {
     if (s.mode.name === "idle") {
       // double-click a sketch curve → edit that sketch
       const vp = viewportRef.current!;
-      const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
+      const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
       if (
         r &&
         (r.selection.kind === "sketchEntity" ||
@@ -2552,7 +2540,7 @@ export function ViewportView() {
     } else if (s.mode.name === "sketch") {
       // double-click a curve → edit its size
       const vp = viewportRef.current!;
-      const r = vp.pick(e.clientX, e.clientY, { sketchEntities: true });
+      const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
       if (r && r.selection.kind === "sketchEntity") {
         void openDimensionEditor((r.selection as any).entityId, e);
         return;

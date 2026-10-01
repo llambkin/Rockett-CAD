@@ -82,11 +82,11 @@ it("owns plane picking through the registered active command", async () => {
   await runCommand("design.sketch.create");
   expect(useStore.getState().active?.id).toBe("design.sketch.create");
   expect(useStore.getState().mode).toEqual({ name: "idle" });
-  expect(activeCommand()?.pickFilter).toEqual({
-    originPlanes: true,
-    constructionPlanes: true,
-    faces: true,
-  });
+  expect(activeCommand()?.pickFilter).toEqual([
+    "design.originPlane",
+    "design.constructionPlane",
+    "design.face",
+  ]);
   expect(activeCommand()?.hint).toBe(
     "Select a plane or planar face to sketch on",
   );
