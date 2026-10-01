@@ -146,14 +146,16 @@ function openSketch() {
     timelinePosition: 1,
   };
   useStore.setState({
-    active: null,
     document,
     projectId: document.id,
-    mode: {
-      name: "sketch",
-      sketchId: sketch.id,
-      tool: "line",
-      constructionMode: false,
+    active: {
+      id: "design.sketch",
+      state: {
+        sketchId: sketch.id,
+        tool: "line",
+        constructionMode: false,
+        polygonSides: 6,
+      },
     },
     draftSketch: sketch,
   });
@@ -211,7 +213,7 @@ it("keeps the sketch and workbench when finishing fails and refuses a busy switc
     switching: false,
   });
   expect(useStore.getState()).toMatchObject({
-    mode: { name: "sketch" },
+    active: { id: "design.sketch", state: { polygonSides: 6 } },
     draftSketch: sketch,
     error: "Evaluation refused",
   });

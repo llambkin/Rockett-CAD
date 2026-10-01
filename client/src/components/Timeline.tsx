@@ -129,7 +129,7 @@ export function Timeline() {
   const viewport = useContext(ViewportContext);
   const document_ = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const idle = useStore(isIdle);
   const selection = useStore((s) => s.selection);
   const busy = useStore((s) => s.busy);
@@ -153,7 +153,7 @@ export function Timeline() {
 
   if (!document_) return null;
   const pos =
-    sketchEditingPosition(document_, mode) ?? document_.timelinePosition;
+    sketchEditingPosition(document_, active) ?? document_.timelinePosition;
   const statuses = new Map(
     (evaluation?.featureStatuses ?? []).map((s) => [s.featureId, s]),
   );
@@ -162,7 +162,7 @@ export function Timeline() {
     <div className="timeline">
       <fieldset
         className="tl-controls"
-        disabled={busy || mode.name === "sketch"}
+        disabled={busy || active?.id === "design.sketch"}
         style={{ border: 0, margin: 0, padding: 0 }}
       >
         <button title="Roll to start" onClick={() => void rollTimeline(0)}>

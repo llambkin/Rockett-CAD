@@ -80,23 +80,25 @@ beforeEach(() => {
 });
 afterEach(() => useStore.setState(initial, true));
 
-it.each(["design.chamfer", "design.export"])(
+it.each(["design.chamfer", "design.export", "inspect.measure"])(
   "opening a healthy sketch replaces %s",
   async (id) => {
     await runCommand(id);
     await openFeatureEditor(sketch);
-    expect(useStore.getState().active).toBeNull();
-    expect(useStore.getState().mode).toEqual({
-      name: "sketch",
-      sketchId: "sk",
-      tool: "select",
-      constructionMode: false,
+    expect(useStore.getState().active).toEqual({
+      id: "design.sketch",
+      state: {
+        sketchId: "sk",
+        tool: "select",
+        constructionMode: false,
+        polygonSides: 6,
+      },
     });
     expect(useStore.getState().draftSketch).toEqual(sketch);
   },
 );
 
-it.each(["design.chamfer", "design.export"])(
+it.each(["design.chamfer", "design.export", "inspect.measure"])(
   "starting a sketch replaces %s after the mutation succeeds",
   async (id) => {
     await runCommand(id);
@@ -104,8 +106,7 @@ it.each(["design.chamfer", "design.export"])(
       .getState()
       .startSketchOnPlane({ kind: "origin", plane: "XY" });
     expect(api.addFeature).toHaveBeenCalledOnce();
-    expect(useStore.getState().active).toBeNull();
-    expect(useStore.getState().mode.name).toBe("sketch");
+    expect(useStore.getState().active?.id).toBe("design.sketch");
     expect(useStore.getState().draftSketch?.id).toBe(
       useStore.getState().document?.features.at(-1)?.id,
     );

@@ -410,9 +410,9 @@ export async function openInDialog(
   ui: DialogFeatureUI,
   f: Feature,
 ): Promise<void> {
-  if (useStore.getState().mode.name === "sketch") {
+  if (useStore.getState().active?.id === "design.sketch") {
     await useStore.getState().finishSketch();
-    if (useStore.getState().mode.name === "sketch") return;
+    if (useStore.getState().active?.id === "design.sketch") return;
   }
   if (!ui.prefill) return;
   const { inputs, selection } = ui.prefill(f);

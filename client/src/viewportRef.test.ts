@@ -20,11 +20,14 @@ function sketch(viewport: ViewportRef) {
     yAxis: [0, 1, 0],
   };
   useStore.setState({
-    mode: {
-      name: "sketch",
-      sketchId: "sketch",
-      tool: "select",
-      constructionMode: false,
+    active: {
+      id: "design.sketch",
+      state: {
+        sketchId: "sketch",
+        tool: "select",
+        constructionMode: false,
+        polygonSides: 6,
+      },
     },
     evaluation: {
       sketches: [{ featureId: "sketch", frame }],

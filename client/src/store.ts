@@ -43,62 +43,48 @@ import {
 } from "./selection/kinds";
 export { selectionKey, type Selection } from "./selection/kinds";
 
-export type SketchTool =
-  | "select"
-  | "line"
-  | "rect"
-  | "centerRect"
-  | "circle"
-  | "arc3"
-  | "polygon"
-  | "slot"
-  | "point"
-  | "project"
-  | "trim"
-  | "extend"
-  | "offset"
-  | "dimension";
+import {
+  sketchState,
+  type SketchState,
+  type SketchTool,
+} from "./commands/sketch";
+export type { SketchTool } from "./commands/sketch";
 
 export type DialogType = FeatureType | "export";
 
-export type Mode =
-  | { name: "idle" }
-  | {
-      name: "sketch";
-      sketchId: string;
-      tool: SketchTool;
-      constructionMode: boolean;
-    };
+export type Mode = { name: "idle" };
 
 function historyEditingState(
-  mode: Mode,
+  active: Active | null,
   m: MutationResponse,
-): Pick<State, "mode" | "draftSketch" | "selection" | "active"> {
+): Pick<State, "draftSketch" | "selection" | "active"> {
   const cleared = { active: null, selection: [] };
-  if (mode.name === "sketch") {
-    const feature = m.document.features.find((f) => f.id === mode.sketchId);
+  if (active?.id === "design.sketch") {
+    const feature = m.document.features.find(
+      (f) => f.id === active.state.sketchId,
+    );
     const solved = m.evaluation.sketches.find(
-      (sk) => sk.featureId === mode.sketchId,
+      (sk) => sk.featureId === active.state.sketchId,
     );
     if (feature?.type === "sketch" && solved)
       return {
         ...cleared,
-        mode: { ...mode, tool: "select" },
+        active: { ...active, state: { ...active.state, tool: "select" } },
         draftSketch: JSON.parse(
           JSON.stringify({ ...feature, entities: solved.entities }),
         ),
       };
   }
-  return { ...cleared, mode: { name: "idle" }, draftSketch: null };
+  return { ...cleared, draftSketch: null };
 }
 
 export function sketchEditingPosition(
   document: CadDocument,
-  mode: Mode,
+  active: Active | null,
 ): number | undefined {
-  if (mode.name !== "sketch") return undefined;
+  if (active?.id !== "design.sketch") return undefined;
   const index = document.features.findIndex(
-    (f) => f.id === mode.sketchId && f.type === "sketch",
+    (f) => f.id === active.state.sketchId && f.type === "sketch",
   );
   return index < 0 ? undefined : index + 1;
 }
@@ -157,6 +143,9 @@ interface State {
     joinTolerance: number,
   ) => Promise<void>;
   editOffset: (id: string, distance: number) => Promise<void>;
+  setSketchState: (
+    state: Partial<Pick<SketchState, "constructionMode" | "polygonSides">>,
+  ) => void;
   setSketchTool: (tool: SketchTool) => void;
   updateDraftSketch: (
     entities: SketchEntity[],
@@ -425,10 +414,10 @@ async function moveHistory(
   able: boolean | undefined,
   move: (projectId: string, position?: number) => Promise<MutationResponse>,
 ): Promise<void> {
-  const { document, projectId, mode, busy, recovery } = useStore.getState();
+  const { document, projectId, active, busy, recovery } = useStore.getState();
   if (busy || recovery || !projectId || !document || !able) return;
   useStore.setState({ busy: true });
-  const position = sketchEditingPosition(document, mode);
+  const position = sketchEditingPosition(document, active);
   try {
     const m = await inTurn(() =>
       move(projectId, position).catch((e) => {
@@ -440,7 +429,7 @@ async function moveHistory(
       ...landed(m),
       savedAt: Date.now(),
       busy: false,
-      ...historyEditingState(mode, m),
+      ...historyEditingState(active, m),
     });
   } catch (e: any) {
     useStore.setState({ error: lost(e) ? null : e.message, busy: false });
@@ -495,6 +484,7 @@ export const useStore = create<State>((set, get) => ({
         view,
         history: null,
         selection: [],
+        active: null,
         mode: { name: "idle" },
         draftSketch: null,
         dialogParams: {},
@@ -579,10 +569,10 @@ export const useStore = create<State>((set, get) => ({
         for (const tx of abandoned.splice(0))
           await api.abortPreview(document.id, tx).catch(() => null);
         const latest = (await api.getProject(document.id)).document;
-        const mode = get().mode;
+        const active = get().active;
         const evaluation = await api.evaluate(
           document.id,
-          sketchEditingPosition(latest, mode),
+          sketchEditingPosition(latest, active),
         );
         set({
           document: latest,
@@ -590,7 +580,7 @@ export const useStore = create<State>((set, get) => ({
           recovery: null,
           history: null,
           busy: false,
-          ...historyEditingState(mode, { document: latest, evaluation }),
+          ...historyEditingState(active, { document: latest, evaluation }),
         });
         void loadHistory(latest);
         return true;
@@ -722,12 +712,9 @@ export const useStore = create<State>((set, get) => ({
       (f) => f.id === feature.id,
     ) as SketchFeature;
     set({
-      active: null,
-      mode: {
-        name: "sketch",
-        sketchId: feature.id,
-        tool: "line",
-        constructionMode: false,
+      active: {
+        id: "design.sketch",
+        state: sketchState(feature.id, "line"),
       },
       draftSketch: JSON.parse(JSON.stringify(created)),
       selection: [],
@@ -736,10 +723,11 @@ export const useStore = create<State>((set, get) => ({
 
   async editSketch(sketchId) {
     if (get().busy) return;
-    if (get().mode.name === "sketch") {
-      if ((get().mode as { sketchId: string }).sketchId === sketchId) return;
+    const active = get().active;
+    if (active?.id === "design.sketch") {
+      if (active.state.sketchId === sketchId) return;
       await get().finishSketch();
-      if (get().mode.name === "sketch") return;
+      if (get().active?.id === "design.sketch") return;
     }
     const { document } = get();
     const feature = document?.features.find(
@@ -765,12 +753,9 @@ export const useStore = create<State>((set, get) => ({
         evaluation,
         busy: false,
         dialogParams: {},
-        active: null,
-        mode: {
-          name: "sketch",
-          sketchId,
-          tool: "select",
-          constructionMode: false,
+        active: {
+          id: "design.sketch",
+          state: sketchState(sketchId, "select"),
         },
         draftSketch: {
           ...JSON.parse(JSON.stringify(feature)),
@@ -839,11 +824,16 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  setSketchState(state) {
+    const active = get().active;
+    if (active?.id !== "design.sketch") return;
+    set({ active: { ...active, state: { ...active.state, ...state } } });
+  },
   setSketchTool(tool) {
-    const { mode } = get();
-    if (mode.name !== "sketch") return;
+    const { active } = get();
+    if (active?.id !== "design.sketch") return;
     set({
-      mode: { ...mode, tool },
+      active: { ...active, state: { ...active.state, tool } },
       selection: [],
       ...(tool === "offset"
         ? {
@@ -917,7 +907,7 @@ export const useStore = create<State>((set, get) => ({
           constraints: draftSketch.constraints,
           offsets: draftSketch.offsets,
         } as Partial<Feature>,
-        sketchEditingPosition(document, get().mode),
+        sketchEditingPosition(document, get().active),
         tx,
       ),
     );
@@ -938,7 +928,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async finishSketch() {
-    if (get().busy || get().mode.name !== "sketch") return;
+    if (get().busy || get().active?.id !== "design.sketch") return;
     try {
       await get().commitDraftSketch();
       const doc = get().document;
@@ -949,6 +939,7 @@ export const useStore = create<State>((set, get) => ({
       set({
         evaluation,
         busy: false,
+        active: null,
         mode: { name: "idle" },
         draftSketch: null,
         selection: [],
@@ -1129,7 +1120,7 @@ export const useStore = create<State>((set, get) => ({
         document.id,
         fid,
         patch,
-        sketchEditingPosition(document, get().mode),
+        sketchEditingPosition(document, get().active),
         tx,
       );
     await saveDialog(document.id, take(false, fid), patch, plain);
@@ -1168,7 +1159,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async rollTimeline(position) {
-    if (get().mode.name === "sketch" || get().busy) return;
+    if (get().active?.id === "design.sketch" || get().busy) return;
     const { document } = get();
     if (!document) return;
     await get().mutate((tx) => api.setTimeline(document.id, position, tx));

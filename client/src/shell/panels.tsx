@@ -101,7 +101,8 @@ registerPanel({
 registerPanel({
   id: "sketch.offset",
   title: "Offset sketch",
-  when: (s) => s.mode.name === "sketch" && s.mode.tool === "offset",
+  when: (s) =>
+    s.active?.id === "design.sketch" && s.active.state.tool === "offset",
   component: SketchOffsetPanel,
 });
 registerPanel({

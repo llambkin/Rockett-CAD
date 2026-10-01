@@ -60,14 +60,13 @@ export async function addSketchConstraints(constraints: SketchConstraint[]) {
 }
 
 export function Toolbar() {
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const workbench = useWorkbench((s) => s.current);
   useStore((s) => s.busy);
-  useStore((s) => s.active?.id);
   useRegistrations();
 
   const viewport = useContext(ViewportContext);
-  if (mode.name === "sketch") return <SketchToolbar />;
+  if (active?.id === "design.sketch") return <SketchToolbar />;
 
   const ctx = { ...useStore.getState(), viewport };
   const rows = toolbarFor(workbench, ctx);
@@ -130,6 +129,8 @@ function ToolGroup({
 }
 
 function PolygonFields() {
+  const active = useStore((s) => s.active);
+  const setSketchState = useStore((s) => s.setSketchState);
   const dialogParams = useStore((s) => s.dialogParams);
   const setDialogParams = useStore((s) => s.setDialogParams);
   return (
@@ -141,8 +142,8 @@ function PolygonFields() {
         int
         min={3}
         max={24}
-        value={Number(dialogParams.polygonSides ?? 6)}
-        onChange={(v) => setDialogParams({ polygonSides: v })}
+        value={active?.id === "design.sketch" ? active.state.polygonSides : 6}
+        onChange={(v) => setSketchState({ polygonSides: v })}
       />
       <select
         className="tb-select"
@@ -168,17 +169,17 @@ function PolygonFields() {
 }
 
 function SketchToolbar() {
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const busy = useStore((s) => s.busy);
   const setSketchTool = useStore((s) => s.setSketchTool);
   const finishSketch = useStore((s) => s.finishSketch);
-  const setMode = useStore((s) => s.setMode);
+  const setSketchState = useStore((s) => s.setSketchState);
   const selection = useStore((s) => s.selection);
   const draft = useStore((s) => s.draftSketch);
   const setError = useStore((s) => s.setError);
 
-  if (mode.name !== "sketch") return null;
-  const tool = mode.tool;
+  if (active?.id !== "design.sketch") return null;
+  const { tool, sketchId, constructionMode } = active.state;
 
   const applyConstraint = async (type: RelationType) => {
     if (!draft) return;
@@ -195,10 +196,10 @@ function SketchToolbar() {
   const extrudeSketch = async () => {
     const s = useStore.getState();
     const selected = s.selection.filter(
-      (item) => item.kind === "profile" && item.sketchId === mode.sketchId,
+      (item) => item.kind === "profile" && item.sketchId === sketchId,
     );
     await s.finishSketch();
-    if (useStore.getState().mode.name !== "idle") return;
+    if (useStore.getState().active?.id === "design.sketch") return;
     useStore.getState().setSelection(selected);
     openDialog("extrude");
   };
@@ -220,10 +221,10 @@ function SketchToolbar() {
         <ToolButton
           icon="construction"
           label="Construction"
-          className={mode.constructionMode ? "active" : ""}
+          className={constructionMode ? "active" : ""}
           title="Toggle construction geometry (X)"
           onClick={() =>
-            setMode({ ...mode, constructionMode: !mode.constructionMode })
+            setSketchState({ constructionMode: !constructionMode })
           }
         />
       </ToolGroup>

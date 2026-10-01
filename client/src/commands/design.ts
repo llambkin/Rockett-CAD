@@ -1,3 +1,4 @@
+import { sketchCommand } from "./sketch";
 import { sketchCreateCommand } from "./sketchCreate";
 import { measureCommand } from "./measure";
 import { exitActive } from "./active";
@@ -29,12 +30,16 @@ export function toggleProjection(ctx: CommandContext) {
 const idle = (s: CommandContext) => !s.busy || "Wait for the current job";
 
 function cancel(s: CommandContext) {
-  const { mode } = s;
-  if (mode.name === "sketch" && mode.tool !== "select")
-    return s.setSketchTool("select");
+  const { active } = s;
+  if (active?.id === "design.sketch")
+    return active.state.tool !== "select"
+      ? s.setSketchTool("select")
+      : s.setSelection([]);
   if (s.active && s.active.id !== "inspect.measure") return exitActive();
   s.setSelection([]);
 }
+
+registerCommand(sketchCommand);
 
 const GROUPS = [
   ["sketch", "SKETCH"],

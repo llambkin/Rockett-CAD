@@ -171,20 +171,24 @@ it("releases plane picking when a different mode takes ownership", async () => {
 it("hands ownership to sketch editing after the existing starter changes mode", async () => {
   start.mockImplementationOnce(async () => {
     useStore.setState({
-      active: null,
-      mode: {
-        name: "sketch",
-        sketchId: "sketch",
-        tool: "line",
-        constructionMode: false,
+      active: {
+        id: "design.sketch",
+        state: {
+          sketchId: "sketch",
+          tool: "line",
+          constructionMode: false,
+          polygonSides: 6,
+        },
       },
     });
   });
   await runCommand("design.sketch.create");
   await activeCommand()!.onClick(plane, event);
   expect(useStore.getState()).toMatchObject({
-    active: null,
-    mode: { name: "sketch", sketchId: "sketch", tool: "line" },
+    active: {
+      id: "design.sketch",
+      state: { sketchId: "sketch", tool: "line", polygonSides: 6 },
+    },
   });
 });
 

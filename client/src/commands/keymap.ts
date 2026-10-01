@@ -118,7 +118,7 @@ function inText(target: EventTarget | null): boolean {
 }
 
 function sketchKey(e: KeyEvent, s: CommandContext): boolean {
-  if (s.mode.name !== "sketch") return false;
+  if (s.active?.id !== "design.sketch") return false;
   if (e.key === "Delete" || e.key === "Backspace") {
     const ids = s.selection.flatMap((x) =>
       x.kind === "sketchEntity" || x.kind === "sketchPoint" ? [x.entityId] : [],
@@ -134,7 +134,7 @@ function sketchKey(e: KeyEvent, s: CommandContext): boolean {
     return true;
   }
   if (e.key.toLowerCase() !== "x") return false;
-  s.setMode({ ...s.mode, constructionMode: !s.mode.constructionMode });
+  s.setSketchState({ constructionMode: !s.active.state.constructionMode });
   return true;
 }
 
@@ -142,7 +142,8 @@ export function handleKey(e: KeyEvent, viewport?: ViewportRef): void {
   if (e.repeat || pressHold(e) || inText(e.target)) return;
   const s = useStore.getState();
   const plain = !(e.ctrlKey || e.metaKey || e.altKey || e.shiftKey);
-  if (s.mode.name === "sketch" && plain && !s.busy && sketchKey(e, s)) return;
+  if (s.active?.id === "design.sketch" && plain && !s.busy && sketchKey(e, s))
+    return;
   const chord = chordOf(e);
   for (const context of keyContexts(s)) {
     const command = bound().find(

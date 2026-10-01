@@ -66,9 +66,10 @@ export function SizeLimitHint({ draft }: { draft: Feature | null }) {
   useEffect(() => {
     if (!key || !projectId) return;
     let current = true;
+    const feature = draft as SizedFeature;
+    const position = sizePosition(feature.id);
     const ask = window.setTimeout(() => {
-      const feature = draft as SizedFeature;
-      api.sizeLimit(projectId, feature, sizePosition(feature.id)).then(
+      api.sizeLimit(projectId, feature, position).then(
         (limit) => current && setHint({ key, result: limit }),
         () =>
           current &&

@@ -3,8 +3,10 @@ import { commandById, type CommandContext } from "./registry";
 import type { ViewportRef } from "../viewportRef";
 import type { FeatureCommandState } from "./featureCommand";
 import type { MeasureState } from "./measure";
+import type { SketchState } from "./sketch";
 
 export type Active =
+  | { id: "design.sketch"; state: SketchState }
   | { id: "inspect.measure"; state: MeasureState; editTarget?: string }
   | { id: "design.sketch.create"; state?: never }
   | { id: "design.feature"; state: FeatureCommandState }

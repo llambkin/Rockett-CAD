@@ -12,12 +12,12 @@ export function SketchOffsetIndicators() {
   const viewport = useContext(ViewportContext);
   const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const evaluation = useStore((s) => s.evaluation);
   const busy = useStore((s) => s.busy);
   const layer = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (mode.name !== "sketch" || !draft) return;
+    if (active?.id !== "design.sketch" || !draft) return;
     const frame = evaluation?.sketches.find(
       (s) => s.featureId === draft.id,
     )?.frame;
@@ -45,8 +45,8 @@ export function SketchOffsetIndicators() {
     };
     vp.requestRender();
     return vp.onRender(update);
-  }, [draft, mode.name, evaluation, viewport]);
-  if (mode.name !== "sketch" || !draft) return null;
+  }, [draft, active?.id, evaluation, viewport]);
+  if (active?.id !== "design.sketch" || !draft) return null;
   return (
     <div className="dim-label-layer" ref={layer}>
       {(draft.offsets ?? []).map((offset, i) => (

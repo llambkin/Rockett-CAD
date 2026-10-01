@@ -95,7 +95,8 @@ export const measureCommand: ActiveCommand = {
   exit() {
     unsubscribe?.();
     unsubscribe = undefined;
-    useStore.setState({ active: null, hover: null });
+    if (useStore.getState().active?.id === "inspect.measure")
+      useStore.setState({ active: null, hover: null });
   },
   pickFilter: () => ["design.face", "design.edge", "design.vertex"],
   onHover: (selection) =>

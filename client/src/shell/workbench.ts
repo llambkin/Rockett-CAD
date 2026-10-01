@@ -33,9 +33,9 @@ export async function switchWorkbench(id: string): Promise<void> {
   useWorkbench.setState({ switching: true });
   try {
     exitActive();
-    if (useStore.getState().mode.name === "sketch") {
+    if (useStore.getState().active?.id === "design.sketch") {
       await useStore.getState().finishSketch();
-      if (useStore.getState().mode.name !== "idle") return;
+      if (useStore.getState().active?.id === "design.sketch") return;
     }
     const state = useStore.getState();
     if (state.projectId !== projectId || workbenches.get(id) !== target) return;

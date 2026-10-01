@@ -53,11 +53,14 @@ it("warns after a conflict-clearing deletion, preserves points and clears on the
   useStore.setState({
     document: doc,
     draftSketch: sketch,
-    mode: {
-      name: "sketch",
-      sketchId: "sk",
-      tool: "select",
-      constructionMode: false,
+    active: {
+      id: "design.sketch",
+      state: {
+        sketchId: "sk",
+        tool: "select",
+        constructionMode: false,
+        polygonSides: 6,
+      },
     },
     evaluation: {
       bodies: [],

@@ -11,7 +11,7 @@ export const sketchOn = (ref: PlaneRef, viewport: ViewportRef) => {
   void runCommand("design.sketch.create", viewport);
 };
 export const planeMenu = (ref: PlaneRef, viewport: ViewportRef): MenuItem[] =>
-  useStore.getState().mode.name === "idle"
+  useStore.getState().active?.id !== "design.sketch"
     ? [{ label: "Create sketch", action: () => sketchOn(ref, viewport) }]
     : [];
 export const deleteItem = (id: string): MenuItem => ({

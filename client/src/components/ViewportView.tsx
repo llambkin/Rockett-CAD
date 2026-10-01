@@ -134,7 +134,7 @@ export function ViewportView({
   const projectId = useStore((s) => s.projectId);
   const savedCamera = useStore((s) => s.view.camera);
   const shownCamera = useRef({ key: "", camera: null as ViewCamera | null });
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const idle = useStore(isIdle);
   const selection = useStore((s) => s.selection);
   const hover = useStore((s) => s.hover);
@@ -405,7 +405,8 @@ export function ViewportView({
     const usage = sketchUsage(document_, evaluation.sketches);
     const hiddenSketches = new Set(hiddenFeatures);
 
-    const activeSketchId = mode.name === "sketch" ? mode.sketchId : null;
+    const editingId =
+      active?.id === "design.sketch" ? active.state.sketchId : null;
     const needProfiles =
       !!activeFeature && takes(activeFeature.type, "profile");
     // Fusion-style select-then-command: in idle, unused sketch regions shade
@@ -414,7 +415,7 @@ export function ViewportView({
 
     const inputs: SketchRenderInput[] = [];
     for (const sk of evaluation.sketches) {
-      const isActive = sk.featureId === activeSketchId;
+      const isActive = sk.featureId === editingId;
       if (isActive && draftSketch) {
         inputs.push({
           sketchId: sk.featureId,
@@ -450,10 +451,8 @@ export function ViewportView({
 
     // dimension labels for the active sketch
     const labels: DimLabel[] = [];
-    if (activeSketchId && draftSketch) {
-      const sk = evaluation.sketches.find(
-        (s) => s.featureId === activeSketchId,
-      );
+    if (editingId && draftSketch) {
+      const sk = evaluation.sketches.find((s) => s.featureId === editingId);
       if (sk) {
         const { points, lines, circles } = dimensionMaps(draftSketch.entities);
         for (const c of draftSketch.constraints) {
@@ -510,7 +509,7 @@ export function ViewportView({
     evaluation,
     document_,
     hiddenFeatures,
-    mode,
+    active,
     activeFeature,
     selection,
     idle,
@@ -601,7 +600,7 @@ export function ViewportView({
   }
 
   // switching sketch tools resets pending clicks + previews
-  const sketchTool = mode.name === "sketch" ? mode.tool : null;
+  const sketchTool = active?.id === "design.sketch" ? active.state.tool : null;
   useEffect(() => {
     toolState.current.clicks = [];
     toolState.current.downUV = null;
@@ -610,7 +609,7 @@ export function ViewportView({
     setToolLabel(null);
     clearDimEntry();
     setSnapMarker(null);
-  }, [sketchTool, mode.name]);
+  }, [sketchTool, active?.id]);
 
   // ---- camera + pointer input ----
   useEffect(() => {
@@ -751,10 +750,9 @@ export function ViewportView({
 
   function activeSketchFrame(): PlaneFrame | null {
     const s = useStore.getState();
-    if (s.mode.name !== "sketch") return null;
-    const sk = s.evaluation?.sketches.find(
-      (x) => x.featureId === (s.mode as any).sketchId,
-    );
+    if (s.active?.id !== "design.sketch") return null;
+    const sketchId = s.active.state.sketchId;
+    const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
     return sk?.frame ?? null;
   }
 
@@ -775,8 +773,8 @@ export function ViewportView({
 
   function faceSnapGeometry() {
     const s = useStore.getState();
-    if (s.mode.name !== "sketch") return null;
-    const sketchId = (s.mode as any).sketchId as string;
+    if (s.active?.id !== "design.sketch") return null;
+    const sketchId = s.active.state.sketchId as string;
     const cached = faceSnapCache.current;
     if (cached && cached.key === sketchId && cached.eval === s.evaluation) {
       return cached.data;
@@ -1162,8 +1160,8 @@ export function ViewportView({
     if (command) {
       const r = vp.pick(e.clientX, e.clientY, command.pickFilter(e));
       picked = command.onHover(r?.selection ?? null, e);
-    } else if (s.mode.name === "sketch") {
-      const tool = (s.mode as any).tool as string;
+    } else if (s.active?.id === "design.sketch") {
+      const tool = s.active.state.tool as string;
       if (tool === "project") {
         picked =
           vp.pick(e.clientX, e.clientY, ["design.edge"])?.selection ?? null;
@@ -1221,7 +1219,7 @@ export function ViewportView({
           clearDimEntry();
         }
         // highlight snap target
-        const sketchId = (s.mode as any).sketchId as string;
+        const sketchId = s.active.state.sketchId as string;
         if (uv?.snapPointId) {
           picked = { kind: "sketchPoint", sketchId, entityId: uv.snapPointId };
         } else if (
@@ -1257,8 +1255,8 @@ export function ViewportView({
 
   function handlePrimaryDown(e: PointerEvent) {
     const s = useStore.getState();
-    if (s.mode.name === "sketch") {
-      const t = (s.mode as any).tool as string;
+    if (s.active?.id === "design.sketch") {
+      const t = s.active.state.tool as string;
       if (t === "select") {
         // start dragging a point?
         const vp = viewportRef.current!;
@@ -1282,7 +1280,7 @@ export function ViewportView({
 
   function handlePrimaryDrag(e: PointerEvent) {
     const s = useStore.getState();
-    if (s.mode.name !== "sketch") return;
+    if (s.active?.id !== "design.sketch") return;
     if (toolState.current.trimDrag) {
       trimAlong(e);
       return;
@@ -1299,7 +1297,7 @@ export function ViewportView({
       return;
     }
     const down = toolState.current.downUV;
-    const tool = (s.mode as any).tool as string;
+    const tool = s.active.state.tool as string;
     if (down && DRAW_TOOLS.has(tool)) {
       const vp = viewportRef.current;
       const frame = activeSketchFrame();
@@ -1457,8 +1455,8 @@ export function ViewportView({
   /** Place the two-input shape using typed sizes, with the cursor filling the rest. */
   async function placeWithDims(cursor: tools.UV) {
     const s = useStore.getState();
-    if (s.mode.name !== "sketch") return;
-    const tool = s.mode.tool as string;
+    if (s.active?.id !== "design.sketch") return;
+    const tool = s.active.state.tool as string;
     const ts = toolState.current;
     const d = dimRef.current;
     if (ts.clicks.length !== 1 || !d) return;
@@ -1475,7 +1473,7 @@ export function ViewportView({
     const result = buildFromClicks(
       tool,
       [first, second],
-      s.mode.constructionMode,
+      s.active.state.constructionMode,
     );
     if (!result?.created) return;
     clearDimEntry();
@@ -1592,9 +1590,9 @@ export function ViewportView({
     if (!keepChaining) {
       const st = useStore.getState();
       if (
-        st.mode.name === "sketch" &&
-        st.mode.tool !== "select" &&
-        st.mode.tool !== "dimension"
+        st.active?.id === "design.sketch" &&
+        st.active.state.tool !== "select" &&
+        st.active.state.tool !== "dimension"
       ) {
         st.setSketchTool("select");
       }
@@ -1607,7 +1605,7 @@ export function ViewportView({
 
     if (toolState.current.trimDrag) return finishTrimDrag(e);
 
-    if (s.mode.name === "sketch" && toolState.current.dragPointId) {
+    if (s.active?.id === "design.sketch" && toolState.current.dragPointId) {
       const wasDrag = dragMoved;
       toolState.current.dragPointId = null;
       if (wasDrag) {
@@ -1617,11 +1615,11 @@ export function ViewportView({
     }
 
     // drag-to-draw completion
-    if (dragMoved && s.mode.name === "sketch") {
+    if (dragMoved && s.active?.id === "design.sketch") {
       const ts = toolState.current;
       const down = ts.downUV;
       ts.downUV = null;
-      const tool = (s.mode as any).tool as string;
+      const tool = s.active.state.tool as string;
       if (down && DRAW_TOOLS.has(tool) && ts.clicks.length === 0) {
         const upUV = angleSnapped(
           e,
@@ -1642,7 +1640,7 @@ export function ViewportView({
             const result = buildFromClicks(
               tool,
               [down, upUV],
-              (s.mode as any).constructionMode,
+              s.active.state.constructionMode,
             );
             if (result?.created) {
               await applyCreated(result.created, false);
@@ -1680,7 +1678,7 @@ export function ViewportView({
       return;
     }
 
-    if (s.mode.name === "sketch") {
+    if (s.active?.id === "design.sketch") {
       await handleSketchClick(e);
       return;
     }
@@ -1698,9 +1696,9 @@ export function ViewportView({
   async function handleSketchClick(e: PointerEvent) {
     const s = useStore.getState();
     const vp = viewportRef.current!;
-    if (s.mode.name !== "sketch") return;
-    const tool = s.mode.tool;
-    const construction = s.mode.constructionMode;
+    if (s.active?.id !== "design.sketch") return;
+    const tool = s.active.state.tool;
+    const construction = s.active.state.constructionMode;
     const ts = toolState.current;
     const last = ts.clicks[ts.clicks.length - 1];
     const uv = angleSnapped(
@@ -1747,8 +1745,8 @@ export function ViewportView({
         const current = useStore.getState();
         if (
           current.draftSketch !== draft ||
-          current.mode.name !== "sketch" ||
-          current.mode.tool !== "project"
+          current.active?.id !== "design.sketch" ||
+          current.active.state.tool !== "project"
         )
           return;
         s.updateDraftSketch([...draft.entities, ...added], draft.constraints);
@@ -1924,7 +1922,7 @@ export function ViewportView({
       command.onContextMenu(r?.selection ?? null, e);
       return;
     }
-    if (s.mode.name === "sketch") {
+    if (s.active?.id === "design.sketch") {
       // right-click sketch geometry → delete / construction / dimension
       const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
       if (
@@ -2029,8 +2027,8 @@ export function ViewportView({
 
   function handleDoubleClick(e: MouseEvent) {
     const s = useStore.getState();
-    if (s.active) return;
-    if (s.mode.name === "idle") {
+    if (s.active && s.active.id !== "design.sketch") return;
+    if (!s.active) {
       // double-click a sketch curve → edit that sketch
       const vp = viewportRef.current!;
       const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
@@ -2043,7 +2041,7 @@ export function ViewportView({
           .editSketch((r.selection as any).sketchId)
           .then(() => alignCameraToActiveSketch(viewportRef));
       }
-    } else if (s.mode.name === "sketch") {
+    } else if (s.active?.id === "design.sketch") {
       // double-click a curve → edit its size
       const vp = viewportRef.current!;
       const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
@@ -2057,7 +2055,7 @@ export function ViewportView({
       clearToolPreview(viewportRef.current);
       setToolLabel(null);
       clearDimEntry();
-      if ((s.mode as any).tool === "line") s.setSketchTool("select");
+      if (s.active.state.tool === "line") s.setSketchTool("select");
     }
   }
 
@@ -2067,7 +2065,7 @@ export function ViewportView({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
-      if (s.mode.name !== "sketch") return;
+      if (s.active?.id !== "design.sketch") return;
       const d = dimRef.current;
       const ts = toolState.current;
       if (!d || ts.clicks.length !== 1) return;
@@ -2607,9 +2605,9 @@ function angleSnapped(
 }
 
 function polygonOptions(): tools.PolygonOptions {
-  const p = useStore.getState().dialogParams;
+  const { active, dialogParams: p } = useStore.getState();
   return {
-    sides: Number(p.polygonSides ?? 6) || 6,
+    sides: active?.id === "design.sketch" ? active.state.polygonSides || 6 : 6,
     type: p.polygonType === "circumscribed" ? "circumscribed" : "inscribed",
     angle: Number.isFinite(p.polygonAngle) ? p.polygonAngle : null,
   };

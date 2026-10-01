@@ -3,14 +3,15 @@ import { sketchConstraintsHold, type SketchSolveStatus } from "@rockett/shared";
 import { useStore } from "../store";
 
 export function SketchStatus() {
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const evaluation = useStore((s) => s.evaluation);
   const draftSketch = useStore((s) => s.draftSketch);
   const willSettle = useMemo(
     () => (draftSketch ? sketchConstraintsHold(draftSketch) === false : false),
     [draftSketch?.entities, draftSketch?.constraints],
   );
-  if (mode.name !== "sketch" || !draftSketch || !evaluation) return null;
+  if (active?.id !== "design.sketch" || !draftSketch || !evaluation)
+    return null;
   const solved = evaluation.sketches.find(
     (s) => s.featureId === draftSketch.id,
   );

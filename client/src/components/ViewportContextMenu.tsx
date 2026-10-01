@@ -50,7 +50,7 @@ function viewItems(viewport: ViewportRef): MenuItem[] {
 
 function useRelationItems(): MenuItem[] {
   const draft = useStore((s) =>
-    s.mode.name === "sketch" ? s.draftSketch : null,
+    s.active?.id === "design.sketch" ? s.draftSketch : null,
   );
   const selection = useStore((s) => s.selection);
   const relations = useMemo(
@@ -97,7 +97,7 @@ export function ViewportContextMenu({
   if (sel.kind === "sketchEntity" || sel.kind === "sketchPoint") {
     const selectedIds = sketchSelectionIds(s.selection);
     const many = selectedIds.length > 1;
-    if (s.mode.name !== "sketch") {
+    if (s.active?.id !== "design.sketch") {
       if (sel.kind === "sketchEntity") {
         items.push({
           label: many
