@@ -48,8 +48,8 @@ function sizePicks(draft: Feature | null): string | null {
 }
 
 function sizePosition(id: string): number {
-  const { document: before, mode } = useStore.getState();
-  const own = dialogFeatureId(mode) ?? id;
+  const { document: before, active } = useStore.getState();
+  const own = dialogFeatureId(active) ?? id;
   const edited = before!.features.findIndex((f) => f.id === own);
   if (edited >= 0) return edited;
   return Math.min(before!.timelinePosition, before!.features.length);

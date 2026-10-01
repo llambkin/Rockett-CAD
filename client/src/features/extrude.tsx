@@ -5,7 +5,7 @@ import {
   SelectField,
   SelInfo,
 } from "../components/form/fields";
-import { profilesOrFaces, targets } from "../dialogPicks";
+import { profilesOrFaces, targets } from "../commands/featureCommand";
 import { autoOperation, extrudeOperation } from "../extrudeReach";
 import { useSetting } from "../settings";
 import {

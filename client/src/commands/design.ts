@@ -1,9 +1,10 @@
 import { sketchCreateCommand } from "./sketchCreate";
 import { measureCommand } from "./measure";
 import { exitActive } from "./active";
-import { filterSelectionFor } from "../dialogPicks";
+import { featureCommand } from "./featureCommand";
+import { exportCommand } from "./export";
 import type { IconId } from "../icons";
-import { useStore, type DialogType } from "../store";
+import type { DialogType } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { NamedViewSelect } from "../components/NamedViewSelect";
 import { StepImportButton } from "../components/StepImportButton";
@@ -14,10 +15,8 @@ import {
 } from "./registry";
 
 export function openDialog(dialog: DialogType) {
-  const s = useStore.getState();
-  const kept = filterSelectionFor(dialog, s.selection);
-  s.setMode({ name: "dialog", dialog });
-  s.setSelection(kept);
+  if (dialog === "export") return exportCommand.enter();
+  featureCommand.enter(dialog);
 }
 
 export function toggleProjection() {
@@ -34,8 +33,7 @@ function cancel(s: CommandContext) {
   const { mode } = s;
   if (mode.name === "sketch" && mode.tool !== "select")
     return s.setSketchTool("select");
-  if (s.active?.id === "design.sketch.create") return exitActive();
-  if (mode.name === "dialog") return s.cancelDialog();
+  if (s.active && s.active.id !== "inspect.measure") return exitActive();
   s.setSelection([]);
 }
 
@@ -76,6 +74,13 @@ registerCommand({
   interaction: sketchCreateCommand,
   active: (s) => s.active?.id === "design.sketch.create",
   run: () => sketchCreateCommand.enter(),
+});
+
+registerCommand({
+  id: "design.feature",
+  label: "Feature",
+  interaction: featureCommand,
+  run() {},
 });
 
 const DIALOG_KEYS: Partial<Record<DialogType, string>> = {
@@ -170,7 +175,8 @@ registerCommand({
   group: "design.group.export",
   tooltip: "STL / 3MF export",
   enabled: idle,
-  run: () => openDialog("export"),
+  interaction: exportCommand,
+  run: () => exportCommand.enter(),
 });
 
 registerCommand({
@@ -196,7 +202,9 @@ registerCommand({
   label: "Cancel",
   keys: ["Escape"],
   keyContext: "global",
-  enabled: (s) => s.mode.name !== "dialog" || idle(s),
+  enabled: (s) =>
+    !["design.feature", "design.export"].includes(s.active?.id ?? "") ||
+    idle(s),
   run: cancel,
 });
 

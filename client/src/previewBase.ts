@@ -11,7 +11,7 @@ import {
   type PreviewGhost,
   type PreviewTint,
 } from "./livePreview";
-import type { Mode } from "./store";
+import type { Active } from "./commands/active";
 
 type Base = {
   fid: string;
@@ -65,24 +65,25 @@ export async function bodiesAfter(
 }
 
 export function previewBodies(
-  s: { mode: Mode; evaluation: EvaluateResult | null },
+  s: { active: Active | null; evaluation: EvaluateResult | null },
   base = current(),
 ): BodyPayload[] {
-  return s.mode.name === "dialog" && base
+  return s.active?.id === "design.feature" && base
     ? base.bodies
     : (s.evaluation?.bodies ?? []);
 }
 
 export function baseBodies(s: {
-  mode: Mode;
+  active: Active | null;
   evaluation: EvaluateResult | null;
 }): BodyPayload[] {
-  const editing = s.mode.name === "dialog" && s.mode.editFeatureId;
+  const editing =
+    s.active?.id === "design.feature" && s.active.state.editFeatureId;
   return editing && !current()?.loaded ? [] : previewBodies(s);
 }
 
 export function previewScene(s: {
-  mode: Mode;
+  active: Active | null;
   document: CadDocument | null;
   evaluation: EvaluateResult | null;
   view: ProjectView;
@@ -109,7 +110,7 @@ export function previewScene(s: {
 export async function loadPreviewBase(
   fid: string,
   read: () => {
-    mode: Mode;
+    active: Active | null;
     document: CadDocument | null;
     projectId: string | null;
   },
@@ -123,10 +124,10 @@ export async function loadPreviewBase(
       api.evaluate(document.id, index),
       bodiesAfter(document, fid),
     ]);
-    const { mode, projectId } = read();
+    const { active, projectId } = read();
     if (
-      mode.name !== "dialog" ||
-      mode.editFeatureId !== fid ||
+      active?.id !== "design.feature" ||
+      active.state.editFeatureId !== fid ||
       projectId !== document.id
     )
       return false;

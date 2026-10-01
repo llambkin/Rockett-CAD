@@ -7,7 +7,9 @@ import { DialogFooter } from "./form/DialogFooter";
 
 export function MeasurePanel() {
   const units = useSetting("units.length");
-  const state = useStore((s) => s.active?.state);
+  const state = useStore((s) =>
+    s.active?.id === "inspect.measure" ? s.active.state : undefined,
+  );
   const result = state?.result;
   const selection = state?.picks ?? [];
   const fmt = (v: number | undefined) =>

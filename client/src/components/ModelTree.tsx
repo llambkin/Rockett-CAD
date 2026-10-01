@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { Feature, PlaneRef, TreeGroup } from "@rockett/shared";
 import { ORIGIN_AXES, UNITS_LENGTH } from "@rockett/shared";
-import { pickInto } from "../dialogPicks";
+import { activeCommand } from "../commands/active";
 import "../commands/design";
 import { runCommand } from "../commands/registry";
 import { useStore, selectionKey, isIdle, type Selection } from "../store";
@@ -189,7 +189,7 @@ export const ModelTree = memo(function ModelTree() {
     e: React.MouseEvent,
     sel: Selection,
     order: Selection[],
-    plain: () => void,
+    plain = () => toggleSelection(sel, false),
   ) => {
     const range = e.shiftKey;
     const additive = e.ctrlKey || e.metaKey;
@@ -202,7 +202,8 @@ export const ModelTree = memo(function ModelTree() {
         : sel;
     anchor.current = from;
     const s = useStore.getState();
-    if (s.mode.name === "dialog") pickInto([sel], range || additive);
+    const command = activeCommand(s);
+    if (command?.onSelection) command.onSelection([sel], range || additive);
     else if (!range && !additive) plain();
     else s.setSelection(treeClick(s.selection, sel, order, from, range));
   };
@@ -255,7 +256,7 @@ export const ModelTree = memo(function ModelTree() {
           sketchOn(sel.ref);
           return;
         }
-        pick(e, sel, origins, () => toggleSelection(sel, false));
+        pick(e, sel, origins);
       }}
       onContextMenu={(e) => openMenu(e, planeMenu(sel.ref))}
     >
@@ -267,7 +268,7 @@ export const ModelTree = memo(function ModelTree() {
     <div
       key={selectionKey(sel)}
       className={`tree-item ${selKeys.has(selectionKey(sel)) ? "selected" : ""}`}
-      onClick={(e) => pick(e, sel, origins, () => toggleSelection(sel, false))}
+      onClick={(e) => pick(e, sel, origins)}
     >
       <span className="tree-icon">↗</span>
       {pickLabel(sel, document_, evaluation, [])}
@@ -486,7 +487,7 @@ export const ModelTree = memo(function ModelTree() {
   latest.current = {
     click: (e, bodyId) => {
       const sel = bodySel({ bodyId });
-      pick(e, sel, bodyParts.order, () => toggleSelection(sel, false));
+      pick(e, sel, bodyParts.order);
     },
     menu: (e, bodyId) => openMenu(e, bodyMenu(bodyId)),
     rename: (bodyId) => setRenaming(bodyId),
@@ -545,11 +546,7 @@ export const ModelTree = memo(function ModelTree() {
             <div
               key={f.id}
               className={`tree-item ${selKeys.has(selectionKey(planeSels[i]!)) ? "selected" : ""}`}
-              onClick={(e) =>
-                pick(e, planeSels[i]!, planeSels, () =>
-                  toggleSelection(planeSels[i]!, false),
-                )
-              }
+              onClick={(e) => pick(e, planeSels[i]!, planeSels)}
               onDoubleClick={() => openFeatureEditor(f)}
               onContextMenu={(e) => openMenu(e, constructionMenu(f))}
             >

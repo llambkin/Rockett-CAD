@@ -29,7 +29,7 @@ const offsetFace: FeatureUI<OffsetFaceFeature> = {
   icon: "⇱",
   title: "Press / Pull",
   group: "modify",
-  picks: [{ key: "faces", kinds: ["face"], planar: true }],
+  picks: [{ key: "faces", providers: ["design.face"], planar: true }],
   Form: OffsetFaceForm,
   build: (params, selection) => {
     const faces = faceRefs(selection);

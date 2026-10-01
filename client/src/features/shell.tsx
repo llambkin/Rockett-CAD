@@ -40,7 +40,7 @@ const shell: FeatureUI<ShellFeature> = {
   icon: "▢",
   title: "Shell",
   group: "modify",
-  picks: [{ key: "faces", kinds: ["face"] }],
+  picks: [{ key: "faces", providers: ["design.face"] }],
   Form: ShellForm,
   build: (params, selection) => ({
     id: params.id ?? newId("shell"),

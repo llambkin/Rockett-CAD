@@ -1,7 +1,7 @@
 import { newId, type ChamferFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
-import { edges } from "../dialogPicks";
+import { edges } from "../commands/featureCommand";
 import { edgePicks, edgeRefs, handleValue } from "./inputs";
 import {
   registerFeatureUI,

@@ -10,7 +10,6 @@ import { useShallow } from "zustand/react/shallow";
 import { createRegistry } from "@rockett/shared";
 import { activeCommand } from "../commands/active";
 import type { CommandContext } from "../commands/registry";
-import { featureUI } from "../features/registry";
 import { useStore } from "../store";
 import { ExportPanel } from "../components/ExportPanel";
 import { HistoryPanel } from "../components/HistoryPanel";
@@ -86,13 +85,17 @@ export function Panels() {
 registerPanel({
   id: "design.export",
   title: "Export for 3D printing",
-  when: () => true,
-  component: ExportPanel,
+  when: (s) => activeCommand(s)?.panel === "design.export",
+  component: () => (
+    <ExportPanel
+      onClose={() => useStore.getState().setMode({ name: "idle" })}
+    />
+  ),
 });
 registerPanel({
   id: "design.feature",
   title: "Feature",
-  when: (s) => s.mode.name === "dialog" && !!featureUI(s.mode.dialog)?.prefill,
+  when: (s) => activeCommand(s)?.panel === "design.feature",
   component: FeatureDialog,
 });
 registerPanel({

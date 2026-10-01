@@ -13,7 +13,12 @@ import {
   SelInfo,
   SelectField,
 } from "../components/form/fields";
-import { axis, clearInput, planar, type PickInput } from "../dialogPicks";
+import {
+  axis,
+  clearInput,
+  planar,
+  type PickInput,
+} from "../commands/featureCommand";
 import { useStore, type Selection } from "../store";
 import { useSetting } from "../settings";
 import {
@@ -38,10 +43,13 @@ type Method = ConstructionPlaneFeature["method"];
 const OFFSET_TAKES_ONE = "Offset takes one reference; remove the extra one";
 
 const planes = planar("plane", false);
-const points: PickInput = { key: "points", kinds: ["vertex", "sketchPoint"] };
+const points: PickInput = {
+  key: "points",
+  providers: ["design.vertex", "sketch.point"],
+};
 const lines: PickInput = {
   key: "lines",
-  kinds: ["edge", "sketchEntity", "axis"],
+  providers: ["design.edge", "sketch.entity", "design.originAxis"],
   straight: true,
 };
 

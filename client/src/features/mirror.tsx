@@ -1,6 +1,6 @@
 import { newId, type MirrorFeature } from "@rockett/shared";
 import { CheckField, SelInfo } from "../components/form/fields";
-import { bodies, planar } from "../dialogPicks";
+import { bodies, planar } from "../commands/featureCommand";
 import { bodyIds, bodyPicks, selectedPlane } from "./inputs";
 import {
   registerFeatureUI,

@@ -1,6 +1,6 @@
 import { newId, type SplitBodyFeature } from "@rockett/shared";
 import { SelInfo } from "../components/form/fields";
-import { planar } from "../dialogPicks";
+import { planar } from "../commands/featureCommand";
 import { bodyIds, bodyPicks, selectedPlane } from "./inputs";
 import { registerFeatureUI, type FeatureUI } from "./registry";
 
@@ -22,7 +22,10 @@ const splitBody: FeatureUI<SplitBodyFeature> = {
   icon: "∤",
   title: "Split Body",
   group: "modify",
-  picks: [{ key: "body", kinds: ["body"], one: true }, planar("tool", true)],
+  picks: [
+    { key: "body", providers: ["design.body"], one: true },
+    planar("tool", true),
+  ],
   Form: SplitBodyForm,
   build: (params, selection) => {
     const [body] = bodyIds(selection);

@@ -5,7 +5,7 @@ import {
   SelectField,
   TargetField,
 } from "../components/form/fields";
-import { profiles, targets } from "../dialogPicks";
+import { profiles, targets } from "../commands/featureCommand";
 import { targetOperation } from "../toolTargets";
 import { useSetting } from "../settings";
 import { bodyTargets, handleValue, profilePicks, profileRefs } from "./inputs";

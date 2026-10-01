@@ -146,6 +146,7 @@ function openSketch() {
     timelinePosition: 1,
   };
   useStore.setState({
+    active: null,
     document,
     projectId: document.id,
     mode: {

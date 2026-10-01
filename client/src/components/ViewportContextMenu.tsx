@@ -1,3 +1,7 @@
+import {
+  featureCommand,
+  type FeatureCommandState,
+} from "../commands/featureCommand";
 import { runCommand } from "../commands/registry";
 import { useMemo } from "react";
 import { useStore, type Selection } from "../store";
@@ -83,10 +87,8 @@ export function ViewportContextMenu({
     return shown();
   }
 
-  const openDialog = (dialog: any, selection: Selection[] = [sel]) => {
-    s.setMode({ name: "dialog", dialog });
-    s.setSelection(selection);
-  };
+  const open = (type: FeatureCommandState["type"], selection = [sel]) =>
+    featureCommand.enter(type, { selection });
 
   if (sel.kind === "sketchEntity" || sel.kind === "sketchPoint") {
     const selectedIds = sketchSelectionIds(s.selection);
@@ -147,15 +149,15 @@ export function ViewportContextMenu({
       });
       items.push({
         label: "Extrude face",
-        action: () => openDialog("extrude"),
+        action: () => open("extrude"),
       });
       items.push({
         label: "Press / Pull",
-        action: () => openDialog("offsetFace"),
+        action: () => open("offsetFace"),
       });
       items.push({
         label: "Shell (open this face)",
-        action: () => openDialog("shell"),
+        action: () => open("shell"),
       });
     }
     items.push({
@@ -164,18 +166,21 @@ export function ViewportContextMenu({
         void s.setVisible({ bodies: { [sel.bodyId]: false }, features: {} }),
     });
   } else if (sel.kind === "edge") {
-    items.push({ label: "Fillet edge", action: () => openDialog("fillet") });
-    items.push({ label: "Chamfer edge", action: () => openDialog("chamfer") });
+    items.push({ label: "Fillet edge", action: () => open("fillet") });
+    items.push({
+      label: "Chamfer edge",
+      action: () => open("chamfer"),
+    });
   } else if (sel.kind === "profile") {
     const regions = s.selection.filter((x) => x.kind === "profile");
     const many = regions.length > 1;
     items.push({
       label: many ? `Extrude (${regions.length} regions)` : "Extrude region",
-      action: () => openDialog("extrude", regions),
+      action: () => open("extrude", regions),
     });
     items.push({
       label: many ? `Revolve (${regions.length} regions)` : "Revolve region",
-      action: () => openDialog("revolve", regions),
+      action: () => open("revolve", regions),
     });
   }
 

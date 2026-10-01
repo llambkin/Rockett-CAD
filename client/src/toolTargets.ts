@@ -1,13 +1,13 @@
 import type { Feature, NamingVersion } from "@rockett/shared";
 import { createLivePreview } from "./livePreview";
-import { useStore, type DialogType } from "./store";
+import { useStore } from "./store";
 
 export function several(operation: string, namingVersion?: NamingVersion) {
   return operation === "cut" || (operation === "join" && namingVersion === 2);
 }
 
 export function targetOperation(
-  dialog: DialogType,
+  dialog: string,
   params: Record<string, any>,
 ): string {
   if (dialog === "emboss")
@@ -35,9 +35,9 @@ export function toolTargets(
 
 export function dialogTargets(): { targets?: string[] } {
   const s = useStore.getState();
-  if (s.mode.name !== "dialog") return {};
+  if (s.active?.id !== "design.feature") return {};
   return toolTargets(
-    targetOperation(s.mode.dialog, s.dialogParams),
+    targetOperation(s.active.state.type, s.dialogParams),
     s.dialogParams.targets,
     s.document?.namingVersion,
   );

@@ -1,21 +1,25 @@
-import { pickProviders } from "./three/pickProviders";
+import { selectionBeforeCommand } from "../selection/kinds";
+import type { ActiveCommand, PickModifiers } from "./active";
+import { repick } from "../featureReferences";
+import type { Feature } from "@rockett/shared";
+import { pickProviders } from "../three/pickProviders";
 import {
   previewBodies,
   selectionKey,
   useStore,
-  type DialogType,
   type Selection,
-} from "./store";
-import { featureUI } from "./features/registry";
-import { chosenTargets, several, targetOperation } from "./toolTargets";
-import { sketchRegions } from "./treeSelection";
+} from "../store";
+import { featureUI, type DialogFeatureUI } from "../features/registry";
+import { chosenTargets, several, targetOperation } from "../toolTargets";
+import { sketchRegions } from "../treeSelection";
 
 type Store = ReturnType<typeof useStore.getState>;
 type Kind = Selection["kind"];
 
 export interface PickInput {
   key: string;
-  kinds: readonly Kind[];
+  providers: readonly string[];
+  wholeSketch?: true;
   one?: true;
   planar?: true;
   straight?: true;
@@ -30,27 +34,31 @@ export interface PickInput {
 
 const input = (
   key: string,
-  kinds: readonly Kind[],
-  rules: Omit<PickInput, "key" | "kinds"> = {},
-): PickInput => ({ key, kinds, ...rules });
+  providers: readonly string[],
+  rules: Omit<PickInput, "key" | "providers"> = {},
+): PickInput => ({ key, providers, ...rules });
 
-export const profiles = input("profiles", ["profile"]);
-export const profilesOrFaces = input("profiles", ["profile", "face"], {
-  planar: true,
-  shiftFaces: true,
-});
-export const sections = input("profiles", ["profile", "face"], {
+export const profiles = input("profiles", ["sketch.profile"]);
+export const profilesOrFaces = input(
+  "profiles",
+  ["sketch.profile", "design.face"],
+  {
+    planar: true,
+    shiftFaces: true,
+  },
+);
+export const sections = input("profiles", ["sketch.profile", "design.face"], {
   planar: true,
   accumulate: true,
 });
-export const targets = input("targets", ["body"], {
+export const targets = input("targets", ["design.body"], {
   optional: true,
   param: {
     read: (s) =>
-      s.mode.name !== "dialog"
+      s.active?.id !== "design.feature"
         ? []
         : chosenTargets(
-            targetOperation(s.mode.dialog, s.dialogParams),
+            targetOperation(s.active.state.type, s.dialogParams),
             s.dialogParams.targets,
             s.document?.namingVersion,
           ).map((bodyId) => ({ kind: "body", bodyId })),
@@ -61,28 +69,34 @@ export const targets = input("targets", ["body"], {
   },
 });
 
-export const bodies = input("bodies", ["body"]);
-export const edges = input("edges", ["edge"]);
+export const bodies = input("bodies", ["design.body"]);
+export const edges = input("edges", ["design.edge"]);
 const line = { one: true, straight: true } as const;
-export const axis = input("axis", ["edge", "sketchEntity", "axis"], line);
+export const axis = input(
+  "axis",
+  ["design.edge", "sketch.entity", "design.originAxis"],
+  line,
+);
 export const planar = (key: string, one: boolean) =>
-  input(key, ["plane", "face"], { planar: true, ...(one && { one: true }) });
+  input(
+    key,
+    ["design.originPlane", "design.constructionPlane", "design.face"],
+    { planar: true, ...(one && { one: true }) },
+  );
 
-const DIALOG_INPUTS: Partial<Record<DialogType, readonly PickInput[]>> = {
-  export: [bodies],
-};
-
-const picksOf = (dialog: DialogType): readonly PickInput[] =>
-  featureUI(dialog)?.picks ?? DIALOG_INPUTS[dialog] ?? [];
+const picksOf = (dialog: Feature["type"]): readonly PickInput[] =>
+  featureUI(dialog)?.picks ?? [];
 
 const inSelection = (i: PickInput) => !i.param;
 
-export function takes(dialog: DialogType, kind: Kind): boolean {
-  return picksOf(dialog).some((i) => inSelection(i) && i.kinds.includes(kind));
+export function takes(dialog: Feature["type"], kind: Kind): boolean {
+  return picksOf(dialog).some(
+    (i) => inSelection(i) && kindsOf(i).includes(kind),
+  );
 }
 
-export function filterSelectionFor(
-  dialog: DialogType,
+export function preselectionFor(
+  dialog: Feature["type"],
   selection: Selection[],
 ): Selection[] {
   const s = useStore.getState();
@@ -93,31 +107,31 @@ export function filterSelectionFor(
   );
   return selection.filter((sel) =>
     inputs.some(
-      (i) => i.kinds.includes(sel.kind) && accepted(i, sel, s).length > 0,
+      (i) => kindsOf(i).includes(sel.kind) && accepted(i, sel, s).length > 0,
     ),
   );
 }
 
 function inputsFor(
-  dialog: DialogType,
+  dialog: Feature["type"],
   params: Record<string, any>,
 ): readonly PickInput[] {
   return featureUI(dialog)?.picksFor?.(params) ?? picksOf(dialog);
 }
 
 export function takesAxis(
-  dialog: DialogType,
+  dialog: Feature["type"],
   params: Record<string, any>,
 ): boolean {
   return inputsFor(dialog, params).some(
-    (i) => inSelection(i) && !!i.one && i.kinds.includes("axis"),
+    (i) => inSelection(i) && !!i.one && kindsOf(i).includes("axis"),
   );
 }
 
 function dialogInputs(s: Store): PickInput[] {
-  if (s.mode.name !== "dialog") return [];
-  const operation = targetOperation(s.mode.dialog, s.dialogParams);
-  return inputsFor(s.mode.dialog, s.dialogParams).flatMap((i) => {
+  if (s.active?.id !== "design.feature") return [];
+  const operation = targetOperation(s.active.state.type, s.dialogParams);
+  return inputsFor(s.active.state.type, s.dialogParams).flatMap((i) => {
     if (i !== targets) return [i];
     if (operation === "newBody") return [];
     return several(operation, s.document?.namingVersion)
@@ -127,7 +141,7 @@ function dialogInputs(s: Store): PickInput[] {
 }
 
 const held = (i: PickInput | undefined, selection: Selection[]) =>
-  selection.filter((x) => !!i?.kinds.includes(x.kind));
+  selection.filter((x) => !!kindsOf(i).includes(x.kind));
 
 export function readInput(key: string, s: Store): Selection[] {
   const i = dialogInputs(s).find((x) => x.key === key);
@@ -158,7 +172,11 @@ export function isPlanarFace(sel: Selection, s: Store): boolean {
 }
 
 function fits(i: PickInput, sel: Selection, s: Store): boolean {
-  if (!i.kinds.includes(sel.kind)) return false;
+  if (
+    !kindsOf(i).includes(sel.kind) &&
+    !(i.wholeSketch && sel.kind === "sketch")
+  )
+    return false;
   return !(i.planar && sel.kind === "face" && !isPlanarFace(sel, s));
 }
 
@@ -177,33 +195,45 @@ function isStraight(sel: Selection, s: Store): boolean {
   );
 }
 
+function kindsOf(i: PickInput | undefined): Kind[] {
+  return [
+    ...pickProviders().flatMap((p) =>
+      i?.providers.includes(p.id) ? [p.kind] : [],
+    ),
+    ...(i?.wholeSketch ? ["sketch" as const] : []),
+  ];
+}
+
 export function pickProviderIds(
   i: PickInput | undefined,
   shift?: boolean,
 ): string[] {
-  const has = (kind: Kind) => !!i?.kinds.includes(kind);
-  const split = shift !== undefined && !!i?.shiftFaces;
-  const kinds =
-    i?.kinds.filter((kind) =>
-      kind === "profile"
-        ? !(split && shift)
-        : kind === "face"
-          ? !split || shift
-          : kind === "body"
-            ? !has("face")
-            : true,
-    ) ?? [];
+  if (!i) return [];
+  const kinds = kindsOf(i);
+  const split = shift !== undefined && !!i.shiftFaces;
+  const ids = i.providers.filter((id) => {
+    const kind = pickProviders().find((p) => p.id === id)?.kind;
+    return kind === "profile"
+      ? !(split && shift)
+      : kind === "face"
+        ? !split || shift
+        : kind === "body"
+          ? !kinds.includes("face")
+          : true;
+  });
   if (kinds.includes("sketchPoint") && !kinds.includes("sketchEntity"))
-    kinds.push("sketchEntity");
+    ids.push("sketch.entity");
   return pickProviders()
-    .filter((provider) => kinds.includes(provider.kind))
-    .map((provider) => provider.id);
+    .filter((p) => ids.includes(p.id))
+    .map((p) => p.id);
 }
 
-export function dialogPickProviders(s: Store, shift?: boolean): string[] {
+function featurePickProviders(s: Store, shift?: boolean): string[] {
   const repair: { kind: "face" | "edge" } | undefined = s.dialogParams.repick;
   return pickProviderIds(
-    repair ? { key: "repick", kinds: [repair.kind] } : activeInput(s),
+    repair
+      ? { key: "repick", providers: [`design.${repair.kind}`] }
+      : activeInput(s),
     shift,
   );
 }
@@ -214,7 +244,7 @@ export function accepted(
   s: Store,
 ): Selection[] {
   if (!i || !sel) return [];
-  const has = (kind: Kind) => i.kinds.includes(kind);
+  const has = (kind: Kind) => kindsOf(i).includes(kind);
   if (sel.kind === "face" && !has("face") && has("body"))
     return [{ kind: "body", bodyId: sel.bodyId }];
   if (sel.kind === "sketch" && has("profile"))
@@ -252,7 +282,7 @@ function replaced(i: PickInput, had: Selection[], taken: Selection[]) {
 function write(i: PickInput, next: Selection[], s: Store) {
   if (i.param) return i.param.write(next, s);
   s.setSelection([
-    ...s.selection.filter((x) => !i.kinds.includes(x.kind)),
+    ...s.selection.filter((x) => !kindsOf(i).includes(x.kind)),
     ...next,
   ]);
 }
@@ -270,7 +300,7 @@ export function clearInput(key: string, keys?: string[]) {
     );
   s.setSelection(
     s.selection.filter(
-      (x) => !i.kinds.includes(x.kind) || !gone.has(selectionKey(x)),
+      (x) => !kindsOf(i).includes(x.kind) || !gone.has(selectionKey(x)),
     ),
   );
 }
@@ -298,4 +328,77 @@ export function pickInto(picks: readonly Selection[], additive: boolean) {
   const after = useStore.getState();
   const pass = i.one && next.length > 0 ? following(i.key, after) : undefined;
   after.setPickInput((pass ?? i).key);
+}
+
+export interface FeatureCommandState {
+  type: Feature["type"];
+  editFeatureId?: string;
+  selectionBefore: Selection[];
+}
+
+export const featureCommand = {
+  enter(
+    type?: FeatureCommandState["type"],
+    initial?: {
+      editFeatureId?: string;
+      params?: Record<string, any>;
+      selection: Selection[];
+    },
+  ) {
+    if (!type || !featureUI(type)) return;
+    const s = useStore.getState();
+    const selectionBefore = selectionBeforeCommand(s);
+    const selection = initial?.selection ?? preselectionFor(type, s.selection);
+    s.setMode({ name: "idle" });
+    useStore.setState({
+      active: {
+        id: "design.feature",
+        state: {
+          type,
+          selectionBefore,
+          ...(initial?.editFeatureId && {
+            editFeatureId: initial.editFeatureId,
+          }),
+        },
+      },
+      dialogParams: initial?.params ?? {},
+      selection,
+      hover: null,
+    });
+  },
+  exit() {
+    useStore.getState().cancelDialog();
+  },
+  pickFilter(event?: Pick<PointerEvent, "shiftKey">) {
+    return featurePickProviders(useStore.getState(), event?.shiftKey);
+  },
+  onHover(selection: Selection | null) {
+    return hoverPick(useStore.getState(), selection);
+  },
+  async onClick(selection: Selection | null, event: PickModifiers) {
+    const s = useStore.getState();
+    if (s.active?.id !== "design.feature" || s.busy) return;
+    if (repick(selection)) return;
+    const sel = accepted(activeInput(s), selection, s)[0] ?? null;
+    const taken = sel && featureUI(s.active.state.type)?.onPick?.(sel, s);
+    if (taken) return taken;
+    if (sel) pickInto([sel], event.ctrlKey || event.metaKey || event.shiftKey);
+  },
+  onSelection: pickInto,
+  onContextMenu() {},
+  hint: "",
+  panel: "design.feature",
+  keyContext: "design.feature",
+} satisfies ActiveCommand;
+
+export async function openInDialog(
+  ui: DialogFeatureUI,
+  f: Feature,
+): Promise<void> {
+  if (useStore.getState().mode.name === "sketch") {
+    await useStore.getState().finishSketch();
+    if (useStore.getState().mode.name === "sketch") return;
+  }
+  const { params, selection } = ui.prefill(f);
+  featureCommand.enter(ui.type, { editFeatureId: f.id, params, selection });
 }

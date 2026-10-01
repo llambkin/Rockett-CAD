@@ -9,7 +9,8 @@ import type {
   Feature,
   FeatureStatus,
 } from "@rockett/shared";
-import { pickInto } from "../dialogPicks";
+import { openInDialog } from "../commands/featureCommand";
+import { activeCommand } from "../commands/active";
 import { featureUI } from "../features/registry";
 import {
   useStore,
@@ -65,7 +66,8 @@ function chipClass(
 function selectFeatureBodies(featureId: string, additive: boolean) {
   const s = useStore.getState();
   const bodies = featureBodies(s.evaluation, featureId);
-  if (s.mode.name === "dialog") return pickInto(bodies, additive);
+  const command = activeCommand(s);
+  if (command?.onSelection) return command.onSelection(bodies, additive);
   if (!isIdle(s) || bodies.length === 0) return;
   const had = new Set(s.selection.map(selectionKey));
   s.setSelection(
@@ -299,5 +301,7 @@ export function Timeline() {
 
 export async function openFeatureEditor(f: Feature): Promise<void> {
   if (useStore.getState().busy) return;
-  await featureUI(f.type)?.open(f);
+  const ui = featureUI(f.type);
+  if (ui?.open) await ui.open(f);
+  else if (ui?.prefill) await openInDialog(ui, f);
 }

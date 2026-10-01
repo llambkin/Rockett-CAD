@@ -11,9 +11,9 @@ export function PickReadout() {
   const selection = useStore((s) => s.selection);
   const document = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   if (!hover && selection.length === 0) return null;
-  const bodies = previewBodies({ mode, evaluation });
+  const bodies = previewBodies({ active, evaluation });
   const name = (pick: Selection) =>
     pickLabel(pick, document, evaluation, bodies);
   return (

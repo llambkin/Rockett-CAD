@@ -6,7 +6,7 @@ import {
   NumField,
   SelInfo,
 } from "../components/form/fields";
-import { bodies, clearInput, type PickInput } from "../dialogPicks";
+import { bodies, clearInput, type PickInput } from "../commands/featureCommand";
 import { useSetting } from "../settings";
 import { useStore } from "../store";
 import {
@@ -27,7 +27,7 @@ import {
 
 const direction: PickInput = {
   key: "direction",
-  kinds: ["edge", "axis"],
+  providers: ["design.edge", "design.originAxis"],
   one: true,
   straight: true,
 };

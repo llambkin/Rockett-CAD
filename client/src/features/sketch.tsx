@@ -1,3 +1,4 @@
+import { openInDialog } from "../commands/featureCommand";
 import type { SketchFeature } from "@rockett/shared";
 import { useStore } from "../store";
 import { alignCameraToActiveSketch } from "../viewportRef";
@@ -6,7 +7,6 @@ import { RefRepair } from "../components/RefRepair";
 import { DialogFooter } from "../components/form/DialogFooter";
 import {
   registerFeatureUI,
-  openInDialog,
   type FeatureUI,
   type FeaturePanelProps,
 } from "./registry";

@@ -1,3 +1,4 @@
+import type { Active } from "../commands/active";
 import type { HighlightContext, HighlightStyle } from "./highlights";
 import {
   createRegistry,
@@ -32,6 +33,15 @@ export type ExtensionSelection = {
   [key: string]: unknown;
 };
 export type Selection = CoreSelection | ExtensionSelection;
+export function selectionBeforeCommand(s: {
+  active: Active | null;
+  selection: Selection[];
+}): Selection[] {
+  return s.active?.state && "selectionBefore" in s.active.state
+    ? s.active.state.selectionBefore
+    : s.selection;
+}
+
 type Kind = Selection["kind"];
 type SelectionOf<K extends Kind> = K extends CoreSelection["kind"]
   ? Extract<CoreSelection, { kind: K }>

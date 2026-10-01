@@ -1,3 +1,5 @@
+import "../features/core";
+import { featureCommand } from "./featureCommand";
 import "./design";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { activeCommand, exitActive } from "./active";
@@ -82,7 +84,7 @@ it("owns plane picking through the registered active command", async () => {
   await runCommand("design.sketch.create");
   expect(useStore.getState().active?.id).toBe("design.sketch.create");
   expect(useStore.getState().mode).toEqual({ name: "idle" });
-  expect(activeCommand()?.pickFilter).toEqual([
+  expect(activeCommand()?.pickFilter()).toEqual([
     "design.originPlane",
     "design.constructionPlane",
     "design.face",
@@ -162,13 +164,14 @@ it("refuses clicks after exit or while a job is busy", async () => {
 
 it("releases plane picking when a different mode takes ownership", async () => {
   await runCommand("design.sketch.create");
-  useStore.getState().setMode({ name: "dialog", dialog: "extrude" });
-  expect(activeCommand()).toBeUndefined();
+  featureCommand.enter("extrude");
+  expect(useStore.getState().active?.id).toBe("design.feature");
 });
 
 it("hands ownership to sketch editing after the existing starter changes mode", async () => {
   start.mockImplementationOnce(async () => {
     useStore.setState({
+      active: null,
       mode: {
         name: "sketch",
         sketchId: "sketch",

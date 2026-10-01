@@ -36,7 +36,11 @@ import * as previewBase from "./previewBase";
 export { previewBodies } from "./previewBase";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
 
-import { selectionKey, type Selection } from "./selection/kinds";
+import {
+  selectionBeforeCommand,
+  selectionKey,
+  type Selection,
+} from "./selection/kinds";
 export { selectionKey, type Selection } from "./selection/kinds";
 
 export type SketchTool =
@@ -64,13 +68,13 @@ export type Mode =
       sketchId: string;
       tool: SketchTool;
       constructionMode: boolean;
-    }
-  | { name: "dialog"; dialog: DialogType; editFeatureId?: string };
+    };
 
 function historyEditingState(
   mode: Mode,
   m: MutationResponse,
-): Pick<State, "mode" | "draftSketch" | "selection"> {
+): Pick<State, "mode" | "draftSketch" | "selection" | "active"> {
+  const cleared = { active: null, selection: [] };
   if (mode.name === "sketch") {
     const feature = m.document.features.find((f) => f.id === mode.sketchId);
     const solved = m.evaluation.sketches.find(
@@ -78,14 +82,14 @@ function historyEditingState(
     );
     if (feature?.type === "sketch" && solved)
       return {
+        ...cleared,
         mode: { ...mode, tool: "select" },
-        selection: [],
         draftSketch: JSON.parse(
           JSON.stringify({ ...feature, entities: solved.entities }),
         ),
       };
   }
-  return { mode: { name: "idle" }, draftSketch: null, selection: [] };
+  return { ...cleared, mode: { name: "idle" }, draftSketch: null };
 }
 
 export function sketchEditingPosition(
@@ -253,19 +257,19 @@ function committing(
   };
 }
 
-export function dialogFeatureId(mode: Mode): string | undefined {
-  if (mode.name === "dialog")
+export function dialogFeatureId(active: Active | null): string | undefined {
+  if (active?.id === "design.feature")
     return (
-      mode.editFeatureId ??
+      active.state.editFeatureId ??
       (preview.session?.fresh ? preview.session.fid : undefined)
     );
 }
 
 export function previewedFeature(s: {
-  mode: Mode;
+  active: Active | null;
   document: CadDocument | null;
 }): Feature | undefined {
-  const id = dialogFeatureId(s.mode);
+  const id = dialogFeatureId(s.active);
   return s.document?.features.find((f) => f.id === id);
 }
 
@@ -317,7 +321,6 @@ async function sendPreviews(): Promise<void> {
   preview.inFlight = null;
 }
 
-let selectionBeforeDialog: Selection[] = [];
 let writing = 0;
 let unsent: Array<(tx: string) => Promise<MutationResponse>> = [];
 let abandoned: string[] = [];
@@ -691,20 +694,12 @@ export const useStore = create<State>((set, get) => ({
   setHover: (s) => set({ hover: s }),
 
   setMode(m) {
-    const { mode, selection } = get();
-    if (m.name === "dialog" && mode.name !== "dialog")
-      selectionBeforeDialog = selection;
-    set({
-      mode: m,
-      dialogParams: {},
-      pickInput: null,
-      active: null,
-      selection,
-    });
+    set({ mode: m, dialogParams: {}, pickInput: null, active: null });
   },
   cancelDialog() {
+    const before = selectionBeforeCommand(get());
     get().setMode({ name: "idle" });
-    set({ selection: selectionBeforeDialog });
+    set({ selection: before });
   },
   setDialogParams: (p) =>
     set((s) => ({ dialogParams: { ...s.dialogParams, ...p } })),
@@ -727,6 +722,7 @@ export const useStore = create<State>((set, get) => ({
       (f) => f.id === feature.id,
     ) as SketchFeature;
     set({
+      active: null,
       mode: {
         name: "sketch",
         sketchId: feature.id,
@@ -769,6 +765,7 @@ export const useStore = create<State>((set, get) => ({
         evaluation,
         busy: false,
         dialogParams: {},
+        active: null,
         mode: {
           name: "sketch",
           sketchId,

@@ -79,20 +79,11 @@ import { watchSnapshots } from "../snapshot";
 import * as tools from "../sketchTools";
 import { ANGLE_LOCK_KEY } from "../shortcuts";
 
-import {
-  activeInput,
-  accepted,
-  dialogPickProviders,
-  hoverPick,
-  isPlanarFace,
-  pickInto,
-  takes,
-} from "../dialogPicks";
+import { isPlanarFace, takes } from "../commands/featureCommand";
 import { dimensionLayout, dimensionMaps } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import { repick } from "./RefRepair";
 import { featureUI } from "../features/registry";
 import { handleValue } from "../features/inputs";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
@@ -160,8 +151,11 @@ export function ViewportView() {
   const peeked = usePeekedFeature();
   const draftSketch = useStore((s) => s.draftSketch);
   const dialogParams = useStore((s) => s.dialogParams);
-  const dialogOpen = mode.name === "dialog";
-  const editFeatureId = dialogOpen ? mode.editFeatureId : undefined;
+  const activeFeature = useStore((s) =>
+    s.active?.id === "design.feature" ? s.active.state : undefined,
+  );
+  const dialogOpen = !!activeFeature;
+  const editFeatureId = activeFeature?.editFeatureId;
   const held = usePreviewBase();
 
   const [dimEdit, setDimEdit] = useState<{
@@ -427,7 +421,7 @@ export function ViewportView() {
 
     const activeSketchId = mode.name === "sketch" ? mode.sketchId : null;
     const needProfiles =
-      mode.name === "dialog" && takes(mode.dialog, "profile");
+      !!activeFeature && takes(activeFeature.type, "profile");
     // Fusion-style select-then-command: in idle, unused sketch regions shade
     // and are selectable before any tool is chosen.
     const idleProfiles = idle;
@@ -531,6 +525,7 @@ export function ViewportView() {
     document_,
     hiddenFeatures,
     mode,
+    activeFeature,
     selection,
     idle,
     hover,
@@ -561,7 +556,8 @@ export function ViewportView() {
 
   function computeGizmoSource(): GizmoSource | null {
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "extrude") return null;
+    if (s.active?.id !== "design.feature" || s.active.state.type !== "extrude")
+      return null;
     const profSel = s.selection.find((x) => x.kind === "profile") as any;
     if (profSel) {
       const sk = s.evaluation?.sketches.find(
@@ -604,7 +600,7 @@ export function ViewportView() {
   // build / rebuild the gizmo when the extrude dialog selection changes
   useEffect(() => {
     extrudeSlot.rebuild(buildExtrudeGizmo);
-  }, [mode, selection, evaluation, held]);
+  }, [activeFeature, selection, evaluation, held]);
 
   function buildExtrudeGizmo(): ExtrudeGizmo | null {
     setGizmoLabel(null);
@@ -647,13 +643,14 @@ export function ViewportView() {
   // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
   useEffect(() => {
     moveSlot.rebuild(buildMoveGizmo);
-  }, [mode, selection, evaluation, held]);
+  }, [activeFeature, selection, evaluation, held]);
 
   function buildMoveGizmo(): MoveGizmo | null {
     const vp = viewportRef.current;
     if (!vp) return null;
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "move") return null;
+    if (s.active?.id !== "design.feature" || s.active.state.type !== "move")
+      return null;
     const bodyIds = s.selection
       .filter((x) => x.kind === "body")
       .map((x: any) => x.bodyId);
@@ -768,8 +765,8 @@ export function ViewportView() {
     if (!vp) return;
     const s = useStore.getState();
     if (
-      s.mode.name !== "dialog" ||
-      s.mode.dialog !== "revolve" ||
+      s.active?.id !== "design.feature" ||
+      s.active.state.type !== "revolve" ||
       previewedFeature(s) // the previewed body is already real
     ) {
       return;
@@ -794,7 +791,7 @@ export function ViewportView() {
       layer.dispose();
       vp.requestRender();
     };
-  }, [mode, selection, evaluation, dialogParams, held]);
+  }, [activeFeature, selection, evaluation, dialogParams, held]);
 
   // rotational drag handle for the revolve angle (ring around the axis)
   useEffect(() => {
@@ -815,7 +812,8 @@ export function ViewportView() {
     const vp = viewportRef.current;
     if (!vp) return null;
     const s = useStore.getState();
-    if (s.mode.name !== "dialog" || s.mode.dialog !== "revolve") return null;
+    if (s.active?.id !== "design.feature" || s.active.state.type !== "revolve")
+      return null;
     const sel = selectedRevolveProfile();
     const axis = resolveRevolveAxis();
     if (!sel || !axis) return null;
@@ -846,15 +844,15 @@ export function ViewportView() {
 
   useEffect(() => {
     featureSlot.rebuild(buildFeatureHandle);
-  }, [mode, selection, evaluation, dialogParams, held]);
+  }, [activeFeature, selection, evaluation, dialogParams, held]);
 
   function buildFeatureHandle(): ExtrudeGizmo | RevolveGizmo | null {
     const vp = viewportRef.current;
     const s = useStore.getState();
     const handle =
-      vp && s.mode.name === "dialog"
+      vp && s.active?.id === "design.feature"
         ? featureHandle({
-            dialog: s.mode.dialog,
+            dialog: s.active.state.type,
             params: s.dialogParams,
             selection: s.selection,
             bodies: previewBodies(s),
@@ -1001,14 +999,14 @@ export function ViewportView() {
         const tip = g.handleScreenPosition();
         setGizmoLabel({ x: tip.x, y: tip.y, text: formatAngle(a, 3) });
         // editing an existing revolve: live-update the real geometry
-        const modeNow = s.mode;
+        const feature = s.active?.id === "design.feature" && s.active.state;
         if (
-          modeNow.name === "dialog" &&
-          modeNow.dialog === "revolve" &&
-          modeNow.editFeatureId &&
+          !!feature &&
+          feature.type === "revolve" &&
+          feature.editFeatureId &&
           a !== 0
         ) {
-          livePreview.during(modeNow.editFeatureId, { angle: a } as any);
+          livePreview.during(feature.editFeatureId, { angle: a } as any);
         }
         lastX = e.clientX;
         lastY = e.clientY;
@@ -1031,13 +1029,9 @@ export function ViewportView() {
           });
         }
         // editing an existing move: live-update the real geometry
-        const modeNow = s.mode;
-        if (
-          modeNow.name === "dialog" &&
-          modeNow.dialog === "move" &&
-          modeNow.editFeatureId
-        ) {
-          livePreview.during(modeNow.editFeatureId, {
+        const feature = s.active?.id === "design.feature" && s.active.state;
+        if (!!feature && feature.type === "move" && feature.editFeatureId) {
+          livePreview.during(feature.editFeatureId, {
             translation: t,
           } as any);
         }
@@ -1069,14 +1063,14 @@ export function ViewportView() {
             y: tip.y,
             text: formatLength(zeroed ? 0 : Math.abs(v), units),
           });
-          const modeNow = s.mode;
+          const feature = s.active?.id === "design.feature" && s.active.state;
           if (
-            modeNow.name === "dialog" &&
-            modeNow.dialog === "extrude" &&
-            modeNow.editFeatureId
+            !!feature &&
+            feature.type === "extrude" &&
+            feature.editFeatureId
           ) {
             livePreview.during(
-              modeNow.editFeatureId,
+              feature.editFeatureId,
               (zeroed
                 ? { suppressed: true }
                 : {
@@ -1116,13 +1110,13 @@ export function ViewportView() {
         const s = useStore.getState();
         const a = Number(s.dialogParams.angle);
         if (
-          s.mode.name === "dialog" &&
-          s.mode.dialog === "revolve" &&
-          s.mode.editFeatureId &&
+          s.active?.id === "design.feature" &&
+          s.active.state.type === "revolve" &&
+          s.active.state.editFeatureId &&
           Number.isFinite(a) &&
           a !== 0
         ) {
-          livePreview.commit(s.mode.editFeatureId, { angle: a } as any);
+          livePreview.commit(s.active.state.editFeatureId, { angle: a } as any);
         }
         return;
       }
@@ -1132,11 +1126,11 @@ export function ViewportView() {
         button = -1;
         const s = useStore.getState();
         if (
-          s.mode.name === "dialog" &&
-          s.mode.dialog === "move" &&
-          s.mode.editFeatureId
+          s.active?.id === "design.feature" &&
+          s.active.state.type === "move" &&
+          s.active.state.editFeatureId
         ) {
-          livePreview.commit(s.mode.editFeatureId, {
+          livePreview.commit(s.active.state.editFeatureId, {
             translation: [
               Number(s.dialogParams.tx) || 0,
               Number(s.dialogParams.ty) || 0,
@@ -1153,13 +1147,13 @@ export function ViewportView() {
         // editing: make sure the final dragged value is applied
         const s = useStore.getState();
         if (
-          s.mode.name === "dialog" &&
-          s.mode.dialog === "extrude" &&
-          s.mode.editFeatureId
+          s.active?.id === "design.feature" &&
+          s.active.state.type === "extrude" &&
+          s.active.state.editFeatureId
         ) {
           const dist = Number(s.dialogParams.distance);
           if (Number.isFinite(dist) && dist !== 0) {
-            livePreview.commit(s.mode.editFeatureId, {
+            livePreview.commit(s.active.state.editFeatureId, {
               suppressed: false,
               distance: dist,
               direction: s.dialogParams.direction ?? "normal",
@@ -1168,7 +1162,7 @@ export function ViewportView() {
           } else if (dist === 0) {
             // Ctrl-zeroed: leave the feature suppressed so profiles stay
             // pickable; dragging the arrow (or OK) brings it back.
-            livePreview.commit(s.mode.editFeatureId, {
+            livePreview.commit(s.active.state.editFeatureId, {
               suppressed: true,
             } as any);
           }
@@ -1636,7 +1630,7 @@ export function ViewportView() {
     let picked: Selection | null = null;
     const command = activeCommand();
     if (command) {
-      const r = vp.pick(e.clientX, e.clientY, command.pickFilter);
+      const r = vp.pick(e.clientX, e.clientY, command.pickFilter(e));
       picked = command.onHover(r?.selection ?? null, e);
     } else if (s.mode.name === "sketch") {
       const tool = (s.mode as any).tool as string;
@@ -1718,9 +1712,6 @@ export function ViewportView() {
       } else {
         setSnapMarker(null);
       }
-    } else if (s.mode.name === "dialog") {
-      const r = vp.pick(e.clientX, e.clientY, dialogPickProviders(s));
-      picked = hoverPick(s, r?.selection ?? null);
     } else {
       const r = vp.pick(e.clientX, e.clientY, IDLE_PICKS);
       picked = r?.selection ?? null;
@@ -2152,7 +2143,7 @@ export function ViewportView() {
       const r = vp.pick(
         e.clientX,
         e.clientY,
-        command.pickFilter,
+        command.pickFilter(e),
         toolState.current.pickDepth,
       );
       await command.onClick(r?.selection ?? null, e);
@@ -2161,21 +2152,6 @@ export function ViewportView() {
 
     if (s.mode.name === "sketch") {
       await handleSketchClick(e);
-      return;
-    }
-
-    if (s.mode.name === "dialog") {
-      const r = vp.pick(
-        e.clientX,
-        e.clientY,
-        dialogPickProviders(s, e.shiftKey),
-        toolState.current.pickDepth,
-      );
-      if (repick(r?.selection ?? null)) return;
-      const sel = accepted(activeInput(s), r?.selection ?? null, s)[0] ?? null;
-      const taken = sel && featureUI(s.mode.dialog)?.onPick?.(sel, s);
-      if (taken) return taken;
-      if (sel) pickInto([sel], e.ctrlKey || e.metaKey || e.shiftKey);
       return;
     }
 
@@ -2414,7 +2390,7 @@ export function ViewportView() {
     if (!vp) return;
     const command = activeCommand();
     if (command) {
-      const r = vp.pick(e.clientX, e.clientY, command.pickFilter);
+      const r = vp.pick(e.clientX, e.clientY, command.pickFilter(e));
       command.onContextMenu(r?.selection ?? null, e);
       return;
     }
@@ -2639,13 +2615,13 @@ export function ViewportView() {
   }
   const peekRef = useRef(false);
   const editingProfiles =
-    mode.name === "dialog" &&
-    !!mode.editFeatureId &&
-    (mode.dialog === "extrude" || mode.dialog === "revolve");
+    !!activeFeature &&
+    !!activeFeature.editFeatureId &&
+    (activeFeature.type === "extrude" || activeFeature.type === "revolve");
 
   useEffect(() => {
-    if (!editingProfiles || mode.name !== "dialog" || peekRef.current) return;
-    const editId = mode.editFeatureId!;
+    if (!editingProfiles || !activeFeature || peekRef.current) return;
+    const editId = activeFeature.editFeatureId!;
     const refs = selectionRefs(selection);
     if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
     const current = document_?.features.find((f) => f.id === editId);
@@ -2659,19 +2635,24 @@ export function ViewportView() {
       id: "design.editPeek",
       keys: ["Control", "Meta"],
       press: (s) => {
-        if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
+        if (s.active?.id !== "design.feature" || !s.active.state.editFeatureId)
+          return;
         peekRef.current = true;
-        void s.updateFeaturePreview(s.mode.editFeatureId, {
+        void s.updateFeaturePreview(s.active.state.editFeatureId, {
           suppressed: true,
         } as any);
       },
       release: (s) => {
         if (!peekRef.current) return;
         peekRef.current = false;
-        if (s.mode.name !== "dialog" || !s.mode.editFeatureId) return;
+        if (s.active?.id !== "design.feature" || !s.active.state.editFeatureId)
+          return;
         const refs = selectionRefs(s.selection);
         if (refs.profiles.length + (refs.faces?.length ?? 0) === 0) return;
-        void previewEdit(s.mode.editFeatureId, { ...refs, suppressed: false });
+        void previewEdit(s.active.state.editFeatureId, {
+          ...refs,
+          suppressed: false,
+        });
       },
     });
     return () => {

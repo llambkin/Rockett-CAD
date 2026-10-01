@@ -97,7 +97,7 @@ export const measureCommand: ActiveCommand = {
     unsubscribe = undefined;
     useStore.setState({ active: null, hover: null });
   },
-  pickFilter: ["design.face", "design.edge", "design.vertex"],
+  pickFilter: () => ["design.face", "design.edge", "design.vertex"],
   onHover: (selection) =>
     selection && measurable(selection) ? selection : null,
   async onClick(selection) {

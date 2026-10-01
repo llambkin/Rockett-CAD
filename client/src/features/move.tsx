@@ -1,7 +1,7 @@
 import { newId, type MoveFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
-import { bodies } from "../dialogPicks";
+import { bodies } from "../commands/featureCommand";
 import { bodyIds, bodyPicks, num } from "./inputs";
 import {
   registerFeatureUI,

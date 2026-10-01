@@ -8,7 +8,11 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { selectionKey, useStore, type Selection } from "../../store";
 import { previewBodies, usePreviewBase } from "../../previewBase";
-import { activeInput, clearInput, readInput } from "../../dialogPicks";
+import {
+  activeInput,
+  clearInput,
+  readInput,
+} from "../../commands/featureCommand";
 import { chosenTargets, several } from "../../toolTargets";
 import { pickLabel } from "../../selection/labels";
 export { pickLabel } from "../../selection/labels";
@@ -335,17 +339,20 @@ export function SelInfo({
   input: string;
   onRemove?: (keys: string[]) => void;
 }) {
-  const { document, evaluation, mode } = useStore(
-    useShallow(({ document, evaluation, mode, selection, dialogParams }) => ({
+  const { document, evaluation, command } = useStore(
+    useShallow(({ document, evaluation, active, selection, dialogParams }) => ({
       document,
       evaluation,
-      mode,
+      command: active,
       selection,
       dialogParams,
     })),
   );
   const active = useStore((s) => activeInput(s)?.key === input);
-  const bodies = previewBodies({ mode, evaluation }, usePreviewBase());
+  const bodies = previewBodies(
+    { active: command, evaluation },
+    usePreviewBase(),
+  );
   const shown = picks ?? readInput(input, useStore.getState());
   return (
     <>
@@ -376,10 +383,10 @@ export function TargetField({ operation }: { operation: string }) {
   const setParams = useStore((s) => s.setDialogParams);
   const namingVersion = useStore((s) => s.document?.namingVersion);
   const evaluation = useStore((s) => s.evaluation);
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const hidden = useStore((s) => s.view.hidden.bodies);
   if (operation === "newBody") return null;
-  const bodies = previewBodies({ mode, evaluation });
+  const bodies = previewBodies({ active, evaluation });
   const many = several(operation, namingVersion);
   const ids = chosenTargets(operation, value, namingVersion);
   const set = (next: string[]) =>

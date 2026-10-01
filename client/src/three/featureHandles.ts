@@ -8,7 +8,7 @@ import type {
   SketchPayload,
 } from "@rockett/shared";
 import { findProfile } from "@rockett/shared";
-import type { DialogType, Selection } from "../store";
+import type { Selection } from "../store";
 import { ORIGIN_PLANE_DEFS, uv3 } from "./CadViewport";
 
 export const HANDLE_VALUES = {
@@ -97,7 +97,7 @@ export type FeatureHandle = {
 } & Placement;
 
 export interface HandleInput {
-  dialog: DialogType;
+  dialog: string;
   params: Record<string, any>;
   selection: Selection[];
   bodies: BodyPayload[];

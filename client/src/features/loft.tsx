@@ -5,7 +5,7 @@ import {
   type FaceRef,
 } from "@rockett/shared";
 import { OperationField, SelInfo } from "../components/form/fields";
-import { sections, targets } from "../dialogPicks";
+import { sections, targets } from "../commands/featureCommand";
 import { autoOperation, toolOperation } from "../extrudeReach";
 import {
   bodyTargets,

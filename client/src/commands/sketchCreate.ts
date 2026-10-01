@@ -1,5 +1,5 @@
 import type { PlaneRef } from "@rockett/shared";
-import { isPlanarFace } from "../dialogPicks";
+import { isPlanarFace } from "./featureCommand";
 import { useStore, type Selection } from "../store";
 import { alignCameraToActiveSketch } from "../viewportRef";
 import { exitActive, type ActiveCommand } from "./active";
@@ -38,7 +38,11 @@ export const sketchCreateCommand: ActiveCommand = {
   exit() {
     useStore.setState({ active: null, hover: null });
   },
-  pickFilter: ["design.originPlane", "design.constructionPlane", "design.face"],
+  pickFilter: () => [
+    "design.originPlane",
+    "design.constructionPlane",
+    "design.face",
+  ],
   onHover: (selection) => (planeFor(selection) ? selection : null),
   onClick: pick,
   onContextMenu() {},

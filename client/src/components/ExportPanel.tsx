@@ -1,30 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
+import {
+  downloadExport,
+  exportBodyIds,
+  exportCommand,
+} from "../commands/export";
+import { useEffect, useState } from "react";
 import type { ExportFormat } from "@rockett/shared";
 import { formatLength } from "@rockett/shared";
-import { api, saveDownload } from "../api";
+import { api } from "../api";
 import { useSetting } from "../settings";
-import { useStore } from "../store";
+import { selectionKey, useStore } from "../store";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { SelInfo } from "./form/fields";
 
-export function ExportPanel() {
-  const open = useStore(
-    (s) => s.mode.name === "dialog" && s.mode.dialog === "export",
-  );
-  const setMode = useStore((s) => s.setMode);
-  if (!open) return null;
-  return <ExportBody onClose={() => setMode({ name: "idle" })} />;
-}
-
-function ExportBody({ onClose }: { onClose: () => void }) {
+export function ExportPanel({ onClose }: { onClose: () => void }) {
   const units = useSetting("units.length");
   const document_ = useStore((s) => s.document);
-  const evaluation = useStore((s) => s.evaluation);
-  const hiddenBodies = useStore((s) => s.view.hidden.bodies);
   const selection = useStore((s) => s.selection);
   const setError = useStore((s) => s.setError);
-  const cancel = useStore((s) => s.cancelDialog);
   const [exporters, setExporters] = useState<ExportFormat[]>([]);
   const [picked, setFormat] = useState("");
   const format = picked || exporters[0]?.format;
@@ -39,31 +33,13 @@ function ExportBody({ onClose }: { onClose: () => void }) {
     );
   }, [setError]);
 
-  const selectedBodies = useMemo(
-    () => selection.filter((s) => s.kind === "body").map((s: any) => s.bodyId),
-    [selection],
-  );
-  const shownBodies = useMemo(() => {
-    const hidden = new Set(hiddenBodies);
-    return (evaluation?.bodies ?? [])
-      .filter((b) => !hidden.has(b.bodyId))
-      .map((b) => b.bodyId);
-  }, [evaluation, hiddenBodies]);
+  const bodyIds = useStore(useShallow(exportBodyIds));
 
   const doExport = async () => {
     if (!document_ || !format) return;
     setPending(true);
     try {
-      saveDownload(
-        await api.exportModel(document_.id, {
-          format,
-          bodyIds: selectedBodies.length > 0 ? selectedBodies : shownBodies,
-          quality,
-        }),
-      );
-      onClose();
-    } catch (e: any) {
-      setError(e.message);
+      await downloadExport(document_.id, { format, bodyIds, quality }, onClose);
     } finally {
       setPending(false);
     }
@@ -75,7 +51,15 @@ function ExportBody({ onClose }: { onClose: () => void }) {
         <SelInfo
           label="Bodies"
           input="bodies"
-          hint={`all visible (${shownBodies.length})`}
+          picks={selection.filter((pick) => pick.kind === "body")}
+          onRemove={(keys) =>
+            useStore
+              .getState()
+              .setSelection(
+                selection.filter((pick) => !keys.includes(selectionKey(pick))),
+              )
+          }
+          hint={`all visible (${bodyIds.length})`}
         />
         <label className="field">
           <span>Format</span>
@@ -101,7 +85,7 @@ function ExportBody({ onClose }: { onClose: () => void }) {
       </div>
       <DialogFooter
         onOk={() => void doExport()}
-        onCancel={cancel}
+        onCancel={exportCommand.exit}
         pending={pending}
         okDisabled={!format}
         okLabel={pending ? "Exporting…" : "Download"}

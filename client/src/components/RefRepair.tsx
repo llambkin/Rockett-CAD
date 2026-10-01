@@ -5,7 +5,6 @@ import type {
   EdgeRef,
   EvaluateResult,
   FaceRef,
-  Feature,
   NamingCandidate,
   NamingDecision,
   NamingMapping,
@@ -21,22 +20,13 @@ import {
   useStore,
   type Selection,
 } from "../store";
-import { dialogTargets } from "../toolTargets";
-import { loadPreviewBase } from "../previewBase";
+import { accept, pickOf } from "../featureReferences";
 import type { MenuItem } from "./ContextMenu";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { pickLabel, useHoverPick } from "./form/fields";
 
 type Ref = FaceRef | EdgeRef;
-
-const pickOf = (
-  kind: Ref["kind"],
-  { bodyId, name }: Pick<RefCandidate, "bodyId" | "name">,
-): Selection =>
-  kind === "face"
-    ? { kind, bodyId, faceName: name }
-    : { kind, bodyId, edgeName: name };
 
 type Found<C> = {
   status: NamingMapping["status"];
@@ -89,76 +79,6 @@ export function refNotes(
   return problems.map((p) =>
     note(p, (pick) => pickLabel(pick, document, evaluation, bodies)),
   );
-}
-
-const sameRef = (item: Record<string, unknown>, ref: Ref) =>
-  item.kind === ref.kind &&
-  item.bodyId === ref.bodyId &&
-  (ref.kind === "face"
-    ? item.faceName === ref.faceName
-    : item.edgeName === ref.edgeName);
-
-function swapRef(value: unknown, ref: Ref, to: Selection): unknown {
-  if (Array.isArray(value)) return value.map((v) => swapRef(v, ref, to));
-  if (typeof value !== "object" || value === null) return value;
-  const item = value as Record<string, unknown>;
-  if (sameRef(item, ref)) return to;
-  return Object.fromEntries(
-    Object.entries(item).map(([k, v]) => [k, swapRef(v, ref, to)]),
-  );
-}
-
-async function accept(fid: string, ref: Ref, to: Selection): Promise<void> {
-  const s = useStore.getState();
-  const feature = s.document?.features.find((f) => f.id === fid);
-  if (!feature) return;
-  const patch = Object.fromEntries(
-    Object.entries(feature).flatMap(([key, value]) => {
-      const next = swapRef(value, ref, to);
-      return JSON.stringify(next) === JSON.stringify(value)
-        ? []
-        : [[key, next]];
-    }),
-  );
-  try {
-    await s.updateFeature(fid, {
-      ...patch,
-      ...dialogTargets(),
-    } as Partial<Feature>);
-  } catch {
-    return;
-  }
-  const current = useStore.getState();
-  if (
-    current.projectId !== s.projectId ||
-    current.mode.name !== "dialog" ||
-    current.mode.editFeatureId !== fid
-  )
-    return;
-  useStore.setState({
-    selection: current.selection.map(
-      (pick) => swapRef(pick, ref, to) as Selection,
-    ),
-    dialogParams: swapRef(
-      current.dialogParams,
-      ref,
-      to,
-    ) as typeof current.dialogParams,
-    hover: null,
-  });
-  await loadPreviewBase(fid, useStore.getState);
-}
-
-export function repick(pick: Selection | null): boolean {
-  const s = useStore.getState();
-  const ref: Ref | undefined = s.dialogParams.repick;
-  const fid = s.mode.name === "dialog" ? s.mode.editFeatureId : undefined;
-  if (!ref || !fid) return false;
-  if (pick?.kind !== ref.kind) return true;
-  s.setDialogParams({ repick: undefined });
-  const name = pick.kind === "face" ? pick.faceName : pick.edgeName;
-  void accept(fid, ref, pickOf(ref.kind, { bodyId: pick.bodyId, name }));
-  return true;
 }
 
 function PickButton({ refFor }: { refFor: Ref }) {
@@ -223,7 +143,7 @@ function RepairRow({
 }
 
 function RefProblems({ fid }: { fid: string }) {
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const document = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
   const picking: Ref | undefined = useStore((s) => s.dialogParams.repick);
@@ -232,7 +152,7 @@ function RefProblems({ fid }: { fid: string }) {
     (st) => st.featureId === fid,
   )?.refs;
   if (!problems?.length) return null;
-  const bodies = previewBodies({ mode, evaluation });
+  const bodies = previewBodies({ active, evaluation });
   const label = (pick: Selection) =>
     pickLabel(pick, document, evaluation, bodies);
   const acceptButton = (ref: Ref, to: Selection) => (
@@ -456,7 +376,9 @@ function NamingUpgrade({ id, revision }: { id: string; revision: number }) {
 
 export function RefRepair() {
   const fid = useStore((s) =>
-    s.mode.name === "dialog" ? s.mode.editFeatureId : undefined,
+    s.active?.id === "design.feature"
+      ? s.active.state.editFeatureId
+      : undefined,
   );
   const document = useStore((s) => s.document);
   if (!fid || !document) return null;

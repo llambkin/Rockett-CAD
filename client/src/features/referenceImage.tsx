@@ -10,7 +10,7 @@ import { RefRepair } from "../components/RefRepair";
 import { DraggablePanel } from "../components/DraggablePanel";
 import { DialogFooter } from "../components/form/DialogFooter";
 import { AngleField, LengthField, SelInfo } from "../components/form/fields";
-import { planar } from "../dialogPicks";
+import { planar } from "../commands/featureCommand";
 import { useStore, type Selection } from "../store";
 import { useSetting } from "../settings";
 import { viewportHandle } from "../viewportRef";

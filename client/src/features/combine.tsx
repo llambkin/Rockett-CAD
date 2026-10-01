@@ -1,6 +1,6 @@
 import { newId, type CombineFeature } from "@rockett/shared";
 import { CheckField, SelectField, SelInfo } from "../components/form/fields";
-import { bodies } from "../dialogPicks";
+import { bodies } from "../commands/featureCommand";
 import { bodyIds, bodyPicks } from "./inputs";
 import {
   registerFeatureUI,

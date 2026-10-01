@@ -5,7 +5,12 @@ import {
   OperationField,
   SelInfo,
 } from "../components/form/fields";
-import { axis, clearInput, profilesOrFaces, targets } from "../dialogPicks";
+import {
+  axis,
+  clearInput,
+  profilesOrFaces,
+  targets,
+} from "../commands/featureCommand";
 import { autoOperation, toolOperation } from "../extrudeReach";
 import { useStore } from "../store";
 import {

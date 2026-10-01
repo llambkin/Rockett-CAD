@@ -39,8 +39,7 @@ export async function switchWorkbench(id: string): Promise<void> {
     }
     const state = useStore.getState();
     if (state.projectId !== projectId || workbenches.get(id) !== target) return;
-    if (state.mode.name === "dialog") state.cancelDialog();
-    else if (state.mode.name !== "idle") state.setMode({ name: "idle" });
+    if (state.mode.name !== "idle") state.setMode({ name: "idle" });
     state.setSelection([]);
     state.setHover(null);
     useWorkbench.setState({ current: id });

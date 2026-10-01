@@ -5,7 +5,7 @@ import {
   NumField,
   SelInfo,
 } from "../components/form/fields";
-import { axis, bodies, clearInput } from "../dialogPicks";
+import { axis, bodies, clearInput } from "../commands/featureCommand";
 import { useStore } from "../store";
 import {
   axisHint,

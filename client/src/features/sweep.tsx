@@ -4,7 +4,7 @@ import {
   SelInfo,
   SelectField,
 } from "../components/form/fields";
-import { profiles, targets, type PickInput } from "../dialogPicks";
+import { profiles, targets, type PickInput } from "../commands/featureCommand";
 import { autoOperation, toolOperation } from "../extrudeReach";
 import { useStore, type Selection } from "../store";
 import { bodyTargets, profilePicks, profileRefs } from "./inputs";
@@ -19,7 +19,8 @@ const sketchPicks = (sketchId: string | undefined): Selection[] =>
 
 const path: PickInput = {
   key: "path",
-  kinds: ["sketchEntity", "sketch"],
+  providers: ["sketch.entity"],
+  wholeSketch: true,
   one: true,
   param: {
     read: (s) => sketchPicks(s.dialogParams.pathSketchId),

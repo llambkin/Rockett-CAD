@@ -29,11 +29,11 @@ async function pickChain(
     const response = await api.tangentEdges(
       projectId,
       sel,
-      dialogFeatureId(s.mode),
+      dialogFeatureId(s.active),
     );
     const current = useStore.getState();
     if (
-      current.mode !== s.mode ||
+      current.active !== s.active ||
       current.selection !== s.selection ||
       current.dialogParams.tangentChain === false
     )

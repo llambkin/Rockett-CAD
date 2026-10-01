@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CadDocument, Feature } from "@rockett/shared";
-import { featurePatch, useStore, type Mode } from "../store";
-import { takesAxis } from "../dialogPicks";
+import { featurePatch, useStore } from "../store";
+import { takesAxis } from "../commands/featureCommand";
 import { createLivePreview } from "../livePreview";
 import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
@@ -9,8 +9,6 @@ import { DialogFooter } from "./form/DialogFooter";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI, type DialogFeatureUI } from "../features/registry";
 import { axisMissing, axisPicks } from "../features/inputs";
-
-type DialogMode = Extract<Mode, { name: "dialog" }>;
 
 function attempt(build: (() => Feature) | null): Feature | null {
   try {
@@ -71,12 +69,15 @@ function useStoredFeature(
 }
 
 export function FeatureDialog() {
-  const mode = useStore((s) => s.mode) as DialogMode;
+  const active = useStore((s) => s.active);
+  if (active?.id !== "design.feature") return null;
+  const ui = featureUI(active.state.type);
+  if (!ui?.prefill) return null;
   return (
     <DialogBody
-      key={mode.dialog + (mode.editFeatureId ?? "")}
-      ui={featureUI(mode.dialog) as DialogFeatureUI}
-      editId={mode.editFeatureId}
+      key={active.state.type + (active.state.editFeatureId ?? "")}
+      ui={ui}
+      editId={active.state.editFeatureId}
     />
   );
 }
