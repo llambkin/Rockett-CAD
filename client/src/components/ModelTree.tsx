@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { Feature, PlaneRef, TreeGroup } from "@rockett/shared";
 import { ORIGIN_AXES, UNITS_LENGTH } from "@rockett/shared";
+import { moveBodies } from "../commands/treeMove";
 import { activeCommand } from "../commands/active";
 import "../commands/design";
 import { runCommand } from "../commands/registry";
@@ -369,12 +370,7 @@ export const ModelTree = memo(function ModelTree() {
     return [
       {
         label: "Move…",
-        action: () => {
-          runCommand("design.move");
-          const s = useStore.getState();
-          s.setSelection(ids.map((bodyId) => ({ kind: "body", bodyId })));
-          s.setDialogParams({ tx: 0, ty: 0, tz: 0 });
-        },
+        action: () => moveBodies(ids),
       },
       ids.length > 1
         ? groupItem("body", ids)

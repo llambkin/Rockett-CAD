@@ -4,9 +4,16 @@ import type {
   ImportStepFeature,
 } from "@rockett/shared";
 import { ImportPanel } from "../components/ImportPanel";
-import { registerFeatureUI, type FeatureUI } from "./registry";
+import {
+  registerFeatureUI,
+  type FeatureUI,
+  type InputParams,
+} from "./registry";
+
+type ImportParams = InputParams<Pick<Feature, "id" | "name">>;
 
 const imported = {
+  initialParams: {},
   icon: "⇩",
   group: "insert",
   picks: [],
@@ -17,13 +24,13 @@ const imported = {
   }),
 };
 
-const importStep: FeatureUI<ImportStepFeature> = {
+const importStep: FeatureUI<ImportStepFeature, ImportParams> = {
   ...imported,
   type: "importStep",
   title: "Imported STEP",
 };
 
-const importMesh: FeatureUI<ImportMeshFeature> = {
+const importMesh: FeatureUI<ImportMeshFeature, ImportParams> = {
   ...imported,
   type: "importMesh",
   title: "Imported mesh",

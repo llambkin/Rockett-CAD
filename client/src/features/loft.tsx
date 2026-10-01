@@ -14,7 +14,15 @@ import {
   profilePicks,
   profileRefs,
 } from "./inputs";
-import { registerFeatureUI, type FeatureUI } from "./registry";
+import {
+  registerFeatureUI,
+  type FeatureUI,
+  type InputParams,
+} from "./registry";
+
+export type LoftParams = InputParams<
+  Pick<LoftFeature, "id" | "name" | "operation" | "targets">
+> & { autoOperation?: boolean | undefined };
 
 function LoftForm() {
   return (
@@ -29,8 +37,9 @@ function LoftForm() {
   );
 }
 
-const loft: FeatureUI<LoftFeature> = {
+export const loft: FeatureUI<LoftFeature, LoftParams> = {
   type: "loft",
+  initialParams: {},
   icon: "◆",
   title: "Loft",
   group: "create",

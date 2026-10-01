@@ -2,16 +2,18 @@ import type { BodyPayload, FaceInfo, Feature } from "@rockett/shared";
 import type { ThemeColor } from "./theme/tokens";
 import { TIMING_MS } from "./tunables";
 
-type Send = (featureId: string, patch: Partial<Feature>) => Promise<void>;
+type Send<P> = (featureId: string, patch: P) => Promise<void>;
 
 export const PREVIEW_DEBOUNCE_MS = TIMING_MS.previewDebounce;
 
-export function createLivePreview({
+export function createLivePreview<
+  P extends Partial<Feature> = Partial<Feature>,
+>({
   send,
   dwellMs = PREVIEW_DEBOUNCE_MS,
   now = () => performance.now(),
 }: {
-  send: Send;
+  send: Send<P>;
   dwellMs?: number;
   now?: () => number;
 }) {
@@ -23,7 +25,7 @@ export function createLivePreview({
     timer = undefined;
   };
   return {
-    during(featureId: string, patch: Partial<Feature>) {
+    during(featureId: string, patch: P) {
       const t = now();
       if (inFlight || t - last <= TIMING_MS.dragThrottle) return;
       last = t;
@@ -32,14 +34,14 @@ export function createLivePreview({
         inFlight = false;
       });
     },
-    dwell(featureId: string, patch: Partial<Feature>) {
+    dwell(featureId: string, patch: P) {
       cancel();
       timer = setTimeout(() => {
         timer = undefined;
         void send(featureId, patch);
       }, dwellMs);
     },
-    commit(featureId: string, patch: Partial<Feature>) {
+    commit(featureId: string, patch: P) {
       cancel();
       void send(featureId, patch);
     },

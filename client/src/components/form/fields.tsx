@@ -3,6 +3,8 @@ import {
   parseLength,
   roundedLength,
   type Units,
+  type OriginAxis,
+  type ExtrudeFeature,
 } from "@rockett/shared";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -10,6 +12,8 @@ import { selectionKey, useStore, type Selection } from "../../store";
 import { previewBodies, usePreviewBase } from "../../previewBase";
 import {
   activeInput,
+  featureParams,
+  setFeatureParams,
   clearInput,
   readInput,
 } from "../../commands/featureCommand";
@@ -186,21 +190,27 @@ export function AngleField({
   return <NumField label={`${label} (°)`} value={value} onChange={onChange} />;
 }
 
-export function SelectField({
+export function SelectField<T extends string>({
   label,
   value,
   options,
   onChange,
 }: {
   label: string;
-  value: string;
-  options: [string, string][];
-  onChange: (v: string) => void;
+  value: T;
+  options: [T, string][];
+  onChange: (v: NoInfer<T>) => void;
 }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        value={value}
+        onChange={(e) => {
+          const selected = options.find(([v]) => v === e.target.value);
+          if (selected) onChange(selected[0]);
+        }}
+      >
         {options.map(([v, l]) => (
           <option key={v} value={v}>
             {l}
@@ -211,7 +221,10 @@ export function SelectField({
   );
 }
 
-const axisOptions = ORIGIN_AXES.map((a): [string, string] => [a, `${a} axis`]);
+const axisOptions = ORIGIN_AXES.map((a): [OriginAxis, string] => [
+  a,
+  `${a} axis`,
+]);
 
 export function AxisField({
   axisSource,
@@ -222,12 +235,12 @@ export function AxisField({
   edgeLabel = "Selected line/edge",
 }: {
   axisSource: unknown;
-  axis: string | undefined;
+  axis: OriginAxis | undefined;
   onChange: (
-    patch: { axisSource: "edge" } | { axisSource: "origin"; axis: string },
+    patch: { axisSource: "edge" } | { axisSource: "origin"; axis: OriginAxis },
   ) => void;
   label?: string;
-  defaultAxis?: string;
+  defaultAxis?: OriginAxis;
   edgeLabel?: string;
 }) {
   return (
@@ -340,12 +353,11 @@ export function SelInfo({
   onRemove?: (keys: string[]) => void;
 }) {
   const { document, evaluation, command } = useStore(
-    useShallow(({ document, evaluation, active, selection, dialogParams }) => ({
+    useShallow(({ document, evaluation, active, selection }) => ({
       document,
       evaluation,
       command: active,
       selection,
-      dialogParams,
     })),
   );
   const active = useStore((s) => activeInput(s)?.key === input);
@@ -379,8 +391,8 @@ export function SelInfo({
 }
 
 export function TargetField({ operation }: { operation: string }) {
-  const value: string[] | undefined = useStore((s) => s.dialogParams.targets);
-  const setParams = useStore((s) => s.setDialogParams);
+  const value: string[] | undefined = useStore((s) => featureParams(s).targets);
+  const setParams = setFeatureParams;
   const namingVersion = useStore((s) => s.document?.namingVersion);
   const evaluation = useStore((s) => s.evaluation);
   const active = useStore((s) => s.active);
@@ -423,11 +435,11 @@ export function TargetField({ operation }: { operation: string }) {
 }
 
 export function OperationField({ intersect }: { intersect?: boolean }) {
-  const operation: string = useStore((s) => s.dialogParams.operation ?? "join");
-  const setParams = useStore((s) => s.setDialogParams);
+  const operation = useStore((s) => featureParams(s).operation ?? "join");
+  const setParams = setFeatureParams;
   return (
     <>
-      <SelectField
+      <SelectField<NonNullable<ExtrudeFeature["operation"]>>
         label="Operation"
         value={operation}
         options={[
@@ -435,7 +447,10 @@ export function OperationField({ intersect }: { intersect?: boolean }) {
           ["join", "Join"],
           ["cut", "Cut"],
           ...(intersect
-            ? [["intersect", "Intersect"] as [string, string]]
+            ? ([["intersect", "Intersect"]] satisfies [
+                NonNullable<ExtrudeFeature["operation"]>,
+                string,
+              ][])
             : []),
         ]}
         onChange={(v) => setParams({ operation: v, autoOperation: false })}

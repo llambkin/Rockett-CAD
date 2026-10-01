@@ -7,10 +7,15 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 import { tangentChain, TangentChainField } from "./tangentChain";
 
-function FilletForm({ params, setParams }: FeatureFormProps) {
+export type FilletParams = InputParams<
+  Pick<FilletFeature, "id" | "name" | "radius" | "tangentChain">
+>;
+
+function FilletForm({ params, setParams }: FeatureFormProps<FilletParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -20,15 +25,16 @@ function FilletForm({ params, setParams }: FeatureFormProps) {
         label="Radius"
         units={units}
         autoFocus
-        value={params.radius ?? handleValue(params, "fillet")}
+        value={handleValue(params, "fillet")}
         onChange={(v) => setParams({ radius: v })}
       />
     </>
   );
 }
 
-const fillet: FeatureUI<FilletFeature> = {
+export const fillet: FeatureUI<FilletFeature, FilletParams> = {
   type: "fillet",
+  initialParams: {},
   icon: "◠",
   title: "Fillet",
   group: "modify",

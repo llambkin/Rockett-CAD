@@ -4,7 +4,13 @@ import {
   SelInfo,
   SelectField,
 } from "../components/form/fields";
-import { profiles, targets, type PickInput } from "../commands/featureCommand";
+import {
+  profiles,
+  targets,
+  featureParams,
+  setFeatureParams,
+  type PickInput,
+} from "../commands/featureCommand";
 import { autoOperation, toolOperation } from "../extrudeReach";
 import { useStore, type Selection } from "../store";
 import { bodyTargets, profilePicks, profileRefs } from "./inputs";
@@ -12,7 +18,12 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
+
+export type SweepParams = InputParams<
+  Pick<SweepFeature, "id" | "name" | "pathSketchId" | "operation" | "targets">
+> & { autoOperation?: boolean | undefined };
 
 const sketchPicks = (sketchId: string | undefined): Selection[] =>
   sketchId ? [{ kind: "sketch", sketchId }] : [];
@@ -23,17 +34,17 @@ const path: PickInput = {
   wholeSketch: true,
   one: true,
   param: {
-    read: (s) => sketchPicks(s.dialogParams.pathSketchId),
-    write: (next, s) =>
-      s.setDialogParams({
+    read: (s) => sketchPicks(featureParams(s).pathSketchId),
+    write: (next) =>
+      setFeatureParams({
         pathSketchId: next.flatMap((x) =>
-          "sketchId" in x ? [x.sketchId] : [],
+          "sketchId" in x && typeof x.sketchId === "string" ? [x.sketchId] : [],
         )[0],
       }),
   },
 };
 
-function SweepForm({ params, setParams }: FeatureFormProps) {
+function SweepForm({ params, setParams }: FeatureFormProps<SweepParams>) {
   const features = useStore((s) => s.document?.features);
   const sketches = (features ?? []).filter((f) => f.type === "sketch");
   return (
@@ -44,7 +55,7 @@ function SweepForm({ params, setParams }: FeatureFormProps) {
         value={params.pathSketchId ?? ""}
         options={[
           ["", "Choose"],
-          ...sketches.map((s) => [s.id, s.name] as [string, string]),
+          ...sketches.map((s): [string, string] => [s.id, s.name]),
         ]}
         onChange={(v) => setParams({ pathSketchId: v })}
       />
@@ -58,8 +69,9 @@ function SweepForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const sweep: FeatureUI<SweepFeature> = {
+export const sweep: FeatureUI<SweepFeature, SweepParams> = {
   type: "sweep",
+  initialParams: {},
   icon: "〰",
   title: "Sweep",
   group: "create",

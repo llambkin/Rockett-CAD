@@ -6,9 +6,17 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function OffsetFaceForm({ params, setParams }: FeatureFormProps) {
+export type OffsetFaceParams = InputParams<
+  Pick<OffsetFaceFeature, "id" | "name" | "distance">
+>;
+
+function OffsetFaceForm({
+  params,
+  setParams,
+}: FeatureFormProps<OffsetFaceParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -17,15 +25,16 @@ function OffsetFaceForm({ params, setParams }: FeatureFormProps) {
         label="Distance, − = inward"
         units={units}
         autoFocus
-        value={params.distance ?? handleValue(params, "offsetFace")}
+        value={handleValue(params, "offsetFace")}
         onChange={(v) => setParams({ distance: v })}
       />
     </>
   );
 }
 
-const offsetFace: FeatureUI<OffsetFaceFeature> = {
+export const offsetFace: FeatureUI<OffsetFaceFeature, OffsetFaceParams> = {
   type: "offsetFace",
+  initialParams: {},
   icon: "⇱",
   title: "Press / Pull",
   group: "modify",

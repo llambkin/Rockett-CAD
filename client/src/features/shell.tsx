@@ -5,17 +5,21 @@ import { HANDLE_VALUES } from "../three/featureHandles";
 import { facePicks, faceRefs } from "./inputs";
 import {
   registerFeatureUI,
-  type DialogParams,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-const thickness = (params: DialogParams) => {
+export type ShellParams = InputParams<
+  Pick<ShellFeature, "id" | "name" | "thickness">
+>;
+
+const thickness = (params: ShellParams) => {
   const v = Number(params.thickness);
   return Number.isFinite(v) ? v : HANDLE_VALUES.shell.fallback;
 };
 
-function ShellForm({ params, setParams }: FeatureFormProps) {
+function ShellForm({ params, setParams }: FeatureFormProps<ShellParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -28,15 +32,16 @@ function ShellForm({ params, setParams }: FeatureFormProps) {
         label="Thickness"
         units={units}
         autoFocus
-        value={params.thickness ?? thickness(params)}
+        value={thickness(params)}
         onChange={(v) => setParams({ thickness: v })}
       />
     </>
   );
 }
 
-const shell: FeatureUI<ShellFeature> = {
+export const shell: FeatureUI<ShellFeature, ShellParams> = {
   type: "shell",
+  initialParams: {},
   icon: "▢",
   title: "Shell",
   group: "modify",

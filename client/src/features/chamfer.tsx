@@ -7,10 +7,15 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 import { tangentChain, TangentChainField } from "./tangentChain";
 
-function ChamferForm({ params, setParams }: FeatureFormProps) {
+export type ChamferParams = InputParams<
+  Pick<ChamferFeature, "id" | "name" | "tangentChain" | "distance">
+>;
+
+function ChamferForm({ params, setParams }: FeatureFormProps<ChamferParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -20,19 +25,20 @@ function ChamferForm({ params, setParams }: FeatureFormProps) {
         label="Distance"
         units={units}
         autoFocus
-        value={params.distance ?? handleValue(params, "chamfer")}
+        value={handleValue(params, "chamfer")}
         onChange={(v) => setParams({ distance: v })}
       />
     </>
   );
 }
 
-const chamfer: FeatureUI<ChamferFeature> = {
+export const chamfer: FeatureUI<ChamferFeature, ChamferParams> = {
   type: "chamfer",
   icon: "◣",
   title: "Chamfer",
   group: "modify",
   picks: [edges],
+  initialParams: {},
   Form: ChamferForm,
   build: (params, selection) => {
     const edges = edgeRefs(selection);

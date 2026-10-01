@@ -1,3 +1,4 @@
+import { featureParams } from "./commands/featureCommand";
 import type { Feature, NamingVersion } from "@rockett/shared";
 import { createLivePreview } from "./livePreview";
 import { useStore } from "./store";
@@ -8,7 +9,7 @@ export function several(operation: string, namingVersion?: NamingVersion) {
 
 export function targetOperation(
   dialog: string,
-  params: Record<string, any>,
+  params: { operation?: string | undefined; embossMode?: string | undefined },
 ): string {
   if (dialog === "emboss")
     return params.embossMode === "deboss" ? "cut" : "join";
@@ -37,8 +38,8 @@ export function dialogTargets(): { targets?: string[] } {
   const s = useStore.getState();
   if (s.active?.id !== "design.feature") return {};
   return toolTargets(
-    targetOperation(s.active.state.type, s.dialogParams),
-    s.dialogParams.targets,
+    targetOperation(s.active.state.type, featureParams(s)),
+    featureParams(s).targets,
     s.document?.namingVersion,
   );
 }

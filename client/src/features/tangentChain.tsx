@@ -1,8 +1,16 @@
+import { featureParams } from "../commands/featureCommand";
 import { api } from "../api";
 import { dialogFeatureId, useStore, type Selection } from "../store";
-import type { FeatureFormProps, PickState } from "./registry";
+import type {
+  FeatureFormProps,
+  PickState,
+  SharedInputParams,
+} from "./registry";
 
-export function TangentChainField({ params, setParams }: FeatureFormProps) {
+export function TangentChainField({
+  params,
+  setParams,
+}: FeatureFormProps<{ tangentChain?: boolean | undefined }>) {
   return (
     <>
       <label>
@@ -20,6 +28,17 @@ export function TangentChainField({ params, setParams }: FeatureFormProps) {
   );
 }
 
+function ownsReply(s: PickState) {
+  const current = useStore.getState();
+  return (
+    current.active?.id === "design.feature" &&
+    s.active?.id === "design.feature" &&
+    current.active.state.inputs.lifetime === s.active.state.inputs.lifetime &&
+    current.selection === s.selection &&
+    featureParams(current).tangentChain !== false
+  );
+}
+
 async function pickChain(
   sel: Extract<Selection, { kind: "edge" }>,
   s: PickState,
@@ -31,13 +50,7 @@ async function pickChain(
       sel,
       dialogFeatureId(s.active),
     );
-    const current = useStore.getState();
-    if (
-      current.active !== s.active ||
-      current.selection !== s.selection ||
-      current.dialogParams.tangentChain === false
-    )
-      return;
+    if (!ownsReply(s)) return;
     const names = new Set(response.edges.map((e) => e.edgeName));
     const remove = response.edges.every((edge) =>
       s.selection.some(
@@ -55,14 +68,16 @@ async function pickChain(
     );
     s.setSelection(remove ? remaining : [...remaining, ...response.edges]);
   } catch (error) {
-    s.setError((error as Error).message);
+    if (ownsReply(s))
+      s.setError(error instanceof Error ? error.message : String(error));
   }
 }
 
 export function tangentChain(
   sel: Selection,
   s: PickState,
+  params: SharedInputParams = featureParams(s),
 ): Promise<void> | undefined {
-  if (sel.kind !== "edge" || s.dialogParams.tangentChain === false) return;
+  if (sel.kind !== "edge" || params.tangentChain === false) return;
   return s.projectId ? pickChain(sel, s, s.projectId) : undefined;
 }

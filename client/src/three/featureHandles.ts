@@ -1,3 +1,4 @@
+import type { SharedInputParams } from "../features/registry";
 import * as THREE from "three";
 import type {
   BodyPayload,
@@ -91,14 +92,14 @@ const first = (input: HandleInput, kind: Selection["kind"]) =>
   input.selection.find((s) => s.kind === kind);
 
 export type FeatureHandle = {
-  param: string;
+  param: (typeof HANDLE_VALUES)[HandleDialog]["param"];
   value: number;
   signed: boolean;
 } & Placement;
 
 export interface HandleInput {
   dialog: string;
-  params: Record<string, any>;
+  params: SharedInputParams;
   selection: Selection[];
   bodies: BodyPayload[];
   evaluation: EvaluateResult | null;

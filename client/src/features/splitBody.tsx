@@ -2,7 +2,15 @@ import { newId, type SplitBodyFeature } from "@rockett/shared";
 import { SelInfo } from "../components/form/fields";
 import { planar } from "../commands/featureCommand";
 import { bodyIds, bodyPicks, selectedPlane } from "./inputs";
-import { registerFeatureUI, type FeatureUI } from "./registry";
+import {
+  registerFeatureUI,
+  type FeatureUI,
+  type InputParams,
+} from "./registry";
+
+export type SplitBodyParams = InputParams<
+  Pick<SplitBodyFeature, "id" | "name">
+>;
 
 function SplitBodyForm() {
   return (
@@ -17,8 +25,9 @@ function SplitBodyForm() {
   );
 }
 
-const splitBody: FeatureUI<SplitBodyFeature> = {
+export const splitBody: FeatureUI<SplitBodyFeature, SplitBodyParams> = {
   type: "splitBody",
+  initialParams: {},
   icon: "∤",
   title: "Split Body",
   group: "modify",

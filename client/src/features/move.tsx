@@ -7,9 +7,17 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function MoveForm({ params, setParams }: FeatureFormProps) {
+export type MoveParams = InputParams<Pick<MoveFeature, "id" | "name">> &
+  InputParams<{
+    tx: MoveFeature["translation"][0];
+    ty: MoveFeature["translation"][1];
+    tz: MoveFeature["translation"][2];
+  }>;
+
+function MoveForm({ params, setParams }: FeatureFormProps<MoveParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -18,27 +26,28 @@ function MoveForm({ params, setParams }: FeatureFormProps) {
         label="X"
         units={units}
         autoFocus
-        value={params.tx ?? 0}
+        value={num(params, "tx", 0)}
         onChange={(v) => setParams({ tx: v })}
       />
       <LengthField
         label="Y"
         units={units}
-        value={params.ty ?? 0}
+        value={num(params, "ty", 0)}
         onChange={(v) => setParams({ ty: v })}
       />
       <LengthField
         label="Z"
         units={units}
-        value={params.tz ?? 0}
+        value={num(params, "tz", 0)}
         onChange={(v) => setParams({ tz: v })}
       />
     </>
   );
 }
 
-const move: FeatureUI<MoveFeature> = {
+export const move: FeatureUI<MoveFeature, MoveParams> = {
   type: "move",
+  initialParams: {},
   icon: "✥",
   title: "Move",
   group: "modify",

@@ -8,6 +8,8 @@ import { DialogFooter } from "../components/form/DialogFooter";
 import {
   registerFeatureUI,
   type FeatureUI,
+  type InputParams,
+  featureUI,
   type FeaturePanelProps,
 } from "./registry";
 
@@ -17,6 +19,7 @@ const sketch = {
   title: "Sketch",
   group: "create",
   picks: [],
+  initialParams: {},
   prefill: () => ({ params: {}, selection: [] }),
   Panel: SketchRepair,
   open: async (f): Promise<void> => {
@@ -25,12 +28,14 @@ const sketch = {
       s.evaluation?.featureStatuses.find((st) => st.featureId === f.id)?.refs
         ?.length
     ) {
-      return openInDialog(sketch, f);
+      const ui = featureUI(f.type);
+      if (ui) return openInDialog(ui, f);
+      return;
     }
     await s.editSketch(f.id);
     alignCameraToActiveSketch();
   },
-} satisfies FeatureUI<SketchFeature>;
+} satisfies FeatureUI<SketchFeature, InputParams<{}>>;
 
 registerFeatureUI(sketch);
 

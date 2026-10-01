@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { CadDocument, Feature } from "@rockett/shared";
 import { featurePatch, useStore } from "../store";
-import { takesAxis } from "../commands/featureCommand";
+import {
+  takesAxis,
+  featureParams,
+  setFeatureParams,
+} from "../commands/featureCommand";
 import { createLivePreview } from "../livePreview";
 import { DraggablePanel } from "./DraggablePanel";
 import { RefRepair } from "./RefRepair";
@@ -35,12 +39,12 @@ function useLivePreview(editId: string | undefined, draft: Feature | null) {
   const key = draft && JSON.stringify(featurePatch(draft));
   const sent = useRef(editId ? key : null);
   const [live] = useState(() =>
-    createLivePreview({
+    createLivePreview<Feature>({
       send: async (_id, feature) => {
-        const patch = featurePatch(feature as Feature);
+        const patch = featurePatch(feature);
         sent.current = JSON.stringify(patch);
         const s = useStore.getState();
-        if (!editId) return s.previewNewFeature(feature as Feature);
+        if (!editId) return s.previewNewFeature(feature);
         const stored = s.document?.features.find((f) => f.id === editId);
         if (featureChanges(stored, patch))
           return s.updateFeaturePreview(editId, patch);
@@ -91,8 +95,10 @@ function DialogBody({
 }) {
   const dialog = ui.type;
   const selection = useStore((s) => s.selection);
-  const params = useStore((s) => s.dialogParams);
-  const setParams = useStore((s) => s.setDialogParams);
+  const inputs = useStore((s) =>
+    s.active?.id === "design.feature" ? s.active.state.inputs : undefined,
+  );
+  const params = useStore(featureParams);
   const setMode = useStore((s) => s.setMode);
   const cancel = useStore((s) => s.cancelDialog);
   const addFeature = useStore((s) => s.addFeature);
@@ -106,29 +112,30 @@ function DialogBody({
   const axisPicked = axisPicks(selection, document).length > 0;
   useEffect(() => {
     if (axisDialog && axisPicked && params.axisSource !== "edge")
-      setParams({ axisSource: "edge" });
+      setFeatureParams({ axisSource: "edge" });
   }, [axisPicked, dialog]);
   const originAxis = selection.findLast((s) => s.kind === "axis")?.axis;
   useEffect(() => {
     if (axisDialog && originAxis)
-      setParams({ axisSource: "origin", axis: originAxis });
+      setFeatureParams({ axisSource: "origin", axis: originAxis });
   }, [originAxis, dialog]);
 
   const close = () => setMode({ name: "idle" });
 
   useEffect(() => {
-    const patch = ui.onParamsChange?.(params);
-    if (patch) setParams(patch);
+    const patch = inputs?.onParamsChange();
+    if (patch) setFeatureParams(patch);
   }, [dialog, selection, params]);
 
-  const uiBuild = ui.build;
-  const build = uiBuild
-    ? (): Feature => {
-        const built = uiBuild(params, selection);
-        if ("error" in built) throw new Error(built.error);
-        return built;
-      }
-    : null;
+  const build =
+    ui.hasBuild && inputs
+      ? (): Feature => {
+          const built = inputs.build(selection);
+          if (!built) throw new Error("Feature has no builder");
+          if ("error" in built) throw new Error(built.error);
+          return built;
+        }
+      : null;
 
   const draft = attempt(build);
   const live = useLivePreview(editId, draft);
@@ -142,14 +149,14 @@ function DialogBody({
     if (featureChanges(stored, patch)) await updateFeature(editId!, patch);
   };
   const props = { editId, onClose: close, cancelPreview: live.cancel, update };
-  if (ui.Panel) return <ui.Panel {...props} />;
+  if (ui.hasPanel) return inputs?.renderPanel(props, setFeatureParams);
 
   const ok = async () => {
     let feature: Feature;
     try {
       feature = build!();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
       return;
     }
     live.cancel();
@@ -159,7 +166,7 @@ function DialogBody({
       else await addFeature(feature);
       close();
     } catch {
-      // error toast already set by store
+      return;
     } finally {
       setPending(false);
     }
@@ -169,7 +176,7 @@ function DialogBody({
     <DraggablePanel title={ui.title}>
       <div className="dialog-body">
         <RefRepair />
-        {ui.Form && <ui.Form params={params} setParams={setParams} />}
+        {inputs?.renderForm(setFeatureParams)}
         <SizeLimitHint draft={draft} />
       </div>
       <DialogFooter

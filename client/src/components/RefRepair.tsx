@@ -1,3 +1,4 @@
+import { featureParams, setFeatureParams } from "../commands/featureCommand";
 import { Fragment, useState, type ReactNode } from "react";
 import type {
   BodyPayload,
@@ -83,8 +84,8 @@ export function refNotes(
 
 function PickButton({ refFor }: { refFor: Ref }) {
   const busy = useStore((s) => s.busy);
-  const picking: Ref | undefined = useStore((s) => s.dialogParams.repick);
-  const setParams = useStore((s) => s.setDialogParams);
+  const picking: Ref | undefined = useStore((s) => featureParams(s).repick);
+  const setParams = setFeatureParams;
   const on = JSON.stringify(picking) === JSON.stringify(refFor);
   return (
     <button
@@ -146,7 +147,7 @@ function RefProblems({ fid }: { fid: string }) {
   const active = useStore((s) => s.active);
   const document = useStore((s) => s.document);
   const evaluation = useStore((s) => s.evaluation);
-  const picking: Ref | undefined = useStore((s) => s.dialogParams.repick);
+  const picking: Ref | undefined = useStore((s) => featureParams(s).repick);
   const hover = useHoverPick();
   const problems = evaluation?.featureStatuses.find(
     (st) => st.featureId === fid,

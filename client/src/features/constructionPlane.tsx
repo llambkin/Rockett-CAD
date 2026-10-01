@@ -22,6 +22,7 @@ import {
 import { useStore, type Selection } from "../store";
 import { useSetting } from "../settings";
 import {
+  type AxisParams,
   axisHint,
   axisMissing,
   axisParams,
@@ -33,10 +34,19 @@ import {
 } from "./inputs";
 import {
   registerFeatureUI,
-  type DialogParams,
+  type InputParams,
   type FeatureFormProps,
   type FeatureUI,
 } from "./registry";
+
+export type PlaneParams = InputParams<{
+  method: ConstructionPlaneFeature["method"]["kind"];
+  distance: number;
+  offset: number;
+  angle: number;
+  flip: boolean;
+}> &
+  AxisParams;
 
 type Method = ConstructionPlaneFeature["method"];
 
@@ -61,7 +71,7 @@ const PLANE_INPUTS: Record<Method["kind"], readonly PickInput[]> = {
   twoEdges: [lines],
 };
 
-const methodOf = (params: DialogParams): Method["kind"] =>
+const methodOf = (params: PlaneParams): Method["kind"] =>
   params.method ?? "offset";
 
 const refsOf = (selection: Selection[]) =>
@@ -73,7 +83,7 @@ const refsOf = (selection: Selection[]) =>
         : [],
   );
 
-function PlaneForm({ params, setParams }: FeatureFormProps) {
+function PlaneForm({ params, setParams }: FeatureFormProps<PlaneParams>) {
   const units = useSetting("units.length");
   const selection = useStore((s) => s.selection);
   const doc = useStore((s) => s.document);
@@ -114,7 +124,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
             label="Offset"
             units={units}
             autoFocus
-            value={params.distance ?? handleValue(params, "constructionPlane")}
+            value={handleValue(params, "constructionPlane")}
             onChange={(v) => setParams({ distance: v })}
           />
           {flipField}
@@ -130,7 +140,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
           <LengthField
             label="Offset"
             units={units}
-            value={params.offset ?? 0}
+            value={num(params, "offset", 0)}
             onChange={(v) => setParams({ offset: v })}
           />
           {flipField}
@@ -159,7 +169,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
           />
           <AngleField
             label="Angle"
-            value={params.angle ?? 90}
+            value={num(params, "angle", 90)}
             onChange={(v) => setParams({ angle: v })}
           />
         </>
@@ -183,7 +193,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps) {
 }
 
 function planeMethod(
-  params: DialogParams,
+  params: PlaneParams,
   selection: Selection[],
 ): Method | { error: string } {
   const refs = refsOf(selection);
@@ -286,12 +296,13 @@ function prefillMethod(m: Method) {
   }
 }
 
-const constructionPlane: FeatureUI<ConstructionPlaneFeature> = {
+const constructionPlane: FeatureUI<ConstructionPlaneFeature, PlaneParams> = {
   type: "constructionPlane",
   icon: "▱",
   title: "Construction Plane",
   group: "construct",
   picks: [planes, axis, points, lines],
+  initialParams: {},
   picksFor: (params) => PLANE_INPUTS[methodOf(params)],
   Form: PlaneForm,
   build: (params, selection) => {

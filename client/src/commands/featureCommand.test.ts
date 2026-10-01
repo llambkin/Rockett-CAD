@@ -1,7 +1,11 @@
 import { afterEach, expect, it } from "vitest";
 import type { ExtensionFeature } from "@rockett/shared";
 import { registerSelectionKind } from "../selection/kinds";
-import { registerFeatureUI, type FeatureUI } from "../features/registry";
+import {
+  registerFeatureUI,
+  type FeatureUI,
+  type InputParams,
+} from "../features/registry";
 import { registerPickProvider } from "../three/pickProviders";
 import { featureCommand } from "./featureCommand";
 import { activeCommand } from "./active";
@@ -24,7 +28,11 @@ it("activates Chamfer through the registered feature command and restores presel
   expect(useStore.getState().mode).toEqual({ name: "idle" });
   expect(useStore.getState().active).toEqual({
     id: "design.feature",
-    state: { type: "chamfer", selectionBefore: [edge, body] },
+    state: {
+      type: "chamfer",
+      selectionBefore: [edge, body],
+      inputs: expect.any(Object),
+    },
   });
   expect(activeCommand()).toBeDefined();
   expect(useStore.getState().selection).toEqual([edge]);
@@ -189,13 +197,14 @@ it("runs a registered extension through the same provider and command owners", a
     priority: 0,
     pick: () => [],
   });
-  const ui: FeatureUI<ExtensionFeature> = {
+  const ui: FeatureUI<ExtensionFeature, InputParams<Record<never, never>>> = {
     type: "test.feature",
     icon: "test",
     title: "Test",
     group: "test",
     picks: [{ key: "node", providers: ["test.node"] }],
     Form: () => null,
+    initialParams: {},
     prefill: (f) => ({ params: f.params, selection: [] }),
     build: (params) => ({
       id: "test",

@@ -6,9 +6,14 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function MirrorForm({ params, setParams }: FeatureFormProps) {
+export type MirrorParams = InputParams<
+  Pick<MirrorFeature, "id" | "name" | "combine">
+>;
+
+function MirrorForm({ params, setParams }: FeatureFormProps<MirrorParams>) {
   return (
     <>
       <SelInfo label="Bodies" input="bodies" hint="click bodies" />
@@ -26,8 +31,9 @@ function MirrorForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const mirror: FeatureUI<MirrorFeature> = {
+export const mirror: FeatureUI<MirrorFeature, MirrorParams> = {
   type: "mirror",
+  initialParams: {},
   icon: "⧉",
   title: "Mirror",
   group: "pattern",

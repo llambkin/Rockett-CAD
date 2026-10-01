@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   newId,
   parseLength,
@@ -14,16 +14,31 @@ import { planar } from "../commands/featureCommand";
 import { useStore, type Selection } from "../store";
 import { useSetting } from "../settings";
 import { viewportHandle } from "../viewportRef";
-import { selectedPlane } from "./inputs";
+import { selectedPlane, num } from "./inputs";
 import {
   registerFeatureUI,
-  type DialogParams,
+  type InputParams,
   type FeaturePanelProps,
   type FeatureUI,
 } from "./registry";
 
+export type ReferenceImageParams = InputParams<
+  Pick<
+    ReferenceImageFeature,
+    | "id"
+    | "name"
+    | "plane"
+    | "assetId"
+    | "fileName"
+    | "opacity"
+    | "width"
+    | "height"
+  > &
+    ReferenceImageFeature["transform"]
+>;
+
 function build(
-  params: DialogParams,
+  params: ReferenceImageParams,
   selection: Selection[],
 ): ReferenceImageFeature | { error: string } {
   if (!params.assetId)
@@ -36,16 +51,16 @@ function build(
     plane: params.plane ??
       selectedPlane(selection) ?? { kind: "origin", plane: "XY" },
     assetId: params.assetId,
-    fileName: params.fileName,
+    fileName: params.fileName ?? "",
     transform: {
-      u: params.u ?? 0,
-      v: params.v ?? 0,
-      rotation: params.rotation ?? 0,
-      scale: params.scale ?? 0.5,
+      u: num(params, "u", 0),
+      v: num(params, "v", 0),
+      rotation: num(params, "rotation", 0),
+      scale: num(params, "scale", 0.5),
     },
-    opacity: params.opacity ?? 0.6,
-    width: params.width,
-    height: params.height,
+    opacity: num(params, "opacity", 0.6),
+    width: num(params, "width", 0),
+    height: num(params, "height", 0),
   };
 }
 
@@ -80,10 +95,12 @@ function ReferenceImagePanel({
   onClose,
   cancelPreview,
   update,
-}: FeaturePanelProps) {
+  params,
+  setParams,
+}: FeaturePanelProps<ReferenceImageParams>) {
   const doc = useStore((s) => s.document);
-  const params = useStore((s) => s.dialogParams);
-  const setParams = useStore((s) => s.setDialogParams);
+  const latestParams = useRef(params);
+  latestParams.current = params;
   const addFeature = useStore((s) => s.addFeature);
   const setError = useStore((s) => s.setError);
   const cancel = useStore((s) => s.cancelDialog);
@@ -95,10 +112,12 @@ function ReferenceImagePanel({
   const existing = editId
     ? doc?.features.find((f) => f.id === editId)
     : undefined;
-  const seed: DialogParams =
+  const seed: ReferenceImageParams =
     existing?.type === "referenceImage" ? prefill(existing).params : {};
-  const value = (key: string, dflt: number): number =>
-    params[key] ?? seed[key] ?? dflt;
+  const value = (
+    key: "opacity" | "scale" | "rotation" | "u" | "v",
+    dflt: number,
+  ): number => num(params[key] !== undefined ? params : seed, key, dflt);
   const opacity = value("opacity", 0.6);
   const scale = value("scale", 0.5);
   const rotation = value("rotation", 0);
@@ -113,7 +132,7 @@ function ReferenceImagePanel({
         await update({
           opacity,
           transform: { u, v, rotation, scale },
-        } as any);
+        });
         onClose();
         return;
       }
@@ -137,8 +156,8 @@ function ReferenceImagePanel({
       if ("error" in built) throw new Error(built.error);
       await addFeature(built);
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPending(false);
     }
@@ -177,7 +196,7 @@ function ReferenceImagePanel({
         if (entry !== null && (desired === null || desired <= 0))
           useStore.getState().setError("Enter a valid distance");
         if (desired !== null && desired > 0 && d > 1e-9) {
-          const now = useStore.getState().dialogParams.scale ?? scale;
+          const now = num(latestParams.current, "scale", scale);
           setParams({ scale: now * (desired / d) });
         }
       }
@@ -264,12 +283,16 @@ function ReferenceImagePanel({
   );
 }
 
-const referenceImage: FeatureUI<ReferenceImageFeature> = {
+export const referenceImage: FeatureUI<
+  ReferenceImageFeature,
+  ReferenceImageParams
+> = {
   type: "referenceImage",
   icon: "🖼",
   title: "Reference Image",
   group: "insert",
   picks: [planar("plane", true)],
+  initialParams: {},
   Panel: ReferenceImagePanel,
   build,
   prefill,

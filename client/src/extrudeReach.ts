@@ -135,7 +135,10 @@ export function toolOperation(tools?: Bounds[]): ToolOperation {
 }
 
 export function autoOperation(
-  params: { operation?: string; autoOperation?: boolean },
+  params: {
+    operation?: string | undefined;
+    autoOperation?: boolean | undefined;
+  },
   operation: () => ToolOperation,
 ) {
   if (params.operation !== undefined && !params.autoOperation) return undefined;

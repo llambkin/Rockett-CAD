@@ -9,7 +9,12 @@ import {
   useStore,
   type Selection,
 } from "../store";
-import { featureUI, type DialogFeatureUI } from "../features/registry";
+import {
+  featureUI,
+  type DialogFeatureUI,
+  type FeatureInputs,
+  type SharedInputParams,
+} from "../features/registry";
 import { chosenTargets, several, targetOperation } from "../toolTargets";
 import { sketchRegions } from "../treeSelection";
 
@@ -58,13 +63,13 @@ export const targets = input("targets", ["design.body"], {
       s.active?.id !== "design.feature"
         ? []
         : chosenTargets(
-            targetOperation(s.active.state.type, s.dialogParams),
-            s.dialogParams.targets,
+            targetOperation(s.active.state.type, featureParams(s)),
+            featureParams(s).targets,
             s.document?.namingVersion,
           ).map((bodyId) => ({ kind: "body", bodyId })),
-    write: (next, s) => {
+    write: (next) => {
       const ids = next.flatMap((x) => (x.kind === "body" ? [x.bodyId] : []));
-      s.setDialogParams({ targets: ids.length > 0 ? ids : undefined });
+      setFeatureParams({ targets: ids.length > 0 ? ids : undefined });
     },
   },
 });
@@ -114,14 +119,18 @@ export function preselectionFor(
 
 function inputsFor(
   dialog: Feature["type"],
-  params: Record<string, any>,
+  params: SharedInputParams,
 ): readonly PickInput[] {
-  return featureUI(dialog)?.picksFor?.(params) ?? picksOf(dialog);
+  const s = useStore.getState();
+  return s.active?.id === "design.feature" && s.active.state.type === dialog
+    ? s.active.state.inputs.picks()
+    : (featureUI(dialog)?.create().withParams(params).picks() ??
+        picksOf(dialog));
 }
 
 export function takesAxis(
   dialog: Feature["type"],
-  params: Record<string, any>,
+  params: SharedInputParams,
 ): boolean {
   return inputsFor(dialog, params).some(
     (i) => inSelection(i) && !!i.one && kindsOf(i).includes("axis"),
@@ -130,8 +139,8 @@ export function takesAxis(
 
 function dialogInputs(s: Store): PickInput[] {
   if (s.active?.id !== "design.feature") return [];
-  const operation = targetOperation(s.active.state.type, s.dialogParams);
-  return inputsFor(s.active.state.type, s.dialogParams).flatMap((i) => {
+  const operation = targetOperation(s.active.state.type, featureParams(s));
+  return inputsFor(s.active.state.type, featureParams(s)).flatMap((i) => {
     if (i !== targets) return [i];
     if (operation === "newBody") return [];
     return several(operation, s.document?.namingVersion)
@@ -229,7 +238,7 @@ export function pickProviderIds(
 }
 
 function featurePickProviders(s: Store, shift?: boolean): string[] {
-  const repair: { kind: "face" | "edge" } | undefined = s.dialogParams.repick;
+  const repair: { kind: "face" | "edge" } | undefined = featureParams(s).repick;
   return pickProviderIds(
     repair
       ? { key: "repick", providers: [`design.${repair.kind}`] }
@@ -255,7 +264,7 @@ export function accepted(
 }
 
 export function hoverPick(s: Store, sel: Selection | null): Selection | null {
-  if (s.dialogParams.repick) return sel;
+  if (featureParams(s).repick) return sel;
   return accepted(activeInput(s), sel, s)[0] ?? null;
 }
 
@@ -334,6 +343,7 @@ export interface FeatureCommandState {
   type: Feature["type"];
   editFeatureId?: string;
   selectionBefore: Selection[];
+  inputs: FeatureInputs;
 }
 
 export const featureCommand = {
@@ -341,11 +351,16 @@ export const featureCommand = {
     type?: FeatureCommandState["type"],
     initial?: {
       editFeatureId?: string;
-      params?: Record<string, any>;
+      inputs?: FeatureInputs;
       selection: Selection[];
     },
   ) {
-    if (!type || !featureUI(type)) return;
+    if (
+      !type ||
+      !featureUI(type) ||
+      (initial?.inputs && !initial.inputs.belongsTo(type))
+    )
+      return;
     const s = useStore.getState();
     const selectionBefore = selectionBeforeCommand(s);
     const selection = initial?.selection ?? preselectionFor(type, s.selection);
@@ -356,12 +371,12 @@ export const featureCommand = {
         state: {
           type,
           selectionBefore,
+          inputs: initial?.inputs ?? featureUI(type)!.create(),
           ...(initial?.editFeatureId && {
             editFeatureId: initial.editFeatureId,
           }),
         },
       },
-      dialogParams: initial?.params ?? {},
       selection,
       hover: null,
     });
@@ -380,7 +395,7 @@ export const featureCommand = {
     if (s.active?.id !== "design.feature" || s.busy) return;
     if (repick(selection)) return;
     const sel = accepted(activeInput(s), selection, s)[0] ?? null;
-    const taken = sel && featureUI(s.active.state.type)?.onPick?.(sel, s);
+    const taken = sel && s.active.state.inputs.onPick(sel, s, setFeatureParams);
     if (taken) return taken;
     if (sel) pickInto([sel], event.ctrlKey || event.metaKey || event.shiftKey);
   },
@@ -399,6 +414,32 @@ export async function openInDialog(
     await useStore.getState().finishSketch();
     if (useStore.getState().mode.name === "sketch") return;
   }
-  const { params, selection } = ui.prefill(f);
-  featureCommand.enter(ui.type, { editFeatureId: f.id, params, selection });
+  if (!ui.prefill) return;
+  const { inputs, selection } = ui.prefill(f);
+  featureCommand.enter(ui.type, { editFeatureId: f.id, inputs, selection });
+}
+
+const emptyParams: SharedInputParams = {};
+
+export function featureParams(
+  s: Store = useStore.getState(),
+): SharedInputParams {
+  return s.active?.id === "design.feature"
+    ? s.active.state.inputs.params
+    : emptyParams;
+}
+
+export function setFeatureParams(patch: SharedInputParams, lifetime?: object) {
+  const { active } = useStore.getState();
+  if (
+    active?.id !== "design.feature" ||
+    (lifetime && active.state.inputs.lifetime !== lifetime)
+  )
+    return;
+  useStore.setState({
+    active: {
+      ...active,
+      state: { ...active.state, inputs: active.state.inputs.withParams(patch) },
+    },
+  });
 }

@@ -1,3 +1,4 @@
+import { featureParams, setFeatureParams } from "./commands/featureCommand";
 import type { EdgeRef, FaceRef, Feature, RefCandidate } from "@rockett/shared";
 import { useStore, type Selection } from "./store";
 import { dialogTargets } from "./toolTargets";
@@ -65,26 +66,26 @@ export async function accept(
     selection: current.selection.map(
       (pick) => swapRef(pick, ref, to) as Selection,
     ),
-    dialogParams: swapRef(
-      current.dialogParams,
-      ref,
-      to,
-    ) as typeof current.dialogParams,
     hover: null,
   });
+  setFeatureParams(
+    swapRef(featureParams(current), ref, to) as ReturnType<
+      typeof featureParams
+    >,
+  );
   await loadPreviewBase(fid, useStore.getState);
 }
 
 export function repick(pick: Selection | null): boolean {
   const s = useStore.getState();
-  const ref: Ref | undefined = s.dialogParams.repick;
+  const ref: Ref | undefined = featureParams(s).repick;
   const fid =
     s.active?.id === "design.feature"
       ? s.active.state.editFeatureId
       : undefined;
   if (!ref || !fid) return false;
   if (pick?.kind !== ref.kind) return true;
-  s.setDialogParams({ repick: undefined });
+  setFeatureParams({ repick: undefined });
   const name = pick.kind === "face" ? pick.faceName : pick.edgeName;
   void accept(fid, ref, pickOf(ref.kind, { bodyId: pick.bodyId, name }));
   return true;

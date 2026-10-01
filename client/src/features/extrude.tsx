@@ -20,14 +20,28 @@ import {
 } from "./inputs";
 import {
   registerFeatureUI,
-  type DialogParams,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-const distance = (params: DialogParams) => handleValue(params, "extrude");
+export type ExtrudeParams = InputParams<
+  Pick<
+    ExtrudeFeature,
+    | "id"
+    | "name"
+    | "distance"
+    | "distance2"
+    | "startOffset"
+    | "direction"
+    | "operation"
+    | "targets"
+  >
+> & { autoOperation?: boolean | undefined };
 
-function ExtrudeForm({ params, setParams }: FeatureFormProps) {
+const distance = (params: ExtrudeParams) => handleValue(params, "extrude");
+
+function ExtrudeForm({ params, setParams }: FeatureFormProps<ExtrudeParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -35,7 +49,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps) {
       <LengthField
         label="Start offset"
         units={units}
-        value={params.startOffset ?? 0}
+        value={num(params, "startOffset", 0)}
         onChange={(v) => setParams({ startOffset: v })}
       />
       <div className="field-hint">
@@ -66,7 +80,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps) {
         <LengthField
           label="Distance 2"
           units={units}
-          value={params.distance2 ?? 5}
+          value={num(params, "distance2", 5)}
           onChange={(v) => setParams({ distance2: v })}
         />
       )}
@@ -75,8 +89,9 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const extrude: FeatureUI<ExtrudeFeature> = {
+export const extrude: FeatureUI<ExtrudeFeature, ExtrudeParams> = {
   type: "extrude",
+  initialParams: {},
   icon: "⬆",
   title: "Extrude",
   group: "create",

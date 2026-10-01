@@ -27,14 +27,21 @@ import {
   profileHint,
   profileSources,
   storedFeature,
+  type AxisParams,
 } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function RevolveForm({ params, setParams }: FeatureFormProps) {
+export type RevolveParams = InputParams<
+  Pick<RevolveFeature, "id" | "name" | "angle" | "operation" | "targets">
+> &
+  AxisParams & { autoOperation?: boolean | undefined };
+
+function RevolveForm({ params, setParams }: FeatureFormProps<RevolveParams>) {
   const selection = useStore((s) => s.selection);
   const document = useStore((s) => s.document);
   return (
@@ -65,8 +72,9 @@ function RevolveForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const revolve: FeatureUI<RevolveFeature> = {
+export const revolve: FeatureUI<RevolveFeature, RevolveParams> = {
   type: "revolve",
+  initialParams: {},
   icon: "↻",
   title: "Revolve",
   group: "create",

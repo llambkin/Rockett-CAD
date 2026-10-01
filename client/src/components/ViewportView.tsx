@@ -79,12 +79,16 @@ import { watchSnapshots } from "../snapshot";
 import * as tools from "../sketchTools";
 import { ANGLE_LOCK_KEY } from "../shortcuts";
 
-import { isPlanarFace, takes } from "../commands/featureCommand";
+import {
+  isPlanarFace,
+  takes,
+  featureParams,
+  setFeatureParams,
+} from "../commands/featureCommand";
 import { dimensionLayout, dimensionMaps } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import { featureUI } from "../features/registry";
 import { handleValue } from "../features/inputs";
 import { dragPreview as livePreview, previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
@@ -150,7 +154,7 @@ export function ViewportView() {
   const hover = useStore((s) => s.hover);
   const peeked = usePeekedFeature();
   const draftSketch = useStore((s) => s.draftSketch);
-  const dialogParams = useStore((s) => s.dialogParams);
+  const params = useStore(featureParams);
   const activeFeature = useStore((s) =>
     s.active?.id === "design.feature" ? s.active.state : undefined,
   );
@@ -614,14 +618,14 @@ export function ViewportView() {
       src.profile = undefined;
       src.faceGhost = undefined;
     }
-    const dist = handleValue(s.dialogParams, "extrude");
-    const sign = s.dialogParams.direction === "reverse" ? -1 : 1;
-    const startRaw = Number(s.dialogParams.startOffset);
+    const dist = handleValue(featureParams(s), "extrude");
+    const sign = featureParams(s).direction === "reverse" ? -1 : 1;
+    const startRaw = Number(featureParams(s).startOffset);
     return new ExtrudeGizmo(
       vp,
       src,
       sign * dist,
-      (s.dialogParams.operation ?? "join") === "cut",
+      (featureParams(s).operation ?? "join") === "cut",
       Number.isFinite(startRaw) ? startRaw : 0,
     );
   }
@@ -630,15 +634,15 @@ export function ViewportView() {
   useEffect(() => {
     const g = extrudeSlot.current;
     if (!g) return;
-    g.setCut((dialogParams.operation ?? "join") === "cut");
+    g.setCut((params.operation ?? "join") === "cut");
     if (extrudeSlot.isDragging) return;
-    const startRaw = Number(dialogParams.startOffset);
+    const startRaw = Number(params.startOffset);
     g.setStartOffset(Number.isFinite(startRaw) ? startRaw : 0);
-    const dist = Number(dialogParams.distance);
+    const dist = Number(params.distance);
     if (!Number.isFinite(dist)) return;
-    const sign = dialogParams.direction === "reverse" ? -1 : 1;
+    const sign = params.direction === "reverse" ? -1 : 1;
     g.update(sign * dist);
-  }, [dialogParams]);
+  }, [params]);
 
   // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
   useEffect(() => {
@@ -658,9 +662,9 @@ export function ViewportView() {
     const bodies = baseBodies(s).filter((b) => bodyIds.includes(b.bodyId));
     if (bodies.length === 0) return null;
     const t: [number, number, number] = [
-      Number(s.dialogParams.tx) || 0,
-      Number(s.dialogParams.ty) || 0,
-      Number(s.dialogParams.tz) || 0,
+      Number(featureParams(s).tx) || 0,
+      Number(featureParams(s).ty) || 0,
+      Number(featureParams(s).tz) || 0,
     ];
     const shown = previewedFeature(s);
     const center = new THREE.Vector3();
@@ -686,11 +690,11 @@ export function ViewportView() {
     const g = moveSlot.current;
     if (!g || moveSlot.isDragging) return;
     g.update([
-      Number(dialogParams.tx) || 0,
-      Number(dialogParams.ty) || 0,
-      Number(dialogParams.tz) || 0,
+      Number(params.tx) || 0,
+      Number(params.ty) || 0,
+      Number(params.tz) || 0,
     ]);
-  }, [dialogParams]);
+  }, [params]);
 
   /** Resolve the revolve axis (origin + direction) exactly as the feature
    * will, from the current dialog params + selection. */
@@ -701,7 +705,7 @@ export function ViewportView() {
     const s = useStore.getState();
     let axisOrigin: THREE.Vector3 | null = null;
     let axisDir: THREE.Vector3 | null = null;
-    if ((s.dialogParams.axisSource ?? "origin") === "edge") {
+    if ((featureParams(s).axisSource ?? "origin") === "edge") {
       const lineSel = s.selection.find((x) => x.kind === "sketchEntity") as any;
       const edgeSel = s.selection.find((x) => x.kind === "edge") as any;
       if (lineSel) {
@@ -738,7 +742,7 @@ export function ViewportView() {
         }
       }
     } else {
-      const index = ORIGIN_AXES.indexOf(s.dialogParams.axis);
+      const index = ORIGIN_AXES.indexOf(featureParams(s).axis ?? "Z");
       axisOrigin = new THREE.Vector3(0, 0, 0);
       axisDir = new THREE.Vector3().setComponent(index < 0 ? 2 : index, 1);
     }
@@ -782,7 +786,7 @@ export function ViewportView() {
       profile.holePolygons,
       axis.origin,
       axis.dir,
-      handleValue(s.dialogParams, "revolve"),
+      handleValue(featureParams(s), "revolve"),
     );
     const layer = vp.addLayer("revolveGhost");
     layer.group.add(ghost);
@@ -791,7 +795,7 @@ export function ViewportView() {
       layer.dispose();
       vp.requestRender();
     };
-  }, [activeFeature, selection, evaluation, dialogParams, held]);
+  }, [activeFeature, selection, evaluation, params, held]);
 
   // rotational drag handle for the revolve angle (ring around the axis)
   useEffect(() => {
@@ -799,14 +803,7 @@ export function ViewportView() {
     // axisSource/axis in deps: the axis dropdown may switch AFTER mount
     // (auto-switch on edge pick) — the ring must follow. Angle deliberately
     // excluded so drags don't rebuild the ring under the pointer.
-  }, [
-    mode,
-    selection,
-    evaluation,
-    dialogParams.axisSource,
-    dialogParams.axis,
-    held,
-  ]);
+  }, [mode, selection, evaluation, params.axisSource, params.axis, held]);
 
   function buildRevolveGizmo(): RevolveGizmo | null {
     const vp = viewportRef.current;
@@ -830,7 +827,7 @@ export function ViewportView() {
       ring.dir,
       ring.zeroDir,
       ring.radius,
-      handleValue(s.dialogParams, "revolve"),
+      handleValue(featureParams(s), "revolve"),
     );
   }
 
@@ -838,13 +835,13 @@ export function ViewportView() {
   useEffect(() => {
     const g = revolveSlot.current;
     if (!g || revolveSlot.isDragging) return;
-    const a = Number(dialogParams.angle);
+    const a = Number(params.angle);
     if (Number.isFinite(a)) g.update(a);
-  }, [dialogParams]);
+  }, [params]);
 
   useEffect(() => {
     featureSlot.rebuild(buildFeatureHandle);
-  }, [activeFeature, selection, evaluation, dialogParams, held]);
+  }, [activeFeature, selection, evaluation, params, held]);
 
   function buildFeatureHandle(): ExtrudeGizmo | RevolveGizmo | null {
     const vp = viewportRef.current;
@@ -853,7 +850,7 @@ export function ViewportView() {
       vp && s.active?.id === "design.feature"
         ? featureHandle({
             dialog: s.active.state.type,
-            params: s.dialogParams,
+            params: featureParams(s),
             selection: s.selection,
             bodies: previewBodies(s),
             evaluation: s.evaluation,
@@ -894,7 +891,7 @@ export function ViewportView() {
       : g.dragValue(e.clientX, e.clientY);
     if (handle.signed ? value === 0 : value <= 0) return;
     g.update(value);
-    useStore.getState().setDialogParams({ [handle.param]: value });
+    setFeatureParams({ [handle.param]: value });
     const at = arc ? g.handleScreenPosition() : g.tipScreenPosition();
     const text = arc ? formatAngle(value, 3) : formatLength(value, units);
     setGizmoLabel({ ...at, text });
@@ -995,7 +992,7 @@ export function ViewportView() {
         const a = g.dragAngle(e.clientX, e.clientY);
         g.update(a);
         const s = useStore.getState();
-        s.setDialogParams({ angle: a });
+        setFeatureParams({ angle: a });
         const tip = g.handleScreenPosition();
         setGizmoLabel({ x: tip.x, y: tip.y, text: formatAngle(a, 3) });
         // editing an existing revolve: live-update the real geometry
@@ -1017,7 +1014,7 @@ export function ViewportView() {
         const t = g.dragOffset(e.clientX, e.clientY);
         g.update(t);
         const s = useStore.getState();
-        s.setDialogParams({ tx: t[0], ty: t[1], tz: t[2] });
+        setFeatureParams({ tx: t[0], ty: t[1], tz: t[2] });
         const tip = g.tipScreenPosition();
         if (tip) {
           const axisName = ["X", "Y", "Z"][g.draggingAxis] ?? "";
@@ -1046,17 +1043,19 @@ export function ViewportView() {
         if (zeroed || Math.abs(v) > 1e-9) {
           g.update(v);
           const s = useStore.getState();
-          const curDir = s.dialogParams.direction ?? "normal";
+          const curDir = featureParams(s).direction ?? "normal";
           const patch: Record<string, any> = { distance: Math.abs(v) };
           if (!zeroed && (curDir === "normal" || curDir === "reverse")) {
             patch.direction = v < 0 ? "reverse" : "normal";
           }
-          const params = { ...s.dialogParams, ...patch };
-          s.setDialogParams({
+          const params = { ...featureParams(s), ...patch };
+          setFeatureParams({
             ...patch,
-            ...featureUI("extrude")?.onParamsChange?.(params),
+            ...(s.active?.state && "inputs" in s.active.state
+              ? s.active.state.inputs.withParams(params).onParamsChange()
+              : {}),
           });
-          const current = useStore.getState().dialogParams;
+          const current = featureParams();
           const tip = g.tipScreenPosition();
           setGizmoLabel({
             x: tip.x,
@@ -1108,7 +1107,7 @@ export function ViewportView() {
         setGizmoLabel(null);
         button = -1;
         const s = useStore.getState();
-        const a = Number(s.dialogParams.angle);
+        const a = Number(featureParams(s).angle);
         if (
           s.active?.id === "design.feature" &&
           s.active.state.type === "revolve" &&
@@ -1132,9 +1131,9 @@ export function ViewportView() {
         ) {
           livePreview.commit(s.active.state.editFeatureId, {
             translation: [
-              Number(s.dialogParams.tx) || 0,
-              Number(s.dialogParams.ty) || 0,
-              Number(s.dialogParams.tz) || 0,
+              Number(featureParams(s).tx) || 0,
+              Number(featureParams(s).ty) || 0,
+              Number(featureParams(s).tz) || 0,
             ],
           } as any);
         }
@@ -1151,13 +1150,13 @@ export function ViewportView() {
           s.active.state.type === "extrude" &&
           s.active.state.editFeatureId
         ) {
-          const dist = Number(s.dialogParams.distance);
+          const dist = Number(featureParams(s).distance);
           if (Number.isFinite(dist) && dist !== 0) {
             livePreview.commit(s.active.state.editFeatureId, {
               suppressed: false,
               distance: dist,
-              direction: s.dialogParams.direction ?? "normal",
-              operation: s.dialogParams.operation,
+              direction: featureParams(s).direction ?? "normal",
+              operation: featureParams(s).operation,
             } as any);
           } else if (dist === 0) {
             // Ctrl-zeroed: leave the feature suppressed so profiles stay

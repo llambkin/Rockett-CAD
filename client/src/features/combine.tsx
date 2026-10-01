@@ -6,9 +6,14 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function CombineForm({ params, setParams }: FeatureFormProps) {
+export type CombineParams = InputParams<
+  Pick<CombineFeature, "id" | "name" | "operation" | "keepTools">
+>;
+
+function CombineForm({ params, setParams }: FeatureFormProps<CombineParams>) {
   return (
     <>
       <SelInfo
@@ -35,8 +40,9 @@ function CombineForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const combine: FeatureUI<CombineFeature> = {
+export const combine: FeatureUI<CombineFeature, CombineParams> = {
   type: "combine",
+  initialParams: {},
   icon: "∪",
   title: "Combine",
   group: "modify",

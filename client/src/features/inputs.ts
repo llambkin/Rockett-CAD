@@ -1,5 +1,6 @@
 import type {
   AxisRef,
+  OriginAxis,
   CadDocument,
   EdgeRef,
   FaceRef,
@@ -11,16 +12,20 @@ import { useStore, type Selection } from "../store";
 import { fromRef, refsOf, toRef } from "../selection/kinds";
 import { HANDLE_VALUES, type HandleDialog } from "../three/featureHandles";
 import { toolTargets } from "../toolTargets";
-import type { DialogParams } from "./registry";
+import type { SharedInputParams } from "./registry";
 
 export const profileHint = "click sketch regions or Shift-click planar faces";
 
-export const num = (params: DialogParams, key: string, dflt: number) => {
+export const num = <P extends object>(
+  params: P,
+  key: keyof P,
+  dflt: number,
+) => {
   const v = Number(params[key]);
   return Number.isFinite(v) ? v : dflt;
 };
 
-export const handleValue = (params: DialogParams, d: HandleDialog) =>
+export const handleValue = (params: SharedInputParams, d: HandleDialog) =>
   num(params, HANDLE_VALUES[d].param, HANDLE_VALUES[d].fallback);
 
 export const profileRefs = (selection: Selection[]): ProfileRef[] =>
@@ -64,7 +69,10 @@ export const bodyIds = (selection: Selection[]): string[] =>
 export const bodyPicks = (ids: string[]): Selection[] =>
   ids.map((ref) => fromRef("body", ref));
 
-export const bodyTargets = (operation: string, params: DialogParams) =>
+export const bodyTargets = (
+  operation: string,
+  params: Pick<SharedInputParams, "targets">,
+) =>
   toolTargets(
     operation,
     params.targets,
@@ -101,7 +109,7 @@ export const axisPicks = (selection: Selection[], document: Doc) => [
 ];
 
 export const axisMissing = (
-  params: DialogParams,
+  params: AxisParams,
   selection: Selection[],
   document: Doc,
 ) =>
@@ -111,7 +119,7 @@ export const axisHint = (missing: boolean) =>
   missing ? "Pick an axis" : "click a sketch line or body edge, or pick X/Y/Z";
 
 export function axisRef(
-  params: DialogParams,
+  params: AxisParams,
   selection: Selection[],
   document: Doc,
 ): AxisRef | null {
@@ -131,9 +139,14 @@ export function axisRef(
     : null;
 }
 
+export type AxisParams = Pick<SharedInputParams, "axis" | "axisSource">;
+
 type AxisChoice = AxisRef | LinearPatternFeature["direction"];
 
-export const axisParams = (axis: AxisChoice | undefined, defaultAxis = "Z") =>
+export const axisParams = (
+  axis: AxisChoice | undefined,
+  defaultAxis: OriginAxis = "Z",
+): AxisParams =>
   axis?.kind === "originAxis" || axis?.kind === "axis"
     ? { axisSource: "origin", axis: axis.axis }
     : { axisSource: "edge", axis: defaultAxis };

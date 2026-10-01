@@ -18,14 +18,27 @@ import {
   bodyPicks,
   handleValue,
   num,
+  type AxisParams,
 } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function CircularPatternForm({ params, setParams }: FeatureFormProps) {
+export type CircularPatternParams = InputParams<
+  Pick<
+    CircularPatternFeature,
+    "id" | "name" | "count" | "totalAngle" | "combine"
+  >
+> &
+  AxisParams;
+
+function CircularPatternForm({
+  params,
+  setParams,
+}: FeatureFormProps<CircularPatternParams>) {
   const selection = useStore((s) => s.selection);
   const document = useStore((s) => s.document);
   return (
@@ -48,13 +61,13 @@ function CircularPatternForm({ params, setParams }: FeatureFormProps) {
       <NumField
         label="Quantity"
         autoFocus
-        value={params.count ?? 6}
+        value={num(params, "count", 6)}
         onChange={(v) => setParams({ count: v })}
         int
       />
       <NumField
         label="Total angle (°)"
-        value={params.totalAngle ?? handleValue(params, "circularPattern")}
+        value={handleValue(params, "circularPattern")}
         onChange={(v) => setParams({ totalAngle: v })}
       />
       <CheckField
@@ -66,8 +79,12 @@ function CircularPatternForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const circularPattern: FeatureUI<CircularPatternFeature> = {
+export const circularPattern: FeatureUI<
+  CircularPatternFeature,
+  CircularPatternParams
+> = {
   type: "circularPattern",
+  initialParams: {},
   icon: "❋",
   title: "Circular Pattern",
   group: "pattern",

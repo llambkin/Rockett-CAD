@@ -18,12 +18,19 @@ import {
   edgeRefs,
   handleValue,
   num,
+  type AxisParams,
 } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
+
+export type LinearPatternParams = InputParams<
+  Pick<LinearPatternFeature, "id" | "name" | "count" | "spacing" | "combine">
+> &
+  AxisParams;
 
 const direction: PickInput = {
   key: "direction",
@@ -32,7 +39,10 @@ const direction: PickInput = {
   straight: true,
 };
 
-function LinearPatternForm({ params, setParams }: FeatureFormProps) {
+function LinearPatternForm({
+  params,
+  setParams,
+}: FeatureFormProps<LinearPatternParams>) {
   const units = useSetting("units.length");
   const selection = useStore((s) => s.selection);
   const document = useStore((s) => s.document);
@@ -62,7 +72,7 @@ function LinearPatternForm({ params, setParams }: FeatureFormProps) {
       />
       <NumField
         label="Quantity"
-        value={params.count ?? 3}
+        value={num(params, "count", 3)}
         onChange={(v) => setParams({ count: v })}
         int
       />
@@ -70,7 +80,7 @@ function LinearPatternForm({ params, setParams }: FeatureFormProps) {
         label="Spacing"
         units={units}
         autoFocus
-        value={params.spacing ?? handleValue(params, "linearPattern")}
+        value={handleValue(params, "linearPattern")}
         onChange={(v) => setParams({ spacing: v })}
       />
       <CheckField
@@ -82,8 +92,12 @@ function LinearPatternForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const linearPattern: FeatureUI<LinearPatternFeature> = {
+export const linearPattern: FeatureUI<
+  LinearPatternFeature,
+  LinearPatternParams
+> = {
   type: "linearPattern",
+  initialParams: {},
   icon: "⋮⋮",
   title: "Rectangular Pattern",
   group: "pattern",

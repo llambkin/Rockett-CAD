@@ -13,9 +13,15 @@ import {
   registerFeatureUI,
   type FeatureFormProps,
   type FeatureUI,
+  type InputParams,
 } from "./registry";
 
-function EmbossForm({ params, setParams }: FeatureFormProps) {
+export type EmbossParams = InputParams<
+  Pick<EmbossFeature, "id" | "name" | "depth" | "targets">
+> &
+  InputParams<{ embossMode: EmbossFeature["mode"] }>;
+
+function EmbossForm({ params, setParams }: FeatureFormProps<EmbossParams>) {
   const units = useSetting("units.length");
   return (
     <>
@@ -28,7 +34,7 @@ function EmbossForm({ params, setParams }: FeatureFormProps) {
         label="Depth"
         units={units}
         autoFocus
-        value={params.depth ?? handleValue(params, "emboss")}
+        value={handleValue(params, "emboss")}
         onChange={(v) => setParams({ depth: v })}
       />
       <SelectField
@@ -45,8 +51,9 @@ function EmbossForm({ params, setParams }: FeatureFormProps) {
   );
 }
 
-const emboss: FeatureUI<EmbossFeature> = {
+export const emboss: FeatureUI<EmbossFeature, EmbossParams> = {
   type: "emboss",
+  initialParams: {},
   icon: "℘",
   title: "Emboss",
   group: "create",
