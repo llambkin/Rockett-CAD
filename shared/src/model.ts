@@ -12,8 +12,6 @@ import type { FEATURE_SCHEMAS } from "./schema/features.js";
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-export const SCHEMA_VERSION = 22;
-
 export type NamingVersion = 1 | 2;
 
 // ---------------------------------------------------------------------------
@@ -468,45 +466,7 @@ export type FeatureType = CoreFeature["type"];
 // Document
 // ---------------------------------------------------------------------------
 
-export interface BodyMeta {
-  name: string;
-}
-
-export interface TreeGroup {
-  id: string;
-  name: string;
-  kind: "body" | "sketch";
-  members: string[];
-}
-
-export interface ExtensionData {
-  version: number;
-  data: unknown;
-}
-
-export interface CadDocument {
-  schemaVersion: number;
-  namingVersion: NamingVersion;
-  revision: number;
-  savedWith: { version: string; commit: string | null } | null;
-  id: string;
-  name: string;
-  createdAt: string;
-  modifiedAt: string;
-  modifiedBy: string | null;
-  features: Feature[];
-  /**
-   * Timeline marker: number of features currently "active" (rolled back when
-   * < features.length). New features insert at this position.
-   */
-  timelinePosition: number;
-  /** Display names per body id. */
-  bodyMeta: Record<string, BodyMeta>;
-  /** Per-type counters used for default names (Sketch1, Extrude2, ...). */
-  counters: Record<string, number>;
-  groups: TreeGroup[];
-  extensions: Record<string, ExtensionData>;
-}
+export * from "./documents.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -528,49 +488,4 @@ export function newId(prefix: string): string {
   const time = Date.now().toString(36);
   const count = idCounter.toString(36).padStart(3, "0");
   return `${prefix}-${time}${count}${rand}`;
-}
-
-export function createEmptyDocument(id: string, name: string): CadDocument {
-  const now = new Date().toISOString();
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    namingVersion: 2,
-    revision: 0,
-    savedWith: null,
-    id,
-    name,
-    createdAt: now,
-    modifiedAt: now,
-    modifiedBy: null,
-    features: [],
-    timelinePosition: 0,
-    bodyMeta: {},
-    counters: {},
-    groups: [],
-    extensions: {},
-  };
-}
-
-export const MANIFEST_VERSION = 2;
-export const DOCUMENT_TYPES = ["part"] as const;
-export type DocumentType = (typeof DOCUMENT_TYPES)[number];
-export type ProjectMember = { userId: string; role: "view" | "edit" };
-
-export interface ProjectManifest {
-  version: typeof MANIFEST_VERSION;
-  documents: Array<{ id: string; type: DocumentType }>;
-  owner: string | null;
-  members: ProjectMember[];
-}
-
-export function createManifest(
-  partId: string,
-  owner: string | null = null,
-): ProjectManifest {
-  return {
-    version: MANIFEST_VERSION,
-    documents: [{ id: partId, type: "part" }],
-    owner,
-    members: [],
-  };
 }

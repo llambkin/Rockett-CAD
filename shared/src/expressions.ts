@@ -19,7 +19,7 @@ export class ExpressionError extends Error {
   }
 }
 
-const MAX_BYTES = 65536;
+export const EXPRESSION_MAX_BYTES = 65536;
 const MAX_TOKENS = 8192;
 const MAX_DEPTH = 128;
 const NUMBER = /(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/y;
@@ -291,8 +291,8 @@ export function evaluateExpression(
   inputs: ExpressionInputs = {},
 ): Scalar {
   if (
-    text.length > MAX_BYTES ||
-    new TextEncoder().encode(text).length > MAX_BYTES
+    text.length > EXPRESSION_MAX_BYTES ||
+    new TextEncoder().encode(text).length > EXPRESSION_MAX_BYTES
   )
     fail("limit", "Expression is too long");
   return new Parser(text, inputs).parse();

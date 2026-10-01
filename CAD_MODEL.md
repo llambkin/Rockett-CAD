@@ -4,7 +4,7 @@ The document is a recipe. Geometry is rebuilt from it and never saved. This
 file keeps the contracts code cannot show and names the code that owns each.
 
 Parameter shapes live in the types, not here: `CadDocument` in
-`shared/src/model.ts`, one module per feature in `shared/src/features/`, JSON
+`shared/src/documents.ts`, one module per feature in `shared/src/features/`, JSON
 schemas in `shared/src/schema/`.
 
 ## Saved projects
@@ -12,7 +12,7 @@ schemas in `shared/src/schema/`.
 Saved projects are user data. A shape change ships a migration, a backup and
 a test that loads the previous schema.
 
-- `SCHEMA_VERSION` in `shared/src/model.ts` is the document version. A shape
+- `SCHEMA_VERSION` in `shared/src/documents.ts` is the document version. A shape
   change bumps it and adds the step from the old version to
   `documentMigrations` in `server/src/store/migrations.ts`.
 - `migrate` refuses a newer file with `TooNewError` and a gap with
@@ -314,3 +314,19 @@ The fork migration chain remains authoritative. Upstream schema 12 documents
 that have no naming version receive version 1 while retaining the fork's
 view split. The project store backs up the complete previous project before
 the first migrated save.
+
+## Named parameters
+
+Schema 23 adds `parameters` and `parameterBindings`, empty for prior documents.
+Parameters retain name, unit, expression and comment; bindings retain a feature
+id, schema-relative numeric path and expression. Stored feature inputs remain
+numbers. `resolveDocumentParameters` in `shared/src/parameters.ts` owns derived
+values and a resolved feature copy, without changing the stored associations.
+Numeric schemas own binding eligibility, units and bounds. Names, references,
+cycles, dimensions and numeric results are validated before document acceptance.
+Model inputs retain associations; settings and export options calculate once.
+
+Core feature schemas live in `shared/src/schema/coreFeatures.ts`, below the
+parameter resolver and document validation. `schema/features.ts` retains their
+public exports alongside the document schemas. The cached parser lives in
+`schema/validation.ts` without document or feature imports.

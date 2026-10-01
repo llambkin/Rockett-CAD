@@ -13,8 +13,11 @@ import type {
   ProfileRef,
 } from "./model.js";
 import { createRegistry } from "./registry.js";
-import { extensionFeatureSchema, FEATURE_SCHEMAS } from "./schema/features.js";
-import { parse } from "./schema/index.js";
+import {
+  extensionFeatureSchema,
+  FEATURE_SCHEMAS,
+} from "./schema/coreFeatures.js";
+import { parse } from "./schema/validation.js";
 
 interface RefTargets {
   face: FaceRef;
