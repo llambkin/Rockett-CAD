@@ -7,7 +7,6 @@ import type {
   FeatureType,
   HistoryStatus,
   OpenedProject,
-  OriginAxis,
   PlaneRef,
   ProjectView,
   SketchConstraint,
@@ -37,47 +36,8 @@ import * as previewBase from "./previewBase";
 export { previewBodies } from "./previewBase";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
 
-export type Selection =
-  | { kind: "body"; bodyId: string }
-  | { kind: "face"; bodyId: string; faceName: string }
-  | { kind: "edge"; bodyId: string; edgeName: string }
-  | { kind: "vertex"; bodyId: string; vertexName: string }
-  | { kind: "plane"; ref: PlaneRef; label: string }
-  | { kind: "axis"; axis: OriginAxis }
-  | { kind: "profile"; sketchId: string; profileId: string }
-  | { kind: "sketch"; sketchId: string }
-  | {
-      kind: "sketchEntity";
-      sketchId: string;
-      entityId: string;
-      piece?: number[];
-    }
-  | { kind: "sketchPoint"; sketchId: string; entityId: string };
-
-export function selectionKey(s: Selection): string {
-  switch (s.kind) {
-    case "body":
-      return `body:${s.bodyId}`;
-    case "face":
-      return `face:${s.bodyId}:${s.faceName}`;
-    case "edge":
-      return `edge:${s.bodyId}:${s.edgeName}`;
-    case "vertex":
-      return `vertex:${s.bodyId}:${s.vertexName}`;
-    case "plane":
-      return `plane:${JSON.stringify(s.ref)}`;
-    case "axis":
-      return `axis:${s.axis}`;
-    case "profile":
-      return `profile:${s.sketchId}:${s.profileId}`;
-    case "sketch":
-      return `sketch:${s.sketchId}`;
-    case "sketchEntity":
-      return `se:${s.sketchId}:${s.entityId}`;
-    case "sketchPoint":
-      return `sp:${s.sketchId}:${s.entityId}`;
-  }
-}
+import { selectionKey, type Selection } from "./selection/kinds";
+export { selectionKey, type Selection } from "./selection/kinds";
 
 export type SketchTool =
   | "select"

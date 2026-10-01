@@ -1,3 +1,4 @@
+import { refsOf } from "../selection/kinds";
 /**
  * The 3D viewport: wires the CadViewport engine to application state.
  * Handles CAD-style camera input, topology picking, plane picking,
@@ -2645,19 +2646,8 @@ export function ViewportView() {
 
   // ----- editing an extrude/revolve: live selection preview + Ctrl/⌘ peek -----
 
-  /** Feature refs implied by a selection, for an extrude/revolve patch. */
   function selectionRefs(sel: Selection[]) {
-    const profiles = sel
-      .filter((x) => x.kind === "profile")
-      .map((x: any) => ({ sketchId: x.sketchId, profileId: x.profileId }));
-    const faces = sel
-      .filter((x) => x.kind === "face")
-      .map((x: any) => ({
-        kind: "face",
-        bodyId: x.bodyId,
-        faceName: x.faceName,
-      }));
-    return { profiles, faces };
+    return { profiles: refsOf(sel, "profile"), faces: refsOf(sel, "face") };
   }
   const peekRef = useRef(false);
   const editingProfiles =
