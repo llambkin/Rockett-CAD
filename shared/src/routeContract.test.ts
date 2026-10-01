@@ -1,4 +1,5 @@
-import { expect, it } from "vitest";
+import { Type, type TSchema } from "typebox";
+import { expect, expectTypeOf, it } from "vitest";
 import {
   DOCUMENT_EDITS,
   VIEWER_WRITES,
@@ -28,3 +29,23 @@ it.each(["GET", "POST", "PUT", "PATCH", "DELETE"] as const)(
     }
   },
 );
+
+it("preserves supplied schema types without claiming absent validation", () => {
+  const schema = Type.Object({ name: Type.String() });
+  const declared = route<{ name: string }, unknown>()(
+    "PATCH",
+    "/projects/:id/name",
+    schema,
+    "document",
+  );
+  expectTypeOf(declared.body).toEqualTypeOf<typeof schema>();
+  expect(declared.body).toBe(schema);
+  const unparsed = route<{ name: string }, unknown>()(
+    "PATCH",
+    "/projects/:id/name",
+    undefined,
+    "document",
+  );
+  expectTypeOf(unparsed.body).toEqualTypeOf<TSchema | undefined>();
+  expect(unparsed).not.toHaveProperty("body");
+});

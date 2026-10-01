@@ -1,8 +1,10 @@
 import type { Request, RequestHandler } from "express";
+import type { Static, TSchema } from "typebox";
 import {
   createRegistry,
   DOCUMENT_EDITS,
   type CadDocument,
+  type PathParams,
   type Route,
   type User,
 } from "@rockett/shared";
@@ -30,7 +32,19 @@ type ProjectRead = (
 export interface ModuleApi {
   kernel: KernelClient;
   projectRoute(route: Route, read: ProjectRead): void;
-  projectMutation(route: Route, edit: Edit): void;
+  projectMutation<R extends Route>(
+    route: R,
+    edit: (
+      doc: CadDocument,
+      req: Request<
+        PathParams<R["path"]>,
+        unknown,
+        R extends { readonly body: infer S extends TSchema }
+          ? Static<S>
+          : unknown
+      >,
+    ) => ReturnType<Edit>,
+  ): void;
 }
 
 export interface RouteModule {

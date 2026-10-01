@@ -30,19 +30,34 @@ export const DOCUMENT_EDITS = (target: Pick<Route, "effect">): boolean =>
 export const VIEWER_WRITES = (target: Pick<Route, "effect">): boolean =>
   target.effect === "viewer";
 
-export const route =
-  <Req, Res>() =>
-  <const P extends string, S extends TSchema>(
+export function route<Req, Res>() {
+  function define<const P extends string, S extends TSchema>(
     method: Method,
     path: P,
-    body?: S & (Static<S> extends Req ? unknown : never),
+    body: S & (Static<S> extends Req ? unknown : never),
     effect?: Route["effect"],
-  ): Route<P, Req, Res> => ({
-    method,
-    path,
-    ...(body && { body }),
-    ...(effect && { effect }),
-  });
+  ): Omit<Route<P, Req, Res>, "body"> & { readonly body: S };
+  function define<const P extends string>(
+    method: Method,
+    path: P,
+    body?: undefined,
+    effect?: Route["effect"],
+  ): Route<P, Req, Res>;
+  function define<const P extends string>(
+    method: Method,
+    path: P,
+    body?: TSchema,
+    effect?: Route["effect"],
+  ): Route<P, Req, Res> {
+    return {
+      method,
+      path,
+      ...(body && { body }),
+      ...(effect && { effect }),
+    };
+  }
+  return define;
+}
 
 export function pathFor<P extends string>(
   target: Route<P>,
