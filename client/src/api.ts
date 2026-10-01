@@ -17,6 +17,7 @@ import {
   type MeasureRequest,
   type MutationResponse,
   type NamingDecision,
+  type ParameterEdit,
   type PathParams,
   type ProjectView,
   type ProjectMember,
@@ -539,6 +540,8 @@ export const api = {
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
     send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 
+  updateParameters: (id: string, edit: ParameterEdit, stamp?: Stamp) =>
+    holding(ROUTES.updateParameters, { id }, edit, stamp),
   addFeature: (id: string, feature: Feature, tx?: string, seq?: number) =>
     holding(ROUTES.addFeature, { id }, { feature }, { tx, seq }),
   updateFeature: (

@@ -89,6 +89,15 @@ function viewRoutes(context: ApiRoutes) {
 }
 
 export function documentRoutes(context: ApiRoutes) {
+  const { on, mutateProject } = context;
+  on(
+    ROUTES.updateParameters,
+    mutateProject(async (doc, req) => {
+      doc.parameters = req.body.parameters;
+      doc.parameterBindings = req.body.parameterBindings;
+      return { label: "Edit parameters" };
+    }, true),
+  );
   namingRoutes(context);
   viewRoutes(context);
 }

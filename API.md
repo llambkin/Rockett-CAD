@@ -37,6 +37,7 @@ nothing else is: `server/src/api/routes.ts`.
 | `GET`, `PUT /projects/:id/members`                                                | `server/src/api/projectMembers.ts` |
 | `GET /projects/:id/file`, `POST /projects/file`                                   | `server/src/api/projectFile.ts`    |
 | `POST /projects/import`, `/projects/:id/import`                                   | `server/src/api/routes.ts`         |
+| `PUT /projects/:id/parameters`                                                    | `server/src/api/documentRoutes.ts` |
 | `POST /projects/:id/evaluate`                                                     | `server/src/api/routes.ts`         |
 | `GET /projects/:id/meshes/:hash`                                                  | `server/src/api/meshRoute.ts`      |
 | `GET /jobs/:jobId/events`, `DELETE /jobs/:jobId`                                  | `server/src/api/jobRoutes.ts`      |
@@ -137,6 +138,13 @@ A feature add or edit with `X-Rockett-Preview` (`PREVIEW_HEADER`) and
 `X-Rockett-Tx` stages the edit in memory for that user and session instead of
 saving it. Only the preview commit route saves it. A restart drops open
 previews: `Previews` in `server/src/api/routes.ts`.
+
+Parameter and expression associations update together through
+`PUT /projects/:id/parameters` with `parameters` and `parameterBindings`.
+The document revision header is required; feature preview transaction headers
+also apply. Successful edits regenerate dependent geometry and create one history
+entry. Invalid names, cycles, numeric bounds or conflicting dimensions refuse the
+edit before saving. Project files, history and reopen preserve associations.
 
 ## Evaluation
 

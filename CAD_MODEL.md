@@ -325,6 +325,13 @@ values and a resolved feature copy, without changing the stored associations.
 Numeric schemas own binding eligibility, units and bounds. Names, references,
 cycles, dimensions and numeric results are validated before document acceptance.
 Model inputs retain associations; settings and export options calculate once.
+Geometry resolves inputs before feature-cache keys. Project mutations compare
+resolved sketch dimensions and use the existing write-time solver only for added
+or changed constraints, retaining other stored positions and bound literals.
+History restore keeps the snapshot's stored positions. Deleting a feature removes
+its bindings; undo restores them. Parameter edits use the same revision, preview
+and history owners as feature edits; rejected expressions and conflicting
+dimensions leave the saved document and history unchanged.
 
 Core feature schemas live in `shared/src/schema/coreFeatures.ts`, below the
 parameter resolver and document validation. `schema/features.ts` retains their

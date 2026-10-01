@@ -52,6 +52,11 @@ export interface CadDocument {
   extensions: Record<string, ExtensionData>;
 }
 
+export type ParameterEdit = Pick<
+  CadDocument,
+  "parameters" | "parameterBindings"
+>;
+
 export function createEmptyDocument(id: string, name: string): CadDocument {
   const now = new Date().toISOString();
   return {

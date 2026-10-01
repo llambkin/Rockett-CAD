@@ -1,5 +1,4 @@
 import {
-  editedEntities,
   lacksTargets,
   nextFeatureName,
   pinTargets,
@@ -83,8 +82,6 @@ function addFeatureRoute(context: ApiRoutes) {
       knownKeys(feature, feature.type);
       feature.name ||= nextFeatureName(doc, feature.type);
       validateFeature(feature);
-      if (feature.type === "sketch")
-        feature.entities = editedEntities([], feature);
       if (doc.features.some((f) => f.id === feature.id))
         throw new ValidationError("duplicate feature id");
       const at = Math.min(doc.timelinePosition, doc.features.length);
@@ -130,8 +127,6 @@ function updateFeatureRoute(context: ApiRoutes) {
       const updated = { ...current, ...patch, id: current.id } as Feature;
       if (retargets(patch)) Reflect.deleteProperty(updated, "targets");
       validateFeature(updated);
-      if (updated.type === "sketch" && current.type === "sketch")
-        updated.entities = editedEntities(current.constraints, updated);
       await signed(doc, idx, updated, current);
       doc.features[idx] = updated;
       await (keepsTargets(patch)
@@ -174,6 +169,9 @@ function timelineRoutes(context: ApiRoutes) {
       const idx = doc.features.findIndex((f) => f.id === req.params.fid);
       if (idx < 0) throw new StoreError("feature not found", "not_found");
       const [deleted] = doc.features.splice(idx, 1);
+      doc.parameterBindings = doc.parameterBindings.filter(
+        (binding) => binding.featureId !== deleted!.id,
+      );
       if (doc.timelinePosition > idx) doc.timelinePosition--;
       await pruneViews(store.documents.options.storage, doc.id, deleted!.id);
       return { label: `Delete ${deleted!.name}` };

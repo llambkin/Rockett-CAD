@@ -72,3 +72,18 @@ export const documentSchema = Type.Refine(
     doc.timelinePosition <= doc.features.length && validParameterState(doc),
   () => "has invalid parameters, bindings or timelinePosition",
 );
+
+export const namingUpgradeBody = Type.Object({
+  accept: Type.Optional(
+    Type.Array(
+      Type.Object({
+        featureId: Type.Union([Type.String(), Type.Null()]),
+        path: Type.String(),
+        to: Type.Object({
+          bodyId: Type.String(),
+          name: Type.Optional(Type.String()),
+        }),
+      }),
+    ),
+  ),
+});

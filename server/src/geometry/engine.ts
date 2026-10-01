@@ -1,3 +1,4 @@
+import { resolveDocumentParameters } from "@rockett/shared";
 import type {
   BodyPayload,
   CadDocument,
@@ -359,6 +360,7 @@ class DocumentEngine {
     sources: Sources | undefined,
     hooks?: EvaluateHooks,
   ) {
+    doc = { ...doc, features: resolveDocumentParameters(doc).features };
     if (sources) this.held = sources;
     const upTo = Math.min(
       position ?? doc.timelinePosition,
@@ -367,8 +369,6 @@ class DocumentEngine {
 
     const keys: string[] = [];
     const keyAt = (i: number) => (keys[i] ??= featureKey(doc.features[i]!));
-    // Drop snapshots from the first stale feature on. Valid snapshots past
-    // upTo stay, so a rewind or stateAt query doesn't discard later work.
     let valid = 0;
     while (
       this.namingVersion === doc.namingVersion &&
@@ -431,7 +431,7 @@ class DocumentEngine {
     }
 
     statuses = [...statuses, ...unreached(doc.features, i, upTo)];
-    return { state, statuses };
+    return { state, statuses, features: doc.features };
   }
 
   private tessellated(body: StateBody, name: string): Tessellation {
@@ -453,8 +453,8 @@ class DocumentEngine {
     sources?: Sources,
   ): string[] | undefined {
     return this.measured(() => {
-      const found = this.regenerate(doc, index + 1, sources).statuses[index]
-        ?.targets;
+      const { statuses, features } = this.regenerate(doc, index + 1, sources);
+      const found = statuses[index]?.targets;
       const excluded = new Set(hidden);
       if (!found?.some((id) => excluded.has(id))) return found;
       const before =
@@ -463,8 +463,8 @@ class DocumentEngine {
       try {
         return evaluateTracked(
           trial,
-          doc.features[index]!,
-          doc.features.slice(0, index),
+          features[index]!,
+          features.slice(0, index),
           this.held,
           doc.namingVersion,
         )?.targets;

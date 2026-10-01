@@ -1,4 +1,8 @@
 import {
+  editedEntities,
+  resolveDocumentParameters,
+  type CadDocument,
+  type Feature,
   PREVIEW_HEADER,
   TX_HEADER,
   ValidationError,
@@ -15,6 +19,32 @@ const previewOwner = (res: any, user: User): string => {
   if (!session) throw new Error("auth middleware missing");
   return `${user.id}/${session}`;
 };
+
+function resolvedFeatures(doc: CadDocument): Feature[] {
+  try {
+    return resolveDocumentParameters(doc).features;
+  } catch (error) {
+    throw new ValidationError(
+      error instanceof Error ? error.message : "Invalid parameters",
+    );
+  }
+}
+
+function solveEdits(doc: CadDocument, before: Feature[]) {
+  const previous = new Map(before.map((feature) => [feature.id, feature]));
+  const stored = new Map(doc.features.map((feature) => [feature.id, feature]));
+  for (const feature of resolvedFeatures(doc)) {
+    if (feature.type !== "sketch") continue;
+    const old = previous.get(feature.id);
+    const sketch = stored.get(feature.id);
+    const solved = editedEntities(
+      old?.type === "sketch" ? old.constraints : [],
+      feature,
+    );
+    if (sketch?.type === "sketch" && solved !== feature.entities)
+      sketch.entities = solved;
+  }
+}
 
 const ended = () =>
   new StoreError("This preview has ended. Start it again.", "not_found");
@@ -47,7 +77,9 @@ function previewStage(context: RouterContext) {
       const loaded = staged
         ? structuredClone(staged.document)
         : await editable(req, res);
+      const before = structuredClone(resolvedFeatures(loaded));
       const { label, document = loaded } = await edit(loaded, req);
+      solveEdits(document, before);
       staged = { owner, seq, label: staged?.label ?? label!, document };
     }
     const { document } = staged;
@@ -81,11 +113,12 @@ export function createProjectMutations(context: RouterContext) {
         if (seq !== undefined) {
           if (!previewable || tx === undefined)
             throw new ValidationError(
-              `A preview needs ${TX_HEADER} on a feature add or edit.`,
+              `A preview needs ${TX_HEADER} on a feature or parameter edit.`,
             );
           return stage(req, res, ctx.user, tx, previewSequence(seq), edit);
         }
         const loaded = await editable(req, res);
+        const before = structuredClone(resolvedFeatures(loaded));
         const {
           label,
           cursor,
@@ -93,6 +126,8 @@ export function createProjectMutations(context: RouterContext) {
           document = loaded,
           ...extra
         } = await edit(loaded, req);
+        if (label !== undefined && document === loaded)
+          solveEdits(document, before);
         const evaluation = await evaluateAndSync(document, position);
         await (label === undefined
           ? history.move(document, cursor, ctx.user.id)

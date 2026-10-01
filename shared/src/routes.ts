@@ -6,6 +6,7 @@ import type {
   CadDocument,
   EdgeRef,
   Feature,
+  ParameterEdit,
   SketchEntity,
   TreeGroup,
 } from "./model.js";
@@ -38,6 +39,8 @@ import { settingsRoutes } from "./settingsRoutes.js";
 import { VIEW_VERSION } from "./api.js";
 import { VIEW_PROJECTION } from "./settings.js";
 import { edgeRef, faceRef, groupsSchema, vec3 } from "./schema/features.js";
+import { namingUpgradeBody } from "./schema/documents.js";
+import { parameterStateSchema } from "./schema/parameters.js";
 import { LABEL_LIMIT, snapshotHash } from "./schema/history.js";
 import {
   createFolderBody,
@@ -230,21 +233,11 @@ const topoRef = Type.Union([
 ]);
 
 const viewIds = Type.Array(Type.String({ minLength: 1 }));
-
-const namingUpgradeBody = Type.Object({
-  accept: Type.Optional(
-    Type.Array(
-      Type.Object({
-        featureId: Type.Union([Type.String(), Type.Null()]),
-        path: Type.String(),
-        to: Type.Object({
-          bodyId: Type.String(),
-          name: Type.Optional(Type.String()),
-        }),
-      }),
-    ),
-  ),
-});
+const held = Type.Optional(Type.Array(Type.String()));
+const parameterEditBody = Type.Object(
+  { ...parameterStateSchema, held },
+  { additionalProperties: false },
+);
 
 export const viewCamera = Type.Object(
   {
@@ -359,6 +352,12 @@ export const ROUTES = {
     undefined,
     "document",
   ),
+  updateParameters: route<ParameterEdit & HeldMeshes, WireMutationResponse>()(
+    "PUT",
+    "/projects/:id/parameters",
+    parameterEditBody,
+    "document",
+  ),
   addFeature: route<{ feature: Feature } & HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/features",
@@ -442,7 +441,7 @@ export const ROUTES = {
     Type.Object(
       {
         snapshot: snapshotHash,
-        held: Type.Optional(Type.Array(Type.String())),
+        held,
       },
       { additionalProperties: false },
     ),
@@ -454,7 +453,7 @@ export const ROUTES = {
     Type.Object(
       {
         name: Type.String(),
-        held: Type.Optional(Type.Array(Type.String())),
+        held,
       },
       { additionalProperties: false },
     ),
