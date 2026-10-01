@@ -9,6 +9,8 @@ export const UNIT_TO_MM: Record<Units, number> = {
   in: 25.4,
 };
 
+export const ANGLE_TO_DEGREES = { deg: 1, "°": 1, rad: 180 / Math.PI } as const;
+
 export function toMm(value: number, units: Units): number {
   return value * UNIT_TO_MM[units];
 }

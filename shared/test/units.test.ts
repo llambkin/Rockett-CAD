@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   UNIT_TO_MM,
+  ANGLE_TO_DEGREES,
   formatAngle,
   formatLength,
   fromMm,
@@ -12,6 +13,12 @@ import {
 const UNITS = Object.keys(UNIT_TO_MM) as Units[];
 
 describe("units", () => {
+  it("converts angle units to the degree owner", () => {
+    expect(ANGLE_TO_DEGREES.deg).toBe(1);
+    expect(ANGLE_TO_DEGREES["°"]).toBe(1);
+    expect(Math.PI * ANGLE_TO_DEGREES.rad).toBe(180);
+  });
+
   it("converts inches to millimetres", () => {
     expect(toMm(1, "in")).toBe(25.4);
   });

@@ -46,3 +46,4 @@ export * from "./meshFormat.js";
 export * from "./tolerance.js";
 export * from "./topoRefs.js";
 export * from "./units.js";
+export * from "./expressions.js";
