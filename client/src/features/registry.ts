@@ -13,6 +13,13 @@ import {
 import type { PickInput } from "../commands/featureCommand";
 import type { useStore, Selection } from "../store";
 
+import type {
+  FeatureGizmo,
+  FeatureGizmoContext,
+  GizmoLabel,
+} from "../three/featureGizmos";
+import type { ManipulatorHost } from "../three/Manipulator";
+
 export type NumericInput = number | string;
 export type InputParams<T> = {
   [K in keyof T]?:
@@ -78,6 +85,7 @@ interface FeatureUIBase<F extends Feature, P> {
   group: string;
   picks: readonly PickInput[];
   initialParams?: P;
+  gizmo?(context: FeatureGizmoContext<P>): FeatureGizmo | undefined;
   picksFor?: (params: P) => readonly PickInput[];
   onPick?(
     pick: Selection,
@@ -179,6 +187,19 @@ export function createFeatureInputs<
           setParams: (patch: Partial<P>) => setParams(patch, lifetime),
         })
       );
+    },
+    gizmo(
+      host: ManipulatorHost,
+      label: (value: GizmoLabel) => void,
+      readParams: () => SharedInputParams,
+      setParams: (patch: SharedInputParams) => void,
+    ) {
+      return ui.gizmo?.({
+        host,
+        label,
+        params: () => ({ ...state.params, ...readParams() }),
+        setParams: (patch) => setParams(patch),
+      });
     },
     picks() {
       return ui.picksFor?.(state.params) ?? ui.picks;

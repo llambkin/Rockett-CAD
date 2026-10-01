@@ -5,7 +5,10 @@
  */
 
 import * as THREE from "three";
-import type { PlaneFrame, Profile } from "@rockett/shared";
+import { findProfile, type PlaneFrame, type Profile } from "@rockett/shared";
+import { useStore } from "../store";
+import { baseBodies } from "../previewBase";
+import { faceCentroid, frameAlong, profileCentroid } from "./featureHandles";
 import { disposeObject } from "./dispose";
 import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
 import { themeColor } from "../theme/tokens";
@@ -319,4 +322,47 @@ export class ExtrudeGizmo extends Manipulator {
   tipScreenPosition(): { x: number; y: number } {
     return this.labelPosition(this.tip());
   }
+}
+
+export function extrudeGizmoSource(): GizmoSource | null {
+  const s = useStore.getState();
+  if (s.active?.id !== "design.feature" || s.active.state.type !== "extrude")
+    return null;
+  const profSel = s.selection.find((x) => x.kind === "profile");
+  if (profSel) {
+    const sk = s.evaluation?.sketches.find(
+      (x) => x.featureId === profSel.sketchId,
+    );
+    const p = sk && findProfile(sk, profSel.profileId);
+    if (sk && p && p.polygon.length >= 6)
+      return { frame: sk.frame, anchorUV: profileCentroid(p), profile: p };
+  }
+  const faceSel = s.selection.find((x) => x.kind === "face");
+  if (!faceSel) return null;
+  const body = baseBodies(s).find((b) => b.bodyId === faceSel.bodyId);
+  const face = body?.faces.find((f) => f.name === faceSel.faceName);
+  if (!body || !face || face.surface.type !== "plane") return null;
+  const centroid = faceCentroid(body, face);
+  if (!centroid) return null;
+  const remap = new Map<number, number>();
+  const positions: number[] = [];
+  const indices: number[] = [];
+  for (let i = face.start; i < face.start + face.count; i++) {
+    const vi = body.indices[i]!;
+    let ni = remap.get(vi);
+    if (ni === undefined) {
+      ni = positions.length / 3;
+      remap.set(vi, ni);
+      positions.push(...body.positions.slice(vi * 3, vi * 3 + 3));
+    }
+    indices.push(ni);
+  }
+  const boundary = body.edges
+    .filter((ed) => ed.name.includes(faceSel.faceName))
+    .map((ed) => ed.polyline);
+  return {
+    frame: frameAlong(centroid, new THREE.Vector3(...face.surface.normal)),
+    anchorUV: [0, 0],
+    faceGhost: { positions, indices, boundary },
+  };
 }

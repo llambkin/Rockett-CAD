@@ -40,19 +40,19 @@ import {
   renderSketches,
   type SketchRenderInput,
 } from "../three/sketchRender";
-import { ExtrudeGizmo, type GizmoSource } from "../three/ExtrudeGizmo";
+import { ExtrudeGizmo } from "../three/ExtrudeGizmo";
 import { MoveGizmo } from "../three/MoveGizmo";
 import { themeColor } from "../theme/tokens";
 import { SKETCH_APPEARANCE, TIMING_MS } from "../tunables";
 import { buildRevolveGhost } from "../three/revolveGhost";
 import { RevolveGizmo, ringThrough } from "../three/RevolveGizmo";
 import {
-  faceCentroid,
   featureHandle,
   frameAlong,
   profileCentroid,
   type FeatureHandle,
 } from "../three/featureHandles";
+import { FeatureGizmos } from "../three/featureGizmos";
 import { GizmoSlot } from "../three/gizmoSlot";
 import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
 import { listenWheel } from "../three/wheel";
@@ -180,7 +180,7 @@ export function ViewportView() {
     sel: Selection | null;
   } | null>(null);
 
-  const [extrudeSlot] = useState(() => new GizmoSlot<ExtrudeGizmo>());
+  const commandGizmo = useRef<FeatureGizmos | null>(null);
   const [moveSlot] = useState(() => new GizmoSlot<MoveGizmo>());
   const [revolveSlot] = useState(() => new GizmoSlot<RevolveGizmo>());
   const [featureSlot] = useState(
@@ -328,6 +328,7 @@ export function ViewportView() {
     const container = containerRef.current!;
     const vp = new CadViewport(container);
     viewportRef.current = vp;
+    commandGizmo.current = new FeatureGizmos(vp, setGizmoLabel);
     viewportHandle.current = vp;
     if ((import.meta as any).env?.DEV) {
       // console debugging handle (dev only)
@@ -379,7 +380,8 @@ export function ViewportView() {
         container.removeEventListener(type, nudge);
       }
       cube.dispose();
-      extrudeSlot.release();
+      commandGizmo.current?.dispose();
+      commandGizmo.current = null;
       moveSlot.release();
       revolveSlot.release();
       featureSlot.release();
@@ -556,93 +558,9 @@ export function ViewportView() {
     viewportRef.current?.requestRender();
   });
 
-  // ---- extrude drag gizmo ----
-
-  function computeGizmoSource(): GizmoSource | null {
-    const s = useStore.getState();
-    if (s.active?.id !== "design.feature" || s.active.state.type !== "extrude")
-      return null;
-    const profSel = s.selection.find((x) => x.kind === "profile") as any;
-    if (profSel) {
-      const sk = s.evaluation?.sketches.find(
-        (x) => x.featureId === profSel.sketchId,
-      );
-      const p = sk && findProfile(sk, profSel.profileId);
-      if (sk && p && p.polygon.length >= 6)
-        return { frame: sk.frame, anchorUV: profileCentroid(p), profile: p };
-    }
-    const faceSel = s.selection.find((x) => x.kind === "face") as any;
-    if (!faceSel) return null;
-    const body = baseBodies(s).find((b) => b.bodyId === faceSel.bodyId);
-    const face = body?.faces.find((f) => f.name === faceSel.faceName);
-    if (!body || !face || face.surface.type !== "plane") return null;
-    const centroid = faceCentroid(body, face);
-    if (!centroid) return null;
-    const remap = new Map<number, number>();
-    const positions: number[] = [];
-    const indices: number[] = [];
-    for (let i = face.start; i < face.start + face.count; i++) {
-      const vi = body.indices[i]!;
-      let ni = remap.get(vi);
-      if (ni === undefined) {
-        ni = positions.length / 3;
-        remap.set(vi, ni);
-        positions.push(...body.positions.slice(vi * 3, vi * 3 + 3));
-      }
-      indices.push(ni);
-    }
-    const boundary = body.edges
-      .filter((ed) => ed.name.includes(faceSel.faceName))
-      .map((ed) => ed.polyline);
-    return {
-      frame: frameAlong(centroid, new THREE.Vector3(...face.surface.normal)),
-      anchorUV: [0, 0],
-      faceGhost: { positions, indices, boundary },
-    };
-  }
-
-  // build / rebuild the gizmo when the extrude dialog selection changes
   useEffect(() => {
-    extrudeSlot.rebuild(buildExtrudeGizmo);
-  }, [activeFeature, selection, evaluation, held]);
-
-  function buildExtrudeGizmo(): ExtrudeGizmo | null {
-    setGizmoLabel(null);
-    const vp = viewportRef.current;
-    if (!vp) return null;
-    const src = computeGizmoSource();
-    if (!src) return null;
-    const s = useStore.getState();
-    // when editing, the real geometry live-updates — skip the ghost preview
-    if (previewedFeature(s)) {
-      src.profile = undefined;
-      src.faceGhost = undefined;
-    }
-    const dist = handleValue(featureParams(s), "extrude");
-    const sign = featureParams(s).direction === "reverse" ? -1 : 1;
-    const startRaw = Number(featureParams(s).startOffset);
-    return new ExtrudeGizmo(
-      vp,
-      src,
-      sign * dist,
-      (featureParams(s).operation ?? "join") === "cut",
-      Number.isFinite(startRaw) ? startRaw : 0,
-    );
-  }
-
-  // typing in the dialog moves the arrow too; Cut tints the preview red
-  useEffect(() => {
-    const g = extrudeSlot.current;
-    if (!g) return;
-    g.setCut((params.operation ?? "join") === "cut");
-    if (extrudeSlot.isDragging) return;
-    const startRaw = Number(params.startOffset);
-    g.setStartOffset(Number.isFinite(startRaw) ? startRaw : 0);
-    const dist = Number(params.distance);
-    if (!Number.isFinite(dist)) return;
-    const sign = params.direction === "reverse" ? -1 : 1;
-    g.update(sign * dist);
-  }, [params]);
+    commandGizmo.current?.refresh(true);
+  }, [held]);
 
   // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
   useEffect(() => {
@@ -947,8 +865,7 @@ export function ViewportView() {
       }
       if (e.button === 0) {
         // gizmo drags take priority over everything else
-        if (extrudeSlot.current?.hitTest(e.clientX, e.clientY)) {
-          extrudeSlot.beginDrag();
+        if (commandGizmo.current?.down(e)) {
           e.preventDefault();
           return;
         }
@@ -1036,51 +953,10 @@ export function ViewportView() {
         lastY = e.clientY;
         return;
       }
-      if (extrudeSlot.isDragging && extrudeSlot.current) {
-        const g = extrudeSlot.current;
-        const zeroed = e.ctrlKey || e.metaKey;
-        const v = zeroed ? 0 : g.dragValue(e.clientX, e.clientY);
-        if (zeroed || Math.abs(v) > 1e-9) {
-          g.update(v);
-          const s = useStore.getState();
-          const curDir = featureParams(s).direction ?? "normal";
-          const patch: Record<string, any> = { distance: Math.abs(v) };
-          if (!zeroed && (curDir === "normal" || curDir === "reverse")) {
-            patch.direction = v < 0 ? "reverse" : "normal";
-          }
-          const params = { ...featureParams(s), ...patch };
-          setFeatureParams({
-            ...patch,
-            ...(s.active?.state && "inputs" in s.active.state
-              ? s.active.state.inputs.withParams(params).onParamsChange()
-              : {}),
-          });
-          const current = featureParams();
-          const tip = g.tipScreenPosition();
-          setGizmoLabel({
-            x: tip.x,
-            y: tip.y,
-            text: formatLength(zeroed ? 0 : Math.abs(v), units),
-          });
-          const feature = s.active?.id === "design.feature" && s.active.state;
-          if (
-            !!feature &&
-            feature.type === "extrude" &&
-            feature.editFeatureId
-          ) {
-            livePreview.during(
-              feature.editFeatureId,
-              (zeroed
-                ? { suppressed: true }
-                : {
-                    suppressed: false,
-                    distance: Math.abs(v),
-                    direction: current.direction ?? "normal",
-                    operation: current.operation,
-                  }) as any,
-            );
-          }
-        }
+      if (commandGizmo.current?.move(e)) {
+        lastX = e.clientX;
+        lastY = e.clientY;
+        return;
       } else if (orbiting) {
         vp.orbit(dx, dy, pivot);
       } else if (panning) {
@@ -1139,33 +1015,8 @@ export function ViewportView() {
         }
         return;
       }
-      if (extrudeSlot.isDragging) {
-        extrudeSlot.endDrag();
-        setGizmoLabel(null);
+      if (commandGizmo.current?.up()) {
         button = -1;
-        // editing: make sure the final dragged value is applied
-        const s = useStore.getState();
-        if (
-          s.active?.id === "design.feature" &&
-          s.active.state.type === "extrude" &&
-          s.active.state.editFeatureId
-        ) {
-          const dist = Number(featureParams(s).distance);
-          if (Number.isFinite(dist) && dist !== 0) {
-            livePreview.commit(s.active.state.editFeatureId, {
-              suppressed: false,
-              distance: dist,
-              direction: featureParams(s).direction ?? "normal",
-              operation: featureParams(s).operation,
-            } as any);
-          } else if (dist === 0) {
-            // Ctrl-zeroed: leave the feature suppressed so profiles stay
-            // pickable; dragging the arrow (or OK) brings it back.
-            livePreview.commit(s.active.state.editFeatureId, {
-              suppressed: true,
-            } as any);
-          }
-        }
         return;
       }
       const wasOrbit = orbiting,
@@ -1181,6 +1032,10 @@ export function ViewportView() {
       if (b === 0) handlePrimaryUp(e, dragMoved);
     };
 
+    const onPointerCancel = () => {
+      if (commandGizmo.current?.cancel()) button = -1;
+    };
+
     const onContext = (e: Event) => e.preventDefault();
 
     const onDblClick = (e: MouseEvent) => {
@@ -1190,6 +1045,7 @@ export function ViewportView() {
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
     el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerCancel);
     const unlistenWheel = listenWheel(el, vp);
     el.addEventListener("contextmenu", onContext);
     el.addEventListener("dblclick", onDblClick);
@@ -1197,6 +1053,7 @@ export function ViewportView() {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerCancel);
       unlistenWheel();
       el.removeEventListener("contextmenu", onContext);
       el.removeEventListener("dblclick", onDblClick);
@@ -1609,11 +1466,7 @@ export function ViewportView() {
   function handleHover(e: PointerEvent) {
     const vp = viewportRef.current;
     if (!vp) return;
-    if (extrudeSlot.current) {
-      extrudeSlot.current.setHover(
-        extrudeSlot.current.hitTest(e.clientX, e.clientY),
-      );
-    }
+    commandGizmo.current?.hover(e);
     if (moveSlot.current && !moveSlot.isDragging) {
       moveSlot.current.setHover(moveSlot.current.hitTest(e.clientX, e.clientY));
     }
