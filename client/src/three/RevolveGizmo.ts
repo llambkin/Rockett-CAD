@@ -11,6 +11,13 @@ import { Manipulator, type ManipulatorHost } from "./Manipulator";
 import { themeColor } from "../theme/tokens";
 import { GIZMO_APPEARANCE } from "../tunables";
 
+import type { PlaneFrame } from "@rockett/shared";
+import { axisRef, type AxisParams } from "../features/inputs";
+import { previewBodies, useStore } from "../store";
+import { uv3 } from "./CadViewport";
+import { buildRevolveGhost } from "./revolveGhost";
+import { disposeGroup } from "./dispose";
+
 export function ringThrough(
   point: THREE.Vector3,
   axisOrigin: THREE.Vector3,
@@ -36,6 +43,7 @@ export function ringThrough(
 
 export class RevolveGizmo extends Manipulator {
   private ring: THREE.Mesh;
+  private ghost: THREE.Group | undefined;
   private handle: THREE.Mesh;
 
   /** Ring basis: center on the axis, u = zero-angle direction, v = 90°. */
@@ -107,6 +115,35 @@ export class RevolveGizmo extends Manipulator {
     this.host.requestRender();
   }
 
+  updateGhost(
+    source:
+      | {
+          sketch: { frame: PlaneFrame };
+          profile: { polygon: number[]; holePolygons: number[][] };
+          axis: { origin: THREE.Vector3; dir: THREE.Vector3 };
+          angle: number;
+        }
+      | undefined,
+  ) {
+    if (this.ghost) {
+      this.ghost.removeFromParent();
+      disposeGroup(this.ghost);
+      this.ghost = undefined;
+    }
+    if (source) {
+      this.ghost = buildRevolveGhost(
+        source.sketch.frame,
+        source.profile.polygon,
+        source.profile.holePolygons,
+        source.axis.origin,
+        source.axis.dir,
+        source.angle,
+      );
+      this.group.add(this.ghost);
+    }
+    this.host.requestRender();
+  }
+
   setHover(hover: boolean) {
     const token = hover ? "gizmo-hover" : "gizmo";
     this.ring.userData.themeToken = token;
@@ -172,4 +209,42 @@ export class RevolveGizmo extends Manipulator {
   handleScreenPosition(): { x: number; y: number } {
     return this.labelPosition(this.handle.position);
   }
+}
+
+export function featureAxis(params: AxisParams) {
+  const state = useStore.getState();
+  const ref = axisRef(params, state.selection, state.document);
+  if (!ref) return;
+  if (ref.kind === "originAxis")
+    return {
+      origin: new THREE.Vector3(),
+      dir: new THREE.Vector3(
+        ref.axis === "X" ? 1 : 0,
+        ref.axis === "Y" ? 1 : 0,
+        ref.axis === "Z" ? 1 : 0,
+      ),
+    };
+  let origin: THREE.Vector3 | undefined;
+  let end: THREE.Vector3 | undefined;
+  if (ref.kind === "sketchLine") {
+    const sketch = state.evaluation?.sketches.find(
+      (s) => s.featureId === ref.sketchId,
+    );
+    const line = sketch?.entities.find((e) => e.id === ref.entityId);
+    if (line?.kind !== "line") return;
+    const a = sketch?.entities.find((e) => e.id === line.p1);
+    const b = sketch?.entities.find((e) => e.id === line.p2);
+    if (!sketch || a?.kind !== "point" || b?.kind !== "point") return;
+    origin = uv3(sketch.frame, a.x, a.y);
+    end = uv3(sketch.frame, b.x, b.y);
+  } else {
+    const polyline = previewBodies(state)
+      .find((body) => body.bodyId === ref.edge.bodyId)
+      ?.edges.find((edge) => edge.name === ref.edge.edgeName)?.polyline;
+    if (!polyline || polyline.length < 6) return;
+    origin = new THREE.Vector3(polyline[0], polyline[1], polyline[2]);
+    end = new THREE.Vector3(polyline.at(-3), polyline.at(-2), polyline.at(-1));
+  }
+  const dir = end.sub(origin);
+  return dir.lengthSq() < 1e-12 ? undefined : { origin, dir };
 }

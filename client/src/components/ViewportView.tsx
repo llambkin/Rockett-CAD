@@ -16,7 +16,6 @@ import type {
   ViewCamera,
 } from "@rockett/shared";
 import {
-  findProfile,
   formatAngle,
   formatLength,
   parseLength,
@@ -25,7 +24,6 @@ import {
   extendSketch,
   trimPiece,
   trimPieces,
-  ORIGIN_AXES,
   type Units,
 } from "@rockett/shared";
 import { getSetting, useSetting } from "../settings";
@@ -41,15 +39,12 @@ import {
   type SketchRenderInput,
 } from "../three/sketchRender";
 import { ExtrudeGizmo } from "../three/ExtrudeGizmo";
-import { MoveGizmo } from "../three/MoveGizmo";
 import { themeColor } from "../theme/tokens";
 import { SKETCH_APPEARANCE, TIMING_MS } from "../tunables";
-import { buildRevolveGhost } from "../three/revolveGhost";
-import { RevolveGizmo, ringThrough } from "../three/RevolveGizmo";
+import { RevolveGizmo, ringThrough, featureAxis } from "../three/RevolveGizmo";
 import {
   featureHandle,
   frameAlong,
-  profileCentroid,
   type FeatureHandle,
 } from "../three/featureHandles";
 import { FeatureGizmos } from "../three/featureGizmos";
@@ -58,19 +53,8 @@ import { clearToolPreview, updateToolPreview } from "../three/toolPreview";
 import { listenWheel } from "../three/wheel";
 import { isProfileUsed, sketchUsage } from "../sketchUsage";
 import { extrudeGhosts } from "../extrudeReach";
-import {
-  previewBodies,
-  previewedFeature,
-  useStore,
-  isIdle,
-  type Selection,
-} from "../store";
-import {
-  baseBodies,
-  loadPreviewBase,
-  previewScene,
-  usePreviewBase,
-} from "../previewBase";
+import { previewBodies, useStore, isIdle, type Selection } from "../store";
+import { loadPreviewBase, previewScene, usePreviewBase } from "../previewBase";
 import { api } from "../api";
 import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { activeCommand } from "../commands/active";
@@ -89,8 +73,7 @@ import { dimensionLayout, dimensionMaps } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { ViewportContextMenu } from "./ViewportContextMenu";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import { handleValue } from "../features/inputs";
-import { dragPreview as livePreview, previewEdit } from "../toolTargets";
+import { previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
 import { SketchStatus } from "./SketchStatus";
 import { PickReadout } from "./PickReadout";
@@ -181,8 +164,6 @@ export function ViewportView() {
   } | null>(null);
 
   const commandGizmo = useRef<FeatureGizmos | null>(null);
-  const [moveSlot] = useState(() => new GizmoSlot<MoveGizmo>());
-  const [revolveSlot] = useState(() => new GizmoSlot<RevolveGizmo>());
   const [featureSlot] = useState(
     () => new GizmoSlot<ExtrudeGizmo | RevolveGizmo>(),
   );
@@ -382,8 +363,6 @@ export function ViewportView() {
       cube.dispose();
       commandGizmo.current?.dispose();
       commandGizmo.current = null;
-      moveSlot.release();
-      revolveSlot.release();
       featureSlot.release();
       vp.dispose();
       viewportRef.current = null;
@@ -562,201 +541,6 @@ export function ViewportView() {
     commandGizmo.current?.refresh(true);
   }, [held]);
 
-  // build / rebuild the MOVE gizmo (three axis arrows) for the move dialog
-  useEffect(() => {
-    moveSlot.rebuild(buildMoveGizmo);
-  }, [activeFeature, selection, evaluation, held]);
-
-  function buildMoveGizmo(): MoveGizmo | null {
-    const vp = viewportRef.current;
-    if (!vp) return null;
-    const s = useStore.getState();
-    if (s.active?.id !== "design.feature" || s.active.state.type !== "move")
-      return null;
-    const bodyIds = s.selection
-      .filter((x) => x.kind === "body")
-      .map((x: any) => x.bodyId);
-    if (bodyIds.length === 0) return null;
-    const bodies = baseBodies(s).filter((b) => bodyIds.includes(b.bodyId));
-    if (bodies.length === 0) return null;
-    const t: [number, number, number] = [
-      Number(featureParams(s).tx) || 0,
-      Number(featureParams(s).ty) || 0,
-      Number(featureParams(s).tz) || 0,
-    ];
-    const shown = previewedFeature(s);
-    const center = new THREE.Vector3();
-    for (const b of bodies) {
-      center.add(
-        new THREE.Vector3(
-          (b.bbox.min[0] + b.bbox.max[0]) / 2,
-          (b.bbox.min[1] + b.bbox.max[1]) / 2,
-          (b.bbox.min[2] + b.bbox.max[2]) / 2,
-        ),
-      );
-    }
-    center.divideScalar(bodies.length);
-    // ghost meshes only for NEW moves; edits live-update the real geometry
-    const ghosts = shown
-      ? []
-      : bodies.map((b) => ({ positions: b.positions, indices: b.indices }));
-    return new MoveGizmo(vp, center, t, ghosts);
-  }
-
-  // typing in the move dialog updates the arrows/ghost too
-  useEffect(() => {
-    const g = moveSlot.current;
-    if (!g || moveSlot.isDragging) return;
-    g.update([
-      Number(params.tx) || 0,
-      Number(params.ty) || 0,
-      Number(params.tz) || 0,
-    ]);
-  }, [params]);
-
-  /** Resolve the revolve axis (origin + direction) exactly as the feature
-   * will, from the current dialog params + selection. */
-  function resolveRevolveAxis(): {
-    origin: THREE.Vector3;
-    dir: THREE.Vector3;
-  } | null {
-    const s = useStore.getState();
-    let axisOrigin: THREE.Vector3 | null = null;
-    let axisDir: THREE.Vector3 | null = null;
-    if ((featureParams(s).axisSource ?? "origin") === "edge") {
-      const lineSel = s.selection.find((x) => x.kind === "sketchEntity") as any;
-      const edgeSel = s.selection.find((x) => x.kind === "edge") as any;
-      if (lineSel) {
-        const axSk = s.evaluation?.sketches.find(
-          (x) => x.featureId === lineSel.sketchId,
-        );
-        const line = axSk?.entities.find(
-          (e: any) => e.id === lineSel.entityId && e.kind === "line",
-        ) as any;
-        const p1 = axSk?.entities.find((e: any) => e.id === line?.p1) as any;
-        const p2 = axSk?.entities.find((e: any) => e.id === line?.p2) as any;
-        if (axSk && p1 && p2) {
-          const f = axSk.frame;
-          const to3 = (u: number, v: number) =>
-            new THREE.Vector3(
-              f.origin[0] + u * f.xAxis[0] + v * f.yAxis[0],
-              f.origin[1] + u * f.xAxis[1] + v * f.yAxis[1],
-              f.origin[2] + u * f.xAxis[2] + v * f.yAxis[2],
-            );
-          axisOrigin = to3(p1.x, p1.y);
-          axisDir = to3(p2.x, p2.y).sub(axisOrigin);
-        }
-      } else if (edgeSel) {
-        const body = previewBodies(s).find((b) => b.bodyId === edgeSel.bodyId);
-        const ed = body?.edges.find((x) => x.name === edgeSel.edgeName);
-        if (ed && ed.polyline.length >= 6) {
-          const pl = ed.polyline;
-          axisOrigin = new THREE.Vector3(pl[0], pl[1], pl[2]);
-          axisDir = new THREE.Vector3(
-            pl[pl.length - 3]! - pl[0]!,
-            pl[pl.length - 2]! - pl[1]!,
-            pl[pl.length - 1]! - pl[2]!,
-          );
-        }
-      }
-    } else {
-      const index = ORIGIN_AXES.indexOf(featureParams(s).axis ?? "Z");
-      axisOrigin = new THREE.Vector3(0, 0, 0);
-      axisDir = new THREE.Vector3().setComponent(index < 0 ? 2 : index, 1);
-    }
-    if (!axisOrigin || !axisDir || axisDir.lengthSq() < 1e-12) return null;
-    return { origin: axisOrigin, dir: axisDir };
-  }
-
-  /** First selected profile + its sketch (for the revolve ghost/gizmo). */
-  function selectedRevolveProfile() {
-    const s = useStore.getState();
-    const profSel = s.selection.find((x) => x.kind === "profile") as any;
-    if (!profSel) return null;
-    const sk = s.evaluation?.sketches.find(
-      (x) => x.featureId === profSel.sketchId,
-    );
-    const profile = sk && findProfile(sk, profSel.profileId);
-    if (!sk || !profile) return null;
-    return { sk, profile };
-  }
-
-  // translucent ghost of a NEW revolve (profile swept around the chosen axis)
-  useEffect(() => {
-    const vp = viewportRef.current;
-    if (!vp) return;
-    const s = useStore.getState();
-    if (
-      s.active?.id !== "design.feature" ||
-      s.active.state.type !== "revolve" ||
-      previewedFeature(s) // the previewed body is already real
-    ) {
-      return;
-    }
-    const sel = selectedRevolveProfile();
-    const axis = resolveRevolveAxis();
-    if (!sel || !axis) return;
-    const { sk, profile } = sel;
-
-    const ghost = buildRevolveGhost(
-      sk.frame,
-      profile.polygon,
-      profile.holePolygons,
-      axis.origin,
-      axis.dir,
-      handleValue(featureParams(s), "revolve"),
-    );
-    const layer = vp.addLayer("revolveGhost");
-    layer.group.add(ghost);
-    vp.requestRender();
-    return () => {
-      layer.dispose();
-      vp.requestRender();
-    };
-  }, [activeFeature, selection, evaluation, params, held]);
-
-  // rotational drag handle for the revolve angle (ring around the axis)
-  useEffect(() => {
-    revolveSlot.rebuild(buildRevolveGizmo);
-    // axisSource/axis in deps: the axis dropdown may switch AFTER mount
-    // (auto-switch on edge pick) — the ring must follow. Angle deliberately
-    // excluded so drags don't rebuild the ring under the pointer.
-  }, [mode, selection, evaluation, params.axisSource, params.axis, held]);
-
-  function buildRevolveGizmo(): RevolveGizmo | null {
-    const vp = viewportRef.current;
-    if (!vp) return null;
-    const s = useStore.getState();
-    if (s.active?.id !== "design.feature" || s.active.state.type !== "revolve")
-      return null;
-    const sel = selectedRevolveProfile();
-    const axis = resolveRevolveAxis();
-    if (!sel || !axis) return null;
-    const [u, v] = profileCentroid(sel.profile);
-    const ring = ringThrough(
-      uv3(sel.sk.frame, u, v),
-      axis.origin,
-      axis.dir,
-      vp.worldPerPixel(),
-    );
-    return new RevolveGizmo(
-      vp,
-      ring.center,
-      ring.dir,
-      ring.zeroDir,
-      ring.radius,
-      handleValue(featureParams(s), "revolve"),
-    );
-  }
-
-  // typing an angle moves the handle too
-  useEffect(() => {
-    const g = revolveSlot.current;
-    if (!g || revolveSlot.isDragging) return;
-    const a = Number(params.angle);
-    if (Number.isFinite(a)) g.update(a);
-  }, [params]);
-
   useEffect(() => {
     featureSlot.rebuild(buildFeatureHandle);
   }, [activeFeature, selection, evaluation, params, held]);
@@ -780,7 +564,7 @@ export function ViewportView() {
       const frame = frameAlong(handle.origin, handle.axis);
       return new ExtrudeGizmo(vp, { frame, anchorUV: [0, 0] }, handle.value);
     }
-    const axis = resolveRevolveAxis();
+    const axis = featureAxis(featureParams(s));
     if (!axis) return null;
     const ring = ringThrough(
       handle.through,
@@ -869,19 +653,6 @@ export function ViewportView() {
           e.preventDefault();
           return;
         }
-        const moveAxis = moveSlot.current?.hitTest(e.clientX, e.clientY) ?? -1;
-        if (moveAxis >= 0 && moveSlot.current) {
-          moveSlot.current.beginDrag(moveAxis, e.clientX, e.clientY);
-          moveSlot.beginDrag();
-          e.preventDefault();
-          return;
-        }
-        if (revolveSlot.current?.hitTest(e.clientX, e.clientY)) {
-          revolveSlot.current.beginDrag(e.clientX, e.clientY);
-          revolveSlot.beginDrag();
-          e.preventDefault();
-          return;
-        }
         const handle = featureSlot.current;
         if (handle?.hitTest(e.clientX, e.clientY)) {
           if (handle instanceof RevolveGizmo)
@@ -900,55 +671,6 @@ export function ViewportView() {
       if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
       if (featureSlot.isDragging && featureSlot.current) {
         dragFeatureHandle(featureSlot.current, featureHandleRef.current!, e);
-        lastX = e.clientX;
-        lastY = e.clientY;
-        return;
-      }
-      if (revolveSlot.isDragging && revolveSlot.current) {
-        const g = revolveSlot.current;
-        const a = g.dragAngle(e.clientX, e.clientY);
-        g.update(a);
-        const s = useStore.getState();
-        setFeatureParams({ angle: a });
-        const tip = g.handleScreenPosition();
-        setGizmoLabel({ x: tip.x, y: tip.y, text: formatAngle(a, 3) });
-        // editing an existing revolve: live-update the real geometry
-        const feature = s.active?.id === "design.feature" && s.active.state;
-        if (
-          !!feature &&
-          feature.type === "revolve" &&
-          feature.editFeatureId &&
-          a !== 0
-        ) {
-          livePreview.during(feature.editFeatureId, { angle: a } as any);
-        }
-        lastX = e.clientX;
-        lastY = e.clientY;
-        return;
-      }
-      if (moveSlot.isDragging && moveSlot.current) {
-        const g = moveSlot.current;
-        const t = g.dragOffset(e.clientX, e.clientY);
-        g.update(t);
-        const s = useStore.getState();
-        setFeatureParams({ tx: t[0], ty: t[1], tz: t[2] });
-        const tip = g.tipScreenPosition();
-        if (tip) {
-          const axisName = ["X", "Y", "Z"][g.draggingAxis] ?? "";
-          const v = t[g.draggingAxis] ?? 0;
-          setGizmoLabel({
-            x: tip.x,
-            y: tip.y,
-            text: `${axisName}: ${formatLength(v, units)}`,
-          });
-        }
-        // editing an existing move: live-update the real geometry
-        const feature = s.active?.id === "design.feature" && s.active.state;
-        if (!!feature && feature.type === "move" && feature.editFeatureId) {
-          livePreview.during(feature.editFeatureId, {
-            translation: t,
-          } as any);
-        }
         lastX = e.clientX;
         lastY = e.clientY;
         return;
@@ -976,43 +698,6 @@ export function ViewportView() {
         featureSlot.endDrag();
         setGizmoLabel(null);
         button = -1;
-        return;
-      }
-      if (revolveSlot.isDragging && revolveSlot.current) {
-        revolveSlot.endDrag();
-        setGizmoLabel(null);
-        button = -1;
-        const s = useStore.getState();
-        const a = Number(featureParams(s).angle);
-        if (
-          s.active?.id === "design.feature" &&
-          s.active.state.type === "revolve" &&
-          s.active.state.editFeatureId &&
-          Number.isFinite(a) &&
-          a !== 0
-        ) {
-          livePreview.commit(s.active.state.editFeatureId, { angle: a } as any);
-        }
-        return;
-      }
-      if (moveSlot.isDragging && moveSlot.current) {
-        moveSlot.endDrag();
-        setGizmoLabel(null);
-        button = -1;
-        const s = useStore.getState();
-        if (
-          s.active?.id === "design.feature" &&
-          s.active.state.type === "move" &&
-          s.active.state.editFeatureId
-        ) {
-          livePreview.commit(s.active.state.editFeatureId, {
-            translation: [
-              Number(featureParams(s).tx) || 0,
-              Number(featureParams(s).ty) || 0,
-              Number(featureParams(s).tz) || 0,
-            ],
-          } as any);
-        }
         return;
       }
       if (commandGizmo.current?.up()) {
@@ -1467,14 +1152,6 @@ export function ViewportView() {
     const vp = viewportRef.current;
     if (!vp) return;
     commandGizmo.current?.hover(e);
-    if (moveSlot.current && !moveSlot.isDragging) {
-      moveSlot.current.setHover(moveSlot.current.hitTest(e.clientX, e.clientY));
-    }
-    if (revolveSlot.current && !revolveSlot.isDragging) {
-      revolveSlot.current.setHover(
-        revolveSlot.current.hitTest(e.clientX, e.clientY),
-      );
-    }
     featureSlot.current?.setHover(
       featureSlot.current.hitTest(e.clientX, e.clientY),
     );

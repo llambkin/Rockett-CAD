@@ -1,7 +1,13 @@
-import { newId, type MoveFeature } from "@rockett/shared";
+import { formatLength, newId, type MoveFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
-import { useSetting } from "../settings";
+import { getSetting, useSetting } from "../settings";
 import { bodies } from "../commands/featureCommand";
+import * as THREE from "three";
+import { MoveGizmo } from "../three/MoveGizmo";
+import { baseBodies } from "../previewBase";
+import { previewedFeature, useStore } from "../store";
+import { dragPreview } from "../toolTargets";
+import type { FeatureGizmoContext, GizmoPointer } from "../three/featureGizmos";
 import { bodyIds, bodyPicks, num } from "./inputs";
 import {
   registerFeatureUI,
@@ -45,9 +51,107 @@ function MoveForm({ params, setParams }: FeatureFormProps<MoveParams>) {
   );
 }
 
+function translation(params: MoveParams): [number, number, number] {
+  return [num(params, "tx", 0), num(params, "ty", 0), num(params, "tz", 0)];
+}
+
+export function moveGizmo(context: FeatureGizmoContext<MoveParams>) {
+  const state = useStore.getState();
+  const ids = new Set(bodyIds(state.selection));
+  const selectedBodies = baseBodies(state).filter((body) =>
+    ids.has(body.bodyId),
+  );
+  if (!selectedBodies.length) return;
+  const center = new THREE.Vector3();
+  for (const body of selectedBodies)
+    center.add(
+      new THREE.Vector3(...body.bbox.min)
+        .add(new THREE.Vector3(...body.bbox.max))
+        .multiplyScalar(0.5),
+    );
+  center.divideScalar(selectedBodies.length);
+  return new MoveLayer(
+    context,
+    new MoveGizmo(
+      context.host,
+      center,
+      translation(context.params()),
+      previewedFeature(state)
+        ? []
+        : selectedBodies.map(({ positions, indices }) => ({
+            positions,
+            indices,
+          })),
+    ),
+  );
+}
+
+class MoveLayer {
+  constructor(
+    private readonly context: FeatureGizmoContext<MoveParams>,
+    private readonly gizmo: MoveGizmo,
+  ) {}
+  get dragging() {
+    return this.gizmo.isDragging;
+  }
+  sync() {
+    if (!this.dragging) this.gizmo.update(translation(this.context.params()));
+  }
+  down(event: GizmoPointer) {
+    const axis = this.gizmo.hitTest(event.clientX, event.clientY);
+    if (axis < 0) return false;
+    this.gizmo.beginDrag(axis, event.clientX, event.clientY);
+    return true;
+  }
+  move(event: GizmoPointer) {
+    if (!this.dragging) return false;
+    const offset = this.gizmo.dragOffset(event.clientX, event.clientY);
+    this.gizmo.update(offset);
+    this.context.setParams({ tx: offset[0], ty: offset[1], tz: offset[2] });
+    const tip = this.gizmo.tipScreenPosition();
+    if (tip)
+      this.context.label({
+        ...tip,
+        text: `${["X", "Y", "Z"][this.gizmo.draggingAxis] ?? ""}: ${formatLength(offset[this.gizmo.draggingAxis] ?? 0, getSetting("units.length"))}`,
+      });
+    const edit = this.edit();
+    if (edit) dragPreview.during(edit, { translation: offset });
+    return true;
+  }
+  private edit() {
+    const active = useStore.getState().active;
+    return active?.id === "design.feature" && active.state.type === "move"
+      ? active.state.editFeatureId
+      : undefined;
+  }
+  up() {
+    if (!this.dragging) return false;
+    this.gizmo.endDrag();
+    this.context.label(null);
+    const edit = this.edit();
+    if (edit)
+      dragPreview.commit(edit, {
+        translation: translation(this.context.params()),
+      });
+    return true;
+  }
+  cancel() {
+    this.gizmo.endDrag();
+    this.context.label(null);
+  }
+  hover(event: GizmoPointer) {
+    if (!this.dragging)
+      this.gizmo.setHover(this.gizmo.hitTest(event.clientX, event.clientY));
+  }
+  dispose() {
+    this.gizmo.dispose();
+  }
+}
+
 export const move: FeatureUI<MoveFeature, MoveParams> = {
   type: "move",
   initialParams: {},
+  gizmo: moveGizmo,
   icon: "✥",
   title: "Move",
   group: "modify",

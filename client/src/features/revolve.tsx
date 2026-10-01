@@ -12,6 +12,13 @@ import {
   targets,
 } from "../commands/featureCommand";
 import { autoOperation, toolOperation } from "../extrudeReach";
+import { findProfile, formatAngle } from "@rockett/shared";
+import { RevolveGizmo, ringThrough, featureAxis } from "../three/RevolveGizmo";
+import { uv3 } from "../three/CadViewport";
+import { profileCentroid } from "../three/featureHandles";
+import { previewedFeature } from "../store";
+import { dragPreview } from "../toolTargets";
+import type { FeatureGizmoContext, GizmoPointer } from "../three/featureGizmos";
 import { useStore } from "../store";
 import {
   axisHint,
@@ -72,9 +79,149 @@ function RevolveForm({ params, setParams }: FeatureFormProps<RevolveParams>) {
   );
 }
 
+export function revolveGizmo(context: FeatureGizmoContext<RevolveParams>) {
+  const state = useStore.getState();
+  const selected = state.selection.find((s) => s.kind === "profile");
+  if (selected?.kind !== "profile") return;
+  const sketch = state.evaluation?.sketches.find(
+    (s) => s.featureId === selected.sketchId,
+  );
+  const profile = sketch && findProfile(sketch, selected.profileId);
+  if (!sketch || !profile) return;
+  return new RevolveLayer(context, sketch, profile, !!previewedFeature(state));
+}
+
+type RevolveSketch = NonNullable<
+  ReturnType<typeof useStore.getState>["evaluation"]
+>["sketches"][number];
+type RevolveProfile = NonNullable<ReturnType<typeof findProfile>>;
+
+class RevolveLayer {
+  private gizmo: RevolveGizmo | undefined;
+  private source:
+    | {
+        axis: RevolveParams["axis"];
+        axisSource: RevolveParams["axisSource"];
+        geometry: ReturnType<typeof featureAxis>;
+      }
+    | undefined;
+  constructor(
+    private readonly context: FeatureGizmoContext<RevolveParams>,
+    private readonly sketch: RevolveSketch,
+    private readonly profile: RevolveProfile,
+    private readonly editing: boolean,
+  ) {
+    this.sync();
+  }
+  get dragging() {
+    return this.gizmo?.isDragging ?? false;
+  }
+  sync() {
+    if (this.dragging) return;
+    const params = this.context.params();
+    if (
+      !this.source ||
+      this.source.axis !== params.axis ||
+      this.source.axisSource !== params.axisSource
+    ) {
+      this.gizmo?.dispose();
+      this.gizmo = undefined;
+      this.source = {
+        axis: params.axis,
+        axisSource: params.axisSource,
+        geometry: featureAxis(params),
+      };
+      const resolvedAxis = this.source.geometry;
+      if (resolvedAxis) {
+        const [u, v] = profileCentroid(this.profile);
+        const ring = ringThrough(
+          uv3(this.sketch.frame, u, v),
+          resolvedAxis.origin,
+          resolvedAxis.dir,
+          this.context.host.worldPerPixel(),
+        );
+        this.gizmo = new RevolveGizmo(
+          this.context.host,
+          ring.center,
+          ring.dir,
+          ring.zeroDir,
+          ring.radius,
+          handleValue(params, "revolve"),
+        );
+      }
+    }
+    this.gizmo?.update(handleValue(params, "revolve"));
+    this.syncGhost();
+  }
+  private syncGhost() {
+    const resolvedAxis = this.source?.geometry;
+    this.gizmo?.updateGhost(
+      this.editing || !resolvedAxis
+        ? undefined
+        : {
+            sketch: this.sketch,
+            profile: this.profile,
+            axis: resolvedAxis,
+            angle: handleValue(this.context.params(), "revolve"),
+          },
+    );
+  }
+  down(event: GizmoPointer) {
+    if (!this.gizmo?.hitTest(event.clientX, event.clientY)) return false;
+    this.gizmo.beginDrag(event.clientX, event.clientY);
+    return this.dragging;
+  }
+  move(event: GizmoPointer) {
+    if (!this.dragging || !this.gizmo) return false;
+    const angle = this.gizmo.dragAngle(event.clientX, event.clientY);
+    this.gizmo.update(angle);
+    this.context.setParams({ angle });
+    this.context.label({
+      ...this.gizmo.handleScreenPosition(),
+      text: formatAngle(angle, 3),
+    });
+    this.syncGhost();
+    this.preview("during");
+    return true;
+  }
+  private preview(action: "during" | "commit") {
+    const active = useStore.getState().active;
+    const angle = Number(this.context.params().angle);
+    if (
+      active?.id === "design.feature" &&
+      active.state.type === "revolve" &&
+      active.state.editFeatureId &&
+      Number.isFinite(angle) &&
+      angle !== 0
+    )
+      dragPreview[action](active.state.editFeatureId, { angle });
+  }
+  up() {
+    if (!this.dragging) return false;
+    this.gizmo?.endDrag();
+    this.context.label(null);
+    this.preview("commit");
+    this.sync();
+    return true;
+  }
+  cancel() {
+    this.gizmo?.endDrag();
+    this.context.label(null);
+    this.sync();
+  }
+  hover(event: GizmoPointer) {
+    if (!this.dragging)
+      this.gizmo?.setHover(this.gizmo.hitTest(event.clientX, event.clientY));
+  }
+  dispose() {
+    this.gizmo?.dispose();
+  }
+}
+
 export const revolve: FeatureUI<RevolveFeature, RevolveParams> = {
   type: "revolve",
   initialParams: {},
+  gizmo: revolveGizmo,
   icon: "↻",
   title: "Revolve",
   group: "create",
