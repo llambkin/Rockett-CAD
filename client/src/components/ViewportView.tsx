@@ -58,10 +58,14 @@ import { loadPreviewBase, previewScene, usePreviewBase } from "../previewBase";
 import { api } from "../api";
 import { ViewportContext, alignCameraToActiveSketch } from "../viewportRef";
 import { activeCommand } from "../commands/active";
-import { registerHoldKey } from "../commands/keymap";
+import {
+  registerHoldKey,
+  pushKeyContext,
+  type KeyEvent,
+} from "../commands/keymap";
 import { watchSnapshots } from "../snapshot";
 import * as tools from "../sketchTools";
-import { ANGLE_LOCK_KEY } from "../shortcuts";
+import { ANGLE_LOCK_KEY } from "../commands/sketch";
 
 import {
   isPlanarFace,
@@ -2059,39 +2063,29 @@ export function ViewportView({
     }
   }
 
-  // typed sizes while drawing: digits lock the active field, Tab cycles,
-  // Enter places. Capture phase, so App's shortcut/delete handlers never
-  // see these keys.
+  const drawingDimensions = dimEntry !== null;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    if (!drawingDimensions) return;
+    const onKey = (e: KeyEvent) => {
       const s = useStore.getState();
-      if (s.active?.id !== "design.sketch") return;
+      if (s.active?.id !== "design.sketch") return false;
       const d = dimRef.current;
       const ts = toolState.current;
-      if (!d || ts.clicks.length !== 1) return;
-      const target = e.target as HTMLElement;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!d || ts.clicks.length !== 1) return false;
+      if (e.ctrlKey || e.metaKey || e.altKey) return false;
       const f = d.fields[d.active];
-      if (!f) return;
-      const swallow = () => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
+      if (!f) return false;
       if (e.key === "Tab") {
-        swallow();
         const n = d.fields.length;
         d.active = (d.active + (e.shiftKey ? n - 1 : 1)) % n;
         refreshDim();
       } else if (e.key === "Enter") {
-        swallow();
         void placeWithDims(ts.lastCursor ?? ts.clicks[0]!);
       } else if (
         d.tool === "line" &&
         !e.repeat &&
         e.key.toUpperCase() === ANGLE_LOCK_KEY
       ) {
-        swallow();
         const live = liveDimValues(
           d.tool,
           ts.clicks[0]!,
@@ -2101,7 +2095,6 @@ export function ViewportView({
         refreshDim();
         refreshGhost();
       } else if (e.key === "Backspace" && f.locked) {
-        swallow();
         f.text = f.text.slice(0, -1);
         if (!f.text) {
           // emptied: back to following the cursor
@@ -2122,7 +2115,6 @@ export function ViewportView({
         (f.unit === "°" && /^[0-9.+\-eE]$/.test(e.key)) ||
         (f.unit !== "°" && /^[0-9.+\-mMcCiInNeE]$/.test(e.key))
       ) {
-        swallow();
         if (!f.locked) {
           f.text = "";
           f.locked = true;
@@ -2130,13 +2122,11 @@ export function ViewportView({
         f.text += e.key;
         refreshDim();
         refreshGhost();
-      }
+      } else return false;
+      return true;
     };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [units]);
-
-  // ----- editing an extrude/revolve: live selection preview + Ctrl/⌘ peek -----
+    return pushKeyContext({ kind: "text-entry", handle: onKey });
+  }, [units, drawingDimensions]);
 
   function selectionRefs(sel: Selection[]) {
     return { profiles: refsOf(sel, "profile"), faces: refsOf(sel, "face") };

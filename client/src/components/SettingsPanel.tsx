@@ -1,3 +1,4 @@
+import { pushKeyContext } from "../commands/keymap";
 import { useEffect, useState } from "react";
 import {
   SETTINGS,
@@ -310,11 +311,14 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     setScope(writableScopes(next, projectOpen, admin).at(-1) ?? "app");
   };
   useEffect(() => {
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
+    return pushKeyContext({
+      kind: "overlay",
+      handle: (event) => {
+        if (event.key !== "Escape") return false;
+        if (!event.repeat) onClose();
+        return true;
+      },
+    });
   }, [onClose]);
   return (
     <div

@@ -1,4 +1,5 @@
-import { sketchCommand } from "./sketch";
+import { groupSelectionCommand } from "../treeSelection";
+import { sketchCommand, sketchCommands } from "./sketch";
 import { sketchCreateCommand } from "./sketchCreate";
 import { measureCommand } from "./measure";
 import { exitActive } from "./active";
@@ -40,6 +41,8 @@ function cancel(s: CommandContext) {
 }
 
 registerCommand(sketchCommand);
+registerCommand(groupSelectionCommand);
+for (const command of sketchCommands) registerCommand(command);
 
 const GROUPS = [
   ["sketch", "SKETCH"],

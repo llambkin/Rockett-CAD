@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
-import { LINE_SHORTCUTS, SKETCH_SHORTCUTS } from "../shortcuts";
+import { lineShortcuts } from "../commands/sketch";
 import { keyBindings } from "../commands/keymap";
 import { useRegistrations } from "../commands/registry";
 
@@ -59,14 +59,7 @@ export function ControlsHelp({ onClose }: { onClose: () => void }) {
           <p className="help-heading">
             <b>Sketching</b>
           </p>
-          <p>
-            {SKETCH_SHORTCUTS.map((x, i) => (
-              <span key={x.key}>
-                {i > 0 && " · "}
-                <kbd>{x.key}</kbd> {x.label}
-              </span>
-            ))}
-          </p>
+          <Bindings context="design.sketch" />
           <p>
             <kbd>X</kbd> Construction (applies to whatever tool you draw with
             next: lines, rectangles, circles, arcs, polygons, slots)
@@ -88,7 +81,7 @@ export function ControlsHelp({ onClose }: { onClose: () => void }) {
           </p>
           <p>
             Line:{" "}
-            {LINE_SHORTCUTS.map((x, i) => (
+            {lineShortcuts.map((x, i) => (
               <span key={x.key}>
                 {i > 0 && " · "}
                 <kbd>{x.key}</kbd> {x.label}

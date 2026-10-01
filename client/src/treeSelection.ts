@@ -1,3 +1,4 @@
+import type { Command } from "./commands/registry";
 import {
   bodyMadeBy,
   newId,
@@ -6,7 +7,7 @@ import {
 } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import { freeProfileIds, sketchUsage } from "./sketchUsage";
-import { selectionKey, useStore, type Selection } from "./store";
+import { selectionKey, useStore, isIdle, type Selection } from "./store";
 
 type TreeKind = "body" | "sketch" | "plane";
 
@@ -122,6 +123,42 @@ export async function groupItems(
   ]);
   return group;
 }
+
+const groupRecipients: { created(id: string): void }[] = [];
+
+export function registerGroupRecipient(
+  created: (id: string) => void,
+): () => void {
+  const recipient = { created };
+  groupRecipients.push(recipient);
+  return () => {
+    const index = groupRecipients.indexOf(recipient);
+    if (index >= 0) groupRecipients.splice(index, 1);
+  };
+}
+
+export const groupSelectionCommand = {
+  id: "design.tree.group",
+  label: "Group selected rows",
+  keys: ["Ctrl+G"],
+  keyContext: "design",
+  enabled: (s) =>
+    (groupRecipients.length > 0 &&
+      !s.busy &&
+      isIdle(s) &&
+      s.selection.some(
+        (item) => item.kind === "body" || item.kind === "sketch",
+      )) ||
+    "Select rows while idle",
+  run: async (s) => {
+    const recipient = groupRecipients.at(-1);
+    if (!recipient) return;
+    const kind = treeIds(s.selection, "body").length > 0 ? "body" : "sketch";
+    const group = await groupItems(kind, treeIds(s.selection, kind));
+    if (group && groupRecipients.includes(recipient))
+      recipient.created(group.id);
+  },
+} satisfies Command;
 
 const editGroups = (edit: (groups: TreeGroup[]) => TreeGroup[]) =>
   saveGroups(edit(useStore.getState().document?.groups ?? []));

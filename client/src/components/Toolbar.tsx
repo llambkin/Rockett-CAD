@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { ViewportContext } from "../viewportRef";
-import { useStore, type SketchTool } from "../store";
+import { useStore } from "../store";
 import { useWorkbench } from "../shell/workbench";
 import type { SketchConstraint } from "@rockett/shared";
 import { openDialog } from "../commands/design";
@@ -14,7 +14,7 @@ import {
   type ToolbarGroup,
 } from "../commands/registry";
 import { SketchInsertButtons } from "./SketchInsertButtons";
-import { SKETCH_SHORTCUTS } from "../shortcuts";
+import { sketchTools } from "../commands/sketch";
 import { ToolButton } from "./ToolButton";
 import { HorizontalScroll } from "./HorizontalScroll";
 import { NumField } from "./form/fields";
@@ -24,29 +24,6 @@ import {
   sketchSelectionIds,
   type RelationType,
 } from "../sketchRelations";
-
-const SKETCH_TOOLS: Array<{ id: SketchTool; label: string }> = [
-  { id: "select", label: "Select" },
-  { id: "line", label: "Line" },
-  { id: "rect", label: "Rect" },
-  { id: "centerRect", label: "C-Rect" },
-  { id: "circle", label: "Circle" },
-  { id: "arc3", label: "Arc" },
-  { id: "polygon", label: "Polygon" },
-  { id: "slot", label: "Slot" },
-  { id: "point", label: "Point" },
-  { id: "dimension", label: "Dimension" },
-  { id: "project", label: "Project" },
-  { id: "trim", label: "Trim" },
-  { id: "extend", label: "Extend" },
-  { id: "offset", label: "Offset" },
-];
-
-const sketchTitle = (t: (typeof SKETCH_TOOLS)[number]) =>
-  tooltipOf({
-    label: t.label,
-    keys: SKETCH_SHORTCUTS.filter((k) => k.tool === t.id).map((k) => k.key),
-  });
 
 export async function addSketchConstraints(constraints: SketchConstraint[]) {
   const s = useStore.getState();
@@ -207,13 +184,13 @@ function SketchToolbar() {
   return (
     <HorizontalScroll className="toolbar sketch">
       <ToolGroup title="SKETCH">
-        {SKETCH_TOOLS.map((t) => (
+        {sketchTools.map((t) => (
           <ToolButton
             key={t.id}
             icon={t.id}
             label={t.label}
             className={tool === t.id ? "active" : ""}
-            title={sketchTitle(t)}
+            title={tooltipOf(t)}
             onClick={() => setSketchTool(t.id)}
           />
         ))}

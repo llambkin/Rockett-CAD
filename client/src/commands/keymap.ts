@@ -1,6 +1,5 @@
 import { createRegistry } from "@rockett/shared";
 import { activeCommand } from "./active";
-import { sketchToolFor } from "../shortcuts";
 import type { ViewportRef } from "../viewportRef";
 import { useStore } from "../store";
 import { useWorkbench } from "../shell/workbench";
@@ -22,7 +21,7 @@ export type KeyEvent = Pick<
   | "repeat"
   | "target"
   | "preventDefault"
->;
+> & { isComposing?: boolean; keyCode?: number; stopPropagation?(): void };
 
 export interface HoldKey {
   id: string;
@@ -32,8 +31,15 @@ export interface HoldKey {
 }
 
 const holdKeys = createRegistry<HoldKey>("hold key", (h) => h.id);
-export const registerHoldKey = holdKeys.register;
 const held = new Set<HoldKey>();
+
+export function registerHoldKey(hold: HoldKey): () => void {
+  const unregister = holdKeys.register(hold);
+  return () => {
+    held.delete(hold);
+    unregister();
+  };
+}
 
 function pressHold(e: KeyEvent): boolean {
   const hold = holdKeys.list().find((h) => h.keys.includes(e.key));
@@ -117,33 +123,39 @@ function inText(target: EventTarget | null): boolean {
   );
 }
 
-function sketchKey(e: KeyEvent, s: CommandContext): boolean {
-  if (s.active?.id !== "design.sketch") return false;
-  if (e.key === "Delete" || e.key === "Backspace") {
-    const ids = s.selection.flatMap((x) =>
-      x.kind === "sketchEntity" || x.kind === "sketchPoint" ? [x.entityId] : [],
-    );
-    if (ids.length === 0) return false;
-    e.preventDefault();
-    void s.deleteSketchEntities(ids);
-    return true;
-  }
-  const tool = sketchToolFor(e.key);
-  if (tool) {
-    s.setSketchTool(tool);
-    return true;
-  }
-  if (e.key.toLowerCase() !== "x") return false;
-  s.setSketchState({ constructionMode: !s.active.state.constructionMode });
-  return true;
+type KeyContext = {
+  kind: "text-entry" | "overlay";
+  handle(event: KeyEvent): boolean;
+};
+
+const contexts: KeyContext[] = [];
+
+export function pushKeyContext(context: KeyContext): () => void {
+  contexts.push(context);
+  const uninstall = installKeymap();
+  return () => {
+    const index = contexts.indexOf(context);
+    if (index < 0) return;
+    contexts.splice(index, 1);
+    uninstall();
+  };
 }
 
 export function handleKey(e: KeyEvent, viewport?: ViewportRef): void {
-  if (e.repeat || pressHold(e) || inText(e.target)) return;
+  if (e.isComposing || e.keyCode === 229) return;
+  const typing = inText(e.target);
+  const stack = contexts.toReversed();
+  for (const kind of ["overlay", "text-entry"] as const) {
+    if (kind === "text-entry" && typing) continue;
+    for (const context of stack) {
+      if (context.kind !== kind || !context.handle(e)) continue;
+      e.preventDefault();
+      e.stopPropagation?.();
+      return;
+    }
+  }
+  if (e.repeat || pressHold(e) || typing) return;
   const s = useStore.getState();
-  const plain = !(e.ctrlKey || e.metaKey || e.altKey || e.shiftKey);
-  if (s.active?.id === "design.sketch" && plain && !s.busy && sketchKey(e, s))
-    return;
   const chord = chordOf(e);
   for (const context of keyContexts(s)) {
     const command = bound().find(
@@ -163,14 +175,25 @@ export function handleKey(e: KeyEvent, viewport?: ViewportRef): void {
 
 const releaseAll = () => releaseHolds();
 
+const installations: { viewport?: ViewportRef }[] = [];
+const onKey = (event: KeyboardEvent) =>
+  handleKey(event, installations.findLast((entry) => entry.viewport)?.viewport);
+
 export function installKeymap(viewport?: ViewportRef): () => void {
-  const onKey = (event: KeyboardEvent) => handleKey(event, viewport);
-  document.addEventListener("keydown", onKey, true);
-  document.addEventListener("keyup", handleKeyUp, true);
-  window.addEventListener("blur", releaseAll);
+  const installation = { ...(viewport && { viewport }) };
+  if (installations.length === 0) {
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("blur", releaseAll);
+  }
+  installations.push(installation);
   return () => {
-    document.removeEventListener("keydown", onKey, true);
-    document.removeEventListener("keyup", handleKeyUp, true);
+    const index = installations.indexOf(installation);
+    if (index < 0) return;
+    installations.splice(index, 1);
+    if (installations.length !== 0) return;
+    window.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("keyup", handleKeyUp, true);
     window.removeEventListener("blur", releaseAll);
     releaseAll();
   };

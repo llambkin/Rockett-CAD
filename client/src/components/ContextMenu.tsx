@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { pushKeyContext } from "../commands/keymap";
 
 export type MenuItem = {
   label: string;
@@ -35,14 +36,18 @@ export function ContextMenu({
     const onPointerDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) close.current();
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
+    const pop = pushKeyContext({
+      kind: "overlay",
+      handle: (e) => {
+        if (e.key !== "Escape") return false;
+        if (!e.repeat) close.current();
+        return true;
+      },
+    });
     window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("keydown", onKeyDown);
+      pop();
     };
   }, []);
   return (

@@ -21,8 +21,9 @@ import { ORIGIN_AXES, UNITS_LENGTH } from "@rockett/shared";
 import { moveBodies } from "../commands/treeMove";
 import { activeCommand } from "../commands/active";
 import "../commands/design";
+import { installKeymap } from "../commands/keymap";
 import { runCommand } from "../commands/registry";
-import { useStore, selectionKey, isIdle, type Selection } from "../store";
+import { useStore, selectionKey, type Selection } from "../store";
 import {
   ViewportContext,
   alignCameraToActiveSketch as alignToSketch,
@@ -34,6 +35,7 @@ import { pickLabel } from "./form/fields";
 import {
   deleteFeatures,
   groupItems,
+  registerGroupRecipient,
   groupParts,
   selectSketchRegions,
   sketchSel,
@@ -105,6 +107,24 @@ const BodyRow = memo(function BodyRow({
   );
 });
 
+function useTreeGrouping(setRenaming: (id: string) => void) {
+  const startGroup = async (kind: Kind, ids: string[]) => {
+    const group = await groupItems(kind, ids);
+    if (group) setRenaming(group.id);
+  };
+
+  useEffect(() => {
+    const uninstall = installKeymap();
+    const unregister = registerGroupRecipient(setRenaming);
+    return () => {
+      unregister();
+      uninstall();
+    };
+  }, []);
+
+  return startGroup;
+}
+
 export const ModelTree = memo(function ModelTree() {
   const viewport = useContext(ViewportContext);
   const document_ = useStore((s) => s.document);
@@ -134,27 +154,7 @@ export const ModelTree = memo(function ModelTree() {
     }),
     [],
   );
-  const startGroup = async (kind: Kind, ids: string[]) => {
-    const group = await groupItems(kind, ids);
-    if (group) setRenaming(group.id);
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "g") return;
-      const tag = (e.target as HTMLElement).tagName;
-      const s = useStore.getState();
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || s.busy) return;
-      if (!isIdle(s)) return;
-      const kind = treeIds(s.selection, "body").length > 0 ? "body" : "sketch";
-      const ids = treeIds(s.selection, kind);
-      if (ids.length === 0) return;
-      e.preventDefault();
-      void startGroup(kind, ids);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  const startGroup = useTreeGrouping(setRenaming);
 
   if (!document_) return null;
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {

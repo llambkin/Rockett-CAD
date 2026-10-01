@@ -1,4 +1,4 @@
-import type { Command } from "./registry";
+import type { Command, CommandContext } from "./registry";
 
 export type SketchTool =
   | "select"
@@ -53,3 +53,69 @@ export const sketchCommand = {
   label: "Sketch",
   run: (s) => s.finishSketch(),
 } satisfies Command;
+
+export const sketchTools: { id: SketchTool; label: string; keys: string[] }[] =
+  [
+    { id: "select", label: "Select", keys: ["V"] },
+    { id: "line", label: "Line", keys: ["L"] },
+    { id: "rect", label: "Rect", keys: ["R"] },
+    { id: "centerRect", label: "C-Rect", keys: [] },
+    { id: "circle", label: "Circle", keys: ["C"] },
+    { id: "arc3", label: "Arc", keys: [] },
+    { id: "polygon", label: "Polygon", keys: [] },
+    { id: "slot", label: "Slot", keys: [] },
+    { id: "point", label: "Point", keys: ["P"] },
+    { id: "dimension", label: "Dimension", keys: ["D"] },
+    { id: "project", label: "Project", keys: [] },
+    { id: "trim", label: "Trim", keys: ["T"] },
+    { id: "extend", label: "Extend", keys: [] },
+    { id: "offset", label: "Offset", keys: [] },
+  ];
+
+const enabled = (s: CommandContext) =>
+  (!s.busy && s.active?.id === "design.sketch") || "Sketch is not editable";
+
+export const sketchCommands: Command[] = [
+  ...sketchTools.map((tool): Command => ({
+    id: `design.sketch.${tool.id}`,
+    label: tool.label,
+    keys: tool.keys,
+    keyContext: "design.sketch",
+    enabled,
+    run: (s) => s.setSketchTool(tool.id),
+  })),
+  {
+    id: "design.sketch.construction",
+    label: "Construction",
+    keys: ["X"],
+    keyContext: "design.sketch",
+    enabled,
+    run: (s) => {
+      if (s.active?.id === "design.sketch")
+        s.setSketchState({
+          constructionMode: !s.active.state.constructionMode,
+        });
+    },
+  },
+  {
+    id: "design.sketch.delete",
+    label: "Delete sketch geometry",
+    keys: ["Delete", "Backspace"],
+    keyContext: "design.sketch",
+    enabled,
+    run: (s) => {
+      const ids = s.selection.flatMap((item) =>
+        item.kind === "sketchEntity" || item.kind === "sketchPoint"
+          ? [item.entityId]
+          : [],
+      );
+      if (ids.length > 0) return s.deleteSketchEntities(ids);
+    },
+  },
+];
+
+export const ANGLE_LOCK_KEY = "A";
+export const lineShortcuts = [
+  { key: "Shift", label: "hold to snap the angle to your snap angles" },
+  { key: ANGLE_LOCK_KEY, label: "lock or unlock the angle" },
+];
