@@ -1,10 +1,9 @@
-import {
-  fuseNamed,
-  unifyTool,
-  splitAtEnds,
-  fuseOperation,
-  commonOperation,
-} from "./boolean.js";
+import { nativeFillet } from "./nativeFillet.js";
+import { planarFillet } from "./planarFillet.js";
+import { blendNames } from "./blendNaming.js";
+import { rejectBadBlend } from "./blendValidity.js";
+export { cutsThrough } from "./blendValidity.js";
+import { fuseOperation, commonOperation } from "./boolean.js";
 import {
   LINEAR_TOL,
   UNIT_DOT_TOL,
@@ -18,18 +17,14 @@ import {
   acquire,
   edgeCentroid,
   edges as edgesOf,
-  explore,
   faceCentroid,
   faces as facesOf,
   getKernel,
   kernelCall,
-  listToArray,
   planarFacePlane,
   pnt,
   progress,
   scoped,
-  shapeHash,
-  shapeList,
   solids,
   transformOp,
   vec,
@@ -37,20 +32,11 @@ import {
   wires as wiresOf,
   type Shape,
 } from "./kernel.js";
-import {
-  computeEdgeNames,
-  finalizeNames,
-  propagateNames,
-  type NameMap,
-  type NamedBody,
-} from "./naming.js";
+import { computeEdgeNames, propagateNames, type NamedBody } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
-import { V } from "./frames.js";
 import { tangentEdges } from "./tangentEdges.js";
 import {
-  NoCorner,
   registerBodySolids,
-  rejectInvalid,
   vertexPoint,
   type EvalState,
   type ToolResult,
@@ -100,42 +86,6 @@ function collectEdges(
   return tangentChain ? tangentEdges(body, refs).map(resolve) : seeds;
 }
 
-function blendNames(
-  op: any,
-  body: NamedBody,
-  sourceEdges: { edge: Shape }[],
-  result: Shape,
-  featureId: string,
-): NameMap {
-  return scoped(() => {
-    const k = getKernel();
-    const provisional = new ShapeMap<string>();
-    const bodyFaces = facesOf(body.shape);
-    {
-      for (const face of bodyFaces) {
-        const name = body.names.get(face);
-        if (!name || op.IsDeleted(face)) continue;
-        const modified = listToArray(op.Modified(face));
-        for (const mf of modified.length > 0 ? modified : [face]) {
-          provisional.set(mf, name);
-        }
-      }
-    }
-    sourceEdges.forEach((se, i) => {
-      const gen = listToArray(op.Generated(se.edge));
-      gen.forEach((g, j) => {
-        if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(
-            g,
-            `f:${featureId}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
-          );
-        }
-      });
-    });
-    return finalizeNames(result, provisional, featureId);
-  });
-}
-
 export function evalFillet(state: EvalState, f: FilletFeature): void {
   if (f.edges.length === 0) throw new Error("no edges selected");
   if (f.radius <= 0) throw new Error("fillet radius must be positive");
@@ -150,262 +100,13 @@ function filletBody(
   body: NamedBody,
   refs: EdgeRef[],
 ): void {
-  const bodyId = body.bodyId;
-  const k = getKernel();
   kernelCall("fillet", () => {
     const byName = computeEdgeNames(body).byName;
-    const op = acquire(
-      new k.BRepFilletAPI_MakeFillet(
-        body.shape,
-        k.ChFi3d_FilletShape.ChFi3d_Rational,
-      ),
-    );
-    let result: Shape | undefined;
-    {
-      const sourceEdges = collectEdges(body, byName, refs, f.tangentChain);
-      for (const { edge } of sourceEdges) {
-        if (!op.Contour(edge)) op.Add_2(f.radius, edge);
-      }
-      if (op.NbContours() === 0) {
-        throw new NoCorner(
-          `no sharp corner to fillet on ${sourceEdges.map((s) => s.name).join(", ")}: the faces meet smoothly there`,
-        );
-      }
-      op.Build(progress());
-      const spilled = op.IsDone() ? spilledEnds(op) : new Set<number>();
-      const ends =
-        !op.IsDone() || spilled.size > 0
-          ? openEnds(op, sourceEdges, spilled)
-          : [];
-      const clipped =
-        ends.length > 0 && filletClipped(body, sourceEdges, ends, f);
-      if (clipped) {
-        result = clipped.shape;
-        registerBodySolids(state, bodyId, result, clipped.names);
-        return;
-      }
-      if (!op.IsDone()) {
-        throw new Error(filletFailure(op, byName, refs, f.radius));
-      }
-      result = acquire(op.Shape());
-      rejectBadBlend(
-        op,
-        sourceEdges,
-        result,
-        body.shape,
-        "fillet",
-        `radius ${f.radius}`,
-        "try fewer edges or a different radius",
-      );
-      const names = blendNames(op, body, sourceEdges, result, f.id);
-      registerBodySolids(state, bodyId, result, names);
-    }
-  });
-}
-
-interface OpenEnd {
-  at: Vec3;
-  out: Vec3;
-}
-
-function outward(edge: Shape, vertex: Shape): OpenEnd {
-  return scoped(() => {
-    const k = getKernel();
-    const at = vertexPoint(vertex);
-    const curve = acquire(new k.BRepAdaptor_Curve_2(edge));
-    const p = pnt(0, 0, 0);
-    const d = vec(0, 0, 0);
-    const [start, end] = [curve.FirstParameter(), curve.LastParameter()];
-    curve.D1(start, p, d);
-    const atStart = V.norm(V.sub([p.X(), p.Y(), p.Z()], at)) < LINEAR_TOL;
-    curve.D1(atStart ? start : end, p, d);
-    const along = V.normalize([d.X(), d.Y(), d.Z()]);
-
-    return { at, out: atStart ? V.scale(along, -1) : along };
-  });
-}
-
-function capsEnd(face: Shape, end: OpenEnd): boolean {
-  const k = getKernel();
-  return scoped((own) => {
-    const typed = own(k.TopoDS.Face_1(face));
-    const surface = own(new k.BRepAdaptor_Surface_2(typed, true));
-    const [u0, u1] = [surface.FirstUParameter(), surface.LastUParameter()];
-    const [v0, v1] = [surface.FirstVParameter(), surface.LastVParameter()];
-    const onPlane = (at: Vec3) =>
-      Math.abs(V.dot(V.sub(at, end.at), end.out)) <= LINEAR_TOL;
-    const samples = [0, 0.5, 1].flatMap((s) =>
-      [0, 0.5, 1].map((t) => {
-        const p = own(surface.Value(u0 + s * (u1 - u0), v0 + t * (v1 - v0)));
-        return [p.X(), p.Y(), p.Z()] as Vec3;
-      }),
-    );
-    return [faceCentroid(typed), ...samples].every(onPlane);
-  });
-}
-
-function openEnds(
-  op: any,
-  sourceEdges: { edge: Shape }[],
-  spilled: Set<number>,
-): OpenEnd[] {
-  return scoped(() => {
-    const chosen = new Set(sourceEdges.map(({ edge }) => shapeHash(edge)));
-    const touches = new Map<number, { vertex: Shape; edge: Shape }[]>();
-    for (const { edge } of sourceEdges) {
-      for (const vertex of verticesOf(edge)) {
-        const hash = shapeHash(vertex);
-        touches.set(hash, [...(touches.get(hash) ?? []), { vertex, edge }]);
-      }
-    }
-    const continued = new Set<number>();
-    for (let c = 1; c <= op.NbContours(); c++) {
-      for (let e = 1; e <= op.NbEdges(c); e++) {
-        const edge = acquire(op.Edge(c, e));
-        if (!chosen.has(shapeHash(edge))) {
-          const vertices = verticesOf(edge);
-          for (const vertex of vertices) continued.add(shapeHash(vertex));
-        }
-      }
-    }
-    const ends = [...touches]
-      .filter(
-        ([hash, list]) =>
-          list.length === 1 && (continued.has(hash) || spilled.has(hash)),
-      )
-      .map(([, [only]]) => outward(only!.edge, only!.vertex));
-    return ends;
-  });
-}
-
-function filletClipped(
-  body: NamedBody,
-  sourceEdges: { edge: Shape }[],
-  ends: OpenEnd[],
-  f: FilletFeature,
-): ToolResult | null {
-  const k = getKernel();
-  const size = `radius ${f.radius}`;
-  const advice = "try fewer edges or a different radius";
-  const clipped = scoped((own) => {
-    const split = splitAtEnds(body, sourceEdges, ends, f.id, own);
-    if (!split) return null;
-    const { piece, rest, kept } = split;
-    const op = own(
-      new k.BRepFilletAPI_MakeFillet(
-        piece.shape,
-        k.ChFi3d_FilletShape.ChFi3d_Rational,
-      ),
-    );
-    for (const { edge } of kept)
-      if (!op.Contour(edge)) op.Add_2(f.radius, edge);
-    op.Build(progress());
-    if (!op.IsDone()) return null;
-    const filleted = own(op.Shape());
-    rejectBadBlend(op, kept, filleted, piece.shape, "fillet", size, advice);
-    const joined = fuseNamed(
-      { shape: filleted, names: blendNames(op, piece, kept, filleted, f.id) },
-      rest,
-      f.id,
-      `fillet of ${size} could not close its ends: ${advice}; the previous body has been kept`,
-    );
-    const merged = unifyTool(joined, f.id);
-    if (merged !== joined) own(joined.shape);
-    rejectBadBlend(null, [], merged.shape, body.shape, "fillet", size, advice);
-    own.keep(merged.shape);
-    return merged;
-  });
-  if (clipped) acquire(clipped.shape);
-  return clipped;
-}
-
-function filletFailure(
-  op: any,
-  byName: Map<string, Shape>,
-  refs: EdgeRef[],
-  radius: number,
-): string {
-  return scoped(() => {
-    const chosen = new Set(refs.map((r) => shapeHash(byName.get(r.edgeName)!)));
-    const names = new Map(
-      [...byName].map(([name, edge]) => [shapeHash(edge), name]),
-    );
-    const added = new Set<string>();
-    for (let i = 1; i <= op.NbFaultyContours(); i++) {
-      const contour = op.FaultyContour(i);
-      for (let j = 1; j <= op.NbEdges(contour); j++) {
-        const edge = acquire(op.Edge(contour, j));
-        const hash = shapeHash(edge);
-
-        if (!chosen.has(hash)) added.add(names.get(hash) ?? "an unnamed edge");
-      }
-    }
-    return added.size > 0
-      ? `fillet of radius ${radius} failed on ${[...added].join(", ")}, a tangent continuation of the selected edges: try a smaller radius or fillet this edge before its neighbours`
-      : `fillet of radius ${radius} failed: radius may be too large for the geometry`;
-  });
-}
-
-function rejectBadBlend(
-  op: any,
-  sourceEdges: { edge: Shape }[],
-  result: Shape,
-  before: Shape,
-  kind: "fillet" | "chamfer",
-  size: string,
-  advice: string,
-): void {
-  rejectInvalid(result, before, kind, size, advice);
-  if (op && looseBlend(op, sourceEdges, result))
-    throw new Error(
-      `${kind} could not be built cleanly at this ${kind === "fillet" ? "radius" : "distance"}; try a smaller one`,
-    );
-  if (op && spilledEnds(op).size > 0)
-    throw new Error(
-      `${kind} of ${size} runs past the end of its edges: ${advice}; the previous body has been kept`,
-    );
-  const cut = cutsThrough(op, sourceEdges, result, before);
-  if (cut === false) return;
-  throw new Error(
-    cut
-      ? `${kind} of ${size} cuts through the body: ${advice}; the previous body has been kept`
-      : `${kind} of ${size} could not be checked for cutting through the body: ${advice}; the previous body has been kept`,
-  );
-}
-
-function spilledEnds(op: any): Set<number> {
-  return scoped(() => {
-    const touches = new Map<number, number>();
-    const ends: { vertex: Shape; edge: Shape }[] = [];
-    for (let c = 1; c <= op.NbContours(); c++) {
-      if (!op.Closed(c))
-        ends.push(
-          { vertex: acquire(op.FirstVertex(c)), edge: acquire(op.Edge(c, 1)) },
-          {
-            vertex: acquire(op.LastVertex(c)),
-            edge: acquire(op.Edge(c, op.NbEdges(c))),
-          },
-        );
-      for (let e = 1; e <= op.NbEdges(c); e++) {
-        const edge = acquire(op.Edge(c, e));
-        const vertices = verticesOf(edge);
-        for (const vertex of vertices) {
-          const hash = shapeHash(vertex);
-          touches.set(hash, (touches.get(hash) ?? 0) + 1);
-        }
-      }
-    }
-    const spilled = new Set<number>();
-    for (const { vertex, edge } of ends) {
-      const hash = shapeHash(vertex);
-      if (touches.get(hash) !== 1) continue;
-      const generated = listToArray(op.Generated(vertex));
-      const end = generated.length > 0 ? outward(edge, vertex) : null;
-      if (end && !generated.every((face) => capsEnd(face, end)))
-        spilled.add(hash);
-    }
-
-    return spilled;
+    const sourceEdges = collectEdges(body, byName, refs, f.tangentChain);
+    const result =
+      planarFillet(body, sourceEdges, f.radius, f.id, byName, refs) ??
+      nativeFillet(body, sourceEdges, byName, refs, f);
+    registerBodySolids(state, body.bodyId, result.shape, result.names);
   });
 }
 
@@ -700,148 +401,5 @@ function chamferBody(
       const names = blendNames(op, body, sourceEdges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     }
-  });
-}
-
-const CONTACT = 0.01;
-const LOOSE = 1e-3;
-
-interface Patch {
-  face: Shape;
-  edges: Set<number>;
-  tolerance: number;
-  box: any;
-}
-
-function shellCount(shape: Shape): number {
-  return scoped(() => {
-    const shells = [...explore(shape, "shell")];
-
-    return shells.length;
-  });
-}
-
-function generatedBy(op: any, sourceEdges: { edge: Shape }[]): Set<number> {
-  return scoped(() => {
-    const made = new Set<number>();
-    for (const { edge } of sourceEdges) {
-      const ends = verticesOf(edge);
-      for (const from of [edge, ...ends]) {
-        const generated = listToArray(op.Generated(from));
-        for (const shape of generated) made.add(shapeHash(shape));
-      }
-    }
-    return made;
-  });
-}
-
-function toleranceOf(face: Shape): number {
-  const k = getKernel();
-  return Math.max(
-    ...["VERTEX", "EDGE", "FACE"].map((type) =>
-      k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum[`TopAbs_${type}`]),
-    ),
-  );
-}
-
-function looseBlend(
-  op: any,
-  sourceEdges: { edge: Shape }[],
-  result: Shape,
-): boolean {
-  return scoped(() => {
-    const made = generatedBy(op, sourceEdges);
-    const all = facesOf(result);
-    const loose = all.some(
-      (face) => made.has(shapeHash(face)) && toleranceOf(face) > LOOSE,
-    );
-
-    return loose;
-  });
-}
-
-function patch(face: Shape, box: any): Patch {
-  return scoped(() => {
-    const k = getKernel();
-    const tolerance = toleranceOf(face);
-    if (tolerance > CONTACT) k.BRepBndLib.AddOptimal(face, box, false, false);
-    else k.BRepBndLib.Add(face, box, true);
-    box.Enlarge(CONTACT);
-    const around = edgesOf(face);
-    const hashes = new Set(around.map(shapeHash));
-
-    return { face, edges: hashes, tolerance, box };
-  });
-}
-
-function sharesEdge(a: Patch, b: Patch): boolean {
-  return [...a.edges].some((edge) => b.edges.has(edge));
-}
-
-function near(a: Patch, b: Patch): boolean {
-  if (a.box.IsOut_4(b.box)) return false;
-  if (a.tolerance + b.tolerance <= CONTACT) return true;
-  const k = getKernel();
-  return scoped((own) => {
-    const dist = own(
-      new k.BRepExtrema_DistShapeShape_2(
-        a.face,
-        b.face,
-        k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
-        k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
-        progress(),
-      ),
-    );
-    return !dist.IsDone() || dist.Value() <= CONTACT;
-  });
-}
-
-function crosses(face: Shape, others: Shape[]): boolean | null {
-  const k = getKernel();
-  return scoped((own) => {
-    const builder = own(new k.BRep_Builder());
-    const rest = own(new k.TopoDS_Compound());
-    builder.MakeCompound(rest);
-    for (const other of others) builder.Add(rest, other);
-    const fuse = own(new k.BRepAlgoAPI_BuilderAlgo_1());
-    fuse.SetArguments(own(shapeList([face, rest])));
-    fuse.SetNonDestructive(true);
-    fuse.Build(progress());
-    if (fuse.HasErrors()) return null;
-    return !own(fuse.SectionEdges()).IsEmpty();
-  });
-}
-
-export function cutsThrough(
-  op: any,
-  sourceEdges: { edge: Shape }[],
-  result: Shape,
-  before: Shape,
-): boolean | null {
-  if (shellCount(result) !== shellCount(before)) return true;
-  if (!op) return false;
-  const made = generatedBy(op, sourceEdges);
-  const k = getKernel();
-  return scoped((own) => {
-    const all = facesOf(result).map((face) =>
-      patch(own(face), own(new k.Bnd_Box_1())),
-    );
-    const blend = all.filter((p) => made.has(shapeHash(p.face)));
-    const rest = all.filter(
-      (p) =>
-        !made.has(shapeHash(p.face)) && !blend.some((b) => sharesEdge(p, b)),
-    );
-    for (const [n, a] of blend.entries()) {
-      const partners = [...blend.slice(n + 1), ...rest].filter(
-        (b) => !sharesEdge(a, b) && near(a, b),
-      );
-      if (partners.length === 0) continue;
-      const verdict = crosses(
-        a.face,
-        partners.map((b) => b.face),
-      );
-      if (verdict !== false) return verdict;
-    }
-    return false;
   });
 }

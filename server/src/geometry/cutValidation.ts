@@ -1,3 +1,4 @@
+import { planarInteriorPoints } from "./planeBoundary.js";
 import { LINEAR_TOL } from "@rockett/shared";
 import {
   acquire,
@@ -6,6 +7,7 @@ import {
   getKernel,
   listToArray,
   progress,
+  planarFacePlane,
   scoped,
   vertices,
   volumeAbout,
@@ -54,25 +56,29 @@ function interiorPoint(face: Shape): Shape | null {
 function outside(solid: Shape, face: Shape): boolean {
   const k = getKernel();
   return scoped((own) => {
-    const at = interiorPoint(face);
-    if (!at) return false;
-    own(at);
-    const vertex = own(own(new k.BRepBuilderAPI_MakeVertex(at)).Vertex());
-    const dist = own(
-      new k.BRepExtrema_DistShapeShape_2(
-        solid,
-        vertex,
-        k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
-        k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
-        progress(),
-      ),
-    );
-    if (!dist.IsDone()) throw new Error("cut check failed");
-    const tolerance = Math.max(
-      LINEAR_TOL,
-      k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum.TopAbs_VERTEX),
-    );
-    return !dist.InnerSolution() && dist.Value() > tolerance;
+    const points = planarFacePlane(face)
+      ? planarInteriorPoints(face, own)
+      : [interiorPoint(face)];
+    return points.some((at) => {
+      if (!at) return false;
+      own(at);
+      const vertex = own(own(new k.BRepBuilderAPI_MakeVertex(at)).Vertex());
+      const dist = own(
+        new k.BRepExtrema_DistShapeShape_2(
+          solid,
+          vertex,
+          k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
+          k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
+          progress(),
+        ),
+      );
+      if (!dist.IsDone()) throw new Error("cut check failed");
+      const tolerance = Math.max(
+        LINEAR_TOL,
+        k.BRep_Tool.MaxTolerance(face, k.TopAbs_ShapeEnum.TopAbs_VERTEX),
+      );
+      return !dist.InnerSolution() && dist.Value() > tolerance;
+    });
   });
 }
 

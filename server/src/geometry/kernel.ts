@@ -79,7 +79,7 @@ export function* explore(
 }
 
 type Owned = { delete(): void; isDeleted?(): boolean };
-type Own = {
+export type Own = {
   <H extends Owned>(handle: H): H;
   keep<H extends Owned>(handle: H): H;
 };
@@ -340,14 +340,18 @@ export function lengthOf(shape: Shape): number {
   });
 }
 
-export function bboxOf(shape: Shape): {
+export function bboxOf(
+  shape: Shape,
+  useShapeTolerance = true,
+): {
   min: [number, number, number];
   max: [number, number, number];
 } {
   return scoped((own) => {
     const k = getKernel();
     const box = own(new k.Bnd_Box_1());
-    k.BRepBndLib.Add(shape, box, false);
+    if (useShapeTolerance) k.BRepBndLib.Add(shape, box, false);
+    else k.BRepBndLib.AddOptimal(shape, box, false, false);
     const cmin = own(box.CornerMin());
     const cmax = own(box.CornerMax());
     const result = {
@@ -384,10 +388,12 @@ export function planarFacePlane(face: Shape): {
     }
     const pln = own(surf.Plane());
     const axis = own(pln.Axis());
+    const position = own(pln.Position());
     const d = own(axis.Direction());
     const loc = own(pln.Location());
     const sgn =
-      face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+      (face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1) *
+      (position.Direct() ? 1 : -1);
     const out = {
       origin: [loc.X(), loc.Y(), loc.Z()] as [number, number, number],
       normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as [
