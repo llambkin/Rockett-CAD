@@ -111,29 +111,17 @@ export function createRouterContext(
   const jobs = createJobRoutes(store, kernel, fail);
   router.use(json({ limit: JSON_BODY_LIMIT_BYTES }), check(omitHeldMeshes));
   router.param("id", projectAccessGuard(store, folders));
-  const on = (route: Route, ...handlers: RequestHandler[]) => {
-    if (DOCUMENT_EDITS(route) && route.method === "GET")
-      throw new Error(`document edit ${route.path} must use a write method`);
-    const method = route.method.toLowerCase() as Lowercase<Method>;
-    if (
-      router.stack.some(
-        ({ route: mounted }) =>
-          mounted?.path === route.path &&
-          mounted.stack.some((layer) => layer.method === method),
-      )
-    )
-      throw new Error(`route ${route.method} ${route.path} is already mounted`);
-    return Object.assign(router.route(route.path), { effect: route.effect })[
-      method
-    ](
+  const edits = new Set(DOCUMENT_EDITS);
+  const on = (route: Route, ...handlers: RequestHandler[]) =>
+    router[route.method.toLowerCase() as Lowercase<Method>](
+      route.path,
       ...(route.body ? [parseBody(route.body)] : []),
-      ...(DOCUMENT_EDITS(route) ? [requireRevision] : []),
+      ...(edits.has(route) ? [requireRevision] : []),
       ...(route === ROUTES.jobEvents || route === ROUTES.cancelJob
         ? []
         : [jobs.start]),
       ...handlers,
     );
-  };
 
   const evaluate = jobs.evaluate;
   const wrap = projectWrapper(store, projects, jobs);
@@ -159,6 +147,7 @@ export function createRouterContext(
     previews,
     meshCache,
     jobs,
+    edits,
     on,
     evaluate,
     wrap,

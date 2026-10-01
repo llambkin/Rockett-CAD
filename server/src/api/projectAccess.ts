@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import {
   ROUTES,
-  VIEWER_WRITES,
   type ProjectMember,
   type ProjectSummary,
   type User,
@@ -11,6 +10,18 @@ import { isInvalidProject } from "../store/projectInventory.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
 import type { Folder } from "@rockett/shared";
+
+const VIEWER_WRITES = new Set(
+  [
+    ROUTES.evaluate,
+    ROUTES.projectEdge,
+    ROUTES.tangentEdges,
+    ROUTES.sizeLimit,
+    ROUTES.measure,
+    ROUTES.exportModel,
+    ROUTES.putView,
+  ].map((route) => `${route.method} ${route.path}`),
+);
 
 export function projectRole(
   user: User,
@@ -102,7 +113,7 @@ export function projectAccessGuard(store: ProjectStore, folders: FolderStore) {
         if (
           access === "view" &&
           ["PUT", "PATCH", "DELETE", "POST"].includes(req.method) &&
-          !VIEWER_WRITES(req.route)
+          !VIEWER_WRITES.has(`${req.method} ${req.route.path}`)
         )
           return res.status(403).json({ error: "forbidden" });
         next();
