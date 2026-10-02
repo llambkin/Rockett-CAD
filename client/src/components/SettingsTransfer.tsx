@@ -7,6 +7,7 @@ import {
 import { saveDownload, send } from "../api";
 import { loadUserSettings, useSettings } from "../settings";
 import { useStore } from "../store";
+import { confirm } from "./ConfirmPanel";
 
 const FORMAT = "rockett-settings";
 const VERSION = 1;
@@ -15,6 +16,7 @@ const NOT_SETTINGS = "This is not a Rockett settings file.";
 type Outcome =
   | { kind: "idle" }
   | { kind: "importing" }
+  | { kind: "unchanged" }
   | { kind: "failed"; message: string }
   | {
       kind: "imported";
@@ -61,8 +63,49 @@ function exportSettings(): void {
   });
 }
 
+const changedCount = (settings: LayerValues) => {
+  const current = useSettings.getState().layers.user;
+  return Object.keys(settings).filter(
+    (key) => JSON.stringify(settings[key]) !== JSON.stringify(current[key]),
+  ).length;
+};
+
+function OutcomeLines({ outcome }: { outcome: Outcome }) {
+  return (
+    <>
+      {outcome.kind === "unchanged" && (
+        <span className="field-hint">
+          This file changes none of your settings.
+        </span>
+      )}
+      {outcome.kind === "failed" && (
+        <span className="settings-error">{outcome.message}</span>
+      )}
+      {outcome.kind === "imported" && (
+        <>
+          <span className="field-hint">
+            {outcome.applied.length
+              ? `Applied: ${outcome.applied.join(", ")}`
+              : "No settings applied."}
+          </span>
+          {outcome.rejected.length === 0 ? (
+            <span className="field-hint">No settings rejected.</span>
+          ) : (
+            outcome.rejected.map((entry) => (
+              <span className="settings-error" key={entry.key}>
+                Rejected {entry.key}: {entry.reason}
+              </span>
+            ))
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 export function SettingsTransfer() {
   const input = useRef<HTMLInputElement>(null);
+  const at = useRef<Parameters<typeof confirm>[1]>(undefined);
   const loaded = useSettings((state) => state.loaded.user);
   const [outcome, setOutcome] = useState<Outcome>({ kind: "idle" });
   const importing = outcome.kind === "importing";
@@ -71,6 +114,20 @@ export function SettingsTransfer() {
     setOutcome({ kind: "importing" });
     try {
       const settings = await readSettingsFile(file);
+      const changes = changedCount(settings);
+      if (!changes) {
+        setOutcome({ kind: "unchanged" });
+        return;
+      }
+      if (
+        !(await confirm(
+          `This import changes ${changes} of your settings and cannot be undone.`,
+          at.current,
+        ))
+      ) {
+        setOutcome({ kind: "idle" });
+        return;
+      }
       const result = await send(
         ROUTES.importUserSettings,
         {},
@@ -96,7 +153,10 @@ export function SettingsTransfer() {
         </button>
         <button
           disabled={!loaded || importing}
-          onClick={() => input.current?.click()}
+          onClick={(event) => {
+            at.current = { x: event.clientX, y: event.clientY };
+            input.current?.click();
+          }}
         >
           {importing ? "Importing..." : "Import"}
         </button>
@@ -112,27 +172,7 @@ export function SettingsTransfer() {
       <span className="field-hint">
         Export and Import carry your user settings from every section.
       </span>
-      {outcome.kind === "failed" && (
-        <span className="settings-error">{outcome.message}</span>
-      )}
-      {outcome.kind === "imported" && (
-        <>
-          <span className="field-hint">
-            {outcome.applied.length
-              ? `Applied: ${outcome.applied.join(", ")}`
-              : "No settings applied."}
-          </span>
-          {outcome.rejected.length === 0 ? (
-            <span className="field-hint">No settings rejected.</span>
-          ) : (
-            outcome.rejected.map((entry) => (
-              <span className="settings-error" key={entry.key}>
-                Rejected {entry.key}: {entry.reason}
-              </span>
-            ))
-          )}
-        </>
-      )}
+      <OutcomeLines outcome={outcome} />
     </div>
   );
 }
