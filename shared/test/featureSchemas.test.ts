@@ -219,16 +219,16 @@ const fixtures: {
       type: "importMesh",
       filename: "part.stl",
       format: "stl",
-      data: "c29saWQ=",
+      blob: "a".repeat(64),
     },
     invalid: {
       ...base,
       type: "importMesh",
       filename: "part.stl",
       format: "stl",
-      data: "solid part",
+      blob: "A".repeat(64),
     },
-    path: "/data",
+    path: "/blob",
   },
   emboss: {
     valid: {

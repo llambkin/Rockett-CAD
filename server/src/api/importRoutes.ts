@@ -1,20 +1,25 @@
 import {
-  MB,
   ROUTES,
   ValidationError,
   type CadDocument,
   type User,
 } from "@rockett/shared";
 import { validateFeature } from "./validate.js";
-import { discarding, receiveImport, type Upload } from "./uploads.js";
+import {
+  discarding,
+  receiveImport,
+  withinImportBudget,
+  type Upload,
+} from "./uploads.js";
 import { importers } from "./importers.js";
 import type { ApiRoutes } from "./projectMutations.js";
 function importHandlers(context: ApiRoutes) {
-  const { store, kernel, uploadBytes, evaluate } = context;
+  const { store, kernel, uploadBytes, importBytes, evaluate } = context;
   const receive = receiveImport(store.uploads, uploadBytes, importers.list());
   type Received = Awaited<ReturnType<typeof received>>;
   async function received(req: any) {
     const file: Upload | undefined = req.file;
+    if (file) withinImportBudget(file, importBytes);
     const imported = await kernel.importStep(
       file && {
         name: file.originalname,
@@ -30,10 +35,6 @@ function importHandlers(context: ApiRoutes) {
       const at = Math.min(doc.timelinePosition, doc.features.length);
       doc.features.splice(at, 0, ...features);
       doc.timelinePosition = at + features.length;
-      if (Buffer.byteLength(JSON.stringify(doc), "utf8") > 40 * MB)
-        throw new ValidationError(
-          `This import would exceed the 40 MB project limit. Start a separate project for this ${label} file.`,
-        );
       const evaluation = await evaluate(doc, undefined, sources);
       for (const feature of features) {
         const status = evaluation.featureStatuses.find(

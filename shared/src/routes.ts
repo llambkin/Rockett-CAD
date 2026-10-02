@@ -85,7 +85,7 @@ export function referencedAssets(doc: CadDocument): Set<string> {
     doc.features.flatMap((f) =>
       f.type === "referenceImage"
         ? [f.assetId]
-        : f.type === "importStep"
+        : f.type === "importStep" || f.type === "importMesh"
           ? [f.blob]
           : [],
     ),

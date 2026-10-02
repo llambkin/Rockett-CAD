@@ -108,7 +108,7 @@ docker run -d --name rockett-cad \
 │   └── {userId}/
 │       ├── settings.json
 │       └── views/{projectId}.json  # the user's hidden items and camera
-├── uploads/                    # imports while they stream in
+├── uploads/                    # imports and project files while they stream in
 └── projects/{projectId}/
     ├── project.json            # manifest: version and documents
     ├── documents/{projectId}.json  # the part document (full history)
@@ -166,19 +166,21 @@ never writes. Exit 0 when all projects are on version 2, else 1.
 
 ## Environment
 
-| Variable                  | Default  | Purpose                                                           |
-| ------------------------- | -------- | ----------------------------------------------------------------- |
-| `ROCKETT_ALLOWED_ORIGINS` | required | Comma-separated browser origins; other origins get 403 on writes  |
-| `ROCKETT_SETUP_TOKEN`     | empty    | One-time first-admin token; remove after setup                    |
-| `ROCKETT_COOKIE_SECURE`   | `true`   | `false` for plain HTTP                                            |
-| `ROCKETT_TRUST_PROXY`     | unset    | Proxy hop count or addresses whose `X-Forwarded-For` is trusted   |
-| `ROCKETT_CF_ACCESS_TEAM`  | unset    | Cloudflare Access team; with the audience, enables Access sign-in |
-| `ROCKETT_CF_ACCESS_AUD`   | unset    | Cloudflare Access application audience                            |
-| `ROCKETT_PORT`            | `8788`   | HTTP port inside the container                                    |
-| `DATA_DIR`                | `/data`  | Persistent root                                                   |
-| `ROCKETT_COMMIT`          | empty    | Git revision for `/api/health` (build arg)                        |
-| `ROCKETT_DESCRIBE`        | empty    | `git describe` output for `/api/health` (build arg)               |
-| `ROCKETT_KERNEL`          | unset    | `inprocess` runs the kernel on the main thread                    |
+| Variable                   | Default  | Purpose                                                           |
+| -------------------------- | -------- | ----------------------------------------------------------------- |
+| `ROCKETT_ALLOWED_ORIGINS`  | required | Comma-separated browser origins; other origins get 403 on writes  |
+| `ROCKETT_SETUP_TOKEN`      | empty    | One-time first-admin token; remove after setup                    |
+| `ROCKETT_COOKIE_SECURE`    | `true`   | `false` for plain HTTP                                            |
+| `ROCKETT_TRUST_PROXY`      | unset    | Proxy hop count or addresses whose `X-Forwarded-For` is trusted   |
+| `ROCKETT_CF_ACCESS_TEAM`   | unset    | Cloudflare Access team; with the audience, enables Access sign-in |
+| `ROCKETT_CF_ACCESS_AUD`    | unset    | Cloudflare Access application audience                            |
+| `ROCKETT_PORT`             | `8788`   | HTTP port inside the container                                    |
+| `DATA_DIR`                 | `/data`  | Persistent root                                                   |
+| `ROCKETT_COMMIT`           | empty    | Git revision for `/api/health` (build arg)                        |
+| `ROCKETT_DESCRIBE`         | empty    | `git describe` output for `/api/health` (build arg)               |
+| `ROCKETT_KERNEL`           | unset    | `inprocess` runs the kernel on the main thread                    |
+| `ROCKETT_UPLOAD_MAX_MB`    | `1024`   | Largest import or project file upload written to `/data/uploads`  |
+| `ROCKETT_IMPORT_BUDGET_MB` | `256`    | Largest import or project file read into memory; larger is 413    |
 
 ## Security
 

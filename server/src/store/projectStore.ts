@@ -68,8 +68,10 @@ function imageMime(data: Buffer, label: string): string {
   return type.mime;
 }
 
-function stepBlobs(doc: CadDocument): string[] {
-  return doc.features.flatMap((f) => (f.type === "importStep" ? [f.blob] : []));
+function importBlobs(doc: CadDocument): string[] {
+  return doc.features.flatMap((f) =>
+    f.type === "importStep" || f.type === "importMesh" ? [f.blob] : [],
+  );
 }
 
 function imageBlobs(doc: CadDocument): string[] {
@@ -308,7 +310,7 @@ export class ProjectStore {
         path.posix.join(this.documents.dir(copy.id), "blobs", f),
         await this.storage.read(path.posix.join(from, f)),
       );
-    for (const hash of [...stepBlobs(src), ...imageBlobs(src)]) {
+    for (const hash of [...importBlobs(src), ...imageBlobs(src)]) {
       const bytes = await this.blob(id, hash).catch(() => undefined);
       if (bytes) await this.blobs(copy.id).put(bytes);
     }
@@ -441,7 +443,7 @@ export class ProjectStore {
     held: ReadonlyMap<string, Uint8Array> = new Map(),
   ): Promise<Map<string, Uint8Array>> {
     const out = new Map<string, Uint8Array>();
-    for (const hash of stepBlobs(doc)) {
+    for (const hash of importBlobs(doc)) {
       if (out.has(hash)) continue;
       const bytes =
         held.get(hash) ??
@@ -472,12 +474,11 @@ export class ProjectStore {
     projectId: string,
     assetId: string,
   ): Promise<{ data: Buffer; mime: string }> {
-    const missing = new StoreError("asset not found", "not_found");
-    if (!HASH_RE.test(assetId)) throw missing;
+    if (!HASH_RE.test(assetId))
+      throw new StoreError("asset not found", "not_found");
     const data = await this.blob(projectId, assetId);
     const type = IMAGE_TYPES.find((t) => t.test(data));
-    if (!type) throw missing;
-    return { data, mime: type.mime };
+    return { data, mime: type?.mime ?? "application/octet-stream" };
   }
 
   async saveExport(

@@ -15,11 +15,8 @@ import type { ProjectQueue } from "../store/projectQueue.js";
 import { HistoryStore, Previews } from "../store/historyStore.js";
 import type { KernelClient } from "../kernel/client.js";
 import { MeshCache } from "../kernel/meshCache.js";
-import {
-  IMPORT_LIMITS,
-  JSON_BODY_LIMIT_BYTES,
-  type ImportLimits,
-} from "./uploads.js";
+import { JSON_BODY_LIMIT_BYTES } from "./uploads.js";
+import { IMPORT_LIMITS, type ImportLimits } from "../tunables.js";
 import { checkRevision, reply } from "./revision.js";
 import { omitHeldMeshes } from "./heldMeshes.js";
 import { projectAccessGuard } from "./projectAccess.js";
@@ -103,7 +100,7 @@ export function createRouterContext(
   notices?: NoticeStore,
   friends?: FriendStore,
 ) {
-  const { uploadBytes } = { ...IMPORT_LIMITS, ...limits };
+  const { uploadBytes, importBytes } = { ...IMPORT_LIMITS, ...limits };
   const router = Router();
   const history = new HistoryStore(store.documents.options.storage, store);
   const previews = new Previews();
@@ -156,6 +153,7 @@ export function createRouterContext(
     notices,
     friends,
     uploadBytes,
+    importBytes,
     history,
     previews,
     meshCache,

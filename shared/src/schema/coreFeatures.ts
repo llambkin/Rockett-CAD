@@ -5,10 +5,8 @@ import {
   SHELL_DIRECTIONS,
 } from "../model.js";
 import { LINEAR_TOL } from "../tolerance.js";
-import { MB } from "../units.js";
 
 export const MAX_DIM = 100_000;
-export const MAX_IMPORT_BYTES = 10 * MB;
 export const MAX_TARGETS = 10_000;
 export const NAME_LENGTH = 200;
 
@@ -289,19 +287,19 @@ const referenceImage = feature("referenceImage", {
   }),
 });
 
+const importFilename = Type.String({ minLength: 1, maxLength: 255 });
+const blobHash = Type.String({ pattern: "^[0-9a-f]{64}$" });
+
 const importStep = feature("importStep", {
-  filename: Type.String({ minLength: 1, maxLength: 255 }),
+  filename: importFilename,
   format: Type.Optional(Type.Enum(["iges", "brep"])),
-  blob: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+  blob: blobHash,
 });
 
 const importMesh = feature("importMesh", {
-  filename: Type.String({ minLength: 1, maxLength: 255 }),
+  filename: importFilename,
   format: Type.Enum(["stl", "obj", "3mf"]),
-  data: Type.String({
-    maxLength: Math.ceil(MAX_IMPORT_BYTES / 3) * 4,
-    pattern: "^[A-Za-z0-9+/]*={0,2}$",
-  }),
+  blob: blobHash,
 });
 
 const emboss = feature("emboss", {

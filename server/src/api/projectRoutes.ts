@@ -15,7 +15,17 @@ export const userNames = async (users?: UserStore) =>
   );
 
 function projectCreationRoutes(context: ApiRoutes) {
-  const { on, wrap, store, folders, users, notices, friends } = context;
+  const {
+    on,
+    wrap,
+    store,
+    folders,
+    users,
+    notices,
+    friends,
+    uploadBytes,
+    importBytes,
+  } = context;
   on(
     ROUTES.listProjects,
     wrap(async (_req, res, ctx) => {
@@ -70,8 +80,8 @@ function projectCreationRoutes(context: ApiRoutes) {
   on(ROUTES.downloadProjectFile, wrap(downloadProjectFile(store)));
   on(
     ROUTES.uploadProjectFile,
-    receiveProjectFile,
-    wrap(uploadProjectFile(store, folders)),
+    receiveProjectFile(store.uploads, uploadBytes),
+    wrap(uploadProjectFile(store, folders, importBytes)),
   );
 }
 

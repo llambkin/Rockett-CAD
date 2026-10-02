@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import {
   LINEAR_TOL,
-  MAX_IMPORT_BYTES,
   NAME_LENGTH,
   newId,
   ValidationError,
@@ -90,16 +89,25 @@ function withFile<T>(
   }
 }
 
+function sourceOf(
+  sources: Sources,
+  feature: ImportStepFeature | ImportMeshFeature,
+  label: string,
+): Uint8Array {
+  const data = sources.get(feature.blob);
+  if (!data)
+    throw new Error(
+      `The ${label} source of ${feature.filename} is missing or damaged.`,
+    );
+  return data;
+}
+
 export function readImport(
   feature: ImportStepFeature,
   sources: Sources,
 ): Shape {
   const reader = READERS[feature.format ?? "step"],
-    data = sources.get(feature.blob);
-  if (!data)
-    throw new Error(
-      `The ${reader.label} source of ${feature.filename} is missing or damaged.`,
-    );
+    data = sourceOf(sources, feature, reader.label);
   return acquire(
     scoped((own) => {
       const shape = withFile(data, reader.extension, reader.read);
@@ -262,13 +270,16 @@ function sewTriangles({ nodes, triangles, transform: m }: MeshPart): {
   return result;
 }
 
-export function readMesh(feature: ImportMeshFeature): {
+export function readMesh(
+  feature: ImportMeshFeature,
+  sources: Sources,
+): {
   shape: Shape;
   warning?: string;
 } {
   const k = getKernel(),
     { label, read } = MESH_READERS[feature.format],
-    parts = read(Buffer.from(feature.data, "base64")).filter(
+    parts = read(Buffer.from(sourceOf(sources, feature, label))).filter(
       (part) => part.triangles.length > 0,
     ),
     triangles = parts.reduce((sum, part) => sum + part.triangles.length / 3, 0);
@@ -318,7 +329,6 @@ function importer(format: Format, extensions: string[]) {
     format,
     label: READERS[format].label,
     extensions,
-    bytes: MAX_IMPORT_BYTES,
     read(bytes: Buffer, filename: string): Imported {
       const source = Buffer.from(
           bytes.toString("utf8").replace(/^\uFEFF/, ""),
@@ -350,8 +360,8 @@ function meshImporter(format: MeshFormat) {
     format,
     label: MESH_READERS[format].label,
     extensions: [`.${format}`],
-    bytes: MAX_IMPORT_BYTES,
     read(bytes: Buffer, filename: string): Imported {
+      const blob = sha256(bytes);
       return {
         features: [
           {
@@ -361,10 +371,10 @@ function meshImporter(format: MeshFormat) {
             suppressed: false,
             filename,
             format,
-            data: bytes.toString("base64"),
+            blob,
           },
         ],
-        sources: new Map(),
+        sources: new Map([[blob, bytes]]),
       };
     },
   });

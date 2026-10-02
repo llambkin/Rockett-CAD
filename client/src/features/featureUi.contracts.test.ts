@@ -177,7 +177,7 @@ describe("featureUI(type).open", () => {
       name: "Mesh1",
       filename: "part.stl",
       format: "stl",
-      data: "",
+      blob: "0".repeat(64),
     };
     await openFeatureEditor(mesh);
     expect(useStore.getState().active).toEqual({

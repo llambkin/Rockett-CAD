@@ -432,7 +432,7 @@ export interface ImportMeshFeature extends FeatureBase {
   type: "importMesh";
   filename: string;
   format: "stl" | "obj" | "3mf";
-  data: string;
+  blob: string;
 }
 
 export type ExtensionType = `${string}.${string}`;

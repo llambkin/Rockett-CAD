@@ -259,6 +259,12 @@ stored project with a newer schema is listed as `tooNew`, and an invalid one
 is 422 on load: `server/src/store/projectStore.ts`, which also owns temporary
 projects.
 
+Imports and project files stream to disk under `uploads/`. A file over the
+import budget is 413 before it is read: `server/src/api/uploads.ts`. Imported
+STEP and mesh sources live in the project blob store; the feature holds the
+hash in `blob`, and `GET /projects/:id/assets/:assetId` serves any project
+blob, so a `.rockett` file and a browser project carry them as assets.
+
 ## Validation
 
 - A route with a `body` schema parses it before the handler; a mismatch is
@@ -281,11 +287,11 @@ projects.
 | Limit                                 | Owner                                                                               |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
 | JSON request body                     | `JSON_BODY_LIMIT_BYTES`, `server/src/api/uploads.ts`                                |
-| Import upload                         | `IMPORT_LIMITS`, `server/src/api/uploads.ts`                                        |
+| Import and project file upload, disk  | `ROCKETT_UPLOAD_MAX_MB`, `IMPORT_LIMITS` in `server/src/tunables.ts`                |
+| Import and project file read, heap    | `ROCKETT_IMPORT_BUDGET_MB`, `IMPORT_LIMITS` in `server/src/tunables.ts`             |
 | Mesh import triangles                 | `MAX_MESH_TRIANGLES`, `server/src/geometry/importers.ts`                            |
 | 3MF expanded entry                    | `server/src/geometry/read3mf.ts`                                                    |
-| Document after an import              | 40 MB inline in `server/src/api/routes.ts`                                          |
-| Project file                          | `PROJECT_FILE_LIMIT_MB`, `shared/src/routes.ts`                                     |
+| Browser project file                  | `PROJECT_FILE_LIMIT_MB`, `shared/src/routes.ts`                                     |
 | Thumbnail                             | `THUMBNAIL_LIMITS`, `shared/src/routes.ts`                                          |
 | Reference image                       | `IMAGE_LIMIT_MB`, `server/src/store/projectStore.ts`                                |
 | History labels                        | `LABEL_LIMIT`, `shared/src/schema/history.ts`                                       |

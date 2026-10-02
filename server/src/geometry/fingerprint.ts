@@ -40,7 +40,9 @@ export function bodyFingerprint({
     JSON.stringify({
       features: features.map(featureKey),
       sources: features.flatMap((f) =>
-        f.type === "importStep" ? [source(f.blob)] : [],
+        f.type === "importStep" || f.type === "importMesh"
+          ? [source(f.blob)]
+          : [],
       ),
       namingVersion: doc.namingVersion,
       kernel,

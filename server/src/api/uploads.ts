@@ -2,25 +2,15 @@ import { raw, type RequestHandler } from "express";
 import multer from "multer";
 import {
   importLabels,
-  MAX_IMPORT_BYTES,
   MB,
-  PROJECT_FILE_LIMIT_MB,
   THUMBNAIL_LIMITS,
   type ApiErrorBody,
   type ImportFormat,
 } from "@rockett/shared";
-import { IMAGE_LIMIT_MB } from "../store/projectStore.js";
+import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
 import { THUMBNAIL_RULE } from "../store/thumbnailStore.js";
 import type { Staged, Uploads } from "../store/blobStore.js";
 import { megabytes } from "./importers.js";
-
-export interface ImportLimits {
-  uploadBytes: number;
-}
-
-export const IMPORT_LIMITS: ImportLimits = {
-  uploadBytes: MAX_IMPORT_BYTES,
-};
 
 export const JSON_BODY_LIMIT_BYTES = 50 * MB;
 
@@ -72,11 +62,21 @@ export const receiveThumbnail: RequestHandler = (req, res, next) =>
     res.status(400).json(body);
   });
 
-export const receiveProjectFile = multipart(
-  "file",
-  PROJECT_FILE_LIMIT_MB * MB,
-  `Upload one .rockett project file, up to ${PROJECT_FILE_LIMIT_MB} MB.`,
-);
+export const receiveProjectFile = (uploads: Uploads, bytes: number) =>
+  multipart(
+    "file",
+    bytes,
+    `Upload one .rockett project file, up to ${megabytes(bytes)}.`,
+    staging(uploads),
+  );
+
+export function withinImportBudget(file: Staged, bytes: number): void {
+  if (file.size > bytes)
+    throw new StoreError(
+      `This file is ${megabytes(file.size)}; imports are limited to ${megabytes(bytes)}.`,
+      "too_large",
+    );
+}
 
 export const receiveImport = (
   uploads: Uploads,

@@ -67,3 +67,25 @@ export const JOB_LIMITS = {
 export const BACKUP_LIMITS = {
   live: 20,
 } as const;
+
+function megabytesSetting(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: number,
+): number {
+  const value = env[name]?.trim();
+  if (!value) return fallback * MB;
+  const megabytes = Number(value);
+  if (!Number.isFinite(megabytes) || megabytes <= 0)
+    throw new Error(`${name} must be a positive number of megabytes`);
+  return Math.floor(megabytes * MB);
+}
+
+export const importLimits = (env: NodeJS.ProcessEnv) => ({
+  uploadBytes: megabytesSetting(env, "ROCKETT_UPLOAD_MAX_MB", 1024),
+  importBytes: megabytesSetting(env, "ROCKETT_IMPORT_BUDGET_MB", 256),
+});
+
+export type ImportLimits = ReturnType<typeof importLimits>;
+
+export const IMPORT_LIMITS = importLimits(process.env);

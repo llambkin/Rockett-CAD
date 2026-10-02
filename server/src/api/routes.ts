@@ -4,7 +4,7 @@ import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
 import { ProjectQueue } from "../store/projectQueue.js";
 import { InProcessKernel, type KernelClient } from "../kernel/client.js";
-import type { ImportLimits } from "./uploads.js";
+import type { ImportLimits } from "../tunables.js";
 import { mountRouteModule, mountRouteModules } from "./routeModules.js";
 import { registerSettingsRoutes } from "./settingsRoutes.js";
 import type { UserStore } from "../auth/userStore.js";

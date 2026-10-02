@@ -19,6 +19,7 @@ import { documentMigrations, migrate, splitView } from "../store/migrations.js";
 import { HASH_RE, PendingBlobs } from "../store/blobStore.js";
 import { validateDocument } from "./validate.js";
 import { requireFolderDestination } from "./folderRoutes.js";
+import { discarding, withinImportBudget } from "./uploads.js";
 
 const ATTR_CHAR = /[A-Za-z0-9!#$&+.^_`|~-]/;
 
@@ -84,14 +85,21 @@ function placement(fields: Record<string, unknown> = {}) {
   return { folderId: parse(folderIdSchema, folderId) };
 }
 
-export const uploadProjectFile =
-  (store: ProjectStore, folders: FolderStore) =>
-  async (req: Request, res: Response, ctx: { user: User }) => {
+export const uploadProjectFile = (
+  store: ProjectStore,
+  folders: FolderStore,
+  importBytes: number,
+) =>
+  discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
     const { folderId, temporary = false } = placement(req.body);
     if (folderId !== undefined)
       await requireFolderDestination(folders, ctx.user, folderId);
     if (!req.file) throw new ValidationError("Choose a .rockett project file");
-    const file = parse(projectFileEnvelope, readJson(req.file.buffer));
+    withinImportBudget(req.file, importBytes);
+    const file = parse(
+      projectFileEnvelope,
+      readJson(await store.uploads.read(req.file)),
+    );
     if (file.version > PROJECT_FILE_VERSION)
       throw new ValidationError(
         `project file version ${file.version} is newer than this server reads (${PROJECT_FILE_VERSION})`,
@@ -131,4 +139,4 @@ export const uploadProjectFile =
           ? await imported()
           : await folders.createIn(folderId, imported),
     });
-  };
+  });

@@ -11,6 +11,8 @@ name: rockett-cad
 #   ROCKETT_SETUP_TOKEN      one-time first-admin setup token (unset after setup)
 #   ROCKETT_COOKIE_SECURE    true for HTTPS (default), false for plain HTTP
 #   ROCKETT_TRUST_PROXY      proxy hop count or proxy addresses whose X-Forwarded-For is trusted (default none)
+#   ROCKETT_UPLOAD_MAX_MB    largest import or project file upload in MB (default 1024)
+#   ROCKETT_IMPORT_BUDGET_MB largest import or project file read into memory in MB (default 256)
 services:
   rockett-cad:
     build:
@@ -30,6 +32,8 @@ services:
       ROCKETT_TRUST_PROXY: ${ROCKETT_TRUST_PROXY:-}
       ROCKETT_CF_ACCESS_TEAM: ${ROCKETT_CF_ACCESS_TEAM:-}
       ROCKETT_CF_ACCESS_AUD: ${ROCKETT_CF_ACCESS_AUD:-}
+      ROCKETT_UPLOAD_MAX_MB: ${ROCKETT_UPLOAD_MAX_MB:-}
+      ROCKETT_IMPORT_BUDGET_MB: ${ROCKETT_IMPORT_BUDGET_MB:-}
     labels:
       com.centurylinklabs.watchtower.enable: "false"
     volumes:

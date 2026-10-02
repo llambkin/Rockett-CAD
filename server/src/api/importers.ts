@@ -5,10 +5,8 @@ import {
   type Feature,
   type ImportFormat,
 } from "@rockett/shared";
-import { StoreError } from "../store/projectStore.js";
 
 export interface Importer extends ImportFormat {
-  bytes: number;
   read(
     bytes: Buffer,
     filename: string,
@@ -28,7 +26,7 @@ export const importers = createRegistry<Importer>(
 export const registerImporter = importers.register;
 
 export const megabytes = (bytes: number) =>
-  `${Number((bytes / MB).toPrecision(3))} MB`;
+  `${Number((bytes / MB).toPrecision(4))} MB`;
 
 export async function importFile(upload: ImportUpload | undefined) {
   const name = upload?.name.toLowerCase() ?? "",
@@ -43,11 +41,6 @@ export async function importFile(upload: ImportUpload | undefined) {
         .join(", ")} file`,
     );
   const bytes = await upload.bytes();
-  if (bytes.length > importer.bytes)
-    throw new StoreError(
-      `${importer.label} imports are limited to ${megabytes(importer.bytes)}.`,
-      "too_large",
-    );
   const filename = upload.name.replace(/^.*[\\/]/, "").slice(0, 255);
   return { label: importer.label, filename, ...importer.read(bytes, filename) };
 }

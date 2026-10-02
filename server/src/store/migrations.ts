@@ -113,10 +113,14 @@ function extensionFeatures(doc: Value): Value {
     : { ...doc, features: migrated };
 }
 
-function stepBlob(feature: Value, context: MigrationContext): Value {
+function dataBlob(
+  feature: Value,
+  context: MigrationContext,
+  encoding: BufferEncoding,
+): Value {
   const { data, ...rest } = feature;
   if (typeof data !== "string") return feature;
-  return { ...rest, blob: context.put(Buffer.from(data, "utf8")) };
+  return { ...rest, blob: context.put(Buffer.from(data, encoding)) };
 }
 
 function imageBlob(feature: Value, context: MigrationContext): Value {
@@ -180,7 +184,9 @@ export const documentMigrations: Migrations<CadDocument> = {
     7: (doc, context) => ({
       ...doc,
       features: (doc.features as Value[]).map((feature) =>
-        feature.type === "importStep" ? stepBlob(feature, context) : feature,
+        feature.type === "importStep"
+          ? dataBlob(feature, context, "utf8")
+          : feature,
       ),
     }),
     8: (doc, context) => ({
@@ -229,6 +235,14 @@ export const documentMigrations: Migrations<CadDocument> = {
       features: (doc.features as Value[]).map((feature) =>
         feature.type === "shell"
           ? Object.assign({ direction: "inside" }, feature)
+          : feature,
+      ),
+    }),
+    26: (doc, context) => ({
+      ...doc,
+      features: (doc.features as Value[]).map((feature) =>
+        feature.type === "importMesh"
+          ? dataBlob(feature, context, "base64")
           : feature,
       ),
     }),

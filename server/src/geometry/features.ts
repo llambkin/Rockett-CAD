@@ -1062,10 +1062,10 @@ export function evalEmboss(state: EvalState, f: EmbossFeature) {
 }
 
 export function evalImportMesh(
-  state: EvalState,
+  { state, sources }: EvalContext,
   feature: ImportMeshFeature,
 ): FeatureOutcome | void {
-  const { shape, warning } = readMesh(feature),
+  const { shape, warning } = readMesh(feature, sources),
     bodyId = `b:${feature.id}`,
     names = finalizeNames(shape, new ShapeMap(), feature.id);
   if (!warning) return registerBodySolids(state, bodyId, shape, names);
