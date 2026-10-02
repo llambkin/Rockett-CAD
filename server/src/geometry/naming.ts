@@ -63,11 +63,19 @@ function sortByPosition<T>(
   items: T[],
   positionOf: (item: T) => Vec3,
   version: NamingVersion,
-): Array<{ item: T; key: Vec3 }> {
+): Array<{ item: T; tied: boolean }> {
   const keyOf = version === 1 ? (pos: Vec3) => pos : cell;
-  return items
+  const sorted = items
     .map((item) => ({ item, key: keyOf(positionOf(item)) }))
     .sort((a, b) => byPosition(a.key, b.key));
+  return sorted.map(({ item, key }, i) => ({
+    item,
+    tied:
+      version === 2 &&
+      [sorted[i - 1], sorted[i + 1]].some(
+        (other) => other && byPosition(other.key, key) === 0,
+      ),
+  }));
 }
 
 export function suffixDuplicates<T>(
@@ -81,15 +89,9 @@ export function suffixDuplicates<T>(
       named.push([group[0]!, base]);
       continue;
     }
-    const sorted = sortByPosition(group, positionOf, version);
-    sorted.forEach(({ item, key }, i) => {
-      const tied =
-        version === 2 &&
-        [sorted[i - 1], sorted[i + 1]].some(
-          (other) => other && byPosition(other.key, key) === 0,
-        );
-      named.push([item, `${base}~${tied ? "?" : ""}${i + 1}`]);
-    });
+    sortByPosition(group, positionOf, version).forEach(({ item, tied }, i) =>
+      named.push([item, `${base}~${tied ? "?" : ""}${i + 1}`]),
+    );
   }
   return named;
 }
@@ -171,11 +173,11 @@ export function nameFromEdges(
     };
     for (const face of faces(shape).map(own)) {
       if (provisional.get(face)) continue;
-      const [first] = midpoints
-        .filter((m) => lies(m.vertex, face))
-        .map((m) => m.name)
-        .sort(compareNames);
-      if (first) provisional.set(face, first);
+      const touching = midpoints.filter((m) => lies(m.vertex, face));
+      const [first, ...more] = [...new Set(touching.map((m) => m.name))].sort(
+        compareNames,
+      );
+      if (first) provisional.set(face, more.length ? `${first}~?1` : first);
     }
   });
 }
@@ -240,9 +242,9 @@ export function finalizeNames(
       // its faces in several passes never hands out the same name twice
       const taken = new Set(result.values());
       let n = 0;
-      for (const { item: face } of sorted) {
+      for (const { item: face, tied } of sorted) {
         let name: string;
-        do name = `f:${featureId}:x${++n}`;
+        do name = `f:${featureId}:x${tied ? "~?" : ""}${++n}`;
         while (taken.has(name));
         taken.add(name);
         result.set(face, name);

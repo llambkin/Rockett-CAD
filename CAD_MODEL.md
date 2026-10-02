@@ -107,6 +107,11 @@ only the Naming upgrade changes a stored version.
   `IsSame`, so hash collisions keep names.
 - Duplicates get `~n` in centroid order x, y, z (`suffixDuplicates`).
   Version 2 rounds to `LINEAR_TOL` first and marks equal cells `~?n`.
+  Fallback faces in an equal cell become `f:{featureId}:x~?{n}`.
+- Version 2 names a face its history missed from the profile edge whose
+  midpoint lies on it. A face touched by several takes the first name with
+  `~?1`.
+- A face reference to a `~?` name never resolves; the resolver reports it.
 - Version 2 `key` is the first 16 hex digits of the SHA-256 of the source
   name without its `~n` or `~?n` suffix, so a copy name keeps one length at
   any mirror or pattern depth.
