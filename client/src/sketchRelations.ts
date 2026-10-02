@@ -7,7 +7,7 @@ import {
   type SketchEntity,
 } from "@rockett/shared";
 import type { IconId } from "./icons";
-import type { Selection } from "./store";
+import { useStore, type Selection } from "./store";
 
 export type RelationType =
   | "horizontal"
@@ -56,6 +56,17 @@ export const CONSTRAINTS: Array<{
   { type: "collinear", label: "Collinear", title: "Collinear (2 lines)" },
   { type: "fix", label: "Fix", title: "Fix point" },
 ];
+
+export async function addSketchConstraints(constraints: SketchConstraint[]) {
+  const s = useStore.getState();
+  if (!s.draftSketch) return;
+  s.updateDraftSketch(s.draftSketch.entities, [
+    ...s.draftSketch.constraints,
+    ...constraints,
+  ]);
+  await s.commitDraftSketch();
+  useStore.getState().setSelection([]);
+}
 
 type Draft = { entities: SketchEntity[]; constraints: SketchConstraint[] };
 

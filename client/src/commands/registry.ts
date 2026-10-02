@@ -31,6 +31,8 @@ interface CommandButton {
   icon: IconId;
   tooltip?: string;
   primary?: true;
+  iconOnly?: true;
+  explainsRefusal?: true;
   active?(ctx: CommandContext): boolean;
   run(ctx: CommandContext): unknown;
   Control?: never;

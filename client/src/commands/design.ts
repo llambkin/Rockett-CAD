@@ -1,14 +1,17 @@
 import { groupSelectionCommand } from "../treeSelection";
-import { sketchCommand, sketchCommands } from "./sketch";
+import { sketchCommand, sketchCommands, sketchGroups } from "./sketch";
+import { constraintCommands } from "./constraints";
 import { sketchCreateCommand } from "./sketchCreate";
 import { measureCommand } from "./measure";
 import { exitActive } from "./active";
 import { featureCommand } from "./featureCommand";
 import { exportCommand } from "./export";
 import type { IconId } from "../icons";
-import type { DialogType } from "../store";
+import { useStore, type DialogType } from "../store";
 import { NamedViewSelect } from "../components/NamedViewSelect";
 import { StepImportButton } from "../components/StepImportButton";
+import { SketchInsertButtons } from "../components/SketchInsertButtons";
+import { PolygonFields } from "../components/PolygonFields";
 import {
   registerCommand,
   registerToolbarGroup,
@@ -42,7 +45,47 @@ function cancel(s: CommandContext) {
 
 registerCommand(sketchCommand);
 registerCommand(groupSelectionCommand);
-for (const command of sketchCommands) registerCommand(command);
+for (const command of [...sketchCommands, ...constraintCommands])
+  registerCommand(command);
+for (const group of sketchGroups) registerToolbarGroup(group);
+
+registerCommand({
+  id: "design.sketch.polygonFields",
+  label: "Polygon",
+  group: "design.sketch.group.sketch",
+  before: "design.sketch.construction",
+  when: (s) =>
+    s.active?.id === "design.sketch" && s.active.state.tool === "polygon",
+  Control: PolygonFields,
+});
+
+registerCommand({
+  id: "design.sketch.insert",
+  label: "Insert",
+  group: "design.sketch.group.insert",
+  Control: SketchInsertButtons,
+});
+
+registerCommand({
+  id: "design.sketch.extrude",
+  label: "Extrude",
+  icon: "extrude",
+  group: "design.sketch.group.finish",
+  before: "design.sketch.finish",
+  tooltip: "Finish Sketch and extrude a profile",
+  enabled: idle,
+  run: async (s) => {
+    if (s.active?.id !== "design.sketch") return;
+    const { sketchId } = s.active.state;
+    const selected = s.selection.filter(
+      (item) => item.kind === "profile" && item.sketchId === sketchId,
+    );
+    await s.finishSketch();
+    if (useStore.getState().active?.id === "design.sketch") return;
+    s.setSelection(selected);
+    openDialog("extrude");
+  },
+});
 
 const GROUPS = [
   ["sketch", "SKETCH"],

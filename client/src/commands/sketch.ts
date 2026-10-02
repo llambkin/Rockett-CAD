@@ -1,4 +1,4 @@
-import type { Command, CommandContext } from "./registry";
+import type { Command, CommandContext, ToolbarGroup } from "./registry";
 
 export type SketchTool =
   | "select"
@@ -75,24 +75,68 @@ export const sketchTools: { id: SketchTool; label: string; keys: string[] }[] =
     { id: "offset", label: "Offset", keys: [] },
   ];
 
-const enabled = (s: CommandContext) =>
+export const sketchGroups: ToolbarGroup[] = [
+  {
+    id: "design.sketch.group.sketch",
+    label: "SKETCH",
+    context: "design.sketch",
+  },
+  {
+    id: "design.sketch.group.constrain",
+    label: "CONSTRAIN",
+    context: "design.sketch",
+  },
+  {
+    id: "design.sketch.group.insert",
+    label: "INSERT",
+    context: "design.sketch",
+  },
+  {
+    id: "design.sketch.group.finish",
+    label: "",
+    context: "design.sketch",
+    end: true,
+  },
+];
+
+const sketching = (s: CommandContext) =>
+  s.active?.id === "design.sketch" || "Sketch is not editable";
+const editable = (s: CommandContext) =>
   (!s.busy && s.active?.id === "design.sketch") || "Sketch is not editable";
+
+export function deleteSketchSelection(s: CommandContext) {
+  const ids = s.selection.flatMap((item) =>
+    item.kind === "sketchEntity" || item.kind === "sketchPoint"
+      ? [item.entityId]
+      : [],
+  );
+  if (ids.length > 0) return s.deleteSketchEntities(ids);
+}
 
 export const sketchCommands: Command[] = [
   ...sketchTools.map((tool): Command => ({
     id: `design.sketch.${tool.id}`,
     label: tool.label,
+    icon: tool.id,
+    group: "design.sketch.group.sketch",
     keys: tool.keys,
     keyContext: "design.sketch",
-    enabled,
+    enabled: sketching,
+    active: (s) =>
+      s.active?.id === "design.sketch" && s.active.state.tool === tool.id,
     run: (s) => s.setSketchTool(tool.id),
   })),
   {
     id: "design.sketch.construction",
     label: "Construction",
+    icon: "construction",
+    group: "design.sketch.group.sketch",
+    tooltip: "Toggle construction geometry",
     keys: ["X"],
     keyContext: "design.sketch",
-    enabled,
+    enabled: sketching,
+    active: (s) =>
+      s.active?.id === "design.sketch" && s.active.state.constructionMode,
     run: (s) => {
       if (s.active?.id === "design.sketch")
         s.setSketchState({
@@ -105,15 +149,16 @@ export const sketchCommands: Command[] = [
     label: "Delete sketch geometry",
     keys: ["Delete", "Backspace"],
     keyContext: "design.sketch",
-    enabled,
-    run: (s) => {
-      const ids = s.selection.flatMap((item) =>
-        item.kind === "sketchEntity" || item.kind === "sketchPoint"
-          ? [item.entityId]
-          : [],
-      );
-      if (ids.length > 0) return s.deleteSketchEntities(ids);
-    },
+    enabled: editable,
+    run: deleteSketchSelection,
+  },
+  {
+    id: "design.sketch.finish",
+    label: "Finish Sketch",
+    icon: "finishSketch",
+    group: "design.sketch.group.finish",
+    primary: true,
+    run: (s) => s.finishSketch(),
   },
 ];
 
