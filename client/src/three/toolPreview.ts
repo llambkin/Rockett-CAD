@@ -4,13 +4,18 @@
  */
 
 import * as THREE from "three";
-import type { PlaneFrame } from "@rockett/shared";
+import { curveSamples, ellipseAxes, type PlaneFrame } from "@rockett/shared";
 import { CadViewport, uv3 } from "./CadViewport";
 import { themeColor } from "../theme/tokens";
 import { SKETCH_APPEARANCE } from "../tunables";
 import type { LayerHandle } from "./sceneLayers";
 import type { SketchTool } from "../store";
-import { polygonVertices, type PolygonOptions, type UV } from "../sketchTools";
+import {
+  ellipseMinor,
+  polygonVertices,
+  type PolygonOptions,
+  type UV,
+} from "../sketchTools";
 
 const layers = new WeakMap<CadViewport, LayerHandle>();
 
@@ -47,6 +52,18 @@ function ghostLine(pts: THREE.Vector3[]): THREE.Line {
   return line;
 }
 
+const trace = (frame: PlaneFrame, flat: number[]) =>
+  flat.flatMap((u, i) => (i % 2 ? [] : [uv3(frame, u, flat[i + 1]!)]));
+
+const circlePts = (frame: PlaneFrame, cx: number, cy: number, r: number) =>
+  trace(frame, curveSamples({ id: "", kind: "circle", cx, cy, r }, 48));
+
+function ellipseRim(c: UV, m: UV, cursor: UV): number[] {
+  const n = ellipseMinor(c, m, cursor);
+  if (!n) return [c.x, c.y, m.x, m.y];
+  return curveSamples({ id: "", kind: "ellipse", ...ellipseAxes(c, m, n) }, 48);
+}
+
 /**
  * Draw the ghost for the active tool given committed clicks + cursor.
  * Returns true if a preview was drawn.
@@ -62,15 +79,6 @@ export function updateToolPreview(
   clearToolPreview(viewport);
   const g = ensureGroup(viewport);
   const P = (u: number, v: number) => uv3(frame, u, v);
-
-  const circlePts = (cx: number, cy: number, r: number): THREE.Vector3[] => {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= 48; i++) {
-      const t = (i / 48) * Math.PI * 2;
-      pts.push(P(cx + r * Math.cos(t), cy + r * Math.sin(t)));
-    }
-    return pts;
-  };
 
   switch (tool) {
     case "line": {
@@ -112,7 +120,7 @@ export function updateToolPreview(
       if (clicks.length < 1) return false;
       const c = clicks[0]!;
       const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
-      if (r > 1e-6) g.add(ghostLine(circlePts(c.x, c.y, r)));
+      if (r > 1e-6) g.add(ghostLine(circlePts(frame, c.x, c.y, r)));
       return true;
     }
     case "arc3": {
@@ -123,7 +131,6 @@ export function updateToolPreview(
         return true;
       }
       if (clicks.length === 2) {
-        // arc through start, cursor, end (circumcircle sample)
         const s = clicks[0]!;
         const e = clicks[1]!;
         const b = cursor;
@@ -144,10 +151,7 @@ export function updateToolPreview(
         let am = Math.atan2(b.y - uy, b.x - ux);
         while (a1 <= a0) a1 += Math.PI * 2;
         while (am <= a0) am += Math.PI * 2;
-        if (am > a1) {
-          // go the other way round
-          [a0, a1] = [a1 - Math.PI * 2, a0];
-        }
+        if (am > a1) [a0, a1] = [a1 - Math.PI * 2, a0];
         const pts: THREE.Vector3[] = [];
         for (let i = 0; i <= 32; i++) {
           const t = a0 + ((a1 - a0) * i) / 32;
@@ -157,6 +161,13 @@ export function updateToolPreview(
         return true;
       }
       return false;
+    }
+    case "ellipse": {
+      const [c, m] = clicks;
+      if (!c) return false;
+      const rim = m ? ellipseRim(c, m, cursor) : [c.x, c.y, cursor.x, cursor.y];
+      g.add(ghostLine(trace(frame, rim)));
+      return true;
     }
     case "polygon": {
       if (clicks.length < 1) return false;
@@ -194,8 +205,8 @@ export function updateToolPreview(
             P(c2.x - nx * r, c2.y - ny * r),
           ]),
         );
-        g.add(ghostLine(circlePts(c1.x, c1.y, r)));
-        g.add(ghostLine(circlePts(c2.x, c2.y, r)));
+        g.add(ghostLine(circlePts(frame, c1.x, c1.y, r)));
+        g.add(ghostLine(circlePts(frame, c2.x, c2.y, r)));
         return true;
       }
       return false;

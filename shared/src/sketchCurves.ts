@@ -104,6 +104,25 @@ export function axisCosine(c: At, m: At, n: At): number {
   return (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy) || 1);
 }
 
+export function ellipseLevel(c: At, m: At, n: At, p: At): number {
+  const [ux, uy, vx, vy] = [m.x - c.x, m.y - c.y, n.x - c.x, n.y - c.y];
+  const [dx, dy] = [p.x - c.x, p.y - c.y];
+  const det = Math.abs(ux * vy - uy * vx) || 1;
+  const s = Math.hypot(dx * vy - dy * vx, ux * dy - uy * dx) / det;
+  const d = Math.hypot(dx, dy);
+  return s ? d - d / s : -Math.min(Math.hypot(ux, uy), Math.hypot(vx, vy));
+}
+
+export function ellipseLineGap(
+  c: At,
+  m: At,
+  n: At,
+  offset: (p: At) => number,
+): number {
+  const o = offset(c);
+  return Math.abs(o) - Math.hypot(offset(m) - o, offset(n) - o);
+}
+
 export function ellipseAxes(c: At, m: At, n: At) {
   const ma = Math.hypot(m.x - c.x, m.y - c.y);
   const nb = Math.hypot(n.x - c.x, n.y - c.y);

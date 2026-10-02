@@ -203,3 +203,23 @@ export function leastSquares(
     }
   }
 }
+
+export function components(deps: number[][], numVars: number): Block[] {
+  const parent = Array.from({ length: numVars }, (_, v) => v);
+  const root = (v: number): number => {
+    while (parent[v] !== v) v = parent[v] = parent[parent[v]!]!;
+    return v;
+  };
+  for (const [first, ...rest] of deps)
+    for (const v of rest) parent[root(v)] = root(first!);
+  const found = new Map<number, Block>();
+  for (const [row, used] of deps.entries()) {
+    if (used.length === 0) continue;
+    const key = root(used[0]!);
+    const part = found.get(key) ?? { vars: [], rows: [] };
+    found.set(key, part);
+    part.rows.push(row);
+  }
+  for (let v = 0; v < numVars; v++) found.get(root(v))?.vars.push(v);
+  return [...found.values()];
+}

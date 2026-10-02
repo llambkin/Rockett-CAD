@@ -4,6 +4,7 @@ export * from "./profiles.js";
 export {
   arcAngles,
   curveSamples,
+  ellipseAxes,
   ELLIPSE_UNSUPPORTED,
   entityPointIds,
   sampleArc,

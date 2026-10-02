@@ -7,6 +7,7 @@ export type SketchTool =
   | "centerRect"
   | "circle"
   | "arc3"
+  | "ellipse"
   | "polygon"
   | "slot"
   | "point"
@@ -34,6 +35,7 @@ export const sketchHints: Record<SketchTool, string> = {
   centerRect: "Click centre, then a corner",
   circle: "Click centre, then a point on the circle",
   arc3: "Click start, end, then a point on the arc",
+  ellipse: "Click centre, then a major axis end, then a minor axis point",
   polygon: "Click centre, then a vertex",
   slot: "Click two centres, then the radius",
   point: "Click to place points",
@@ -62,6 +64,7 @@ export const sketchTools: { id: SketchTool; label: string; keys: string[] }[] =
     { id: "centerRect", label: "C-Rect", keys: [] },
     { id: "circle", label: "Circle", keys: ["C"] },
     { id: "arc3", label: "Arc", keys: [] },
+    { id: "ellipse", label: "Ellipse", keys: [] },
     { id: "polygon", label: "Polygon", keys: [] },
     { id: "slot", label: "Slot", keys: [] },
     { id: "point", label: "Point", keys: ["P"] },

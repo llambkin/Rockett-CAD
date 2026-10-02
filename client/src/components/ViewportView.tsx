@@ -260,10 +260,10 @@ export function ViewportView({
     "centerRect",
     "circle",
     "arc3",
+    "ellipse",
     "polygon",
     "slot",
   ]);
-  /** tools completed by exactly two inputs — eligible for drag-to-draw */
   const TWO_POINT_TOOLS = new Set([
     "line",
     "rect",
@@ -955,11 +955,11 @@ export function ViewportView({
 
     const faceSnap = faceSnapGeometry();
 
-    // 1) snap to existing points (strongest); face corners join this tier
     let snapPointId: string | undefined;
     let best = tol;
     for (const ent of entities) {
-      if (ent.kind !== "point") continue;
+      if (ent.kind !== "point" || ent.id === toolState.current.dragPointId)
+        continue;
       const dd = Math.hypot(ent.x - u, ent.y - v);
       if (dd < best) {
         best = dd;
@@ -1390,7 +1390,6 @@ export function ViewportView({
     clicks: tools.UV[],
     cursor: tools.UV,
   ) {
-    // tools with typed sizes get the editable entry instead of the readout
     const fields = dimFieldsFor(tool, units);
     if (fields && clicks.length === 1) {
       let d = dimRef.current;
@@ -1490,8 +1489,6 @@ export function ViewportView({
     );
   }
 
-  /** Build geometry once a tool has enough clicks; null = needs more clicks.
-   * Construction mode applies to every tool's output, not just lines. */
   function buildFromClicks(
     tool: string,
     clicks: tools.UV[],
@@ -1537,6 +1534,13 @@ export function ViewportView({
         return clicks.length >= 3
           ? {
               created: tools.createArc3(clicks[0]!, clicks[1]!, clicks[2]!),
+              chain: false,
+            }
+          : null;
+      case "ellipse":
+        return clicks.length >= 3
+          ? {
+              created: tools.createEllipse(clicks[0]!, clicks[1]!, clicks[2]!),
               chain: false,
             }
           : null;
@@ -1592,8 +1596,6 @@ export function ViewportView({
     clearToolPreview(viewportRef.current);
     setToolLabel(null);
     setSnapMarker(null);
-    // One-shot tools: return to Select once the shape is done. Line keeps
-    // chaining until the chain is ended (double-click / Esc).
     if (!keepChaining) {
       const st = useStore.getState();
       if (
@@ -1652,7 +1654,6 @@ export function ViewportView({
               await applyCreated(result.created, false);
             }
           } else {
-            // arc3 / slot: the drag supplies the first two inputs
             ts.clicks = [down, upUV];
           }
         } else {
@@ -1819,7 +1820,6 @@ export function ViewportView({
     }
 
     if (DRAW_TOOLS.has(tool)) {
-      // a typed (locked) size wins over where the second click landed
       const d = dimRef.current;
       if (ts.clicks.length === 1 && d && d.fields.some((f) => f.locked)) {
         await placeWithDims(uv);

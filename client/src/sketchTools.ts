@@ -1,10 +1,6 @@
-/**
- * Sketch tool geometry builders — pure functions that turn tool clicks into
- * entities + constraints. Interaction state lives in the viewport component.
- */
-
 import type { SketchConstraint, SketchEntity, Units } from "@rockett/shared";
 import {
+  LINEAR_TOL,
   newId,
   normalizeDegrees,
   parseLength,
@@ -14,24 +10,17 @@ import {
 export interface Created {
   entities: SketchEntity[];
   constraints: SketchConstraint[];
-  /** ids of points that can keep being chained (line tool) */
   chainPointId?: string;
 }
 
 export interface UV {
   x: number;
   y: number;
-  /** id of an existing point snapped to, if any */
   snapPointId?: string | undefined;
-  /** id of a line the click snapped onto (adds pointOnLine) */
   snapLineId?: string | undefined;
-  /** id of a circle/arc the click snapped onto (adds pointOnCircle) */
   snapCircleId?: string | undefined;
-  /** id of a line whose midpoint the click snapped to (adds midpoint) */
   snapMidLineId?: string | undefined;
-  /** id of a connected line the new line snapped perpendicular to (adds perpendicular) */
   snapPerpLineId?: string | undefined;
-  /** what kind of snap engaged (drives the on-screen snap glyph) */
   snapKind?: "point" | "midpoint" | "curve" | "origin" | "perpendicular";
 }
 
@@ -185,9 +174,6 @@ function pointOrExisting(
       uv.snapKind === "midpoint" ||
       uv.snapKind === "point"
     ) {
-      // Face corners/midpoints and the origin have no sketch entity to
-      // constrain against. Preserve their snapped position during solving.
-      // Sketch references above retain their relational constraints instead.
       constraints.push({ id: newId("c"), type: "fix", point: id });
     }
   }
@@ -207,14 +193,11 @@ export function createLine(a: UV, b: UV, construction?: boolean): Created {
     p2,
     ...(construction === undefined ? {} : { construction }),
   });
-  // Auto-constrain lines drawn exactly axis-aligned (alignment snapping
-  // produces exact coordinates; freehand clicks never coincide exactly).
   if (a.x === b.x && a.y !== b.y) {
     constraints.push({ id: newId("c"), type: "vertical", line: lineId });
   } else if (a.y === b.y && a.x !== b.x) {
     constraints.push({ id: newId("c"), type: "horizontal", line: lineId });
   } else if (b.snapPerpLineId) {
-    // snapped to 90° from a connected line: keep it that way
     constraints.push({
       id: newId("c"),
       type: "perpendicular",
@@ -288,9 +271,27 @@ export function createCircle(center: UV, edge: UV): Created {
   return { entities, constraints };
 }
 
-/** 3-point arc: start, end, then a point on the arc. */
+export function ellipseMinor(c: UV, m: UV, q: UV): UV | null {
+  const [ux, uy] = [m.x - c.x, m.y - c.y];
+  const a = Math.hypot(ux, uy);
+  const side = (ux * (q.y - c.y) - uy * (q.x - c.x)) / (a || 1);
+  if (!(a > LINEAR_TOL && Math.abs(side) > LINEAR_TOL)) return null;
+  return { x: c.x - (uy / a) * side, y: c.y + (ux / a) * side };
+}
+
+export function createEllipse(c: UV, m: UV, q: UV): Created | null {
+  const n = ellipseMinor(c, m, q);
+  if (!n) return null;
+  const entities: SketchEntity[] = [];
+  const constraints: SketchConstraint[] = [];
+  const center = pointOrExisting(c, undefined, entities, constraints);
+  const major = pointOrExisting(m, undefined, entities, constraints);
+  const minor = pointOrExisting(n, undefined, entities);
+  entities.push({ id: newId("el"), kind: "ellipse", center, major, minor });
+  return { entities, constraints };
+}
+
 export function createArc3(start: UV, end: UV, on: UV): Created | null {
-  // circumcenter of the three points
   const ax = start.x,
     ay = start.y,
     bx = on.x,
@@ -321,7 +322,6 @@ export function createArc3(start: UV, end: UV, on: UV): Created | null {
   });
   const s = pointOrExisting(start, undefined, entities, arcConstraints);
   const e = pointOrExisting(end, undefined, entities, arcConstraints);
-  // arc goes CCW from start to end; flip when the on-point lies the other way
   const a0 = Math.atan2(ay - uy, ax - ux);
   let a1 = Math.atan2(cy - uy, cx - ux);
   let am = Math.atan2(by - uy, bx - ux);
@@ -426,7 +426,6 @@ export function createPolygon(
   return { entities, constraints };
 }
 
-/** Slot: two center clicks + a radius from the second click drag point. */
 export function createSlot(c1: UV, c2: UV, r: number): Created {
   const entities: SketchEntity[] = [];
   const constraints: SketchConstraint[] = [];
@@ -668,12 +667,6 @@ export function chooseDimension(
   );
 }
 
-/**
- * Mark everything a tool just created as construction geometry (points and
- * curves alike) so any tool — rectangle, circle, polygon, slot… — can draw
- * reference geometry, not only the line tool. Existing snapped-to points are
- * not in `created.entities` and stay as they are.
- */
 export function asConstruction(created: Created): Created {
   return {
     ...created,

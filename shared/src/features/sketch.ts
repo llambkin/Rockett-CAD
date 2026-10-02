@@ -1,5 +1,5 @@
 import { refAt, registerCoreSpec } from "../featureSpec.js";
-import type { SketchFeature } from "../model.js";
+import type { SketchConstraint, SketchFeature } from "../model.js";
 import { ValidationError } from "../schema/index.js";
 import {
   axisCosine,
@@ -49,14 +49,15 @@ function sketchReferences(f: SketchFeature): void {
     if (Math.abs(axisCosine(c!, m!, n!)) > ELLIPSE_AXIS_TOL)
       throw new ValidationError(`Ellipse ${e.id} axes must be perpendicular`);
   }
-  const ellipses = new Set(
-    f.entities.filter((e) => e.kind === "ellipse").map((e) => e.id),
-  );
+  const kinds = new Map(f.entities.map((e) => [e.id, e.kind]));
+  const held = (c: SketchConstraint) =>
+    (c.type === "pointOnCircle" && kinds.get(c.point) === "point") ||
+    (c.type === "tangent" && [c.a, c.b].some((id) => kinds.get(id) === "line"));
   for (const c of f.constraints)
     for (const id of constraintEntityRefs(c))
-      if (ellipses.has(id))
+      if (kinds.get(id) === "ellipse" && !held(c))
         throw new ValidationError(
-          `Constraints cannot reference ellipse ${id} yet`,
+          `${c.type} constraints cannot reference ellipse ${id} yet`,
         );
 }
 

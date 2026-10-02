@@ -1,6 +1,8 @@
 import {
+  curveDistance,
   entityPointIds,
   newId,
+  sketchCurves,
   type SketchConstraint,
   type SketchEntity,
 } from "@rockett/shared";
@@ -30,7 +32,8 @@ export const CONSTRAINTS: Array<{
   {
     type: "coincident",
     label: "Coincident",
-    title: "Coincident (2 points, or a point on a line, circle or arc)",
+    title:
+      "Coincident (2 points, or a point on a line, circle, arc or ellipse)",
   },
   { type: "parallel", label: "Parallel", title: "Parallel (2 lines)" },
   {
@@ -38,7 +41,11 @@ export const CONSTRAINTS: Array<{
     label: "Perpendicular",
     title: "Perpendicular (2 lines)",
   },
-  { type: "tangent", label: "Tangent", title: "Tangent (line + circle)" },
+  {
+    type: "tangent",
+    label: "Tangent",
+    title: "Tangent (line + circle or ellipse, or 2 circles)",
+  },
   { type: "equal", label: "Equal", title: "Equal (2 lines / 2 circles)" },
   {
     type: "concentric",
@@ -80,6 +87,7 @@ function classify(draft: Draft, ids: string[]) {
       const k = find(id)?.kind;
       return k === "circle" || k === "arc";
     }),
+    ellipses: ids.filter((id) => find(id)?.kind === "ellipse"),
   };
 }
 
@@ -88,49 +96,48 @@ export function constraintFor(
   ids: string[],
   type: RelationType,
 ): SketchConstraint | null {
-  const { find, own, points, lines, circleLikes } = classify(draft, ids);
+  const { find, own, points, lines, circleLikes, ellipses } = classify(
+    draft,
+    ids,
+  );
   const [point, point2] = points;
   const [line, line2] = lines;
   const [circle, circle2] = circleLikes;
+  const curve = circle ?? ellipses[0];
   const id = newId("c");
   switch (type) {
     case "horizontal":
     case "vertical":
       return line ? { id, type, line } : null;
     case "coincident": {
-      const at = (p: string) => {
-        const e = find(p);
-        return e?.kind === "point" ? e : { x: NaN, y: NaN };
-      };
+      const target = sketchCurves(draft.entities, true).find(
+        (c) => c.id === curve,
+      );
       const offCurve = (p: string) => {
-        const e = find(circle);
-        if (e?.kind !== "circle" && e?.kind !== "arc") return Infinity;
-        const o = at(e.center);
-        const r =
-          e.kind === "circle"
-            ? e.radius
-            : Math.hypot(at(e.start).x - o.x, at(e.start).y - o.y);
-        return Math.abs(Math.hypot(at(p).x - o.x, at(p).y - o.y) - r);
+        const e = find(p);
+        return target && e?.kind === "point"
+          ? curveDistance(target, e.x, e.y)
+          : Infinity;
       };
       if (point && point2) return { id, type, a: point, b: point2 };
-      if (point && circle && !own(circle).includes(point))
-        return { id, type: "pointOnCircle", point, circle };
+      if (point && curve && !own(curve).includes(point))
+        return { id, type: "pointOnCircle", point, circle: curve };
       if (point && line && !own(line).includes(point))
         return { id, type: "pointOnLine", point, line };
-      if (point || !line || !circle) return null;
+      if (point || !line || !curve) return null;
       const end = own(line).reduce((a, b) =>
         offCurve(b) < offCurve(a) ? b : a,
       );
-      return own(circle).includes(end)
+      return own(curve).includes(end)
         ? null
-        : { id, type: "pointOnCircle", point: end, circle };
+        : { id, type: "pointOnCircle", point: end, circle: curve };
     }
     case "parallel":
     case "perpendicular":
     case "collinear":
       return line && line2 ? { id, type, a: line, b: line2 } : null;
     case "tangent":
-      if (line && circle) return { id, type, a: line, b: circle };
+      if (line && curve) return { id, type, a: line, b: curve };
       return circle && circle2 ? { id, type, a: circle, b: circle2 } : null;
     case "equal":
       if (line && line2) return { id, type, a: line, b: line2 };
@@ -169,11 +176,11 @@ const refs = (c: SketchConstraint) =>
   ]);
 
 export function relationsFor(draft: Draft, ids: string[]): Relation[] {
-  const { own, points, lines, circleLikes } = classify(draft, ids);
+  const { own, points, lines, circleLikes, ellipses } = classify(draft, ids);
+  const curves = circleLikes.length + ellipses.length;
   if (ids.length === 0) return [];
-  if (points.length + lines.length + circleLikes.length !== ids.length)
-    return [];
-  const counts = `${points.length},${lines.length},${circleLikes.length}`;
+  if (points.length + lines.length + curves !== ids.length) return [];
+  const counts = `${points.length},${lines.length},${curves}`;
   const existing = new Set(draft.constraints.map(refs));
   const fresh = (c: SketchConstraint | null) => c && !existing.has(refs(c));
   return CONSTRAINTS.flatMap(({ type, label }): Relation[] => {
@@ -194,6 +201,8 @@ export function relationsFor(draft: Draft, ids: string[]): Relation[] {
       return constraints.length ? [{ type, label, constraints }] : [];
     }
     if (!WHOLE[type].includes(counts)) return [];
+    if (ellipses.length && type !== "coincident" && type !== "tangent")
+      return [];
     const [point] = points;
     const [line] = lines;
     if (type === "midpoint" && point && line && own(line).includes(point))

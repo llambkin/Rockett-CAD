@@ -258,8 +258,12 @@ input bound, not a tolerance.
 - Schema 25 adds the sketch `ellipse`: `center`, `major` and `minor` point ids,
   with the longer axis taken as major. The solver keeps the axes perpendicular
   as it keeps arc radii equal. Validation in `shared/src/features/sketch.ts`
-  refuses zero or non-perpendicular axes and constraints on the ellipse curve.
-  An ellipse that touches another curve forms no region and the sketch warns;
+  refuses zero or non-perpendicular axes. On the ellipse curve it accepts only
+  `pointOnCircle` and `tangent` to a line, solved by `ellipseLevel` and
+  `ellipseLineGap` in `shared/src/sketchCurves.ts`; other constraints refuse.
+  A solve weakly holds the points of every ellipse not being dragged, so a new
+  constraint moves the other curve rather than resizing the ellipse:
+  `shared/test/ellipseConstraints.test.ts`. An ellipse that touches another curve forms no region and the sketch warns;
   trim, extend, offset and sweep paths refuse ellipses. `pieceEdge` in
   `server/src/geometry/sketchEdges.ts` builds the exact `gp_Elips` edge:
   `shared/test/ellipse.test.ts`.

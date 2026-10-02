@@ -24,8 +24,15 @@ import type {
 } from "./model.js";
 import { OverConstrainedError } from "./solverError.js";
 export { OverConstrainedError } from "./solverError.js";
-import { arcRadiusGap, axisCosine, entityPointIds } from "./sketchCurves.js";
 import {
+  arcRadiusGap,
+  axisCosine,
+  ellipseLevel,
+  ellipseLineGap,
+  entityPointIds,
+} from "./sketchCurves.js";
+import {
+  components,
   dampingFloor,
   evalResiduals,
   jacobianRank,
@@ -38,34 +45,26 @@ import {
 export interface SolveInput {
   entities: SketchEntity[];
   constraints: SketchConstraint[];
-  /**
-   * Optional drag target: pulls a point toward (x, y) with a weak residual
-   * so the sketch follows the mouse while hard constraints hold.
-   */
   drag?: { pointId: string; x: number; y: number };
 }
 
 export interface SolveResult {
-  /** Entities with updated point coordinates / radii. Same order as input. */
   entities: SketchEntity[];
   status: SketchSolveStatus;
-  /** Remaining degrees of freedom (0 when fully constrained). */
   dof: number;
-  /** True when all constraint residuals converged below tolerance. */
   converged: boolean;
-  /** Max absolute residual after solving (mm / rad scale). */
   maxResidual: number;
 }
 
 const CONFLICT_TOL = 1e-4;
 const DRAG_WEIGHT = 0.02;
+const STAY_WEIGHT = 1e-2;
 
 interface Problem {
   x0: Float64Array;
   residuals: Residual[];
   deps: number[][];
   refs: Set<string>;
-  /** residuals contributed by real constraints (excludes drag pulls) */
   hardCount: number;
   varsOf: (id: string) => number[];
   apply: (x: Float64Array, entities: SketchEntity[]) => void;
@@ -197,7 +196,6 @@ function buildProblem(input: SolveInput): Problem {
     }
     const a = arcs.get(id);
     if (a) {
-      // Arc radius derived from center–start distance.
       const cx = px(a.center),
         cy = py(a.center),
         sx = px(a.start),
@@ -207,12 +205,18 @@ function buildProblem(input: SolveInput): Problem {
     throw new SolverModelError(`entity ${id} has no radius`);
   };
 
-  /** Center accessor for circle or arc. */
   const centerOf = (id: string): { cx: Residual; cy: Residual } => {
     const c = circles.get(id) ?? arcs.get(id);
     if (!c) throw new SolverModelError(`entity ${id} is not a circle/arc`);
-    const centerId = c.kind === "circle" ? c.center : c.center;
-    return { cx: px(centerId), cy: py(centerId) };
+    return { cx: px(c.center), cy: py(c.center) };
+  };
+
+  const ellipseOf = (id: string) => {
+    const e = input.entities.find((x) => x.id === id);
+    if (e?.kind !== "ellipse") return null;
+    const [c, m, n] = entityPointIds(e).map((p) => [px(p), py(p)]);
+    return (x: Float64Array) =>
+      [pointAt(c!, x), pointAt(m!, x), pointAt(n!, x)] as const;
   };
 
   const lineEnds = (id: string) => {
@@ -253,39 +257,27 @@ function buildProblem(input: SolveInput): Problem {
         residuals.push((x) => x2(x) - x1(x));
         break;
       }
-      case "parallel": {
-        const a = lineEnds(c.a),
-          b = lineEnds(c.b);
-        residuals.push((x) => {
-          const dax = a.x2(x) - a.x1(x),
-            day = a.y2(x) - a.y1(x);
-          const dbx = b.x2(x) - b.x1(x),
-            dby = b.y2(x) - b.y1(x);
-          const la = Math.hypot(dax, day) || 1,
-            lb = Math.hypot(dbx, dby) || 1;
-          return (dax * dby - day * dbx) / (la * lb);
-        });
-        break;
-      }
+      case "parallel":
       case "perpendicular": {
         const a = lineEnds(c.a),
           b = lineEnds(c.b);
+        const part = c.type === "parallel" ? "cross" : "dot";
         residuals.push((x) => {
-          const dax = a.x2(x) - a.x1(x),
-            day = a.y2(x) - a.y1(x);
-          const dbx = b.x2(x) - b.x1(x),
-            dby = b.y2(x) - b.y1(x);
-          const la = Math.hypot(dax, day) || 1,
-            lb = Math.hypot(dbx, dby) || 1;
-          return (dax * dbx + day * dby) / (la * lb);
+          const t = turn(a, b, x);
+          return t[part] / t.scale;
         });
         break;
       }
       case "tangent": {
-        // line–circle/arc or circle–circle
         const lineId = lines.has(c.a) ? c.a : lines.has(c.b) ? c.b : null;
         const circId = lines.has(c.a) ? c.b : c.a;
-        if (lineId) {
+        const oval = ellipseOf(circId);
+        if (lineId && oval) {
+          const offset = lineOffset(lineEnds(lineId));
+          residuals.push((x) =>
+            ellipseLineGap(...oval(x), (p) => offset(x, p.x, p.y)),
+          );
+        } else if (lineId) {
           const offset = lineOffset(lineEnds(lineId));
           const { cx, cy } = centerOf(circId);
           const r = radius(circId);
@@ -295,7 +287,6 @@ function buildProblem(input: SolveInput): Problem {
             B = centerOf(c.b);
           const ra = radius(c.a),
             rb = radius(c.b);
-          // Branch (external/internal tangency) chosen from initial config.
           residuals.push((x) => {
             const d = Math.hypot(B.cx(x) - A.cx(x), B.cy(x) - A.cy(x));
             const ext = Math.abs(d - (ra(x) + rb(x)));
@@ -370,6 +361,13 @@ function buildProblem(input: SolveInput): Problem {
       }
       case "pointOnCircle": {
         const p = { x: px(c.point), y: py(c.point) };
+        const oval = ellipseOf(c.circle);
+        if (oval) {
+          residuals.push((x) =>
+            ellipseLevel(...oval(x), { x: p.x(x), y: p.y(x) }),
+          );
+          break;
+        }
         const { cx, cy } = centerOf(c.circle);
         const r = radius(c.circle);
         residuals.push(
@@ -429,12 +427,7 @@ function buildProblem(input: SolveInput): Problem {
           b = lineEnds(c.b);
         const v = (c.value * Math.PI) / 180;
         residuals.push((x) => {
-          const dax = a.x2(x) - a.x1(x),
-            day = a.y2(x) - a.y1(x);
-          const dbx = b.x2(x) - b.x1(x),
-            dby = b.y2(x) - b.y1(x);
-          const dot = dax * dbx + day * dby;
-          const cross = dax * dby - day * dbx;
+          const { cross, dot } = turn(a, b, x);
           return Math.atan2(Math.abs(cross), dot) - v;
         });
         break;
@@ -455,6 +448,10 @@ function buildProblem(input: SolveInput): Problem {
       settle();
     }
   }
+  for (const { v, r } of stayRows(input, varsOf, space.vars)) {
+    residuals.push(r);
+    deps.push([v]);
+  }
 
   return {
     x0: Float64Array.from(space.vars),
@@ -468,12 +465,32 @@ function buildProblem(input: SolveInput): Problem {
   };
 }
 
-function lineOffset(l: {
-  x1: Residual;
-  y1: Residual;
-  x2: Residual;
-  y2: Residual;
-}) {
+function stayRows(
+  input: SolveInput,
+  varsOf: (id: string) => number[],
+  x0: number[],
+) {
+  const drag = input.drag?.pointId;
+  return input.entities.flatMap((e) => {
+    const ids = e.kind === "ellipse" ? entityPointIds(e) : [];
+    if (drag && ids.includes(drag)) return [];
+    return ids.flatMap(varsOf).map((v) => ({
+      v,
+      r: (x: Float64Array) => STAY_WEIGHT * (x[v]! - x0[v]!),
+    }));
+  });
+}
+
+type Ends = { x1: Residual; y1: Residual; x2: Residual; y2: Residual };
+
+function turn(a: Ends, b: Ends, x: Float64Array) {
+  const [ax, ay] = [a.x2(x) - a.x1(x), a.y2(x) - a.y1(x)];
+  const [bx, by] = [b.x2(x) - b.x1(x), b.y2(x) - b.y1(x)];
+  const scale = (Math.hypot(ax, ay) || 1) * (Math.hypot(bx, by) || 1);
+  return { dot: ax * bx + ay * by, cross: ax * by - ay * bx, scale };
+}
+
+function lineOffset(l: Ends) {
   return (x: Float64Array, ptx: number, pty: number) => {
     const dx = l.x2(x) - l.x1(x),
       dy = l.y2(x) - l.y1(x);
@@ -483,26 +500,6 @@ function lineOffset(l: {
 }
 
 export class SolverModelError extends Error {}
-
-function components(deps: number[][], numVars: number): Block[] {
-  const parent = Array.from({ length: numVars }, (_, v) => v);
-  const root = (v: number): number => {
-    while (parent[v] !== v) v = parent[v] = parent[parent[v]!]!;
-    return v;
-  };
-  for (const [first, ...rest] of deps)
-    for (const v of rest) parent[root(v)] = root(first!);
-  const found = new Map<number, Block>();
-  for (const [row, used] of deps.entries()) {
-    if (used.length === 0) continue;
-    const key = root(used[0]!);
-    const part = found.get(key) ?? { vars: [], rows: [] };
-    found.set(key, part);
-    part.rows.push(row);
-  }
-  for (let v = 0; v < numVars; v++) found.get(root(v))?.vars.push(v);
-  return [...found.values()];
-}
 
 function solveTouching(
   input: SolveInput,
