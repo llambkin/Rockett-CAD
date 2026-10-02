@@ -34,6 +34,7 @@ import type {
 } from "./api.js";
 import type { ProjectMember } from "./model.js";
 import { settingsRoutes } from "./settingsRoutes.js";
+import { refRepairRoutes } from "./refRepairRoutes.js";
 import { VIEW_VERSION } from "./api.js";
 import { VIEW_PROJECTION } from "./settings.js";
 import { edgeRef, faceRef, groupsSchema, vec3 } from "./schema/features.js";
@@ -390,18 +391,7 @@ export const ROUTES = {
     Type.Object({ position: Type.Integer({ minimum: 0 }) }),
     "document",
   ),
-  tangentEdges: route<
-    { edge: EdgeRef; beforeFeatureId?: string | undefined },
-    { edges: EdgeRef[] }
-  >()(
-    "POST",
-    "/projects/:id/tangent-edges",
-    Type.Object({
-      edge: edgeRef,
-      beforeFeatureId: Type.Optional(Type.String()),
-    }),
-    "viewer",
-  ),
+  ...refRepairRoutes(route),
   undo: route<HeldMeshes, WireMutationResponse>()(
     "POST",
     "/projects/:id/undo",

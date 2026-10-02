@@ -6,6 +6,8 @@ import {
   startFirst,
   ValidationError,
   type CadDocument,
+  type EdgeRef,
+  type FaceRef,
   type Feature,
   type User,
   unsignedRefs,
@@ -50,14 +52,11 @@ function featureEdits(context: ApiRoutes) {
     startFirst(doc.features[index]!);
   }
 
-  async function signed(
+  async function sign(
     doc: CadDocument,
     index: number,
-    feature: Feature,
-    previous?: Feature,
+    refs: Array<FaceRef | EdgeRef>,
   ) {
-    const refs = unsignedRefs(feature, previous);
-    if (!refs.length) return;
     const sigs = await kernel.stateQuery(doc, {
       kind: "sign",
       position: index,
@@ -68,7 +67,17 @@ function featureEdits(context: ApiRoutes) {
       if (sig) ref.sig = sig;
     });
   }
-  return { pinned, written, signed };
+
+  async function signed(
+    doc: CadDocument,
+    index: number,
+    feature: Feature,
+    previous?: Feature,
+  ) {
+    const refs = unsignedRefs(feature, previous);
+    if (refs.length) await sign(doc, index, refs);
+  }
+  return { pinned, written, sign, signed };
 }
 
 function addFeatureRoute(context: ApiRoutes) {
@@ -163,6 +172,24 @@ function projectEdgeRoute(context: ApiRoutes) {
   );
 }
 
+function refSignatureRoute(context: ApiRoutes) {
+  const { on, wrap, store } = context;
+  const { sign } = featureEdits(context);
+  on(
+    ROUTES.refSignature,
+    wrap(async (req, res) => {
+      const doc = await store.load(req.params.id);
+      const position = doc.features.findIndex((f) => f.id === req.params.fid);
+      if (position < 0) throw new StoreError("feature not found", "not_found");
+      const ref = { ...req.body.ref };
+      Reflect.deleteProperty(ref, "sig");
+      await sign(doc, position, [ref]);
+      if (!ref.sig) throw new ValidationError("Reference geometry not found");
+      res.json({ sig: ref.sig });
+    }),
+  );
+}
+
 function timelineRoutes(context: ApiRoutes) {
   const { on, mutateProject, store } = context;
   on(
@@ -196,5 +223,6 @@ export function featureRoutes(context: ApiRoutes) {
   addFeatureRoute(context);
   updateFeatureRoute(context);
   projectEdgeRoute(context);
+  refSignatureRoute(context);
   timelineRoutes(context);
 }

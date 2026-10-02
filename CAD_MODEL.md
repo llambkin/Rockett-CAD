@@ -293,8 +293,11 @@ the inside out.
 ## Reference signatures
 
 Feature add and update fill each missing `sig` from the state before the
-feature and keep one sent with the reference. `collectTopoRefs` in
-`shared/src/topoRefs.ts` derives face and edge paths from `FeatureSpec.refs`.
+feature and keep one sent with the reference. A reference sent without `sig`
+keeps the one its name already had, so reference repair signs an accepted or
+re-picked reference first (`ROUTES.refSignature`) and sends that `sig`.
+`collectTopoRefs` in `shared/src/topoRefs.ts` derives face and edge paths
+from `FeatureSpec.refs`.
 The same contract owns body and feature dependencies, including references
 inside planes, axes and points. Opaque extension parameters are not references
 unless their registered spec declares them.

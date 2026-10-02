@@ -1,5 +1,12 @@
 import { featureParams, setFeatureParams } from "./commands/featureCommand";
-import type { EdgeRef, FaceRef, Feature, RefCandidate } from "@rockett/shared";
+import {
+  ROUTES,
+  type EdgeRef,
+  type FaceRef,
+  type Feature,
+  type RefCandidate,
+} from "@rockett/shared";
+import { send } from "./api";
 import { useStore, type Selection } from "./store";
 import { dialogTargets } from "./toolTargets";
 import { loadPreviewBase } from "./previewBase";
@@ -9,7 +16,7 @@ type Ref = FaceRef | EdgeRef;
 export const pickOf = (
   kind: Ref["kind"],
   { bodyId, name }: Pick<RefCandidate, "bodyId" | "name">,
-): Selection =>
+): Ref =>
   kind === "face"
     ? { kind, bodyId, faceName: name }
     : { kind, bodyId, edgeName: name };
@@ -21,7 +28,7 @@ const sameRef = (item: Record<string, unknown>, ref: Ref) =>
     ? item.faceName === ref.faceName
     : item.edgeName === ref.edgeName);
 
-function swapRef(value: unknown, ref: Ref, to: Selection): unknown {
+function swapRef(value: unknown, ref: Ref, to: Ref): unknown {
   if (Array.isArray(value)) return value.map((v) => swapRef(v, ref, to));
   if (typeof value !== "object" || value === null) return value;
   const item = value as Record<string, unknown>;
@@ -31,17 +38,45 @@ function swapRef(value: unknown, ref: Ref, to: Selection): unknown {
   );
 }
 
-export async function accept(
-  fid: string,
-  ref: Ref,
-  to: Selection,
-): Promise<void> {
+const editing = (projectId: string | null, fid: string) => {
   const s = useStore.getState();
-  const feature = s.document?.features.find((f) => f.id === fid);
+  return s.projectId === projectId &&
+    s.active?.id === "design.feature" &&
+    s.active.state.editFeatureId === fid
+    ? s
+    : null;
+};
+
+async function signed(id: string, fid: string, to: Ref) {
+  try {
+    const { sig } = await send(
+      ROUTES.refSignature,
+      { id, fid },
+      { body: { ref: to } },
+    );
+    return { ...to, sig };
+  } catch (e) {
+    if (editing(id, fid)) useStore.getState().setError((e as Error).message);
+    return null;
+  }
+}
+
+let signing = false;
+
+export async function accept(fid: string, ref: Ref, to: Ref): Promise<void> {
+  const { projectId, document } = useStore.getState();
+  if (!projectId || !document || signing) return;
+  signing = true;
+  const fresh = await signed(projectId, fid, to).finally(() => {
+    signing = false;
+  });
+  const s = editing(projectId, fid);
+  if (!fresh || s?.document?.revision !== document.revision) return;
+  const feature = s.document.features.find((f) => f.id === fid);
   if (!feature) return;
   const patch = Object.fromEntries(
     Object.entries(feature).flatMap(([key, value]) => {
-      const next = swapRef(value, ref, to);
+      const next = swapRef(value, ref, fresh);
       return JSON.stringify(next) === JSON.stringify(value)
         ? []
         : [[key, next]];
@@ -55,13 +90,8 @@ export async function accept(
   } catch {
     return;
   }
-  const current = useStore.getState();
-  if (
-    current.projectId !== s.projectId ||
-    current.active?.id !== "design.feature" ||
-    current.active.state.editFeatureId !== fid
-  )
-    return;
+  const current = editing(projectId, fid);
+  if (!current) return;
   useStore.setState({
     selection: current.selection.map(
       (pick) => swapRef(pick, ref, to) as Selection,
@@ -84,7 +114,7 @@ export function repick(pick: Selection | null): boolean {
       ? s.active.state.editFeatureId
       : undefined;
   if (!ref || !fid) return false;
-  if (pick?.kind !== ref.kind) return true;
+  if (pick?.kind !== ref.kind || s.busy || signing) return true;
   setFeatureParams({ repick: undefined });
   const name = pick.kind === "face" ? pick.faceName : pick.edgeName;
   void accept(fid, ref, pickOf(ref.kind, { bodyId: pick.bodyId, name }));

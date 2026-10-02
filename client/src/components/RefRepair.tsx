@@ -39,7 +39,7 @@ type Found<C> = {
 const lone = <C,>({ status, candidates }: Found<C>) =>
   status === "candidate" ? candidates[0] : undefined;
 
-function proposed(problem: UnresolvedRef): Selection | null {
+function proposed(problem: UnresolvedRef): Ref | null {
   const to = lone(problem);
   return to ? pickOf(problem.ref.kind, to) : null;
 }
@@ -165,7 +165,7 @@ function RefProblems({ fid }: { fid: string }) {
   const bodies = previewBodies({ active, evaluation });
   const label = (pick: Selection) =>
     pickLabel(pick, document, evaluation, bodies);
-  const acceptButton = (ref: Ref, to: Selection) => (
+  const acceptButton = (ref: Ref, to: Ref) => (
     <AcceptButton
       label={label(to)}
       onAccept={() => void accept(fid, ref, to)}

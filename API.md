@@ -5,6 +5,7 @@ schema and the request and response types (the `route<Req, Res>` generics):
 
 - `ROUTES`, `AUTH_ROUTES` and `DOCUMENT_EDITS` in `shared/src/routes.ts`;
 - settings entries in `shared/src/settingsRoutes.ts`;
+- tangent edges and reference signing in `shared/src/refRepairRoutes.ts`;
 - `FRIEND_ROUTES` in `shared/src/friends.ts`, `NOTICE_ROUTES` in
   `shared/src/notices.ts`.
 
@@ -43,7 +44,7 @@ nothing else is: `server/src/api/routes.ts`.
 | `GET /jobs/:jobId/events`, `DELETE /jobs/:jobId`                                  | `server/src/api/jobRoutes.ts`      |
 | `POST /projects/:id/features`                                                     | `server/src/api/routes.ts`         |
 | `PUT`, `DELETE /projects/:id/features/:fid`                                       | `server/src/api/routes.ts`         |
-| `POST /projects/:id/features/:fid/project`                                        | `server/src/api/routes.ts`         |
+| `POST /projects/:id/features/:fid/project`, `/signature`                          | `server/src/api/routes.ts`         |
 | `POST /projects/:id/timeline`                                                     | `server/src/api/routes.ts`         |
 | `POST /projects/:id/undo`, `/redo`                                                | `server/src/api/routes.ts`         |
 | `POST /projects/:id/previews/:tx/commit`, `DELETE /projects/:id/previews/:tx`     | `server/src/api/routes.ts`         |
