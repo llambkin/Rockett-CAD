@@ -9,7 +9,7 @@ export interface MeasureState {
   pending: boolean;
 }
 
-const measurable = (s: Selection): s is TopoRef =>
+export const measurable = (s: Selection): s is TopoRef =>
   s.kind === "face" || s.kind === "edge" || s.kind === "vertex";
 
 let unsubscribe: (() => void) | undefined;

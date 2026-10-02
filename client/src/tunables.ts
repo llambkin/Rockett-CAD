@@ -10,6 +10,7 @@ export const TIMING_MS = {
   viewSave: 1_000,
   snapshotHoverDelay: 400,
   snapshotInterval: 60_000,
+  selectionSettle: 250,
 } as const;
 
 export const PREVIEW_APPEARANCE = {
