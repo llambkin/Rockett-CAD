@@ -1,6 +1,7 @@
 import { LINEAR_TOL, type EdgeRef, type Vec3 } from "@rockett/shared";
 import { ShapeMap } from "./shapeMap.js";
 import { computeEdgeNames, type NamedBody } from "./naming.js";
+import { surfaceNormal } from "./signature.js";
 import {
   acquire,
   edges,
@@ -12,6 +13,12 @@ import {
   vec,
   type Shape,
 } from "./kernel.js";
+
+const PARALLEL = Math.cos(Math.PI / 180);
+const dot = (a: Vec3, b: Vec3) => a.reduce((sum, v, j) => sum + v * b[j]!, 0);
+const continues = (a: Vec3, b: Vec3) => dot(a, b) < -PARALLEL;
+const coincident = (a: Vec3, b: Vec3) =>
+  Math.hypot(...a.map((v, j) => v - b[j]!)) < LINEAR_TOL;
 
 function recordEdgeEnds(
   edge: Shape,
@@ -46,18 +53,54 @@ function recordEdgeEnds(
   });
 }
 
+function normalsAlong(edge: Shape, face: Shape): Vec3[] {
+  const k = getKernel();
+  return scoped((own) => {
+    const ends = [own(new k.gp_Pnt2d_1()), own(new k.gp_Pnt2d_1())] as const;
+    k.BRep_Tool.UVPoints_2(edge, face, ...ends);
+    const surface = own(new k.BRepAdaptor_Surface_2(face, true));
+    return ends.map(
+      (uv) => surfaceNormal(face, surface, [uv.X(), uv.Y()]).normal,
+    );
+  });
+}
+
 function namedFaceEdges(
   body: NamedBody,
   names: Map<string, Shape>,
-): Set<string | undefined>[] {
+): { faceEdges: Set<string | undefined>[]; smoothJoins: Set<string> } {
+  const k = getKernel();
   return scoped((own) => {
     const edgeNames = new ShapeMap<string>();
     own({ delete: () => edgeNames.release() });
     for (const [name, edge] of names) edgeNames.set(edge, name);
-    return faces(body.shape).map((face) => {
+    const sides = new Map<string, (Vec3[] | undefined)[]>();
+    const faceEdges = faces(body.shape).map((face) => {
       own(face);
-      return new Set(edges(face).map((edge) => edgeNames.get(own(edge))));
+      return new Set(
+        edges(face).map((edge) => {
+          const name = edgeNames.get(own(edge));
+          if (name === undefined) return name;
+          const seam = k.BRep_Tool.IsClosed_2(edge, face);
+          sides.set(name, [
+            ...(sides.get(name) ?? []),
+            seam ? undefined : normalsAlong(edge, face),
+          ]);
+          return name;
+        }),
+      );
     });
+    const smoothJoins = new Set<string>();
+    for (const [name, normals] of sides) {
+      const [a, b] = normals;
+      if (
+        normals.includes(undefined) ||
+        (normals.length === 2 &&
+          a!.every((n, end) => dot(n, b![end]!) > PARALLEL))
+      )
+        smoothJoins.add(name);
+    }
+    return { faceEdges, smoothJoins };
   });
 }
 
@@ -66,7 +109,7 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
     const names = computeEdgeNames(body).byName;
     const ends = new Map<string, { p: Vec3; d: Vec3 }[]>();
     const lengths = new Map<string, number>();
-    const faceEdges = namedFaceEdges(body, names);
+    const { faceEdges, smoothJoins } = namedFaceEdges(body, names);
     for (const ref of seeds) {
       if (ref.bodyId !== body.bodyId)
         throw new Error("All edges must belong to the same body");
@@ -76,20 +119,15 @@ export function tangentEdges(body: NamedBody, seeds: EdgeRef[]): EdgeRef[] {
     for (const [name, edge] of names) recordEdgeEnds(edge, name, ends, lengths);
     const chosen = new Set(seeds.map((r) => r.edgeName)),
       queue = [...chosen];
-    const coincident = (a: Vec3, b: Vec3) =>
-      Math.hypot(...a.map((v, j) => v - b[j]!)) < LINEAR_TOL;
-    const continues = (a: Vec3, b: Vec3) =>
-      a.reduce((sum, v, j) => sum + v * b[j]!, 0) < -Math.cos(Math.PI / 180);
     for (let i = 0; i < queue.length; i++) {
       for (const end of ends.get(queue[i]!) ?? []) {
         const candidates = [...ends].filter(
           ([name, endpoints]) =>
             name !== queue[i] &&
+            !smoothJoins.has(name) &&
             endpoints.some(
               (other) =>
-                coincident(end.p, other.p) &&
-                end.d.reduce((sum, v, j) => sum + v * other.d[j]!, 0) <
-                  -Math.cos(Math.PI / 180),
+                coincident(end.p, other.p) && continues(end.d, other.d),
             ),
         );
         if (candidates.length === 1 && !chosen.has(candidates[0]![0])) {
