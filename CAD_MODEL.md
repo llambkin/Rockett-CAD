@@ -199,6 +199,8 @@ body.
   vertex stays a separate body, and the status is `warning` saying so.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
+- Shell stores an optional `body` (schema 24). With no open faces it hollows
+  that body, else the first body; open faces must lie on the chosen body.
 - Shell currently accepts valid geometry with significant volume loss
   (`server/src/geometry/shell.ts`); this does not qualify openings or thickness.
   Closed and top-open synthetic boxes qualify independently. A 20 mm cube

@@ -135,6 +135,10 @@ release workflow remain under development.
   documents without a naming version retain version 1; schema 21 documents
   migrate without changing their geometry. Project manifests and views have
   independent versioned migrations.
+- Schema 23: documents add named parameters and expression bindings, empty for
+  prior documents.
+- Schema 24: Shell can name the body it hollows; earlier shells keep hollowing
+  the first body.
 
 ### Known limits
 
