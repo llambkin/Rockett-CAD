@@ -2,8 +2,7 @@ import { Type, type Static } from "typebox";
 import type { HistoryList, HistoryMark } from "../api.js";
 import { route } from "../routeContract.js";
 
-export const HISTORY_VERSION = 2;
-export const HISTORY_LIMIT = 50;
+export const HISTORY_VERSION = 3;
 export const LABEL_LIMIT = 200;
 export const TX_HEADER = "X-Rockett-Tx";
 export const TX_ID = /^[\w-]{1,64}$/;
@@ -29,7 +28,7 @@ const entry = Type.Object(entryFields);
 export const historyLog = Type.Object({
   version: Type.Literal(1),
   base: snapshotHash,
-  entries: Type.Array(entry, { maxItems: HISTORY_LIMIT }),
+  entries: Type.Array(entry),
   position: Type.Integer({ minimum: 0 }),
   checkpoints: Type.Array(mark),
 });
@@ -43,6 +42,7 @@ export const historyRecord = Type.Union([
     snapshot: snapshotHash,
   }),
   Type.Object({ kind: Type.Literal("snapshot"), snapshot: snapshotHash }),
+  Type.Object({ kind: Type.Literal("feature"), hash: snapshotHash }),
   Type.Object({ kind: Type.Literal("checkpoint"), ...markFields }),
   Type.Object({ kind: Type.Literal("entry"), ...entryFields }),
   Type.Object({

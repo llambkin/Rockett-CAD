@@ -145,6 +145,20 @@ Limits); one more is 409 with a plain message and keeps the rest.
 holds, so blobs nothing else references become collectable; an unknown
 checkpoint is 404.
 
+The log stores each feature once, keyed by the SHA256 of its JSON, and each
+snapshot as the document with its features replaced by those keys:
+`server/src/store/historyLog.ts`. A snapshot's hash is the SHA256 of that
+form. Entries have no count limit. A project's log has a disk byte budget
+(see Limits). Past it, the log drops its oldest entries until it fits in
+what checkpoints, the current state and redo entries take, plus half the rest
+of the budget. Those always stay, and so does one undo step while the log
+still fits the budget. A version 2 log, one whole gzipped document per
+snapshot, is backed up as `history2-<hash>` and rewritten on first open:
+`server/src/store/historyUpgrade.ts`. A snapshot it cannot read is dropped
+with its checkpoints, and undo steps over the gap; with none readable, history
+starts again at the next edit. Snapshot hashes change then; a restore naming
+an old hash is 404.
+
 A feature add or edit with `X-Rockett-Preview` (`PREVIEW_HEADER`) and
 `X-Rockett-Tx` stages the edit in memory for that user and session instead of
 saving it. Only the preview commit route saves it. A restart drops open
@@ -274,8 +288,8 @@ projects.
 | Project file                          | `PROJECT_FILE_LIMIT_MB`, `shared/src/routes.ts`                                     |
 | Thumbnail                             | `THUMBNAIL_LIMITS`, `shared/src/routes.ts`                                          |
 | Reference image                       | `IMAGE_LIMIT_MB`, `server/src/store/projectStore.ts`                                |
-| History entries, labels               | `HISTORY_LIMIT`, `LABEL_LIMIT`, `shared/src/schema/history.ts`                      |
-| Checkpoints                           | `HISTORY_LIMITS.checkpoints`, `server/src/tunables.ts`                              |
+| History labels                        | `LABEL_LIMIT`, `shared/src/schema/history.ts`                                       |
+| History disk bytes, checkpoints       | `HISTORY_LIMITS.bytes`, `HISTORY_LIMITS.checkpoints`, `server/src/tunables.ts`      |
 | Tool targets                          | `MAX_TARGETS`, `shared/src/schema/features.ts`                                      |
 | Previews, jobs, timeouts, size search | `server/src/tunables.ts`                                                            |
 | Settings import                       | `SETTINGS_IMPORT_MAX_BYTES`; nodes and depth in `server/src/store/settingsStore.ts` |

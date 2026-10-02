@@ -2,45 +2,57 @@ import path from "node:path";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import {
-  HISTORY_LIMIT,
   HISTORY_VERSION,
   LABEL_LIMIT,
   MB,
-  historyLog,
-  parse,
   type CadDocument,
   type HistoryList,
-  type HistoryLog,
   type HistoryMark,
   type HistoryRecord,
   type HistoryStatus,
 } from "@rockett/shared";
-import { BlobStore } from "./blobStore.js";
 import {
   bodied,
   compose,
+  featureFrames,
   frame,
+  hashOf,
+  LOG,
+  logVersion,
+  pack,
   records,
   replay,
-  retained,
+  trim,
+  unpack,
   type History,
 } from "./historyLog.js";
-import { backupNamespace, sha256, StoreError } from "./jsonStore.js";
+import {
+  dropLegacy,
+  upgradeLegacy,
+  upgradeLog,
+  type Project,
+} from "./historyUpgrade.js";
+import { sha256, StoreError } from "./jsonStore.js";
 import { ID_RE } from "./manifestStore.js";
 import { documentMigrations, migrate } from "./migrations.js";
 import type { ProjectStore } from "./projectStore.js";
 import type { Storage } from "./storage.js";
 import { HISTORY_LIMITS, PREVIEW_LIMITS, TIMING_MS } from "../tunables.js";
 
-const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
-const FAST = { level: zlib.constants.Z_BEST_SPEED };
-const LOG = "history/log.bin";
-const LEGACY_LOG = "history/log.json";
-const LEGACY_SNAPSHOTS = "history/snapshots";
 const MARKS = new Set<HistoryRecord["kind"]>(["entry", "checkpoint", "cursor"]);
 
+const tooLarge = () =>
+  new StoreError(
+    `This history snapshot expands past ${HISTORY_LIMITS.snapshotBytes / MB} MB, the limit.`,
+    "internal",
+  );
+
 type Revision = () => Promise<number>;
+type Change = (
+  history: History,
+  body: (hash: string) => Buffer,
+) => Promise<{ history: History; pinned?: number }>;
 type Records = (
   opened: Opened | undefined,
   revision: number,
@@ -52,11 +64,8 @@ interface Opened {
   heads: HistoryRecord[];
   bodies: Map<string, [number, number]>;
   size: number;
+  floor: number;
   stamp: string | undefined;
-}
-
-function waste(opened: Opened): number {
-  return opened.bodies.size - retained(replay(opened.heads)).size;
 }
 
 export class HistoryStore {
@@ -65,6 +74,7 @@ export class HistoryStore {
   constructor(
     private readonly storage: Storage,
     private readonly store: ProjectStore,
+    private readonly budget: number = HISTORY_LIMITS.bytes,
   ) {}
 
   async remove(id: string): Promise<void> {
@@ -81,29 +91,32 @@ export class HistoryStore {
     if (label === undefined) return this.commit(doc, actor);
     return this.commit(doc, actor, async (opened, revision, file, text) => {
       const added: Buffer[] = [];
+      const known = new Set(opened?.bodies.keys());
       if (!opened) {
-        const stored = await gzip(await this.storage.read(file), FAST);
-        const base = sha256(stored);
+        const stored = await this.storage.read(file);
+        const base = await pack(JSON.parse(stored.toString("utf8")), known);
         added.push(
           frame(
-            { kind: "base", version: HISTORY_VERSION, snapshot: base },
-            stored,
+            { kind: "base", version: HISTORY_VERSION, snapshot: base.hash },
+            base.body,
           ),
+          ...featureFrames(base.features),
         );
       }
-      const body = await gzip(text, FAST);
+      const next = await pack(JSON.parse(text), known);
       added.push(
+        ...featureFrames(next.features),
         frame(
           {
             kind: "entry",
             label: label.slice(0, LABEL_LIMIT),
             at: new Date().toISOString(),
-            snapshot: sha256(body),
+            snapshot: next.hash,
             revision,
             ...(tx !== undefined && { tx }),
             ...(actor !== null && { by: actor }),
           },
-          body,
+          next.body,
         ),
       );
       return added;
@@ -187,7 +200,7 @@ export class HistoryStore {
       );
     });
     const opened = this.opened.get(id);
-    if (opened && waste(opened) >= HISTORY_LIMIT)
+    if (opened && this.over(opened))
       void this.store
         .exclusive(id, () => this.compact(id))
         .catch((err: Error) =>
@@ -233,7 +246,7 @@ export class HistoryStore {
       if (!opened || index < 0)
         throw new StoreError("This checkpoint is already gone.", "not_found");
       history.checkpoints.splice(index, 1);
-      await this.rewrite(id, opened, history);
+      await this.rewrite(id, opened, async () => ({ history }));
     });
   }
 
@@ -259,25 +272,30 @@ export class HistoryStore {
 
   snapshot(id: string, hash: string): Promise<unknown> {
     return this.store.exclusive(id, async () => {
-      const range = (await this.open(id, () => this.revision(id)))?.bodies.get(
-        hash,
-      );
-      if (!range)
-        throw new StoreError(`snapshot ${hash} not found`, "not_found");
-      const bytes = await this.storage.readRange(this.path(id, LOG), ...range);
-      if (sha256(bytes) !== hash)
-        throw new StoreError(`snapshot ${hash} is corrupted`, "internal");
-      const text = await gunzip(bytes, {
-        maxOutputLength: HISTORY_LIMITS.snapshotBytes,
-      }).catch((error: unknown) => {
-        if ((error as { code?: string }).code === "ERR_BUFFER_TOO_LARGE")
-          throw new StoreError(
-            `This history snapshot expands past ${HISTORY_LIMITS.snapshotBytes / MB} MB, the limit.`,
-            "internal",
-          );
-        throw error;
-      });
-      return JSON.parse(text.toString("utf8"));
+      const { bodies } = (await this.open(id, () => this.revision(id))) ?? {};
+      const corrupted = () =>
+        new StoreError(`snapshot ${hash} is corrupted`, "internal");
+      let left = HISTORY_LIMITS.snapshotBytes;
+      const read = async (part: string) => {
+        const range = bodies?.get(part);
+        if (!range)
+          throw new StoreError(`snapshot ${hash} not found`, "not_found");
+        if (left < 1) throw tooLarge();
+        const bytes = await this.storage.readRange(
+          this.path(id, LOG),
+          ...range,
+        );
+        const text = await gunzip(bytes, { maxOutputLength: left }).catch(
+          (error: unknown) => {
+            const { code } = error as { code?: string };
+            throw code === "ERR_BUFFER_TOO_LARGE" ? tooLarge() : corrupted();
+          },
+        );
+        left -= text.length;
+        if (sha256(text) !== part) throw corrupted();
+        return JSON.parse(text.toString("utf8"));
+      };
+      return unpack(await read(hash), read);
     });
   }
 
@@ -315,14 +333,24 @@ export class HistoryStore {
     for (const { head, body } of records(bytes)) {
       heads.push(head);
       if (bodied(head))
-        bodies.set(head.snapshot, [body[0] + size, body[1] + size]);
+        bodies.set(hashOf(head), [body[0] + size, body[1] + size]);
     }
     this.opened.set(id, {
       heads,
       bodies,
       size: size + bytes.length,
+      floor: opened?.floor ?? 0,
       stamp: await this.storage.stamp(file),
     });
+  }
+
+  private project(id: string): Project {
+    return {
+      id,
+      dir: this.path(id, "."),
+      storage: this.storage,
+      temporary: () => this.store.isTemporary(id),
+    };
   }
 
   private async open(
@@ -334,15 +362,13 @@ export class HistoryStore {
     const known = this.opened.get(id);
     if (known && stamp !== undefined && known.stamp === stamp) return known;
     this.opened.delete(id);
-    if (stamp === undefined) return this.migrate(id, revision);
+    if (stamp === undefined)
+      return (await upgradeLegacy(this.project(id)))
+        ? this.open(id, revision)
+        : undefined;
     const log = await this.storage.read(file);
     const found = records(log);
-    const first = found[0]?.head;
-    if (first && (first.kind !== "base" || first.version !== HISTORY_VERSION))
-      throw new StoreError(
-        `project ${id} history is damaged or too new`,
-        "internal",
-      );
+    const version = logVersion(found[0]?.head, `project ${id} history`);
     const last = found.at(-1)?.head;
     if (
       (last?.kind === "entry" || last?.kind === "cursor") &&
@@ -355,9 +381,13 @@ export class HistoryStore {
       await this.storage.remove(file);
       return undefined;
     }
+    if (version < HISTORY_VERSION) {
+      await upgradeLog(this.project(id), log.subarray(0, size));
+      return this.open(id, revision);
+    }
     if (size < log.length)
       await this.storage.writeAtomic(file, log.subarray(0, size));
-    await this.dropLegacy(id);
+    await dropLegacy(this.project(id));
     return this.index(id, log.subarray(0, size));
   }
 
@@ -366,71 +396,40 @@ export class HistoryStore {
     const bodies = new Map<string, [number, number]>();
     for (const { head, body } of records(log)) {
       heads.push(head);
-      if (bodied(head)) bodies.set(head.snapshot, body);
+      if (bodied(head)) bodies.set(hashOf(head), body);
     }
     const opened: Opened = {
       heads,
       bodies,
       size: log.length,
+      floor: 0,
       stamp: await this.storage.stamp(this.path(id, LOG)),
     };
     this.opened.set(id, opened);
     return opened;
   }
 
+  private over({ size, floor }: Opened): boolean {
+    const { budget } = this;
+    return size > (floor < budget ? budget : floor + budget / 2);
+  }
+
   private async compact(id: string): Promise<void> {
     const opened = await this.open(id, () => this.revision(id));
-    if (!opened || waste(opened) < HISTORY_LIMIT) return;
-    await this.rewrite(id, opened, replay(opened.heads));
+    if (!opened || !this.over(opened)) return;
+    await this.rewrite(id, opened, (history, body) =>
+      trim(history, body, this.budget),
+    );
   }
 
-  private async rewrite(id: string, opened: Opened, history: History) {
+  private async rewrite(id: string, opened: Opened, change: Change) {
     const file = this.path(id, LOG);
     const log = await this.storage.read(file);
-    const bytes = await compose(history, async (hash) =>
-      log.subarray(...opened.bodies.get(hash)!),
-    );
+    const body = (hash: string) => log.subarray(...opened.bodies.get(hash)!);
+    const { history, pinned = 0 } = await change(replay(opened.heads), body);
+    const bytes = await compose(history, body);
     await this.storage.writeAtomic(file, bytes);
-    await this.index(id, bytes);
-  }
-
-  private async migrate(
-    id: string,
-    revision: Revision,
-  ): Promise<Opened | undefined> {
-    const raw = await this.storage
-      .read(this.path(id, LEGACY_LOG))
-      .catch(() => undefined);
-    if (!raw) return undefined;
-    let legacy: HistoryLog;
-    try {
-      legacy = parse(historyLog, JSON.parse(raw.toString("utf8")));
-    } catch (err) {
-      throw new StoreError(
-        `project ${id} history is damaged: ${(err as Error).message}`,
-        "internal",
-      );
-    }
-    const snapshots = await this.storage.list(this.path(id, LEGACY_SNAPSHOTS));
-    if (!(await this.store.isTemporary(id)))
-      await backupNamespace(this.storage, this.path(id, ".")).backup(
-        "history1",
-        [LEGACY_LOG, ...snapshots.map((name) => `${LEGACY_SNAPSHOTS}/${name}`)],
-      );
-    const blobs = new BlobStore(this.storage, this.path(id, LEGACY_SNAPSHOTS));
-    const { version: _version, ...history } = legacy;
-    await this.storage.writeAtomic(
-      this.path(id, LOG),
-      await compose(history, (hash) => blobs.get(hash)),
-    );
-    return this.open(id, revision);
-  }
-
-  private async dropLegacy(id: string): Promise<void> {
-    if ((await this.storage.list(this.path(id, "history"))).length === 1)
-      return;
-    await this.storage.remove(this.path(id, LEGACY_SNAPSHOTS));
-    await this.storage.remove(this.path(id, LEGACY_LOG));
+    (await this.index(id, bytes)).floor = pinned;
   }
 }
 

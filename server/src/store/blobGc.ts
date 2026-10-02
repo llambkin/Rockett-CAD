@@ -8,7 +8,7 @@ import {
   type CadDocument,
 } from "@rockett/shared";
 import { HASH_RE } from "./blobStore.js";
-import { snapshotBodies } from "./historyLog.js";
+import { eachSnapshot, LOG } from "./historyLog.js";
 import {
   BACKUP_RECORD as RECORD,
   BACKUP_DELETED,
@@ -127,11 +127,10 @@ async function roots(
         await root(file, async () =>
           named(file, await parsed(await read(name))),
         );
-      else if (name === "history/log.bin")
-        await root(file, async () => {
-          for (const body of snapshotBodies(await read(name)))
-            named(file, await parsed(body));
-        });
+      else if (name === LOG)
+        await root(file, async () =>
+          eachSnapshot(await read(name), (doc) => named(file, doc)),
+        );
     }
   };
   const backups = backupNamespace(storage, dir);

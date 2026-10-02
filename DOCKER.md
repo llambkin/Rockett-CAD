@@ -97,7 +97,8 @@ docker run -d --name rockett-cad \
 │   │   ├── v{schema}-{hash}/   # the project before a migration
 │   │   │   ├── SHA256SUMS      # written last; the backup is complete once it exists
 │   │   │   └── files/          # byte-for-byte copy of the project directory
-│   │   └── history1-{hash}/    # version 1 history files, before they moved into log.bin
+│   │   ├── history1-{hash}/    # version 1 history files, before they moved into log.bin
+│   │   └── history2-{hash}/    # version 2 log.bin, before features were stored once
 │   └── {namespace}/v{version}-{hash}/  # same shape, for users/, folders/ and others
 ├── folders/folders.json        # folder tree and project placement
 ├── sessions/sessions.json      # sessions, stored as the SHA-256 of each token
@@ -149,7 +150,9 @@ Restore a migration backup by hand:
    `document.json`.
 
 Undo a history move: stop the container, delete `history/log.bin`, and copy
-the `history1-{hash}/files/history/` back into the project.
+the `history1-{hash}/files/history/` back into the project. Before running an
+older build, restore `history/log.bin` from `history2-{hash}/files/history/`
+the same way.
 
 ### Naming report
 
