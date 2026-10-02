@@ -52,6 +52,19 @@ export function groupParts<T>(
   return { parts, order };
 }
 
+export function treeRange(
+  order: Selection[],
+  anchor: Selection,
+  item: Selection,
+): Selection[] {
+  const keys = order.map(selectionKey);
+  const [from, to] = [
+    keys.indexOf(selectionKey(anchor)),
+    keys.indexOf(selectionKey(item)),
+  ].toSorted((a, b) => a - b) as [number, number];
+  return order.slice(from, to + 1);
+}
+
 export function treeClick(
   selection: Selection[],
   item: Selection,
@@ -59,14 +72,7 @@ export function treeClick(
   anchor: Selection,
   range: boolean,
 ): Selection[] {
-  const keys = order.map(selectionKey);
-  if (range) {
-    const [from, to] = [
-      keys.indexOf(selectionKey(anchor)),
-      keys.indexOf(selectionKey(item)),
-    ].toSorted((a, b) => a - b) as [number, number];
-    return order.slice(from, to + 1);
-  }
+  if (range) return treeRange(order, anchor, item);
   const key = selectionKey(item);
   const base = treeItems(selection, item.kind as TreeKind);
   return base.some((s) => selectionKey(s) === key)

@@ -339,6 +339,14 @@ export function pickInto(picks: readonly Selection[], additive: boolean) {
   after.setPickInput((pass ?? i).key);
 }
 
+function pickRange(range: readonly Selection[]) {
+  const s = useStore.getState();
+  const i = activeInput(s);
+  const had = new Set(i ? inputPicks(i, s).map(selectionKey) : []);
+  const fresh = (p: Selection) => !had.has(selectionKey(p));
+  pickInto(range.flatMap((p) => accepted(i, p, s)).filter(fresh), true);
+}
+
 export interface FeatureCommandState {
   type: Feature["type"];
   editFeatureId?: string;
@@ -400,6 +408,7 @@ export const featureCommand = {
     if (sel) pickInto([sel], event.ctrlKey || event.metaKey || event.shiftKey);
   },
   onSelection: pickInto,
+  onRange: pickRange,
   onContextMenu() {},
   hint: "",
   panel: "design.feature",

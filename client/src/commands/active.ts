@@ -28,6 +28,7 @@ export interface ActiveCommand {
     viewport?: ViewportRef,
   ): Promise<void>;
   onSelection?(selection: readonly Selection[], additive: boolean): void;
+  onRange?(range: readonly Selection[]): void;
   onContextMenu(selection: Selection | null, event: PointerEvent): void;
   hint: string;
   panel?: string;

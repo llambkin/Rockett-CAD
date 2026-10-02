@@ -45,6 +45,7 @@ import {
   setFeaturesVisible,
   treeClick,
   treeIds,
+  treeRange,
   ungroup,
 } from "../treeSelection";
 
@@ -182,7 +183,9 @@ export const ModelTree = memo(function ModelTree() {
     anchor.current = from;
     const s = useStore.getState();
     const command = activeCommand(s);
-    if (command?.onSelection) command.onSelection([sel], range || additive);
+    if (range && command?.onRange) command.onRange(treeRange(order, from, sel));
+    else if (command?.onSelection)
+      command.onSelection([sel], range || additive);
     else if (!range && !additive) plain();
     else s.setSelection(treeClick(s.selection, sel, order, from, range));
   };
@@ -465,10 +468,7 @@ export const ModelTree = memo(function ModelTree() {
   };
 
   latest.current = {
-    click: (e, bodyId) => {
-      const sel = bodySel({ bodyId });
-      pick(e, sel, bodyParts.order);
-    },
+    click: (e, bodyId) => pick(e, bodySel({ bodyId }), bodyParts.order),
     menu: (e, bodyId) => openMenu(e, bodyMenu(bodyId)),
     rename: (bodyId) => setRenaming(bodyId),
     show: (bodyId, visible) => void setBodiesVisible({ [bodyId]: visible }),
