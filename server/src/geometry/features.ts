@@ -33,6 +33,7 @@ import {
   ANGULAR_TOL_DEG,
   LINEAR_TOL,
   UNIT_DOT_TOL,
+  ORIGIN_AXES,
   type AxisRef,
   type ConstructionPlaneFeature,
   type EmbossFeature,
@@ -44,6 +45,7 @@ import {
   type LinearPatternFeature,
   type MirrorFeature,
   type MoveFeature,
+  type OriginAxis,
   type ReferenceImageFeature,
   type CircularPatternFeature,
   type PlaneFrame,
@@ -126,17 +128,17 @@ function resolvePoint(state: EvalState, ref: PointRef): Vec3 {
   return vertexPoint(vertex);
 }
 
+const originAxisDirection = (axis: OriginAxis): Vec3 => {
+  const i = ORIGIN_AXES.indexOf(axis);
+  return [i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0];
+};
+
 function resolveAxis(
   state: EvalState,
   ref: AxisRef,
 ): { origin: Vec3; direction: Vec3 } {
   if (ref.kind === "originAxis") {
-    const dirs: Record<"X" | "Y" | "Z", Vec3> = {
-      X: [1, 0, 0],
-      Y: [0, 1, 0],
-      Z: [0, 0, 1],
-    };
-    return { origin: [0, 0, 0], direction: dirs[ref.axis] };
+    return { origin: [0, 0, 0], direction: originAxisDirection(ref.axis) };
   }
   if (ref.kind === "sketchLine") {
     const line = state.sketches
@@ -794,12 +796,7 @@ export function evalLinearPattern(state: EvalState, f: LinearPatternFeature) {
   if (f.count < 2) throw new Error("pattern count must be ≥ 2");
   let direction: Vec3;
   if (f.direction.kind === "axis") {
-    const dirs: Record<"X" | "Y" | "Z", Vec3> = {
-      X: [1, 0, 0],
-      Y: [0, 1, 0],
-      Z: [0, 0, 1],
-    };
-    direction = dirs[f.direction.axis];
+    direction = originAxisDirection(f.direction.axis);
   } else {
     const axis = resolveAxis(state, { kind: "edge", edge: f.direction.edge });
     direction = axis.direction;
