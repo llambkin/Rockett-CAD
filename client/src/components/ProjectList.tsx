@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { listBrowserProjects, moveToServer } from "../browserProjects";
+import {
+  createBrowserProject,
+  keepProjectFile,
+  listBrowserProjects,
+  moveToServer,
+} from "../browserProjects";
+import { openBrowserProject } from "../browserSession";
 import {
   BROWSER_PATH,
   browserKeyFromPath,
@@ -71,16 +77,35 @@ function usePlace() {
   };
 }
 
-function OpenProjectFile({ onError }: { onError: (e: string) => void }) {
-  const openProject = useStore((s) => s.openProject);
+const openProject = (id: string) => useStore.getState().openProject(id);
+
+const createProject = (
+  inBrowser: boolean,
+  name: string,
+  folderId: string | null,
+) =>
+  inBrowser
+    ? createBrowserProject(name).then(({ key }) => openBrowserProject(key))
+    : api
+        .createProject(name, folderId)
+        .then(({ document }) => openProject(document.id));
+
+function OpenProjectFile({
+  inBrowser,
+  onError,
+}: {
+  inBrowser: boolean;
+  onError: (e: string) => void;
+}) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const openFile = async (file?: File) => {
     if (!file) return;
     setUploading(true);
     try {
-      const { document } = await api.uploadProjectFile(file);
-      await openProject(document.id);
+      if (inBrowser)
+        await openBrowserProject((await keepProjectFile(file, file.name)).key);
+      else await openProject((await api.uploadProjectFile(file)).document.id);
     } catch (e: any) {
       onError(e.message);
     } finally {
@@ -156,7 +181,6 @@ export function ProjectList({ onUsers }: { onUsers: () => void }) {
   const loadError = useStore((s) => s.error);
   const error = listError ?? loadError;
   const [renaming, setRenaming] = useState<Renaming>(null);
-  const openProject = useStore((s) => s.openProject);
   const missing =
     load === "ready" &&
     folderId !== null &&
@@ -175,10 +199,9 @@ export function ProjectList({ onUsers }: { onUsers: () => void }) {
   };
   const run = runThen(() => Promise.all([server.refresh(), kept.refresh()]));
   const create = () =>
-    api
-      .createProject(name || "Untitled", folderId)
-      .then(({ document }) => openProject(document.id))
-      .catch((e) => setError(e.message));
+    createProject(inBrowser, name || "Untitled", folderId).catch((e) =>
+      setError(e.message),
+    );
   const newFolder = () =>
     run(
       api.createFolder("New folder", folderId).then(({ folder }) => {
@@ -213,13 +236,15 @@ export function ProjectList({ onUsers }: { onUsers: () => void }) {
           <button className="btn primary" onClick={() => void create()}>
             Create
           </button>
-          <button className="btn" onClick={newFolder}>
-            New folder
-          </button>
+          {!inBrowser && (
+            <button className="btn" onClick={newFolder}>
+              New folder
+            </button>
+          )}
         </div>
         <div className="projects">
-          <StepImportButton newProject onError={setError} />
-          <OpenProjectFile onError={setError} />
+          {!inBrowser && <StepImportButton newProject onError={setError} />}
+          <OpenProjectFile inBrowser={inBrowser} onError={setError} />
           {load === "loading" && (
             <div className="tree-empty">Loading projects…</div>
           )}

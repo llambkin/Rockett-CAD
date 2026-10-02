@@ -1,4 +1,5 @@
 import {
+  createEmptyDocument,
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_LIMIT_MB,
   PROJECT_FILE_VERSION,
@@ -247,8 +248,16 @@ export async function upgradeBrowserNaming<T>(
 export const deleteBrowserProject = (key: string) =>
   transact<void>("readwrite", (store) => void store.delete(key));
 
-const keepBrowserProject = (r: BrowserProject) =>
-  transact<void>("readwrite", (store) => void store.add(r));
+async function keepBrowserProject(r: BrowserProject): Promise<BrowserProject> {
+  void navigator.storage?.persist().catch(() => false);
+  await transact<void>("readwrite", (store) => void store.add(r));
+  return r;
+}
+
+export function createBrowserProject(name: string): Promise<BrowserProject> {
+  const key = newKey();
+  return keepBrowserProject(record(key, 1, createEmptyDocument(key, name), {}));
+}
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -316,16 +325,27 @@ export async function browserProjectFile(r: BrowserProject): Promise<File> {
   return new File([blob], fileName);
 }
 
-export async function moveToBrowser(id: string, name: string): Promise<void> {
-  void navigator.storage?.persist().catch(() => false);
-  const { blob } = await api.downloadProjectFile(id);
+export async function keepProjectFile(
+  blob: Blob,
+  name: string,
+): Promise<BrowserProject> {
   if (blob.size > FILE_LIMIT)
     throw new Error(
       `"${name}" is over the ${PROJECT_FILE_LIMIT_MB} MB project file limit, so it could not open from this browser.`,
     );
-  const file: ProjectFile = JSON.parse(await blob.text());
-  await keepBrowserProject(fromProjectFile(file));
-  await api.deleteProject(id, false, file.document.revision).catch(() => {
+  let file: ProjectFile | undefined;
+  try {
+    file = JSON.parse(await blob.text());
+  } catch {}
+  if (file?.format !== PROJECT_FILE_FORMAT)
+    throw new Error("This is not a Rockett project file");
+  return keepBrowserProject(fromProjectFile(file));
+}
+
+export async function moveToBrowser(id: string, name: string): Promise<void> {
+  const { blob } = await api.downloadProjectFile(id);
+  const { document } = await keepProjectFile(blob, name);
+  await api.deleteProject(id, false, document.revision).catch(() => {
     throw new Error(
       `"${name}" is in this browser, but the server copy was not removed.`,
     );
