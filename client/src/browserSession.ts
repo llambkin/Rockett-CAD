@@ -10,6 +10,7 @@ import {
   getBrowserProject,
   saveBrowserDocument,
   StaleRecord,
+  upgradeBrowserNaming,
 } from "./browserProjects";
 import { BROWSER_PATH, browserKeyFromPath, browserProjectPath } from "./paths";
 import { followPath as followProjectPath, useStore } from "./store";
@@ -88,6 +89,16 @@ export function leaveBrowserProject(): boolean {
 
 export function dropBrowserCopy(): void {
   if (open) void api.deleteProject(open.id, true).catch(() => {});
+}
+
+export async function upgradingNaming<T>(
+  id: string,
+  commit: () => Promise<T>,
+): Promise<T> {
+  const session = open?.id === id ? open : null;
+  if (!session) return commit();
+  await session.saving;
+  return upgradeBrowserNaming(session.key, commit);
 }
 
 async function refuseOversizeImage(key: string, image: File): Promise<void> {

@@ -16,6 +16,7 @@ import type {
   UnresolvedRef,
 } from "@rockett/shared";
 import { api } from "../api";
+import { upgradingNaming } from "../browserSession";
 import {
   previewBodies,
   selectionKey,
@@ -251,7 +252,9 @@ function mappingNote(m: NamingMapping, where: string): string {
 async function applyUpgrade(id: string, chosen: NamingDecision[]) {
   const s = useStore.getState();
   try {
-    await s.mutate(() => api.commitNamingUpgrade(id, chosen));
+    await s.mutate(() =>
+      upgradingNaming(id, () => api.commitNamingUpgrade(id, chosen)),
+    );
   } catch {
     return;
   }

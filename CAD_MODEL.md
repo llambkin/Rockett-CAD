@@ -286,7 +286,9 @@ both mesh through `meshShape`. Export formats:
 
 `server/src/store/namingUpgrade.ts` moves a version 1 document to version 2
 only when the user asks, after a `naming1-{hash}` backup of the complete
-project. `planNamingUpgrade` in `server/src/geometry/upgradeNaming.ts` proves
+project. A browser project first keeps its version 1 record in this browser
+as `<name> (before naming upgrade)`, and nothing commits if that copy fails
+(`client/src/browserProjects.ts`). `planNamingUpgrade` in `server/src/geometry/upgradeNaming.ts` proves
 a mapping by provenance only, never by an `x{n}` or `~n` name. The commit
 refuses while a `candidate` or `ambiguous` mapping lacks a choice, and writes
 one save. Vertex references are not mapped. A version 1 copy name compares
