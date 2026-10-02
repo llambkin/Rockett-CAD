@@ -5,6 +5,7 @@ import { requireAdmin } from "../auth/users.js";
 import {
   acceptedNamingUpgrade,
   stageNamingUpgrade,
+  upgradeViews,
 } from "../store/namingUpgrade.js";
 import { receiveThumbnail } from "./uploads.js";
 import type { ApiRoutes } from "./projectMutations.js";
@@ -21,10 +22,19 @@ function namingRoutes(context: ApiRoutes) {
 
   on(
     ROUTES.commitNamingUpgrade,
-    mutateProject(async (doc, req) => ({
-      label: "Upgrade naming",
-      ...(await acceptedNamingUpgrade(store, kernel, doc, req.body.accept)),
-    })),
+    mutateProject(async (doc, req) => {
+      const plan = await acceptedNamingUpgrade(
+        store,
+        kernel,
+        doc,
+        req.body.accept,
+      );
+      return {
+        label: "Upgrade naming",
+        ...plan,
+        after: () => upgradeViews(store, doc.id, plan.mappings),
+      };
+    }),
   );
 
   on(

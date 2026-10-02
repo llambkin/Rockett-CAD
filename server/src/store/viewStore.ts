@@ -45,32 +45,47 @@ async function users(storage: Storage): Promise<string[]> {
   return (await storage.list("users")).filter((id) => ID_RE.test(id));
 }
 
-export async function pruneViews(
+type Hidden = ProjectView["hidden"];
+
+async function rewriteViews(
   storage: Storage,
   projectId: string,
-  featureId: string,
+  change: (hidden: Hidden) => Hidden,
 ): Promise<void> {
-  const kept = (id: string) => id !== featureId && !bodyMadeBy(featureId, id);
   for (const userId of await users(storage)) {
     const at = file(userId, projectId);
     const view = await storage
       .read(at)
       .then((raw) => decode(raw, at))
       .catch(() => undefined);
-    if (!view || [...view.hidden.bodies, ...view.hidden.features].every(kept))
-      continue;
-    const { bodies, features } = view.hidden;
-    await storage.writeAtomic(
-      at,
-      encoded({
-        ...view,
-        hidden: {
-          bodies: bodies.filter(kept),
-          features: features.filter(kept),
-        },
-      }),
-    );
+    if (!view) continue;
+    const hidden = change(view.hidden);
+    if (JSON.stringify(hidden) === JSON.stringify(view.hidden)) continue;
+    await storage.writeAtomic(at, encoded({ ...view, hidden }));
   }
+}
+
+export function pruneViews(
+  storage: Storage,
+  projectId: string,
+  featureId: string,
+): Promise<void> {
+  const kept = (id: string) => id !== featureId && !bodyMadeBy(featureId, id);
+  return rewriteViews(storage, projectId, ({ bodies, features }) => ({
+    bodies: bodies.filter(kept),
+    features: features.filter(kept),
+  }));
+}
+
+export function remapViews(
+  storage: Storage,
+  projectId: string,
+  moved: ReadonlyMap<string, string>,
+): Promise<void> {
+  return rewriteViews(storage, projectId, ({ bodies, features }) => ({
+    bodies: bodies.map((id) => moved.get(id) ?? id),
+    features,
+  }));
 }
 
 function decode(raw: Buffer | undefined, label: string) {

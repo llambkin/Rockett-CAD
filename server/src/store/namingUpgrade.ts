@@ -10,6 +10,7 @@ import type {
 import type { KernelClient } from "../kernel/client.js";
 import { backupNamespace } from "./jsonStore.js";
 import { StoreError, type ProjectStore } from "./projectStore.js";
+import { remapViews } from "./viewStore.js";
 
 type Planner = Pick<KernelClient, "planNamingUpgrade">;
 type Stager = Pick<KernelClient, "planNamingUpgrade" | "evaluate" | "drop">;
@@ -114,6 +115,19 @@ export async function stageNamingUpgrade(
     revision: doc.revision,
     mappings: await withMeshes(store, kernel, document, mappings),
   };
+}
+
+export function upgradeViews(
+  store: ProjectStore,
+  id: string,
+  mappings: NamingMapping[],
+): Promise<void> {
+  const moved = new Map(
+    mappings.flatMap(({ featureId, from, to }) =>
+      featureId === null && to ? [[from.bodyId, to.bodyId] as const] : [],
+    ),
+  );
+  return remapViews(store.documents.options.storage, id, moved);
 }
 
 export async function acceptedNamingUpgrade(

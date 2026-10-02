@@ -193,6 +193,7 @@ export function createProjectMutations(context: RouterContext) {
           cursor,
           position,
           document = loaded,
+          after,
           ...extra
         } = await edit(loaded, req);
         const saved = label !== undefined && document === loaded;
@@ -209,6 +210,7 @@ export function createProjectMutations(context: RouterContext) {
           await (label === undefined
             ? history.move(document, cursor, ctx.user.id)
             : history.save(document, label, tx, ctx.user.id));
+          if (typeof after === "function") await after();
           jobs.committed();
           await send(res, document, evaluation, extra, position);
         });

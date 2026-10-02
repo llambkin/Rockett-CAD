@@ -300,7 +300,8 @@ as `<name> (before naming upgrade)`, and nothing commits if that copy fails
 (`client/src/browserProjects.ts`). `planNamingUpgrade` in `server/src/geometry/upgradeNaming.ts` proves
 a mapping by provenance only, never by an `x{n}` or `~n` name. The commit
 refuses while a `candidate` or `ambiguous` mapping lacks a choice, and writes
-one save. Vertex references are not mapped. A version 1 copy name compares
+one save. After the save it remaps each user's hidden body ids through the
+final-body mappings; a remap failure after the save is a `kept` error. Vertex references are not mapped. A version 1 copy name compares
 by its version 2 form, each `m:` or `p{i}:` prefix applied as a key from
 the inside out.
 
