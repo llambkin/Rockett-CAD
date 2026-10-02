@@ -15,6 +15,7 @@ export function previewRoutes(context: ApiRoutes) {
     previewOwner,
     ended,
     sendStored,
+    refreshSigs,
     evaluateAndSync,
     jobs,
     send,
@@ -47,6 +48,7 @@ export function previewRoutes(context: ApiRoutes) {
         throw new RevisionConflict(stored.revision, document);
       const position = evaluationPosition(req, document);
       const evaluation = await evaluateAndSync(document, position);
+      await refreshSigs(document, stored, evaluation);
       await history.save(document, label, tx, ctx.user.id);
       previews.end(id, tx);
       jobs.committed();

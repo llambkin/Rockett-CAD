@@ -15,6 +15,7 @@ import { jobContext, type Job } from "./jobs.js";
 import type {
   ExportJob,
   KernelClient,
+  SignRequest,
   StateAnswers,
   StateQuery,
 } from "./client.js";
@@ -377,6 +378,17 @@ export class WorkerKernel implements KernelClient {
     return this.call(
       "visibleTargets",
       [doc, index, hidden],
+      this.sources(doc),
+      undefined,
+      jobContext.getStore(),
+      doc.id,
+    );
+  }
+
+  signResolved(doc: CadDocument, requests: SignRequest[]) {
+    return this.call(
+      "signResolved",
+      [doc, requests],
       this.sources(doc),
       undefined,
       jobContext.getStore(),

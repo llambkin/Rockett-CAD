@@ -29,7 +29,8 @@ import {
 import { initKernel, kernelVersion, release } from "../geometry/kernel.js";
 import { measure } from "../geometry/measure.js";
 import { resolvePlaneFrame, type EvalState } from "../geometry/features.js";
-import { computeEdgeNames } from "../geometry/naming.js";
+import { computeEdgeNames, withNamingVersion } from "../geometry/naming.js";
+import { resolveRefs } from "../geometry/resolve.js";
 import { curveInfo } from "../geometry/tessellate.js";
 import { faceDrawing } from "../geometry/dxf.js";
 import { signRefs } from "../geometry/signature.js";
@@ -72,6 +73,11 @@ export interface StateAnswers {
   sizeLimit: SizeLimit;
 }
 
+export interface SignRequest {
+  position: number;
+  refs: Array<FaceRef | EdgeRef>;
+}
+
 export interface ExportJob extends Omit<ExportRequest, "retain"> {
   hidden: readonly string[];
 }
@@ -104,6 +110,10 @@ export interface KernelClient {
     index: number,
     hidden: readonly string[],
   ): Promise<string[] | undefined>;
+  signResolved(
+    doc: CadDocument,
+    requests: SignRequest[],
+  ): Promise<Array<Array<RefSignature | undefined>>>;
   export(
     doc: CadDocument,
     job: ExportJob,
@@ -125,6 +135,12 @@ function asValidation<T>(run: () => T, detail?: string): T {
   } catch (error) {
     throw new ValidationError((error as Error).message, detail);
   }
+}
+
+function signed(state: EvalState, refs: Array<FaceRef | EdgeRef>) {
+  const copies = structuredClone(refs);
+  signRefs(state.bodies, copies);
+  return copies.map((ref) => ref.sig);
 }
 
 const ANSWERS: {
@@ -180,11 +196,7 @@ const ANSWERS: {
         : { entities: drawing.sketch };
     });
   },
-  sign(state, { refs }) {
-    const signed = structuredClone(refs);
-    signRefs(state.bodies, signed);
-    return signed.map((ref) => ref.sig);
-  },
+  sign: (state, { refs }) => signed(state, refs),
   sizeLimit: (state, { position, feature }, doc, resume) =>
     sizeLimit(state, doc, position, feature, resume),
 };
@@ -326,6 +338,22 @@ export class InProcessKernel implements KernelClient {
   ) {
     const { engine, sources } = await this.sourced(doc);
     return engine.visibleTargets(doc, index, hidden, sources);
+  }
+
+  async signResolved(doc: CadDocument, requests: SignRequest[]) {
+    const { engine, sources } = await this.sourced(doc);
+    return requests.map(({ position, refs }) => {
+      const state = engine.stateAt(doc, position, sources);
+      const resolutions = withNamingVersion(doc.namingVersion, () =>
+        resolveRefs(state.bodies, refs),
+      );
+      return signed(state, refs).map((sig, i) =>
+        resolutions[i]!.status === "resolved" &&
+        !state.blocked.has(refs[i]!.bodyId)
+          ? sig
+          : undefined,
+      );
+    });
   }
 
   async export(doc: CadDocument, job: ExportJob) {

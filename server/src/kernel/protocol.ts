@@ -37,6 +37,10 @@ export interface Calls {
     args: Parameters<KernelClient["visibleTargets"]>;
     result: string[] | undefined;
   };
+  signResolved: {
+    args: Parameters<KernelClient["signResolved"]>;
+    result: Awaited<ReturnType<KernelClient["signResolved"]>>;
+  };
   export: {
     args: [doc: CadDocument, job: ExportJob];
     result: { data: ArrayBuffer; mime: string; ext: string };

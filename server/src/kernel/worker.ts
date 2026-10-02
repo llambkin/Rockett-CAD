@@ -93,6 +93,7 @@ const RUN: {
     }),
   stateQuery: (id, doc, query) => kernelFor(id).stateQuery(doc, query),
   visibleTargets: (id, ...args) => kernelFor(id).visibleTargets(...args),
+  signResolved: (id, ...args) => kernelFor(id).signResolved(...args),
   async export(id, doc, job) {
     const { data, ...file } = await kernelFor(id).export(doc, job);
     return { data: owned(data), ...file };

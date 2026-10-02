@@ -1,8 +1,11 @@
 import {
+  collectTopoRefs,
   editedEntities,
   resolveDocumentParameters,
   type CadDocument,
+  type EvaluateResult,
   type Feature,
+  type FeatureRunStatus,
   PREVIEW_HEADER,
   TX_HEADER,
   ValidationError,
@@ -14,6 +17,9 @@ import { previewSequence, reply, transactionId } from "./revision.js";
 import type { Edit } from "./routeModules.js";
 import type { RouterContext } from "./routerContext.js";
 import { evaluationPosition } from "./evaluationPosition.js";
+
+const UNBUILT = new Set<FeatureRunStatus>(["cancelled", "rolledBack"]);
+
 const previewOwner = (res: any, user: User): string => {
   const session: string | undefined = res.locals.session;
   if (!session) throw new Error("auth middleware missing");
@@ -44,6 +50,38 @@ function solveEdits(doc: CadDocument, before: Feature[]) {
     if (sketch?.type === "sketch" && solved !== feature.entities)
       sketch.entities = solved;
   }
+}
+
+async function refreshSigs(
+  kernel: RouterContext["kernel"],
+  doc: CadDocument,
+  before: { features: Feature[]; timelinePosition: number },
+  { featureStatuses }: EvaluateResult,
+) {
+  const previous = before.features.map((feature) => JSON.stringify(feature));
+  const kept = new Set(previous);
+  const after = resolvedFeatures(doc).map((feature) => JSON.stringify(feature));
+  const changed = after.findIndex((key, i) => key !== previous[i]);
+  const start = Math.min(
+    changed < 0 ? after.length : changed,
+    before.timelinePosition,
+  );
+  const requests = featureStatuses.flatMap(({ status }, position) => {
+    if (position < start || UNBUILT.has(status) || !kept.has(after[position]!))
+      return [];
+    const refs = collectTopoRefs(doc.features[position]!).filter(
+      (ref) => ref.sig,
+    );
+    return refs.length > 0 ? [{ position, refs }] : [];
+  });
+  if (requests.length === 0) return;
+  const sigs = await kernel.signResolved(doc, requests);
+  requests.forEach(({ refs }, i) =>
+    refs.forEach((ref, j) => {
+      const sig = sigs[i]![j];
+      if (sig) ref.sig = sig;
+    }),
+  );
 }
 
 const ended = () =>
@@ -102,8 +140,16 @@ function previewStage(context: RouterContext) {
 }
 
 export function createProjectMutations(context: RouterContext) {
-  const { store, history, jobs, wrap, editable, send, evaluateAndSync } =
-    context;
+  const {
+    store,
+    history,
+    jobs,
+    wrap,
+    editable,
+    send,
+    evaluateAndSync,
+    kernel,
+  } = context;
   const { stage, sendStored } = previewStage(context);
   const mutateProject = (edit: Edit, previewable = false) =>
     wrap(
@@ -119,6 +165,7 @@ export function createProjectMutations(context: RouterContext) {
         }
         const loaded = await editable(req, res);
         const before = structuredClone(resolvedFeatures(loaded));
+        const { timelinePosition } = loaded;
         const {
           label,
           cursor,
@@ -126,9 +173,16 @@ export function createProjectMutations(context: RouterContext) {
           document = loaded,
           ...extra
         } = await edit(loaded, req);
-        if (label !== undefined && document === loaded)
-          solveEdits(document, before);
+        const saved = label !== undefined && document === loaded;
+        if (saved) solveEdits(document, before);
         const evaluation = await evaluateAndSync(document, position);
+        if (saved)
+          await refreshSigs(
+            kernel,
+            document,
+            { features: before, timelinePosition },
+            evaluation,
+          );
         await (label === undefined
           ? history.move(document, cursor, ctx.user.id)
           : history.save(document, label, tx, ctx.user.id));
@@ -136,7 +190,26 @@ export function createProjectMutations(context: RouterContext) {
         await send(res, document, evaluation, extra, position);
       }),
     );
-  return { mutateProject, previewOwner, ended, sendStored };
+  return {
+    mutateProject,
+    previewOwner,
+    ended,
+    sendStored,
+    refreshSigs: (
+      doc: CadDocument,
+      before: CadDocument,
+      evaluation: EvaluateResult,
+    ) =>
+      refreshSigs(
+        kernel,
+        doc,
+        {
+          features: resolvedFeatures(before),
+          timelinePosition: before.timelinePosition,
+        },
+        evaluation,
+      ),
+  };
 }
 
 export type ApiRoutes = RouterContext &

@@ -145,8 +145,8 @@ imports of one file name faces alike. Mesh imports keep
   `candidate`, not followed.
 - Otherwise lineage decides, then the `sig` on the referenced body. Other
   bodies give `suggestions` only.
-- Evaluation never writes a candidate. Only a feature update, the repair,
-  changes a stored reference.
+- Evaluation never writes a candidate or a `sig`. Only a feature update, the
+  repair, changes a stored reference's name.
 - Version 2: an unresolved reference fails its feature and blocks later
   features that name its bodies. Other bodies build. Export refuses a
   blocked body.
@@ -160,6 +160,9 @@ imports of one file name faces alike. Mesh imports keep
   Version 2 still swaps across a rounding step.
 - Split pieces renumber. A signed reference becomes a `candidate`; an
   unsigned one moves silently, as every version 1 one does.
+- A save evaluated only up to an open sketch refreshes no `sig` after that
+  sketch, and finishing the sketch only evaluates. Those references keep
+  their old `sig` until a later save changes a feature before them.
 - A failure that is not a reference, such as a fillet too large, blocks
   nothing. Later features build on the unchanged body.
 - A consumed face errors its feature; the edit dialog repairs it. See
@@ -295,6 +298,15 @@ feature and keep one sent with the reference. `collectTopoRefs` in
 The same contract owns body and feature dependencies, including references
 inside planes, axes and points. Opaque extension parameters are not references
 unless their registered spec declares them.
+
+A save that changes a feature refreshes the stored `sig` of each reference
+that still resolves on its name in every later feature the save left
+unchanged, from the state before that feature, so a later renumbering is
+still caught. A reference that no longer resolves, or whose body is blocked,
+keeps its `sig`. Only features the save evaluates refresh; one past the
+timeline marker refreshes when the timeline rolls forward over it. A preview
+refreshes at commit. `refreshSigs` in `server/src/api/projectMutations.ts`
+owns this and runs after the save's evaluation. Evaluation never writes `sig`.
 
 ## Tool targets
 
