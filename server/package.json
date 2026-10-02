@@ -15,7 +15,7 @@
     "express": "5.2.1",
     "fflate": "0.8.3",
     "multer": "2.4.0",
-    "opencascade.js": "https://github.com/msegec/opencascade.js/releases/download/v2.0.0-msegec.occt801.2/opencascade.js-2.0.0-msegec.occt801.2.tgz"
+    "opencascade.js": "https://github.com/msegec/opencascade.js/releases/download/v2.0.0-msegec.occt801.4/opencascade.js-2.0.0-msegec.occt801.4.tgz"
   },
   "devDependencies": {
     "@types/express": "5.0.6",

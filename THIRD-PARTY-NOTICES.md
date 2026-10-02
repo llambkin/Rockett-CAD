@@ -19,12 +19,12 @@ is not set yet.
 
 ## opencascade.js
 
-`opencascade.js` `2.0.0-msegec.occt801.2` is the WebAssembly build of Open
+`opencascade.js` `2.0.0-msegec.occt801.4` is the WebAssembly build of Open
 CASCADE Technology 8.0.1, licensed LGPL-2.1-only. It is built from the fork at
 https://github.com/msegec/opencascade.js.
 
 - The corresponding source is the fork's tagged commit
-  `v2.0.0-msegec.occt801.2`. Its `Dockerfile` builds this package from OCCT
+  `v2.0.0-msegec.occt801.4`. Its `Dockerfile` builds this package from OCCT
   tag `V8_0_1` and applies the explicit planar fold patch.
 - The image installs the release asset that `server/package.json` pins with
   `npm ci`. Its licence text ships beside it in
@@ -38,9 +38,9 @@ https://github.com/msegec/opencascade.js.
 ### Source offer
 
 Anyone who receives an image that carries `opencascade.js`
-`2.0.0-msegec.occt801.2` may copy its complete corresponding source, at no
+`2.0.0-msegec.occt801.4` may copy its complete corresponding source, at no
 charge, from https://github.com/msegec/opencascade.js at tag
-`v2.0.0-msegec.occt801.2`. The offer covers that package and the Open CASCADE
+`v2.0.0-msegec.occt801.4`. The offer covers that package and the Open CASCADE
 Technology 8.0.1 build inside it, under LGPL-2.1-only: the fork's build files
 and planar fold patch, and the OCCT `V8_0_1` source its `Dockerfile` names.
 The source stays there for as long as an image that carries this build is
@@ -149,7 +149,7 @@ peers but ship in no artefact.
 | object-inspect          | 1.13.4                 | MIT           | image                        | https://github.com/inspect-js/object-inspect         |
 | on-finished             | 2.4.1                  | MIT           | image                        | https://github.com/jshttp/on-finished                |
 | once                    | 1.4.0                  | ISC           | image                        | https://github.com/isaacs/once                       |
-| opencascade.js          | 2.0.0-msegec.occt801.2 | LGPL-2.1-only | image                        | https://github.com/msegec/opencascade.js             |
+| opencascade.js          | 2.0.0-msegec.occt801.4 | LGPL-2.1-only | image                        | https://github.com/msegec/opencascade.js             |
 | parseurl                | 1.3.3                  | MIT           | image                        | https://github.com/pillarjs/parseurl                 |
 | path-to-regexp          | 8.4.2                  | MIT           | image                        | https://github.com/pillarjs/path-to-regexp           |
 | proxy-addr              | 2.0.8                  | MIT           | image                        | https://github.com/jshttp/proxy-addr                 |
