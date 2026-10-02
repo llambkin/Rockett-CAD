@@ -244,15 +244,20 @@ input bound, not a tolerance.
   `shared/src/profiles.ts` still finds ids saved before tangent splitting
   (DEC-101): `shared/test/profiles.test.ts`.
 - A planar face supports a sketch independently of its boundary curves.
-  Automatic boundary import retains exact straight edges, circles and circular
-  arcs. If any curve is unsupported, the sketch starts empty and reports that
+  Automatic boundary import retains exact straight edges, circles, ellipses
+  and their arcs. If any curve is unsupported, the sketch starts empty and reports that
   limit instead of importing a partial profile. Reference import classifies
   unsupported curves without sampling them; DXF export still samples them.
   Project can import supported edges individually; unsupported edges report
   their limit.
 - Projections (`shared/src/projection.ts`) keep child ids `:a`, `:b` across
   regeneration. A missing source fails the sketch rather
-  than keep stale points.
+  than keep stale points. A circle parallel to the sketch stays a circle or
+  arc. A tilted circle or an ellipse projects to an exact ellipse with ids
+  `:c`, `:m`, `:n`, plus `:a`, `:b` for an arc; an edge seen edge-on refuses.
+  Edge signatures still record an elliptical edge as `other`.
+- A sketch arc runs counter-clockwise from `start` to `end` about `center`.
+  The solver holds both ends at one radius.
 - `editSketchOffset` in `shared/src/sketchOffsets.ts` keeps generated entity
   ids: `shared/test/sketchOffsets.test.ts`.
 - Trim (`shared/src/sketchTrim.ts`) and extend (`extendSketch` in
@@ -270,10 +275,15 @@ input bound, not a tolerance.
   `ellipseLineGap` in `shared/src/sketchCurves.ts`; other constraints refuse.
   A solve weakly holds the points of every ellipse not being dragged, so a new
   constraint moves the other curve rather than resizing the ellipse:
-  `shared/test/ellipseConstraints.test.ts`. An ellipse that touches another curve forms no region and the sketch warns;
-  trim, extend, offset and sweep paths refuse ellipses. `pieceEdge` in
-  `server/src/geometry/sketchEdges.ts` builds the exact `gp_Elips` edge:
-  `shared/test/ellipse.test.ts`.
+  `shared/test/ellipseConstraints.test.ts`. Schema 28 adds optional `start`
+  and `end` points: an elliptical arc runs counter-clockwise from start to
+  end, and the solver holds each end on the curve. A line splits an ellipse
+  or elliptical arc at their exact intersections. Contact with a circle, arc
+  or other ellipse forms no region and the sketch warns; profile ids saved
+  earlier still resolve. Trim, extend, offset and sweep paths refuse
+  ellipses. `pieceEdge` in `server/src/geometry/sketchEdges.ts` builds the
+  exact `gp_Elips` edge between snapped ends: `shared/test/ellipse.test.ts`,
+  `shared/test/ellipticalArc.test.ts`.
 - The solver skips a dimension with `driven: true`. The field is optional, so
   sketches saved without it load unchanged with no schema step.
 

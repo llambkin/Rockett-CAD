@@ -25,10 +25,9 @@ import type {
 import { OverConstrainedError } from "./solverError.js";
 export { OverConstrainedError } from "./solverError.js";
 import {
-  arcRadiusGap,
-  axisCosine,
   ellipseLevel,
   ellipseLineGap,
+  implicitGaps,
   entityPointIds,
 } from "./sketchCurves.js";
 import {
@@ -227,9 +226,10 @@ function buildProblem(input: SolveInput): Problem {
 
   for (const e of input.entities) {
     if (e.kind !== "arc" && e.kind !== "ellipse") continue;
-    const [c, p, q] = entityPointIds(e).map((id) => [px(id), py(id)]);
-    const rule = e.kind === "arc" ? arcRadiusGap : axisCosine;
-    residuals.push((x) => rule(pointAt(c!, x), pointAt(p!, x), pointAt(q!, x)));
+    const pts = entityPointIds(e).map((id) => [px(id), py(id)]);
+    const at = (x: Float64Array) => pts.map((p) => pointAt(p, x));
+    for (let i = 2; i < pts.length; i++)
+      residuals.push((x) => implicitGaps(e.kind, at(x))[i - 2]!);
     settle();
   }
 

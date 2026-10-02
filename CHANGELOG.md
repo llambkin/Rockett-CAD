@@ -148,6 +148,8 @@ release workflow remain under development.
 - Schema 27: mesh imports store their file as a project blob instead of base64
   in the document; earlier documents move their mesh bytes into blobs after a
   backup.
+- Schema 28: sketch ellipses may hold start and end points as elliptical arcs
+  and may be projected from model edges; earlier documents load unchanged.
 
 ### Known limits
 

@@ -149,16 +149,22 @@ function addEntity(sketch: SketchBuilder, record: DxfRecord): boolean {
       return sketch.arc(flip([cx, cy]), s, e, construction);
     }
     case "ELLIPSE": {
-      const ratio = num(record, 40);
-      const span = num(record, 42, TAU) - num(record, 41);
-      if (mirror === null || !(ratio > 0 && ratio <= 1)) return false;
-      if (Math.abs(span - TAU) > FULL_TURN_TOL) return false;
-      return sketch.ellipse(
+      const [c, major, ratio] = [
         xy(record, 10),
         xy(record, 11),
-        ratio,
-        construction,
-      );
+        num(record, 40),
+      ];
+      const [t0, t1] = [num(record, 41), num(record, 42, TAU)];
+      if (mirror === null || !(ratio > 0 && ratio <= 1)) return false;
+      const span = (((t1 - t0) % TAU) + TAU) % TAU;
+      if (Math.min(span, TAU - span) <= FULL_TURN_TOL)
+        return sketch.ellipse(c, major, ratio, construction);
+      const at = (t: number): XY => [
+        c[0] + Math.cos(t) * major[0] - Math.sin(t) * major[1] * ratio * mirror,
+        c[1] + Math.cos(t) * major[1] + Math.sin(t) * major[0] * ratio * mirror,
+      ];
+      const ends: [XY, XY] = mirror > 0 ? [at(t0), at(t1)] : [at(t1), at(t0)];
+      return sketch.ellipse(c, major, ratio, construction, ends);
     }
     case "LWPOLYLINE": {
       const vertices: Vertex[] = [];

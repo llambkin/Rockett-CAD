@@ -35,8 +35,7 @@ function nearby(grid: Map<string, SketchPoint[]>, x: number, y: number) {
   return undefined;
 }
 
-export function sketchBuilder(scale = 1) {
-  const entities: SketchEntity[] = [];
+function pointPool(entities: SketchEntity[], scale: number) {
   const grid = new Map<string, SketchPoint[]>();
   const apart = (a: XY, b: XY) =>
     Math.hypot(b[0] - a[0], b[1] - a[1]) * scale > LINEAR_TOL;
@@ -57,6 +56,12 @@ export function sketchBuilder(scale = 1) {
     grid.set(key, [...(grid.get(key) ?? []), p]);
     return p.id;
   };
+  return { apart, point, endpoint };
+}
+
+export function sketchBuilder(scale = 1) {
+  const entities: SketchEntity[] = [];
+  const { apart, point, endpoint } = pointPool(entities, scale);
   return {
     entities,
     point(at: XY, construction = false) {
@@ -86,15 +91,26 @@ export function sketchBuilder(scale = 1) {
       });
       return true;
     },
-    ellipse(c: XY, major: XY, ratio: number, construction = false) {
+    ellipse(
+      c: XY,
+      major: XY,
+      ratio: number,
+      construction = false,
+      ends?: [XY, XY],
+    ) {
       const minor: XY = [c[0] - major[1] * ratio, c[1] + major[0] * ratio];
       if (!finite(...c, ...major, ratio) || !apart(c, minor)) return false;
+      if (ends && !apart(...ends)) return false;
       entities.push({
         id: newId("el"),
         kind: "ellipse",
         center: point(c, construction).id,
         major: point([c[0] + major[0], c[1] + major[1]], construction).id,
         minor: point(minor, construction).id,
+        ...(ends && {
+          start: endpoint(ends[0], construction),
+          end: endpoint(ends[1], construction),
+        }),
         ...flag(construction),
       });
       return true;

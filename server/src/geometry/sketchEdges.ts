@@ -24,13 +24,14 @@ export interface CurvePiece {
   trim?: [number, number, number, number];
 }
 
-function axes(own: Own, frame: PlaneFrame, c: UV, x: Vec3) {
+function axes(own: Own, frame: PlaneFrame, c: UV, x: Vec3, flip = false) {
   const k = getKernel();
   const [cx, cy, cz] = uvTo3d(frame, c[0], c[1]);
+  const [nx, ny, nz] = frame.normal.map((v) => (flip ? -v : v));
   return own(
     new k.gp_Ax2_2(
       own(pnt(cx, cy, cz)),
-      own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
+      own(dir(nx!, ny!, nz!)),
       own(dir(x[0], x[1], x[2])),
     ),
   );
@@ -98,18 +99,33 @@ function circleEdge(frame: PlaneFrame, c: UV, r: number): Shape {
   );
 }
 
-function ellipseEdge(frame: PlaneFrame, e: SketchCurveEllipse): Shape {
+function ellipseEdge(
+  frame: PlaneFrame,
+  e: SketchCurveEllipse,
+  ends: [UV, UV] | undefined,
+  reversed: boolean,
+): Shape {
   const k = getKernel();
   const origin = uvTo3d(frame, e.cx, e.cy);
   const tip = uvTo3d(frame, e.cx + e.ux, e.cy + e.uy);
   const major = tip.map((v, i) => v - origin[i]!) as Vec3;
   return acquire(
     scoped((own) => {
-      const ax2 = axes(own, frame, [e.cx, e.cy], major);
+      const ax2 = axes(own, frame, [e.cx, e.cy], major, reversed);
       const ellipse = own(new k.gp_Elips_2(ax2, e.a, e.b));
-      return own.keep(
-        own(own(new k.BRepBuilderAPI_MakeEdge_12(ellipse)).Edge()),
+      const [from, to] = (reversed ? ends?.toReversed() : ends) ?? [];
+      const made = own(
+        from && to
+          ? new k.BRepBuilderAPI_MakeEdge_14(
+              ellipse,
+              own(pnt(...uvTo3d(frame, ...from))),
+              own(pnt(...uvTo3d(frame, ...to))),
+            )
+          : new k.BRepBuilderAPI_MakeEdge_12(ellipse),
       );
+      if (!made.IsDone())
+        throw new Error(`Ellipse ${e.id} does not pass through its ends.`);
+      return own.keep(own(made.Edge()));
     }),
   );
 }
@@ -120,12 +136,16 @@ export function pieceEdge(
   piece: CurvePiece,
   snap: Snap,
 ): Shape {
-  if (curve.kind === "ellipse") return ellipseEdge(frame, curve);
   const t = piece.trim;
   const cut = ([a, b, c, d]: number[]): [UV, UV] => [
     snap(a!, b!),
     snap(c!, d!),
   ];
+  if (curve.kind === "ellipse") {
+    const span = curve.span && [...curve.span.s, ...curve.span.e];
+    const ends = t ?? span;
+    return ellipseEdge(frame, curve, ends && cut(ends), piece.reversed);
+  }
   if (curve.kind === "circle") {
     if (!t) return circleEdge(frame, [curve.cx, curve.cy], curve.r);
     const [s, e] = cut(t);

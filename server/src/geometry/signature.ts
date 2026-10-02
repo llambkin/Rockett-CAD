@@ -78,8 +78,9 @@ export function edgeSignature(edge: Shape): RefSignature {
     const p = own(pnt(0, 0, 0)),
       d = own(vec(0, 0, 0));
     curve.D1((curve.FirstParameter() + curve.LastParameter()) / 2, p, d);
+    const { type } = curveInfo(edge);
     return {
-      type: curveInfo(edge).type,
+      type: type === "ellipse" ? "other" : type,
       point: [p.X(), p.Y(), p.Z()],
       direction: unit(d.X(), d.Y(), d.Z()),
     };

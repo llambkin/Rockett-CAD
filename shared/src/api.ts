@@ -57,6 +57,17 @@ export interface EdgeInfo {
         end?: Vec3;
         sweep?: number;
       }
+    | {
+        type: "ellipse";
+        center: Vec3;
+        axis: Vec3;
+        majorAxis: Vec3;
+        majorRadius: number;
+        minorRadius: number;
+        start?: Vec3;
+        end?: Vec3;
+        sweep?: number;
+      }
     | { type: "other" };
 }
 

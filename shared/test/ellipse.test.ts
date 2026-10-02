@@ -160,16 +160,15 @@ describe("DXF ellipse import", () => {
     expect(imported.entities).toHaveLength(4);
   });
 
-  it("counts partial ellipses and invalid ratios as skipped", () => {
+  it("counts invalid ratios as skipped", () => {
     const imported = importDxf(
       dxf(
-        ellipseRecord([0, 0], [10, 0], 0.5, 0, Math.PI),
         ellipseRecord([0, 0], [10, 0], 1.5),
         ellipseRecord([0, 0], [10, 0], 0),
         ellipseRecord([0, 0], [0, 0], 0.5),
       ),
     );
-    expect(imported).toEqual({ entities: [], skipped: 4 });
+    expect(imported).toEqual({ entities: [], skipped: 3 });
   });
 });
 
@@ -220,8 +219,12 @@ describe("ellipse profiles", () => {
     expect(big.holes).toEqual([[{ entityId: "e", reversed: false }]]);
   });
 
-  it("refuses an ellipse that crosses another curve instead of omitting it silently", () => {
-    const entities = [...rect(0, -3, 20, 6), ...ellipse("e", [0, 0], 10, 5)];
+  it("refuses an ellipse that crosses a circle instead of omitting it silently", () => {
+    const entities = [
+      ...ellipse("e", [0, 0], 10, 5),
+      P("oc", 10, 0),
+      { id: "o", kind: "circle", center: "oc", radius: 3 } as SketchEntity,
+    ];
     expect(crossingEllipses(entities)).toEqual(["e"]);
     for (const p of detectProfiles(entities))
       expect(JSON.stringify(p)).not.toContain('"e"');
@@ -313,26 +316,25 @@ describe("unsupported ellipse operations", () => {
       expect(entities).toEqual(before);
     });
 
-  it("refuses trimming at a crossing ellipse", () => {
+  it("refuses trimming a circle at a crossing ellipse", () => {
     const crossed = [
       ...ellipse("e", [0, 0], 10, 5),
-      P("a", -20, 0),
-      P("b", 20, 0),
-      { id: "l", kind: "line", p1: "a", p2: "b" } as SketchEntity,
+      P("oc", 10, 0),
+      { id: "o", kind: "circle", center: "oc", radius: 3 } as SketchEntity,
     ];
     const copy = structuredClone(crossed);
-    expect(() => trimSketch(crossed, [], "l", { x: 0, y: 0 })).toThrow(
+    expect(() => trimSketch(crossed, [], "o", { x: 13, y: 0 })).toThrow(
       /ellipse/i,
     );
     expect(crossed).toEqual(copy);
-    const line = crossed.find((e) => e.id === "l");
-    expect(trimmable(crossed, line)).toBe(false);
+    const circle = crossed.find((e) => e.id === "o");
+    expect(trimmable(crossed, circle)).toBe(false);
     expect(
       trimmable(
         crossed,
         crossed.find((e) => e.id === "e"),
       ),
     ).toBe(false);
-    expect(trimmable(crossed.slice(4), line)).toBe(true);
+    expect(trimmable(crossed.slice(4), circle)).toBe(true);
   });
 });

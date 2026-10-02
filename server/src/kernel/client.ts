@@ -191,7 +191,7 @@ const ANSWERS: {
         ? {
             entities: [],
             warning:
-              "Sketch created without its boundary. Boundary import supports straight edges, circles and circular arcs.",
+              "Sketch created without its boundary. Boundary import supports straight edges, circles, ellipses and their arcs.",
           }
         : { entities: drawing.sketch };
     });

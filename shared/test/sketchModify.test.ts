@@ -119,7 +119,7 @@ describe("projected geometry", () => {
     expect(points(solved.entities).get("mid")!.x).toBeCloseTo(60, 4);
     expect(detectProfiles(next)).toHaveLength(0);
   });
-  it("rejects edge-on lines and tilted circles instead of approximating them", () => {
+  it("rejects edge-on lines and circles instead of approximating them", () => {
     expect(() =>
       projectEdge({ type: "line", a: [0, 0, 0], b: [0, 0, 20] }, f, "p", ref),
     ).toThrow(/point/);
@@ -130,6 +130,6 @@ describe("projected geometry", () => {
         "p",
         ref,
       ),
-    ).toThrow(/ellipses/);
+    ).toThrow(/edge-on/);
   });
 });

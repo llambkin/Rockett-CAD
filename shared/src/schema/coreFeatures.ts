@@ -144,12 +144,13 @@ const entity = Type.Union([
     end: id,
   }),
   Type.Object({
-    ...entityBase,
-    projection: Type.Optional(Type.Never()),
+    ...projected,
     kind: Type.Literal("ellipse"),
     center: id,
     major: id,
     minor: id,
+    start: Type.Optional(id),
+    end: Type.Optional(id),
   }),
 ]);
 

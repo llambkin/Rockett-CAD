@@ -26,8 +26,8 @@ everything downstream against persistent topology references.
 - **Angle snap**: hold Shift to snap a line to 15 degree steps or your own step and angles; A locks its angle.
 - **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
 - **Project, trim and extend**: link model edges into a sketch, trim curve pieces by click or drag (T), extend curves to boundaries.
-- **Insert DXF and SVG**: bring DXF lines, arcs, circles and points, or SVG paths and shapes, into the open sketch as editable geometry.
-- **Ellipses**: draw from centre, major end and minor point or import from DXF; constrain tangent lines and points, extrude exactly.
+- **Insert DXF and SVG**: bring DXF lines, arcs, circles, ellipses and points, or SVG paths and shapes, into the open sketch as editable geometry.
+- **Ellipses**: draw or import from DXF, including elliptical arcs; constrain tangent lines, project tilted circles, extrude exactly.
 - **Edit in place**: history rolls back while editing; Finish Sketch restores it, or Extrude opens with the selected region.
 
 ### Model

@@ -67,6 +67,7 @@ export type Circle = {
   cy: number;
   r: number;
 };
+export type Span = { t0: number; t1: number; s: XY; e: XY };
 export type Ellipse = {
   id: string;
   kind: "ellipse";
@@ -76,6 +77,7 @@ export type Ellipse = {
   b: number;
   ux: number;
   uy: number;
+  span?: Span;
 };
 export type Curve = Line | Arc | Circle | Ellipse;
 export type Round = Arc | Circle;
@@ -92,7 +94,9 @@ export function entityPointIds(e: SketchEntity): string[] {
     case "arc":
       return [e.center, e.start, e.end];
     case "ellipse":
-      return [e.center, e.major, e.minor];
+      return [e.center, e.major, e.minor, e.start, e.end].filter(
+        (id): id is string => id !== undefined,
+      );
   }
 }
 
@@ -111,6 +115,17 @@ export function ellipseLevel(c: At, m: At, n: At, p: At): number {
   const s = Math.hypot(dx * vy - dy * vx, ux * dy - uy * dx) / det;
   const d = Math.hypot(dx, dy);
   return s ? d - d / s : -Math.min(Math.hypot(ux, uy), Math.hypot(vx, vy));
+}
+
+export function implicitGaps(
+  kind: "arc" | "ellipse",
+  [c, p, q, ...ends]: At[],
+): number[] {
+  if (kind === "arc") return [arcRadiusGap(c!, p!, q!)];
+  return [
+    axisCosine(c!, p!, q!),
+    ...ends.map((e) => ellipseLevel(c!, p!, q!, e)),
+  ];
 }
 
 export function ellipseLineGap(
@@ -138,17 +153,55 @@ export const ellipsePoint = (
   e.cy + e.a * Math.cos(t) * e.uy + e.b * Math.sin(t) * e.ux,
 ];
 
-function ellipseFrame(e: Ellipse) {
+function ellipseFrame(e: Omit<Ellipse, "id" | "kind">) {
   return ([x, y]: XY): XY => {
     const [dx, dy] = [x - e.cx, y - e.cy];
     return [(dx * e.ux + dy * e.uy) / e.a, (dy * e.ux - dx * e.uy) / e.b];
   };
 }
 
+function ellipseParam(e: Omit<Ellipse, "id" | "kind">, p: XY): number {
+  const [x, y] = ellipseFrame(e)(p);
+  return Math.atan2(y, x);
+}
+
+function spanOf(e: Omit<Ellipse, "id" | "kind">, s: XY, end: XY): Span {
+  const t0 = ellipseParam(e, s);
+  let t1 = ellipseParam(e, end);
+  if (t1 <= t0 + 1e-12) t1 += TAU;
+  return { t0, t1, s, e: end };
+}
+
+export function spanParam(e: Ellipse, p: XY, from = e.span?.t0 ?? 0): number {
+  let t = ellipseParam(e, p);
+  while (t <= from + 1e-9) t += TAU;
+  return t;
+}
+
+const inSpan = (e: Ellipse, p: XY) =>
+  !e.span || spanParam(e, p) < e.span.t1 - 1e-9;
+
+export function sampleEllipse(
+  e: Ellipse,
+  s: XY,
+  end: XY,
+  segments = ARC_SEGMENTS,
+): number[] {
+  const { t0, t1 } = spanOf(e, s, end);
+  const out: number[] = [];
+  for (let i = 0; i <= segments; i++)
+    out.push(...ellipsePoint(e, t0 + ((t1 - t0) * i) / segments));
+  out.splice(0, 2, ...s);
+  out.splice(-2, 2, ...end);
+  return out;
+}
+
 export function curveSamples(c: Curve, segments = ARC_SEGMENTS): number[] {
   if (c.kind === "line") return [c.x1, c.y1, c.x2, c.y2];
   if (c.kind === "arc")
     return sampleArc(c.cx, c.cy, c.s[0], c.s[1], c.e[0], c.e[1], segments);
+  if (c.kind === "ellipse" && c.span)
+    return sampleEllipse(c, c.span.s, c.span.e, segments);
   const out: number[] = [];
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * TAU;
@@ -162,6 +215,11 @@ export function curveSamples(c: Curve, segments = ARC_SEGMENTS): number[] {
 }
 
 export function curveDistance(c: Curve, x: number, y: number): number {
+  if (c.kind === "ellipse" && !inSpan(c, [x, y]))
+    return Math.min(
+      Math.hypot(x - c.span!.s[0], y - c.span!.s[1]),
+      Math.hypot(x - c.span!.e[0], y - c.span!.e[1]),
+    );
   if (c.kind === "ellipse")
     return Math.abs(Math.hypot(...ellipseFrame(c)([x, y])) - 1) * c.b;
   if (c.kind !== "line") return Math.abs(Math.hypot(x - c.cx, y - c.cy) - c.r);
@@ -178,7 +236,10 @@ const CROSSING_SAMPLES = 256;
 const GOLDEN = (Math.sqrt(5) - 1) / 2;
 
 function along(c: Round | Ellipse): (t: number) => XY {
-  if (c.kind === "ellipse") return (t) => ellipsePoint(c, t * TAU);
+  if (c.kind === "ellipse") {
+    const [t0, t1] = c.span ? [c.span.t0, c.span.t1] : [0, TAU];
+    return (t) => ellipsePoint(c, t0 + (t1 - t0) * t);
+  }
   const [a0, a1] = c.kind === "arc" ? [c.a0, c.a1] : [0, TAU];
   return (t) => {
     const a = a0 + (a1 - a0) * t;
@@ -192,13 +253,24 @@ function least(f: (t: number) => number, lo: number, hi: number): number {
     if (f(m1) < f(m2)) hi = m2;
     else lo = m1;
   }
-  return f((lo + hi) / 2);
+  return (lo + hi) / 2;
 }
 
-function touches(e: Ellipse, c: Curve): boolean {
+const endsOfCurve = (c: Curve): XY[] =>
+  c.kind === "arc"
+    ? [c.s, c.e]
+    : c.kind === "ellipse" && c.span
+      ? [c.span.s, c.span.e]
+      : [];
+
+const awayFrom = (p: XY, ends: XY[]) =>
+  ends.every(([x, y]) => Math.hypot(p[0] - x, p[1] - y) > SPLIT_TOL);
+
+function touches(e: Ellipse, c: Curve, lines: boolean): boolean {
   const local = ellipseFrame(e);
   const tol = SPLIT_TOL / e.b;
   if (c.kind === "line") {
+    if (!lines) return false;
     const [p, q] = [local([c.x1, c.y1]), local([c.x2, c.y2])];
     const [dx, dy] = [q[0] - p[0], q[1] - p[1]];
     const len2 = dx * dx + dy * dy || 1;
@@ -212,21 +284,30 @@ function touches(e: Ellipse, c: Curve): boolean {
   const gap = (t: number) => Math.abs(rise(t));
   const n = CROSSING_SAMPLES;
   const g = Array.from({ length: n + 1 }, (_, i) => rise(i / n));
-  return g.some(
-    (v, i) =>
-      (i < n && v * g[i + 1]! <= 0) ||
-      (Math.abs(v) <= Math.abs(g[i - 1] ?? Infinity) &&
-        Math.abs(v) <= Math.abs(g[i + 1] ?? Infinity) &&
-        least(gap, Math.max(0, (i - 1) / n), Math.min(1, (i + 1) / n)) <= tol),
-  );
+  const contacts = g.flatMap((v, i) => {
+    const [lo, hi] = [Math.max(0, i - 1) / n, Math.min(n, i + 1) / n];
+    const t =
+      i < n && v * g[i + 1]! <= 0
+        ? least(gap, i / n, hi)
+        : Math.abs(v) <= Math.abs(g[i - 1] ?? Infinity) &&
+            Math.abs(v) <= Math.abs(g[i + 1] ?? Infinity)
+          ? least(gap, lo, hi)
+          : -1;
+    return t >= 0 && gap(t) <= tol ? [t] : [];
+  });
+  const ends = [...endsOfCurve(e), ...endsOfCurve(c)];
+  return contacts.some((t) => {
+    const p = at(t);
+    return inSpan(e, p) && awayFrom(p, ends);
+  });
 }
 
-export function crossingIds(curves: Curve[]): Set<string> {
+export function crossingIds(curves: Curve[], lines = false): Set<string> {
   const out = new Set<string>();
   for (const e of curves) {
     if (e.kind !== "ellipse") continue;
     for (const c of curves)
-      if (c !== e && touches(e, c)) out.add(e.id).add(c.id);
+      if (c !== e && touches(e, c, lines)) out.add(e.id).add(c.id);
   }
   return out;
 }
@@ -305,7 +386,37 @@ function roundRound(a: Round, b: Round, mode: Detection): XY[] {
   return out.filter(([x, y]) => onRound(a, x, y) && onRound(b, x, y));
 }
 
-export function meet(a: Line | Round, b: Line | Round, mode: Detection): XY[] {
+function lineEllipse(l: Line, e: Ellipse, mode: Detection): XY[] {
+  const local = ellipseFrame(e);
+  const [p, q] = [local([l.x1, l.y1]), local([l.x2, l.y2])];
+  const [dx, dy] = [q[0] - p[0], q[1] - p[1]];
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-24) return [];
+  const t0 = -(p[0] * dx + p[1] * dy) / len2;
+  const h = Math.hypot(p[0] + t0 * dx, p[1] + t0 * dy);
+  const half = Math.sqrt(Math.max(0, 1 - h * h) / len2);
+  const ts =
+    mode !== "legacy" && Math.abs(h - 1) <= LINEAR_TOL / e.b
+      ? [t0]
+      : h < 1
+        ? [t0 - half, t0 + half]
+        : [];
+  return ts
+    .filter(interior)
+    .map((t): XY => [l.x1 + t * (l.x2 - l.x1), l.y1 + t * (l.y2 - l.y1)])
+    .filter((x) => inSpan(e, x));
+}
+
+export function meet(
+  a: Line | Round | Ellipse,
+  b: Line | Round | Ellipse,
+  mode: Detection,
+): XY[] {
+  if (a.kind === "ellipse" || b.kind === "ellipse") {
+    if (a.kind === "line") return lineEllipse(a, b as Ellipse, mode);
+    if (b.kind === "line") return lineEllipse(b, a as Ellipse, mode);
+    return [];
+  }
   if (a.kind === "line" && b.kind === "line") return lineLine(a, b, mode);
   if (a.kind === "line") return lineRound(a, b as Round, mode);
   if (b.kind === "line") return lineRound(b, a, mode);
@@ -368,11 +479,17 @@ export function sketchCurves(
           r: e.radius,
         });
     } else if (e.kind === "ellipse") {
-      const [c, m, n] = entityPointIds(e).map((id) => points.get(id));
+      const [c, m, n, s, end] = entityPointIds(e).map((id) => points.get(id));
       if (!c || !m || !n) continue;
       const axes = ellipseAxes(c, m, n);
-      if (axes.b > LINEAR_TOL)
-        curves.push({ id: e.id, kind: "ellipse", ...axes });
+      if (axes.b <= LINEAR_TOL) continue;
+      const span = s && end && spanOf(axes, [s.x, s.y], [end.x, end.y]);
+      curves.push({
+        id: e.id,
+        kind: "ellipse",
+        ...axes,
+        ...(span && { span }),
+      });
     }
   }
   return curves;

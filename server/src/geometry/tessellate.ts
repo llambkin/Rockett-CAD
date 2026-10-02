@@ -309,6 +309,12 @@ function surfaceInfo(face: Shape): FaceInfo["surface"] {
   }
 }
 
+const at = (p: { X(): number; Y(): number; Z(): number }): Vec3 => [
+  p.X(),
+  p.Y(),
+  p.Z(),
+];
+
 export function curveInfo(edge: Shape): EdgeInfo["curve"] {
   const k = getKernel();
   try {
@@ -337,6 +343,20 @@ export function curveInfo(edge: Shape): EdgeInfo["curve"] {
           radius: circ.Radius(),
           start: [start.X(), start.Y(), start.Z()],
           end: [end.X(), end.Y(), end.Z()],
+          sweep: curve.LastParameter() - curve.FirstParameter(),
+        };
+      }
+      if (type === k.GeomAbs_CurveType.GeomAbs_Ellipse) {
+        const el = own(curve.Ellipse());
+        return {
+          type: "ellipse",
+          center: at(own(el.Location())),
+          axis: at(own(own(el.Axis()).Direction())),
+          majorAxis: at(own(own(el.XAxis()).Direction())),
+          majorRadius: el.MajorRadius(),
+          minorRadius: el.MinorRadius(),
+          start: at(own(curve.Value(curve.FirstParameter()))),
+          end: at(own(curve.Value(curve.LastParameter()))),
           sweep: curve.LastParameter() - curve.FirstParameter(),
         };
       }

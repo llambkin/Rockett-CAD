@@ -2,10 +2,13 @@ import type { SketchEntity, SketchPoint } from "./model.js";
 import {
   ARC_SEGMENTS,
   crossingIds,
+  curveDistance,
   curveSamples,
   meet,
   sampleArc,
+  sampleEllipse,
   sketchCurves,
+  spanParam,
   SPLIT_TOL,
   TAU,
   type Arc,
@@ -86,13 +89,20 @@ export function profileIdFor(outerIds: string[], holeIds: string[][]): string {
   return "p" + fnv(canon);
 }
 
-const endsOf = (c: Line | Arc): [XY, XY] =>
+type Open = Line | Round | Ellipse;
+
+const endless = (c: Open): c is Circle | Ellipse =>
+  c.kind === "circle" || (c.kind === "ellipse" && !c.span);
+
+const endsOf = (c: Line | Arc | Ellipse): [XY, XY] =>
   c.kind === "line"
     ? [
         [c.x1, c.y1],
         [c.x2, c.y2],
       ]
-    : [c.s, c.e];
+    : c.kind === "arc"
+      ? [c.s, c.e]
+      : [c.span!.s, c.span!.e];
 
 interface Cut {
   n: number;
@@ -101,18 +111,13 @@ interface Cut {
 
 interface Arrangement {
   nodes: XY[];
-  curves: (Line | Round)[];
+  curves: Open[];
   ends: [number, number][];
   cuts: Cut[][];
-  ellipses: Ellipse[];
   crossing: Set<string>;
 }
 
-function cutsOn(
-  c: Line | Round,
-  nodes: XY[],
-  [from, to]: [number, number],
-): Cut[] {
+function cutsOn(c: Open, nodes: XY[], [from, to]: [number, number]): Cut[] {
   const cuts: Cut[] = [];
   nodes.forEach(([x, y], n) => {
     if (n === from || n === to) return;
@@ -124,6 +129,12 @@ function cutsOn(
       if (t <= 1e-9 || t >= 1 - 1e-9) return;
       if (Math.hypot(x - (c.x1 + t * abx), y - (c.y1 + t * aby)) < SPLIT_TOL)
         cuts.push({ n, t });
+      return;
+    }
+    if (c.kind === "ellipse") {
+      if (curveDistance(c, x, y) >= SPLIT_TOL) return;
+      const t = spanParam(c, [x, y]);
+      if (!c.span || t < c.span.t1 - 1e-9) cuts.push({ n, t });
       return;
     }
     if (Math.abs(Math.hypot(x - c.cx, y - c.cy) - c.r) >= SPLIT_TOL) return;
@@ -150,17 +161,13 @@ function arrange(
     nodes.push([x, y]);
     return nodes.length - 1;
   };
-  const curves: (Line | Round)[] = [];
+  const curves: Open[] = [];
   const ends: [number, number][] = [];
-  const ellipses: Ellipse[] = [];
   const all = sketchCurves(entities);
-  const crossing = crossingIds(all);
+  const crossing = crossingIds(all, mode === "legacy");
   for (const c of all) {
-    if (c.kind === "ellipse") {
-      if (!crossing.has(c.id)) ellipses.push(c);
-      continue;
-    }
-    if (c.kind === "circle") {
+    if (crossing.has(c.id) && c.kind === "ellipse") continue;
+    if (endless(c)) {
       curves.push(c);
       ends.push([-1, -1]);
       continue;
@@ -178,7 +185,7 @@ function arrange(
         nodeFor(x, y, SPLIT_TOL);
   for (const p of points) nodeFor(p.x, p.y, SPLIT_TOL);
   const cuts = curves.map((c, i) => cutsOn(c, nodes, ends[i]!));
-  return { nodes, curves, ends, cuts, ellipses, crossing };
+  return { nodes, curves, ends, cuts, crossing };
 }
 
 export function crossingEllipses(entities: SketchEntity[]): string[] {
@@ -251,12 +258,12 @@ function piecesOf(arr: Arrangement): {
   whole: (Circle | Ellipse)[];
 } {
   const pieces: Piece[] = [];
-  const whole: (Circle | Ellipse)[] = [...arr.ellipses];
+  const whole: (Circle | Ellipse)[] = [];
   const at = (n: number) => arr.nodes[n]!;
   arr.curves.forEach((c, i) => {
     const cuts = arr.cuts[i]!;
     let chain: number[];
-    if (c.kind === "circle") {
+    if (endless(c)) {
       if (cuts.length < 2) {
         whole.push(c);
         return;
@@ -265,7 +272,7 @@ function piecesOf(arr: Arrangement): {
     } else {
       chain = [arr.ends[i]![0], ...cuts.map((x) => x.n), arr.ends[i]![1]];
     }
-    const split = chain.length > 2 || c.kind === "circle";
+    const split = chain.length > 2 || endless(c);
     for (let k = 0; k < chain.length - 1; k++) {
       const [na, nb] = [chain[k]!, chain[k + 1]!];
       if (na === nb) continue;
@@ -277,7 +284,9 @@ function piecesOf(arr: Arrangement): {
         samples:
           c.kind === "line"
             ? [a[0], a[1], b[0], b[1]]
-            : sampleArc(c.cx, c.cy, a[0], a[1], b[0], b[1]),
+            : c.kind === "ellipse"
+              ? sampleEllipse(c, a, b)
+              : sampleArc(c.cx, c.cy, a[0], a[1], b[0], b[1]),
         ...(split && { trim: [a[0], a[1], b[0], b[1]] }),
       });
     }

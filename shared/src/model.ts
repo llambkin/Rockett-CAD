@@ -115,10 +115,6 @@ export interface SketchCircle {
   external?: boolean;
 }
 
-/**
- * Arc through center + two endpoint points, counter-clockwise from start to
- * end. The solver adds an implicit |c-s| = |c-e| residual.
- */
 export interface SketchArc {
   projection?: EdgeRef;
   id: string;
@@ -131,12 +127,14 @@ export interface SketchArc {
 }
 
 export interface SketchEllipse {
-  projection?: never;
+  projection?: EdgeRef;
   id: string;
   kind: "ellipse";
   center: string;
   major: string;
   minor: string;
+  start?: string;
+  end?: string;
   construction?: boolean;
   external?: boolean;
 }

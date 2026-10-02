@@ -48,6 +48,15 @@ function sketchReferences(f: SketchFeature): void {
       throw new ValidationError(`Ellipse ${e.id} needs two non-zero axes`);
     if (Math.abs(axisCosine(c!, m!, n!)) > ELLIPSE_AXIS_TOL)
       throw new ValidationError(`Ellipse ${e.id} axes must be perpendicular`);
+    if (!e.start !== !e.end)
+      throw new ValidationError(
+        `Elliptical arc ${e.id} needs a start and an end`,
+      );
+    const [s, end] = refs.slice(3).map((id) => points.get(id)!);
+    if (s && end && Math.hypot(s.x - end.x, s.y - end.y) <= LINEAR_TOL)
+      throw new ValidationError(
+        `Elliptical arc ${e.id} needs two different ends`,
+      );
   }
   const kinds = new Map(f.entities.map((e) => [e.id, e.kind]));
   const held = (c: SketchConstraint) =>
