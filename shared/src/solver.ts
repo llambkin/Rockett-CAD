@@ -24,6 +24,7 @@ import type {
 } from "./model.js";
 import { OverConstrainedError } from "./solverError.js";
 export { OverConstrainedError } from "./solverError.js";
+import { arcRadiusGap, axisCosine, entityPointIds } from "./sketchCurves.js";
 import {
   dampingFloor,
   evalResiduals,
@@ -143,6 +144,11 @@ function layout(input: SolveInput) {
   };
 }
 
+const pointAt = ([fx, fy]: Residual[], x: Float64Array) => ({
+  x: fx!(x),
+  y: fy!(x),
+});
+
 function buildProblem(input: SolveInput): Problem {
   const space = layout(input);
   const { points, lines, circles, arcs, varsOf } = space;
@@ -215,18 +221,11 @@ function buildProblem(input: SolveInput): Problem {
     return { x1: px(l.p1), y1: py(l.p1), x2: px(l.p2), y2: py(l.p2) };
   };
 
-  for (const a of arcs.values()) {
-    const cx = px(a.center),
-      cy = py(a.center);
-    const sx = px(a.start),
-      sy = py(a.start);
-    const ex = px(a.end),
-      ey = py(a.end);
-    residuals.push(
-      (x) =>
-        Math.hypot(sx(x) - cx(x), sy(x) - cy(x)) -
-        Math.hypot(ex(x) - cx(x), ey(x) - cy(x)),
-    );
+  for (const e of input.entities) {
+    if (e.kind !== "arc" && e.kind !== "ellipse") continue;
+    const [c, p, q] = entityPointIds(e).map((id) => [px(id), py(id)]);
+    const rule = e.kind === "arc" ? arcRadiusGap : axisCosine;
+    residuals.push((x) => rule(pointAt(c!, x), pointAt(p!, x), pointAt(q!, x)));
     settle();
   }
 

@@ -1,4 +1,5 @@
 import {
+  entityPointIds,
   newId,
   type SketchConstraint,
   type SketchEntity,
@@ -68,10 +69,7 @@ function classify(draft: Draft, ids: string[]) {
     draft.entities.find((e) => e.id === id);
   const own = (curve: string) => {
     const e = find(curve);
-    if (e?.kind === "line") return [e.p1, e.p2];
-    if (e?.kind === "circle") return [e.center];
-    if (e?.kind === "arc") return [e.center, e.start, e.end];
-    return [];
+    return e ? entityPointIds(e) : [];
   };
   return {
     find,

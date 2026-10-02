@@ -7,8 +7,14 @@
  * used for persistent side-face naming during extrude/revolve.
  */
 
-import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
-import { arcAngles, LINEAR_TOL } from "@rockett/shared";
+import type {
+  OrientedCurve,
+  PlaneFrame,
+  Profile,
+  SketchCurve,
+  SketchEntity,
+} from "@rockett/shared";
+import { curveDistance, LINEAR_TOL, sketchCurves } from "@rockett/shared";
 import {
   acquire,
   getKernel,
@@ -20,7 +26,7 @@ import {
   type Shape,
 } from "./kernel.js";
 import { ShapeMap } from "./shapeMap.js";
-import { uvTo3d } from "./frames.js";
+import { pieceEdge } from "./sketchEdges.js";
 
 export interface ProfileFace {
   face: Shape; // TopoDS_Face
@@ -29,29 +35,13 @@ export interface ProfileFace {
 }
 
 interface EntityMaps {
-  points: Map<string, { x: number; y: number }>;
-  lines: Map<string, { p1: string; p2: string }>;
-  circles: Map<string, { center: string; radius: number }>;
-  arcs: Map<string, { center: string; start: string; end: string }>;
+  curves: Map<string, SketchCurve>;
 }
 
 export function buildMaps(entities: SketchEntity[]): EntityMaps {
-  const points = new Map<string, { x: number; y: number }>();
-  const lines = new Map<string, { p1: string; p2: string }>();
-  const circles = new Map<string, { center: string; radius: number }>();
-  const arcs = new Map<
-    string,
-    { center: string; start: string; end: string }
-  >();
-  for (const e of entities) {
-    if (e.kind === "point") points.set(e.id, { x: e.x, y: e.y });
-    else if (e.kind === "line") lines.set(e.id, { p1: e.p1, p2: e.p2 });
-    else if (e.kind === "circle")
-      circles.set(e.id, { center: e.center, radius: e.radius });
-    else if (e.kind === "arc")
-      arcs.set(e.id, { center: e.center, start: e.start, end: e.end });
-  }
-  return { points, lines, circles, arcs };
+  return {
+    curves: new Map(sketchCurves(entities, true).map((c) => [c.id, c])),
+  };
 }
 
 /** Snap sketch endpoints that nearly coincide so OCCT wires connect exactly. */
@@ -67,124 +57,26 @@ export function snapper(): (x: number, y: number) => [number, number] {
   };
 }
 
-export function arcEdge(
-  frame: PlaneFrame,
-  c: { x: number; y: number },
-  s: [number, number],
-  e: [number, number],
-  reversed = false,
-): Shape {
-  const k = getKernel();
-  const { a0, a1, r } = arcAngles({
-    cx: c.x,
-    cy: c.y,
-    sx: s[0],
-    sy: s[1],
-    ex: e[0],
-    ey: e[1],
-  });
-  const amid = (a0 + a1) / 2;
-  const [from, to] = reversed ? [e, s] : [s, e];
-  const p1 = uvTo3d(frame, from[0], from[1]);
-  const pm = uvTo3d(frame, c.x + r * Math.cos(amid), c.y + r * Math.sin(amid));
-  const p2 = uvTo3d(frame, to[0], to[1]);
-  return acquire(
-    scoped((own) => {
-      const arcMk = own(
-        new k.GC_MakeArcOfCircle_4(
-          own(pnt(...p1)),
-          own(pnt(...pm)),
-          own(pnt(...p2)),
-        ),
-      );
-      const curve = own(k.upcastCurve(own(arcMk.Value())));
-      return own.keep(own(own(new k.BRepBuilderAPI_MakeEdge_24(curve)).Edge()));
-    }),
-  );
-}
-
 function buildWire(
-  chain: {
-    entityId: string;
-    reversed: boolean;
-    trim?: [number, number, number, number];
-  }[],
+  chain: OrientedCurve[],
   maps: EntityMaps,
   frame: PlaneFrame,
   snap: (x: number, y: number) => [number, number],
 ): Shape {
   const k = getKernel();
   const wireMaker = acquire(new k.BRepBuilderAPI_MakeWire_1());
-
-  const to3d = (uv: [number, number]): Vec3 => uvTo3d(frame, uv[0], uv[1]);
-
   for (const oc of chain) {
-    let edge: Shape | null = null;
-    const line = maps.lines.get(oc.entityId);
-    const arc = maps.arcs.get(oc.entityId);
-    const circle = maps.circles.get(oc.entityId);
-    if (line) {
-      // T-junction split pieces carry their own endpoints
-      const a = oc.trim
-        ? { x: oc.trim[0], y: oc.trim[1] }
-        : maps.points.get(line.p1)!;
-      const b = oc.trim
-        ? { x: oc.trim[2], y: oc.trim[3] }
-        : maps.points.get(line.p2)!;
-      let s = snap(a.x, a.y);
-      let e = snap(b.x, b.y);
-      if (oc.reversed) [s, e] = [e, s];
-      const p1 = to3d(s);
-      const p2 = to3d(e);
-      edge = acquire(
-        scoped((own) => {
-          const make = own(
-            new k.BRepBuilderAPI_MakeEdge_3(pnt(...p1), pnt(...p2)),
-          );
-          return own.keep(own(make.Edge()));
-        }),
-      );
-    } else if (arc || (circle && oc.trim)) {
-      // arcs, and pieces of a circle split by crossings (trim = CCW start/end)
-      const c = maps.points.get(arc ? arc.center : circle!.center)!;
-      // T-junction / crossing split pieces carry their own endpoints
-      const s0 = oc.trim
-        ? { x: oc.trim[0], y: oc.trim[1] }
-        : maps.points.get(arc!.start)!;
-      const e0 = oc.trim
-        ? { x: oc.trim[2], y: oc.trim[3] }
-        : maps.points.get(arc!.end)!;
-      edge = arcEdge(frame, c, snap(s0.x, s0.y), snap(e0.x, e0.y), oc.reversed);
-    } else if (circle) {
-      const c = maps.points.get(circle.center)!;
-      const c3 = to3d([c.x, c.y]);
-      edge = acquire(
-        scoped((own) => {
-          const ax2 = own(
-            new k.gp_Ax2_2(
-              own(pnt(c3[0], c3[1], c3[2])),
-              own(dir(frame.normal[0], frame.normal[1], frame.normal[2])),
-              own(dir(frame.xAxis[0], frame.xAxis[1], frame.xAxis[2])),
-            ),
-          );
-          const circ = own(new k.gp_Circ_2(ax2, circle.radius));
-          return own.keep(
-            own(own(new k.BRepBuilderAPI_MakeEdge_8(circ)).Edge()),
-          );
-        }),
-      );
-    }
-    if (!edge)
+    const curve = maps.curves.get(oc.entityId);
+    if (!curve)
       throw new Error(`profile references unknown entity ${oc.entityId}`);
-    wireMaker.Add_1(edge);
+    wireMaker.Add_1(pieceEdge(frame, curve, oc, snap));
     if (!wireMaker.IsDone()) {
       throw new Error(
         `failed to connect profile wire at entity ${oc.entityId}`,
       );
     }
   }
-  const wire = acquire(wireMaker.Wire());
-  return wire;
+  return acquire(wireMaker.Wire());
 }
 
 export function matchEdgesToEntities(
@@ -227,28 +119,8 @@ export function matchEdgesToEntities(
 
       let best: { id: string; d: number } | null = null;
       for (const id of chainIds) {
-        const line = maps.lines.get(id);
-        const circle = maps.circles.get(id);
-        const arc = maps.arcs.get(id);
-        let d = Infinity;
-        if (line) {
-          const a = maps.points.get(line.p1)!;
-          const b = maps.points.get(line.p2)!;
-          const abx = b.x - a.x,
-            aby = b.y - a.y;
-          const len2 = abx * abx + aby * aby || 1;
-          let t = ((u - a.x) * abx + (v - a.y) * aby) / len2;
-          t = Math.max(0, Math.min(1, t));
-          d = Math.hypot(u - (a.x + t * abx), v - (a.y + t * aby));
-        } else if (circle) {
-          const c = maps.points.get(circle.center)!;
-          d = Math.abs(Math.hypot(u - c.x, v - c.y) - circle.radius);
-        } else if (arc) {
-          const c = maps.points.get(arc.center)!;
-          const s = maps.points.get(arc.start)!;
-          const r = Math.hypot(s.x - c.x, s.y - c.y);
-          d = Math.abs(Math.hypot(u - c.x, v - c.y) - r);
-        }
+        const known = maps.curves.get(id);
+        const d = known ? curveDistance(known, u, v) : Infinity;
         if (best === null || d < best.d) best = { id, d };
       }
       if (best && best.d < 1e-4) {

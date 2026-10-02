@@ -82,10 +82,6 @@ export type AxisRef =
   | { kind: "sketchLine"; sketchId: string; entityId: string }
   | { kind: "edge"; edge: EdgeRef };
 
-// ---------------------------------------------------------------------------
-// Sketch geometry
-// ---------------------------------------------------------------------------
-
 export interface SketchPoint {
   id: string;
   kind: "point";
@@ -132,11 +128,19 @@ export interface SketchArc {
   external?: boolean;
 }
 
-export type SketchEntity = SketchPoint | SketchLine | SketchCircle | SketchArc;
+export interface SketchEllipse {
+  projection?: never;
+  id: string;
+  kind: "ellipse";
+  center: string;
+  major: string;
+  minor: string;
+  construction?: boolean;
+  external?: boolean;
+}
 
-// ---------------------------------------------------------------------------
-// Sketch constraints
-// ---------------------------------------------------------------------------
+export type SketchEntity =
+  SketchPoint | SketchLine | SketchCircle | SketchArc | SketchEllipse;
 
 interface ConstraintBase {
   id: string;

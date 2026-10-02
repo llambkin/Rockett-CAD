@@ -1,17 +1,24 @@
 import {
   newId,
   type SketchConstraint,
+  type SketchEllipse,
   type SketchEntity,
   type SketchPoint,
 } from "./model.js";
-import { arcAngles, curveHits, sampleArc, type CurveHit } from "./profiles.js";
+import { curveHits, type CurveHit } from "./profiles.js";
+import {
+  arcAngles,
+  ELLIPSE_UNSUPPORTED,
+  entityPointIds,
+  sampleArc,
+} from "./sketchCurves.js";
 import {
   constraintEntityRefs,
   type SketchModification,
 } from "./sketchModify.js";
 
 type XY = { x: number; y: number };
-type Curve = Exclude<SketchEntity, SketchPoint>;
+type Curve = Exclude<SketchEntity, SketchPoint | SketchEllipse>;
 
 export interface TrimTarget {
   entityId: string;
@@ -29,16 +36,9 @@ const ON_POINT = 1e-4;
 const SEGMENTS = 32;
 const hitCache = new WeakMap<SketchEntity[], Map<string, CurveHit[]>>();
 
-const pointsOf = (e: SketchEntity): string[] =>
-  e.kind === "line"
-    ? [e.p1, e.p2]
-    : e.kind === "arc"
-      ? [e.center, e.start, e.end]
-      : e.kind === "circle"
-        ? [e.center]
-        : [];
+const pointsOf = entityPointIds;
 
-function hitsOn(entities: SketchEntity[], curve: Curve): CurveHit[] {
+function hitMap(entities: SketchEntity[]): Map<string, CurveHit[]> {
   let hits = hitCache.get(entities);
   if (!hits) {
     const owned = new Set(entities.flatMap(pointsOf));
@@ -51,7 +51,26 @@ function hitsOn(entities: SketchEntity[], curve: Curve): CurveHit[] {
     hits = curveHits(cutters, loose);
     hitCache.set(entities, hits);
   }
-  return hits.get(curve.id) ?? [];
+  return hits;
+}
+
+function hitsOn(entities: SketchEntity[], curve: Curve): CurveHit[] {
+  const found = hitMap(entities).get(curve.id);
+  if (!found) throw new Error(ELLIPSE_UNSUPPORTED);
+  return found;
+}
+
+export function trimmable(
+  entities: SketchEntity[],
+  e: SketchEntity | undefined,
+): e is Curve {
+  return (
+    !!e &&
+    e.kind !== "point" &&
+    e.kind !== "ellipse" &&
+    !e.external &&
+    hitMap(entities).has(e.id)
+  );
 }
 
 function pointIn(entities: SketchEntity[], id: string): SketchPoint {
@@ -64,6 +83,7 @@ function curveIn(entities: SketchEntity[], id: string): Curve {
   const curve = entities.find((e) => e.id === id);
   if (!curve || curve.kind === "point")
     throw new Error("Choose a sketch curve.");
+  if (curve.kind === "ellipse") throw new Error(ELLIPSE_UNSUPPORTED);
   return curve;
 }
 

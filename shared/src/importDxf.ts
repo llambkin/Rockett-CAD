@@ -4,6 +4,7 @@ import {
   type SketchImport,
   type XY,
 } from "./sketchBuilder.js";
+import { TAU } from "./sketchCurves.js";
 import { LINEAR_TOL } from "./tolerance.js";
 
 type Pair = [number, string];
@@ -17,6 +18,8 @@ interface Vertex {
   at: XY;
   bulge: number;
 }
+
+const FULL_TURN_TOL = 1e-4;
 
 const MM_PER_INSUNIT = [
   1, 25.4, 304.8, 1609344, 1, 10, 1000, 1e6, 2.54e-5, 0.0254, 914.4, 1e-7, 1e-6,
@@ -144,6 +147,18 @@ function addEntity(sketch: SketchBuilder, record: DxfRecord): boolean {
         ]);
       const [s, e] = mirror > 0 ? [at(a0), at(a1)] : [at(a1), at(a0)];
       return sketch.arc(flip([cx, cy]), s, e, construction);
+    }
+    case "ELLIPSE": {
+      const ratio = num(record, 40);
+      const span = num(record, 42, TAU) - num(record, 41);
+      if (mirror === null || !(ratio > 0 && ratio <= 1)) return false;
+      if (Math.abs(span - TAU) > FULL_TURN_TOL) return false;
+      return sketch.ellipse(
+        xy(record, 10),
+        xy(record, 11),
+        ratio,
+        construction,
+      );
     }
     case "LWPOLYLINE": {
       const vertices: Vertex[] = [];

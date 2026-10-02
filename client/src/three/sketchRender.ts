@@ -5,13 +5,15 @@
 
 import * as THREE from "three";
 import type { PlaneFrame, Profile, SketchEntity } from "@rockett/shared";
-import { detectProfiles, sampleArc } from "@rockett/shared";
+import { curveSamples, detectProfiles, sketchCurves } from "@rockett/shared";
 import { CadViewport, uv3 } from "./CadViewport";
 import { themeColor } from "../theme/tokens";
 import { SKETCH_APPEARANCE } from "../tunables";
 import { disposeGroup } from "./dispose";
 import type { Selection } from "../store";
 import { selectionKey } from "../store";
+
+const CURVE_SEGMENTS = 64;
 
 export interface SketchRenderInput {
   sketchId: string;
@@ -100,11 +102,6 @@ function buildSketch(
 ): THREE.Group {
   const group = new THREE.Group();
   group.userData.renderKey = groupKey;
-  const pts = new Map<string, { x: number; y: number; e: SketchEntity }>();
-  for (const e of sk.entities) {
-    if (e.kind === "point") pts.set(e.id, { x: e.x, y: e.y, e });
-  }
-
   const to3 = (u: number, v: number) => uv3(sk.frame, u, v);
 
   // --- profiles (fills) first so they render under curves ---
@@ -159,33 +156,13 @@ function buildSketch(
   }
 
   // --- curves ---
-  for (const e of sk.entities) {
-    if (e.kind === "point") continue;
-    let positions: THREE.Vector3[] = [];
-    if (e.kind === "line") {
-      const a = pts.get(e.p1);
-      const b = pts.get(e.p2);
-      if (!a || !b) continue;
-      positions = [to3(a.x, a.y), to3(b.x, b.y)];
-    } else if (e.kind === "circle") {
-      const c = pts.get(e.center);
-      if (!c) continue;
-      for (let i = 0; i <= 64; i++) {
-        const t = (i / 64) * Math.PI * 2;
-        positions.push(
-          to3(c.x + e.radius * Math.cos(t), c.y + e.radius * Math.sin(t)),
-        );
-      }
-    } else if (e.kind === "arc") {
-      const c = pts.get(e.center);
-      const s = pts.get(e.start);
-      const en = pts.get(e.end);
-      if (!c || !s || !en) continue;
-      const samples = sampleArc(c.x, c.y, s.x, s.y, en.x, en.y, 32);
-      for (let i = 0; i + 1 < samples.length; i += 2) {
-        positions.push(to3(samples[i]!, samples[i + 1]!));
-      }
-    }
+  const byId = new Map(sk.entities.map((e) => [e.id, e]));
+  for (const curve of sketchCurves(sk.entities, true)) {
+    const e = byId.get(curve.id)!;
+    const samples = curveSamples(curve, CURVE_SEGMENTS);
+    const positions: THREE.Vector3[] = [];
+    for (let i = 0; i + 1 < samples.length; i += 2)
+      positions.push(to3(samples[i]!, samples[i + 1]!));
     if (positions.length < 2) continue;
     const key = `se:${sk.sketchId}:${e.id}`;
     const isSel = selKeys.has(key);

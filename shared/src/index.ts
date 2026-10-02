@@ -1,6 +1,17 @@
 export * from "./model.js";
 export * from "./solver.js";
 export * from "./profiles.js";
+export {
+  arcAngles,
+  curveSamples,
+  ELLIPSE_UNSUPPORTED,
+  entityPointIds,
+  sampleArc,
+  curveDistance,
+  sketchCurves,
+  type Curve as SketchCurve,
+  type Ellipse as SketchCurveEllipse,
+} from "./sketchCurves.js";
 export * from "./api.js";
 export * from "./auth.js";
 export * from "./friends.js";

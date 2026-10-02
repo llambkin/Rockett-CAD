@@ -141,6 +141,14 @@ const entity = Type.Union([
     start: id,
     end: id,
   }),
+  Type.Object({
+    ...entityBase,
+    projection: Type.Optional(Type.Never()),
+    kind: Type.Literal("ellipse"),
+    center: id,
+    major: id,
+    minor: id,
+  }),
 ]);
 
 const constraint = <const T extends string, P extends TProperties>(

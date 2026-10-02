@@ -21,6 +21,7 @@ import { finishJoin, warned } from "./booleanNaming.js";
  */
 
 import {
+  crossingEllipses,
   detectProfiles,
   findProfile,
   solveSketch,
@@ -92,12 +93,12 @@ import { curveInfo } from "./tessellate.js";
 import { readImport, readMesh } from "./importers.js";
 import { type EvalContext } from "./featureKinds.js";
 import {
-  arcEdge,
   buildProfileFace,
   snapper,
   sideEdgeNames,
   type ProfileFace,
 } from "./sketchGeom.js";
+import { arcEdge, lineEdge } from "./sketchEdges.js";
 
 // ---------------------------------------------------------------------------
 // Reference resolution
@@ -223,7 +224,10 @@ function registerNewBodies(
 // Tool-solid creation (extrude / revolve / sweep / loft share this plumbing)
 // ---------------------------------------------------------------------------
 
-export function evalSketch(state: EvalState, f: SketchFeature): void {
+export function evalSketch(
+  state: EvalState,
+  f: SketchFeature,
+): FeatureOutcome | void {
   const frame = resolvePlaneFrame(state, f.plane);
   let entities = f.entities.map((e) => ({ ...e }));
   const place = (e: SketchEntity) =>
@@ -268,6 +272,11 @@ export function evalSketch(state: EvalState, f: SketchFeature): void {
     dof: solved.dof,
     profiles: detectProfiles(placed),
   });
+  const crossing = crossingEllipses(placed);
+  if (crossing.length)
+    return {
+      warning: `Ellipse ${crossing.join(", ")} touches another curve and forms no region. Move it clear to use it.`,
+    };
 }
 
 /** Build prism tool(s) for extrude-like features. */
@@ -631,6 +640,8 @@ function orderOpenChain(
   const ends = new Map<SketchEntity, [number, number][]>();
   const at = new Map<[number, number], SketchEntity[]>();
   for (const e of entities) {
+    if (e.kind === "ellipse" && !e.construction)
+      throw new Error("A sweep path cannot use an ellipse yet.");
     if ((e.kind !== "line" && e.kind !== "arc") || e.construction) continue;
     const ids = e.kind === "line" ? [e.p1, e.p2] : [e.start, e.end];
     const keys = ids.map((id) => {
@@ -664,24 +675,10 @@ function sketchEntityToEdge(
   sketch: EvaluatedSketch,
   points: Map<string, { x: number; y: number }>,
 ): Shape | null {
-  const k = getKernel();
-  const to3d = (u: number, v: number): Vec3 => uvTo3d(sketch.frame, u, v);
   if (e.kind === "line") {
     const a = points.get(e.p1)!;
     const b = points.get(e.p2)!;
-    const p1 = to3d(a.x, a.y);
-    const p2 = to3d(b.x, b.y);
-    return acquire(
-      scoped((own) =>
-        own.keep(
-          own(
-            own(
-              new k.BRepBuilderAPI_MakeEdge_3(own(pnt(...p1)), own(pnt(...p2))),
-            ).Edge(),
-          ),
-        ),
-      ),
-    );
+    return lineEdge(sketch.frame, [a.x, a.y], [b.x, b.y]);
   }
   if (e.kind === "arc") {
     const s = points.get(e.start)!;

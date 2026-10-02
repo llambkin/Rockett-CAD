@@ -26,6 +26,7 @@ import {
   createSketchOffset,
   editSketchOffset,
   constraintEntityRefs,
+  entityPointIds,
   trimSketchPieces,
   withShown,
 } from "@rockett/shared";
@@ -928,74 +929,24 @@ export const useStore = create<State>((set, get) => ({
     if (!draftSketch || entityIds.length === 0) return;
     const idSet = new Set(entityIds);
 
-    const deletedCurvePoints = new Set<string>();
-    for (const e of draftSketch.entities) {
-      const gone =
-        idSet.has(e.id) ||
-        (e.kind === "line" && (idSet.has(e.p1) || idSet.has(e.p2))) ||
-        (e.kind === "circle" && idSet.has(e.center)) ||
-        (e.kind === "arc" &&
-          (idSet.has(e.center) || idSet.has(e.start) || idSet.has(e.end)));
-      if (gone) {
-        if (e.kind === "line") {
-          deletedCurvePoints.add(e.p1);
-          deletedCurvePoints.add(e.p2);
-        } else if (e.kind === "circle") {
-          deletedCurvePoints.add(e.center);
-        } else if (e.kind === "arc") {
-          deletedCurvePoints.add(e.center);
-          deletedCurvePoints.add(e.start);
-          deletedCurvePoints.add(e.end);
-        }
-      }
-    }
-
-    let entities = draftSketch.entities.filter((e) => {
-      if (idSet.has(e.id)) return false;
-      if (e.kind === "line" && (idSet.has(e.p1) || idSet.has(e.p2)))
-        return false;
-      if (e.kind === "circle" && idSet.has(e.center)) return false;
-      if (
-        e.kind === "arc" &&
-        (idSet.has(e.center) || idSet.has(e.start) || idSet.has(e.end))
-      )
-        return false;
-      return true;
-    });
-
-    const stillUsed = new Set<string>();
-    for (const e of entities) {
-      if (e.kind === "line") {
-        stillUsed.add(e.p1);
-        stillUsed.add(e.p2);
-      } else if (e.kind === "circle") {
-        stillUsed.add(e.center);
-      } else if (e.kind === "arc") {
-        stillUsed.add(e.center);
-        stillUsed.add(e.start);
-        stillUsed.add(e.end);
-      }
-    }
+    const gone = (e: SketchEntity) =>
+      idSet.has(e.id) || entityPointIds(e).some((id) => idSet.has(id));
+    const deletedCurvePoints = new Set(
+      draftSketch.entities.filter(gone).flatMap(entityPointIds),
+    );
+    let entities = draftSketch.entities.filter((e) => !gone(e));
+    const stillUsed = new Set(entities.flatMap(entityPointIds));
     entities = entities.filter(
       (e) =>
         e.kind !== "point" ||
         stillUsed.has(e.id) ||
         !deletedCurvePoints.has(e.id),
     );
-
-    const drivenPoints = new Set<string>();
-    for (const e of entities) {
-      if (e.kind === "point" || !e.projection) continue;
-      if (e.kind === "line") {
-        drivenPoints.add(e.p1);
-        drivenPoints.add(e.p2);
-      } else if (e.kind === "circle") drivenPoints.add(e.center);
-      else {
-        drivenPoints.add(e.center);
-        drivenPoints.add(e.start);
-        drivenPoints.add(e.end);
-      }
-    }
+    const drivenPoints = new Set(
+      entities.flatMap((e) =>
+        e.kind !== "point" && e.projection ? entityPointIds(e) : [],
+      ),
+    );
     entities = entities.map((e) =>
       e.kind === "point" &&
       e.external &&
@@ -1061,7 +1012,7 @@ export const useStore = create<State>((set, get) => ({
     if (imported.entities.length === 0) {
       set({
         error:
-          `This ${format} file has no lines, arcs, circles or points to insert. ${skipped}`.trim(),
+          `This ${format} file has no lines, arcs, circles, ellipses or points to insert. ${skipped}`.trim(),
       });
       return;
     }

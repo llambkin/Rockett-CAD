@@ -1,6 +1,8 @@
 import type { SketchEntity, SketchPoint } from "./model.js";
 import {
   ARC_SEGMENTS,
+  crossingIds,
+  curveSamples,
   meet,
   sampleArc,
   sketchCurves,
@@ -8,14 +10,13 @@ import {
   TAU,
   type Arc,
   type Circle,
-  type Curve,
   type Detection,
+  type Ellipse,
   type Line,
+  type Round,
   type XY,
 } from "./sketchCurves.js";
 import { LINEAR_TOL } from "./tolerance.js";
-
-export { arcAngles, sampleArc } from "./sketchCurves.js";
 
 export interface OrientedCurve {
   entityId: string;
@@ -100,12 +101,18 @@ interface Cut {
 
 interface Arrangement {
   nodes: XY[];
-  curves: Curve[];
+  curves: (Line | Round)[];
   ends: [number, number][];
   cuts: Cut[][];
+  ellipses: Ellipse[];
+  crossing: Set<string>;
 }
 
-function cutsOn(c: Curve, nodes: XY[], [from, to]: [number, number]): Cut[] {
+function cutsOn(
+  c: Line | Round,
+  nodes: XY[],
+  [from, to]: [number, number],
+): Cut[] {
   const cuts: Cut[] = [];
   nodes.forEach(([x, y], n) => {
     if (n === from || n === to) return;
@@ -143,9 +150,16 @@ function arrange(
     nodes.push([x, y]);
     return nodes.length - 1;
   };
-  const curves: Curve[] = [];
+  const curves: (Line | Round)[] = [];
   const ends: [number, number][] = [];
-  for (const c of sketchCurves(entities)) {
+  const ellipses: Ellipse[] = [];
+  const all = sketchCurves(entities);
+  const crossing = crossingIds(all);
+  for (const c of all) {
+    if (c.kind === "ellipse") {
+      if (!crossing.has(c.id)) ellipses.push(c);
+      continue;
+    }
     if (c.kind === "circle") {
       curves.push(c);
       ends.push([-1, -1]);
@@ -164,14 +178,26 @@ function arrange(
         nodeFor(x, y, SPLIT_TOL);
   for (const p of points) nodeFor(p.x, p.y, SPLIT_TOL);
   const cuts = curves.map((c, i) => cutsOn(c, nodes, ends[i]!));
-  return { nodes, curves, ends, cuts };
+  return { nodes, curves, ends, cuts, ellipses, crossing };
+}
+
+export function crossingEllipses(entities: SketchEntity[]): string[] {
+  const all = sketchCurves(entities);
+  const crossing = crossingIds(all);
+  return all
+    .filter((c) => c.kind === "ellipse" && crossing.has(c.id))
+    .map((c) => c.id);
 }
 
 export function curveHits(
   entities: SketchEntity[],
   points: SketchPoint[] = [],
 ): Map<string, CurveHit[]> {
-  const { nodes, curves, ends, cuts } = arrange(entities, "trim", points);
+  const { nodes, curves, ends, cuts, crossing } = arrange(
+    entities,
+    "trim",
+    points,
+  );
   const through = new Map<number, string[]>();
   for (const p of points) {
     const n = nodes.findIndex(
@@ -188,15 +214,21 @@ export function curveHits(
     }
   });
   return new Map(
-    curves.map((c, i) => [
-      c.id,
-      cuts[i]!.map(({ n, t }) => ({
-        x: nodes[n]![0],
-        y: nodes[n]![1],
-        t,
-        by: through.get(n)!.filter((id) => id !== c.id),
-      })),
-    ]),
+    curves.flatMap((c, i) =>
+      crossing.has(c.id)
+        ? []
+        : [
+            [
+              c.id,
+              cuts[i]!.map(({ n, t }) => ({
+                x: nodes[n]![0],
+                y: nodes[n]![1],
+                t,
+                by: through.get(n)!.filter((id) => id !== c.id),
+              })),
+            ] as const,
+          ],
+    ),
   );
 }
 
@@ -214,9 +246,12 @@ interface Loop {
   area: number;
 }
 
-function piecesOf(arr: Arrangement): { pieces: Piece[]; whole: Circle[] } {
+function piecesOf(arr: Arrangement): {
+  pieces: Piece[];
+  whole: (Circle | Ellipse)[];
+} {
   const pieces: Piece[] = [];
-  const whole: Circle[] = [];
+  const whole: (Circle | Ellipse)[] = [...arr.ellipses];
   const at = (n: number) => arr.nodes[n]!;
   arr.curves.forEach((c, i) => {
     const cuts = arr.cuts[i]!;
@@ -331,12 +366,8 @@ function faceLoops(pieces: Piece[]): Loop[] {
   return loops;
 }
 
-function circleLoop(c: Circle): Loop {
-  const polygon: number[] = [];
-  for (let i = 0; i < ARC_SEGMENTS * 2; i++) {
-    const t = (i / (ARC_SEGMENTS * 2)) * TAU;
-    polygon.push(c.cx + c.r * Math.cos(t), c.cy + c.r * Math.sin(t));
-  }
+function closedLoop(c: Circle | Ellipse): Loop {
+  const polygon = curveSamples(c, ARC_SEGMENTS * 2).slice(0, -2);
   return {
     curves: [{ entityId: c.id, reversed: false }],
     polygon,
@@ -399,7 +430,7 @@ function distinctIds(profiles: Profile[]): Profile[] {
 
 function detect(entities: SketchEntity[], mode: Detection): Profile[] {
   const { pieces, whole } = piecesOf(arrange(entities, mode));
-  const profiles = nest([...faceLoops(pieces), ...whole.map(circleLoop)]);
+  const profiles = nest([...faceLoops(pieces), ...whole.map(closedLoop)]);
   return mode === "current" ? distinctIds(profiles) : profiles;
 }
 

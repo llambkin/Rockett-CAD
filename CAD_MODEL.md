@@ -260,6 +260,14 @@ input bound, not a tolerance.
   changed constraints stop a converging sketch from converging, and names the
   first such constraint. Client and server both call it. A sketch already in
   conflict is not refused.
+- Schema 25 adds the sketch `ellipse`: `center`, `major` and `minor` point ids,
+  with the longer axis taken as major. The solver keeps the axes perpendicular
+  as it keeps arc radii equal. Validation in `shared/src/features/sketch.ts`
+  refuses zero or non-perpendicular axes and constraints on the ellipse curve.
+  An ellipse that touches another curve forms no region and the sketch warns;
+  trim, extend, offset and sweep paths refuse ellipses. `pieceEdge` in
+  `server/src/geometry/sketchEdges.ts` builds the exact `gp_Elips` edge:
+  `shared/test/ellipse.test.ts`.
 - The solver skips a dimension with `driven: true`. The field is optional, so
   sketches saved without it load unchanged with no schema step.
 

@@ -5,7 +5,8 @@ import {
   findOffsetConnector,
   formatLength,
   offsetSketchSelection,
-  sampleArc,
+  curveSamples,
+  sketchCurves,
   type SketchFeature,
   type SketchEntity,
   type PlaneFrame,
@@ -227,29 +228,9 @@ function offsetPreviewGroup(
   const group = new THREE.Group();
   const original = new Set(draft.entities.map((e) => e.id));
   if (editingIds) for (const id of editingIds) original.delete(id);
-  const points = new Map(
-    result.entities.filter((e) => e.kind === "point").map((e) => [e.id, e]),
-  );
-  for (const e of result.entities) {
-    if (original.has(e.id) || e.kind === "point") continue;
-    let coords: number[] = [];
-    if (e.kind === "line") {
-      const a = points.get(e.p1)!,
-        b = points.get(e.p2)!;
-      coords = [a.x, a.y, b.x, b.y];
-    } else if (e.kind === "circle") {
-      const c = points.get(e.center)!;
-      for (let i = 0; i <= 96; i++)
-        coords.push(
-          c.x + e.radius * Math.cos((i * Math.PI) / 48),
-          c.y + e.radius * Math.sin((i * Math.PI) / 48),
-        );
-    } else {
-      const c = points.get(e.center)!,
-        a = points.get(e.start)!,
-        b = points.get(e.end)!;
-      coords = sampleArc(c.x, c.y, a.x, a.y, b.x, b.y, 64);
-    }
+  for (const curve of sketchCurves(result.entities, true)) {
+    if (original.has(curve.id)) continue;
+    const coords = curveSamples(curve, 96);
     const positions: THREE.Vector3[] = [];
     for (let i = 0; i + 1 < coords.length; i += 2)
       positions.push(uv3(frame, coords[i]!, coords[i + 1]!));

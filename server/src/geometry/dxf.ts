@@ -1,7 +1,11 @@
 import {
+  curveSamples,
+  entityPointIds,
   newId,
   projectEdge,
+  sketchCurves,
   type PlaneFrame,
+  type SketchCurve,
   type SketchEntity,
   type SketchPoint,
   type Vec3,
@@ -80,9 +84,7 @@ function entityPairs(entities: readonly SketchEntity[]) {
   const used = new Set<string>();
   for (const e of entities) {
     if (e.kind === "point") points.set(e.id, e);
-    if (e.kind === "line") used.add(e.p1).add(e.p2);
-    if (e.kind === "circle") used.add(e.center);
-    if (e.kind === "arc") used.add(e.center).add(e.start).add(e.end);
+    for (const id of entityPointIds(e)) used.add(id);
   }
   const at = (id: string) => {
     const p = points.get(id);
@@ -106,6 +108,14 @@ function entityPairs(entities: readonly SketchEntity[]) {
       out.push(...head("LINE"), ...xyz(at(e.p1)), ...xyz(at(e.p2), 11));
     if (e.kind === "circle")
       out.push(...head("CIRCLE"), ...xyz(at(e.center)), [40, real(e.radius)]);
+    if (e.kind === "ellipse")
+      for (const curve of sketchCurves([e, ...points.values()], true))
+        out.push(
+          ...polylinePairs(
+            [sampled(curve)],
+            e.construction ? CONSTRUCTION : "0",
+          ),
+        );
     if (e.kind === "arc") {
       const c = at(e.center);
       const s = at(e.start);
@@ -121,7 +131,17 @@ function entityPairs(entities: readonly SketchEntity[]) {
   return out;
 }
 
-function polylinePairs(polylines: readonly Polyline[]): Pair[] {
+const ELLIPSE_SEGMENTS = 128;
+
+function sampled(curve: SketchCurve): Polyline {
+  const flat = curveSamples(curve, ELLIPSE_SEGMENTS);
+  return Array.from({ length: flat.length / 2 }, (_, i) => [
+    flat[2 * i]!,
+    flat[2 * i + 1]!,
+  ]);
+}
+
+function polylinePairs(polylines: readonly Polyline[], onLayer = "0"): Pair[] {
   const xy = ([x, y]: [number, number]): Pair[] => [
     [10, real(x)],
     [20, real(y)],
@@ -129,12 +149,12 @@ function polylinePairs(polylines: readonly Polyline[]): Pair[] {
   ];
   return polylines.flatMap((points): Pair[] => [
     [0, "POLYLINE"],
-    [8, "0"],
+    [8, onLayer],
     [66, "1"],
     ...xy([0, 0]),
-    ...points.flatMap((p): Pair[] => [[0, "VERTEX"], [8, "0"], ...xy(p)]),
+    ...points.flatMap((p): Pair[] => [[0, "VERTEX"], [8, onLayer], ...xy(p)]),
     [0, "SEQEND"],
-    [8, "0"],
+    [8, onLayer],
   ]);
 }
 

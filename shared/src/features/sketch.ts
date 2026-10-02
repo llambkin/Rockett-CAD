@@ -1,6 +1,14 @@
 import { refAt, registerCoreSpec } from "../featureSpec.js";
 import type { SketchFeature } from "../model.js";
 import { ValidationError } from "../schema/index.js";
+import {
+  axisCosine,
+  ELLIPSE_AXIS_TOL,
+  ellipseAxes,
+  entityPointIds,
+} from "../sketchCurves.js";
+import { constraintEntityRefs } from "../sketchModify.js";
+import { LINEAR_TOL } from "../tolerance.js";
 
 const MIN_OFFSET_MM = 1e-7;
 
@@ -24,23 +32,32 @@ function sketchReferences(f: SketchFeature): void {
   const entityIds = new Set(f.entities.map((e) => e.id));
   if (entityIds.size !== f.entities.length)
     throw new ValidationError("duplicate sketch entity ID");
-  const pointIds = new Set(
-    f.entities.filter((e) => e.kind === "point").map((e) => e.id),
+  const points = new Map(
+    f.entities.flatMap((e) => (e.kind === "point" ? [[e.id, e] as const] : [])),
   );
   for (const e of f.entities) {
-    const pointRefs =
-      e.kind === "line"
-        ? [e.p1, e.p2]
-        : e.kind === "circle"
-          ? [e.center]
-          : e.kind === "arc"
-            ? [e.center, e.start, e.end]
-            : [];
-    if (pointRefs.some((id) => !pointIds.has(id)))
+    const refs = entityPointIds(e);
+    if (refs.some((id) => !points.has(id)))
       throw new ValidationError(`Missing endpoint on sketch entity ${e.id}`);
     if (e.kind !== "point" && e.projection && !e.external)
       throw new ValidationError("projected curves must be external");
+    if (e.kind !== "ellipse") continue;
+    const [c, m, n] = refs.map((id) => points.get(id)!);
+    const { a, b } = ellipseAxes(c!, m!, n!);
+    if (!(b > LINEAR_TOL) || !Number.isFinite(a))
+      throw new ValidationError(`Ellipse ${e.id} needs two non-zero axes`);
+    if (Math.abs(axisCosine(c!, m!, n!)) > ELLIPSE_AXIS_TOL)
+      throw new ValidationError(`Ellipse ${e.id} axes must be perpendicular`);
   }
+  const ellipses = new Set(
+    f.entities.filter((e) => e.kind === "ellipse").map((e) => e.id),
+  );
+  for (const c of f.constraints)
+    for (const id of constraintEntityRefs(c))
+      if (ellipses.has(id))
+        throw new ValidationError(
+          `Constraints cannot reference ellipse ${id} yet`,
+        );
 }
 
 registerCoreSpec(

@@ -139,6 +139,8 @@ release workflow remain under development.
   prior documents.
 - Schema 24: Shell can name the body it hollows; earlier shells keep hollowing
   the first body.
+- Schema 25: sketches may hold exact ellipses; earlier documents load
+  unchanged.
 
 ### Known limits
 

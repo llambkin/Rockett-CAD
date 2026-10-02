@@ -22,8 +22,10 @@ import {
   roundedLength,
   newId,
   extendSketch,
+  ELLIPSE_UNSUPPORTED,
   trimPiece,
   trimPieces,
+  trimmable,
   type Units,
 } from "@rockett/shared";
 import { getSetting, useSetting } from "../settings";
@@ -890,7 +892,11 @@ export function ViewportView({
         clientX: drag.x + (dx * (i + 1)) / steps,
         clientY: drag.y + (dy * (i + 1)) / steps,
       }),
-    ).flatMap((t) => (t ? [{ entityId: t.selection.entityId, at: t.at }] : []));
+    ).flatMap((t) =>
+      t && trimmable(t.entities, t.curve)
+        ? [{ entityId: t.selection.entityId, at: t.at }]
+        : [],
+    );
     drag.x = e.clientX;
     drag.y = e.clientY;
     drag.pieces = trimPieces(draft.entities, [...drag.pieces, ...crossed]);
@@ -1171,7 +1177,7 @@ export function ViewportView({
           vp.pick(e.clientX, e.clientY, ["design.edge"])?.selection ?? null;
       } else if (tool === "trim") {
         const target = trimTarget(e);
-        if (target && !target.curve.external)
+        if (target && trimmable(target.entities, target.curve))
           picked = {
             ...target.selection,
             piece: trimPiece(
@@ -1184,7 +1190,6 @@ export function ViewportView({
         const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
         picked = r?.selection ?? null;
       } else if (DRAW_TOOLS.has(tool) || tool === "point") {
-        // rubber-band preview + snap glyph while drawing
         const ts = toolState.current;
         const last =
           ts.clicks.length > 0 ? ts.clicks[ts.clicks.length - 1] : undefined;
@@ -1222,7 +1227,6 @@ export function ViewportView({
           setToolLabel(null);
           clearDimEntry();
         }
-        // highlight snap target
         const sketchId = s.active.state.sketchId as string;
         if (uv?.snapPointId) {
           picked = { kind: "sketchPoint", sketchId, entityId: uv.snapPointId };
@@ -1262,14 +1266,12 @@ export function ViewportView({
     if (s.active?.id === "design.sketch") {
       const t = s.active.state.tool as string;
       if (t === "select") {
-        // start dragging a point?
         const vp = viewportRef.current!;
         const r = vp.pick(e.clientX, e.clientY, SKETCH_PICKS);
         if (r?.selection.kind === "sketchPoint") {
           toolState.current.dragPointId = (r.selection as any).entityId;
         }
       } else if (DRAW_TOOLS.has(t) && toolState.current.clicks.length === 0) {
-        // press-drag-release drawing
         toolState.current.downUV = pointerToSketchUV(e);
       } else if (t === "trim") {
         toolState.current.trimDrag = {
@@ -1618,7 +1620,6 @@ export function ViewportView({
       }
     }
 
-    // drag-to-draw completion
     if (dragMoved && s.active?.id === "design.sketch") {
       const ts = toolState.current;
       const down = ts.downUV;
@@ -1662,7 +1663,6 @@ export function ViewportView({
     toolState.current.downUV = null;
     if (dragMoved) return;
 
-    // pick-depth cycling with Alt at the same position
     const samePos =
       Math.abs(e.clientX - toolState.current.lastPickPos.x) < 4 &&
       Math.abs(e.clientY - toolState.current.lastPickPos.y) < 4;
@@ -1857,28 +1857,21 @@ export function ViewportView({
         }
         const sel = r.selection as any;
         const ent = draft.entities.find((x) => x.id === sel.entityId);
-        if (!ent) return;
-        const kind =
-          ent.kind === "point"
-            ? "point"
-            : ent.kind === "line"
-              ? "line"
-              : ent.kind === "circle"
-                ? "circle"
-                : "arc";
-        const target: tools.DimTarget = { kind, id: ent.id };
-        if (kind === "line" && (e.ctrlKey || e.metaKey)) {
+        if (ent?.kind === "ellipse") s.setError(ELLIPSE_UNSUPPORTED);
+        if (!ent || ent.kind === "ellipse") return;
+        const target: tools.DimTarget = { kind: ent.kind, id: ent.id };
+        if (ent.kind === "line" && (e.ctrlKey || e.metaKey)) {
           ts.dimTargets = [target];
           return;
         }
         const pending = ts.dimTargets.at(-1);
         const targets =
-          kind === "circle" || kind === "arc" || !pending
+          ent.kind === "circle" || ent.kind === "arc" || !pending
             ? [target]
             : [pending, target];
-        ts.dimTargets = kind === "point" && !pending ? [target] : [];
+        ts.dimTargets = ent.kind === "point" && !pending ? [target] : [];
         const constraint =
-          targets.length === 2 || kind !== "point"
+          targets.length === 2 || ent.kind !== "point"
             ? tools.dimensionFor(targets, draft.entities)
             : null;
         if (constraint) {
@@ -1970,7 +1963,8 @@ export function ViewportView({
     const draft = s.draftSketch;
     if (!draft) return;
     const ent = draft.entities.find((x) => x.id === entityId);
-    if (!ent || ent.kind === "point") return;
+    if (ent?.kind === "ellipse") s.setError(ELLIPSE_UNSUPPORTED);
+    if (!ent || ent.kind === "point" || ent.kind === "ellipse") return;
     if (ent.kind === "line") {
       const dims = tools.lineDimensions(
         entityId,
@@ -2179,7 +2173,6 @@ export function ViewportView({
     };
   }, [editingProfiles]);
 
-  // dimension label click → edit
   async function commitDimEdit() {
     if (!dimEdit || dimCommitting.current) return;
     const s = useStore.getState();

@@ -1,12 +1,11 @@
 import { expect, test } from "vitest";
 import { solveSketch } from "../src/solver.js";
 import {
-  arcAngles,
   detectProfiles,
   pointInPolygon,
   profileIdFor,
-  sampleArc,
 } from "../src/profiles.js";
+import { arcAngles, sampleArc } from "../src/sketchCurves.js";
 import {
   findOffsetConnector,
   offsetSketch,
