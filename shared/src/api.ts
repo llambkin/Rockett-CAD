@@ -347,6 +347,7 @@ export type ApiErrorCode =
   | "precondition_required"
   | "unprocessable"
   | "kernel"
+  | "kept"
   | "internal";
 
 export interface ApiErrorBody {

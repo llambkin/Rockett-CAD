@@ -84,6 +84,28 @@ async function refreshSigs(
   );
 }
 
+async function keeping(
+  store: RouterContext["store"],
+  id: string,
+  revision: number,
+  write: () => Promise<void>,
+): Promise<void> {
+  try {
+    await write();
+  } catch (err) {
+    const stored = (await store.documents.stored(id).catch(() => ({}))) as {
+      revision?: unknown;
+    };
+    if (typeof stored.revision !== "number" || stored.revision <= revision)
+      throw err;
+    console.error(`[rockett] project ${id} kept an edit: ${String(err)}`);
+    throw new StoreError(
+      "Your edit was saved, but the server failed after saving it.",
+      "kept",
+    );
+  }
+}
+
 const ended = () =>
   new StoreError("This preview has ended. Start it again.", "not_found");
 
@@ -165,7 +187,7 @@ export function createProjectMutations(context: RouterContext) {
         }
         const loaded = await editable(req, res);
         const before = structuredClone(resolvedFeatures(loaded));
-        const { timelinePosition } = loaded;
+        const { timelinePosition, revision } = loaded;
         const {
           label,
           cursor,
@@ -183,11 +205,13 @@ export function createProjectMutations(context: RouterContext) {
             { features: before, timelinePosition },
             evaluation,
           );
-        await (label === undefined
-          ? history.move(document, cursor, ctx.user.id)
-          : history.save(document, label, tx, ctx.user.id));
-        jobs.committed();
-        await send(res, document, evaluation, extra, position);
+        await keeping(store, loaded.id, revision, async () => {
+          await (label === undefined
+            ? history.move(document, cursor, ctx.user.id)
+            : history.save(document, label, tx, ctx.user.id));
+          jobs.committed();
+          await send(res, document, evaluation, extra, position);
+        });
       }),
     );
   return {
@@ -195,6 +219,8 @@ export function createProjectMutations(context: RouterContext) {
     previewOwner,
     ended,
     sendStored,
+    keeping: (id: string, revision: number, write: () => Promise<void>) =>
+      keeping(store, id, revision, write),
     refreshSigs: (
       doc: CadDocument,
       before: CadDocument,

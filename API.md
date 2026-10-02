@@ -66,7 +66,7 @@ nothing else is: `server/src/api/routes.ts`.
 ## Errors
 
 Project, folder, settings and job routes answer `ApiErrorBody`
-(`shared/src/api.ts`). `STATUS` in `server/src/api/routes.ts` fixes the
+(`shared/src/api.ts`). `STATUS` in `server/src/api/apiErrors.ts` fixes the
 status for each `code`. `internal` is 500 with a generic message; the log has
 the detail. A 409 on a document edit carries the stored `revision`, and on a
 preview commit also the staged `draft`. `client/src/api.ts` turns any error
@@ -128,7 +128,11 @@ failures refuse listing and deletion. Temporary cleanup needs no revision.
 ## History
 
 Every document edit except a project rename saves the document and one
-labelled undo entry together; a failed edit writes nothing. Edits sharing an
+labelled undo entry together. An edit that fails before its document file
+lands writes nothing. One that fails after it lands keeps the edit and its
+entry and answers 500 `kept`, never `internal`; the client then reloads the
+project, so the edit shows and Undo names it:
+`server/src/api/projectMutations.ts`, `client/src/store.ts`. Edits sharing an
 `X-Rockett-Tx` (`TX_HEADER`) fold into the latest entry. Undo, redo and
 restore are document edits; nothing to undo or redo is 409:
 `server/src/store/historyStore.ts`. Entries and checkpoints carry `by`, the

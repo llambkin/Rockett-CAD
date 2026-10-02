@@ -18,6 +18,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   precondition_required: 428,
   unprocessable: 422,
   kernel: 503,
+  kept: 500,
   internal: 500,
 };
 

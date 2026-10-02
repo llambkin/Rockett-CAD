@@ -14,13 +14,8 @@ import type {
 import { openInDialog } from "../commands/featureCommand";
 import { activeCommand } from "../commands/active";
 import { featureUI } from "../features/registry";
-import {
-  useStore,
-  isIdle,
-  selectionKey,
-  sketchEditingPosition,
-  type Selection,
-} from "../store";
+import { useStore, isIdle, selectionKey, type Selection } from "../store";
+import { sketchEditingPosition } from "../sketchEditing";
 import { useTimelinePeek } from "../timelinePeek";
 import { featureBodies } from "../treeSelection";
 import { HorizontalScroll } from "./HorizontalScroll";

@@ -35,6 +35,7 @@ import { projectIdFromPath, projectPath, showPath } from "./paths";
 import * as previewBase from "./previewBase";
 export { previewBodies } from "./previewBase";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
+import { historyEditingState, sketchEditingPosition } from "./sketchEditing";
 
 import {
   selectionBeforeCommand,
@@ -53,41 +54,6 @@ export type { SketchTool } from "./commands/sketch";
 export type DialogType = FeatureType | "export";
 
 export type Mode = { name: "idle" };
-
-function historyEditingState(
-  active: Active | null,
-  m: MutationResponse,
-): Pick<State, "draftSketch" | "selection" | "active"> {
-  const cleared = { active: null, selection: [] };
-  if (active?.id === "design.sketch") {
-    const feature = m.document.features.find(
-      (f) => f.id === active.state.sketchId,
-    );
-    const solved = m.evaluation.sketches.find(
-      (sk) => sk.featureId === active.state.sketchId,
-    );
-    if (feature?.type === "sketch" && solved)
-      return {
-        ...cleared,
-        active: { ...active, state: { ...active.state, tool: "select" } },
-        draftSketch: JSON.parse(
-          JSON.stringify({ ...feature, entities: solved.entities }),
-        ),
-      };
-  }
-  return { ...cleared, draftSketch: null };
-}
-
-export function sketchEditingPosition(
-  document: CadDocument,
-  active: Active | null,
-): number | undefined {
-  if (active?.id !== "design.sketch") return undefined;
-  const index = document.features.findIndex(
-    (f) => f.id === active.state.sketchId && f.type === "sketch",
-  );
-  return index < 0 ? undefined : index + 1;
-}
 
 interface State {
   projectId: string | null;
@@ -369,6 +335,26 @@ async function loadHistory(document: CadDocument): Promise<void> {
   }
 }
 
+async function reload(id: string): Promise<void> {
+  previewBase.dropBase();
+  const { document } = await api.getProject(id);
+  const { active } = useStore.getState();
+  const position = sketchEditingPosition(document, active);
+  const evaluation = await api.evaluate(id, position);
+  useStore.setState({
+    document,
+    evaluation,
+    recovery: null,
+    history: null,
+    busy: false,
+    ...historyEditingState(active, { document, evaluation }),
+  });
+  void loadHistory(document);
+}
+
+const kept = (id: string, e: Error): Promise<void> =>
+  reload(id).catch(() => useStore.setState({ error: e.message, busy: false }));
+
 function lost(e: unknown): Recovery | null {
   const recovery = recoveryFor(e);
   if (recovery) {
@@ -432,6 +418,7 @@ async function moveHistory(
       ...historyEditingState(active, m),
     });
   } catch (e: any) {
+    if (e?.code === "kept") return kept(projectId, e);
     useStore.setState({ error: lost(e) ? null : e.message, busy: false });
   }
 }
@@ -550,6 +537,7 @@ export const useStore = create<State>((set, get) => ({
         previewBase.dropBase();
         set({ ...landed(m), savedAt: Date.now(), busy: false });
       } catch (e: any) {
+        if (e?.code === "kept") return await kept(document.id, e);
         if (lost(e)) unsent.push(() => fn(tx));
         set((s) => ({ error: s.recovery ? null : e.message, busy: false }));
         throw e;
@@ -562,27 +550,12 @@ export const useStore = create<State>((set, get) => ({
     if (!document || !recovery) return;
     endPreviews();
     preview.session = null;
-    previewBase.dropBase();
     set({ busy: true, error: null });
     const reloaded = await inTurn(async () => {
       try {
         for (const tx of abandoned.splice(0))
           await api.abortPreview(document.id, tx).catch(() => null);
-        const latest = (await api.getProject(document.id)).document;
-        const active = get().active;
-        const evaluation = await api.evaluate(
-          document.id,
-          sketchEditingPosition(latest, active),
-        );
-        set({
-          document: latest,
-          evaluation,
-          recovery: null,
-          history: null,
-          busy: false,
-          ...historyEditingState(active, { document: latest, evaluation }),
-        });
-        void loadHistory(latest);
+        await reload(document.id);
         return true;
       } catch (e: any) {
         set({ busy: false, recovery: lost(e) ?? recovery });

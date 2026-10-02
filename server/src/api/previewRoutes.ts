@@ -15,6 +15,7 @@ export function previewRoutes(context: ApiRoutes) {
     previewOwner,
     ended,
     sendStored,
+    keeping,
     refreshSigs,
     evaluateAndSync,
     jobs,
@@ -49,10 +50,12 @@ export function previewRoutes(context: ApiRoutes) {
       const position = evaluationPosition(req, document);
       const evaluation = await evaluateAndSync(document, position);
       await refreshSigs(document, stored, evaluation);
-      await history.save(document, label, tx, ctx.user.id);
-      previews.end(id, tx);
-      jobs.committed();
-      await send(res, document, evaluation, undefined, position);
+      await keeping(id, stored.revision, async () => {
+        await history.save(document, label, tx, ctx.user.id);
+        previews.end(id, tx);
+        jobs.committed();
+        await send(res, document, evaluation, undefined, position);
+      });
     }),
   );
   on(
