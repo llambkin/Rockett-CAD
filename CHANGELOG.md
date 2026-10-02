@@ -2,7 +2,7 @@
 
 Versions follow semver. The root `package.json` owns the one app version;
 the workspace versions stay `0.1.0`. `SCHEMA_VERSION` (document format) is
-versioned separately in `shared/src/model.ts`; `/api/health` reports both to
+versioned separately in `shared/src/documents.ts`; `/api/health` reports both to
 signed-in users.
 
 A release moves `Unreleased` into a dated `## X.Y.Z` section and gets an
@@ -145,6 +145,9 @@ release workflow remain under development.
   unchanged.
 - Schema 26: Shell stores its direction, inside, outside or both sides, and an
   outside thickness for both sides; earlier shells load as inside.
+- Schema 27: mesh imports store their file as a project blob instead of base64
+  in the document; earlier documents move their mesh bytes into blobs after a
+  backup.
 
 ### Known limits
 
