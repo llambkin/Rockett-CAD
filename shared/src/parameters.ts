@@ -1,6 +1,11 @@
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import type { CadDocument, Feature, UserParameter } from "./model.js";
+import type {
+  CadDocument,
+  Feature,
+  ParameterBinding,
+  UserParameter,
+} from "./model.js";
 import { evaluateExpression, type Scalar } from "./expressions.js";
 import { featureSpec } from "./featureSpec.js";
 import { FEATURE_SCHEMAS } from "./schema/coreFeatures.js";
@@ -183,4 +188,48 @@ export function resolveDocumentParameters(
     target[parts.at(-1)!] = result.value;
   }
   return { values, features };
+}
+
+export function resolvedFeatureIn<F extends Feature>(
+  doc: Pick<CadDocument, "parameters" | "parameterBindings" | "features">,
+  feature: F,
+): F {
+  if (!doc.parameterBindings.some((b) => b.featureId === feature.id))
+    return feature;
+  try {
+    const found = resolveDocumentParameters(doc).features.find(
+      (x) => x.id === feature.id,
+    );
+    return found?.type === feature.type ? (found as F) : feature;
+  } catch {
+    return feature;
+  }
+}
+
+const LISTED = /^\/([A-Za-z_][A-Za-z_0-9]*)\/(0|[1-9][0-9]*)(\/.+)$/;
+
+const listOf = (feature: Feature, key: string): unknown[] => {
+  const items = (feature as unknown as Record<string, unknown>)[key];
+  return Array.isArray(items) ? items : [];
+};
+
+const idOf = (item: unknown): unknown =>
+  typeof item === "object" && item !== null
+    ? (item as { id?: unknown }).id
+    : undefined;
+
+export function movedBindings(
+  bindings: readonly ParameterBinding[],
+  before: Feature,
+  after: Feature,
+): ParameterBinding[] {
+  return bindings.flatMap((binding) => {
+    const found = binding.featureId === after.id && LISTED.exec(binding.path);
+    if (!found) return [binding];
+    const [, key, index, rest] = found;
+    const id = idOf(listOf(before, key!)[Number(index)]);
+    if (id === undefined) return [binding];
+    const at = listOf(after, key!).findIndex((item) => idOf(item) === id);
+    return at < 0 ? [] : [{ ...binding, path: `/${key}/${at}${rest}` }];
+  });
 }

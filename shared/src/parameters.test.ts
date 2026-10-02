@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { expect, it } from "vitest";
 import {
   createEmptyDocument,
+  movedBindings,
   registerExtensionSpec,
   resolveDocumentParameters,
   type UserParameter,
@@ -208,4 +209,54 @@ it("lets the registered feature schema authorize extension numeric inputs and re
   } finally {
     release();
   }
+});
+
+it("moves bindings with the items they name and drops bindings of removed items", () => {
+  const before = {
+    id: "s",
+    type: "sketch" as const,
+    name: "Sketch",
+    suppressed: false,
+    plane: { kind: "origin" as const, plane: "XY" as const },
+    entities: [
+      { id: "a", kind: "point" as const, x: 0, y: 0 },
+      { id: "b", kind: "point" as const, x: 5, y: 0 },
+    ],
+    constraints: [
+      { id: "fix", type: "fix" as const, point: "a" },
+      {
+        id: "d",
+        type: "distance" as const,
+        a: "a",
+        b: "b",
+        axis: null,
+        value: 5,
+      },
+    ],
+  };
+  const after = {
+    ...before,
+    entities: [before.entities[1]!],
+    constraints: [
+      { id: "h", type: "fix" as const, point: "b" },
+      ...before.constraints,
+    ],
+  };
+  const other = { featureId: "e", path: "/distance", expression: "w" };
+  expect(
+    movedBindings(
+      [
+        { featureId: "s", path: "/constraints/1/value", expression: "w" },
+        { featureId: "s", path: "/entities/0/x", expression: "w" },
+        { featureId: "s", path: "/entities/1/x", expression: "w" },
+        other,
+      ],
+      before,
+      after,
+    ),
+  ).toEqual([
+    { featureId: "s", path: "/constraints/2/value", expression: "w" },
+    { featureId: "s", path: "/entities/0/x", expression: "w" },
+    other,
+  ]);
 });

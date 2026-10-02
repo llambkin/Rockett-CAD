@@ -1,9 +1,9 @@
 import { refsOf } from "../selection/kinds";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import * as THREE from "three";
 import type {
-  DimensionConstraint,
   PlaneFrame,
   SketchConstraint,
   SketchEntity,
@@ -13,7 +13,6 @@ import type {
 import {
   formatAngle,
   formatLength,
-  parseLength,
   roundedLength,
   newId,
   extendSketch,
@@ -73,27 +72,15 @@ import {
 import { dimensionLayout, dimensionMaps } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { ViewportContextMenu } from "./ViewportContextMenu";
-import { confirm } from "./ConfirmPanel";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
 import { ViewportHud } from "./ViewportHud";
-
-interface DimEditField {
-  constraintId: string;
-  value: string;
-  label?: string;
-  unit?: Units | "°" | "";
-}
-
-function parsedDimEditValue(field: DimEditField, units: Units): number | null {
-  if (field.unit === "°") {
-    const angle = Number(field.value);
-    return field.value.trim() && Number.isFinite(angle) ? angle : null;
-  }
-  const mm = parseLength(field.value, field.unit || units);
-  return mm !== null && mm > 0 ? mm : null;
-}
+import {
+  DimensionEdit,
+  type DimEdit,
+  type DimEditField,
+} from "./DimensionEdit";
 
 interface DimLabel {
   id: string;
@@ -151,11 +138,7 @@ export function ViewportView({
   const editFeatureId = activeFeature?.editFeatureId;
   const held = usePreviewBase();
 
-  const [dimEdit, setDimEdit] = useState<{
-    fields: DimEditField[];
-    x: number;
-    y: number;
-  } | null>(null);
+  const [dimEdit, setDimEdit] = useState<DimEdit | null>(null);
 
   const [dimMenu, setDimMenu] = useState<{
     x: number;
@@ -174,8 +157,6 @@ export function ViewportView({
     () => new GizmoSlot<ExtrudeGizmo | RevolveGizmo>(),
   );
   const featureHandleRef = useRef<FeatureHandle | null>(null);
-  const dimCommitting = useRef(false);
-  /** in-progress dimension-label drag (repositioning the label) */
   const dimDragRef = useRef<{
     id: string;
     moved: boolean;
@@ -188,7 +169,6 @@ export function ViewportView({
     y: number;
     text: string;
   } | null>(null);
-  /** live size readout while drawing shapes (length / W×H / Ø) */
   const [toolLabel, setToolLabel] = useState<{
     x: number;
     y: number;
@@ -217,14 +197,12 @@ export function ViewportView({
     fields: DimField[];
     active: number;
   } | null>(null);
-  /** snap glyph at the snapped cursor position (triangle = midpoint, …) */
   const [snapMarker, setSnapMarker] = useState<{
     x: number;
     y: number;
     kind: NonNullable<tools.UV["snapKind"]>;
   } | null>(null);
 
-  // Tool interaction state (kept in refs — no re-render churn)
   const toolState = useRef<{
     clicks: tools.UV[];
     dragPointId: string | null;
@@ -2054,7 +2032,7 @@ export function ViewportView({
   }
 
   const drawingDimensions = dimEntry !== null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!drawingDimensions) return;
     const onKey = (e: KeyEvent) => {
       const s = useStore.getState();
@@ -2169,64 +2147,6 @@ export function ViewportView({
     };
   }, [editingProfiles]);
 
-  async function commitDimEdit() {
-    if (!dimEdit || dimCommitting.current) return;
-    const s = useStore.getState();
-    const draft = s.draftSketch;
-    if (!draft) {
-      setDimEdit(null);
-      return;
-    }
-    const parsed = dimEdit.fields.map((field) =>
-      parsedDimEditValue(field, units),
-    );
-    if (parsed.some((value) => value === null)) return;
-    let constraints = draft.constraints;
-    for (const [index, f] of dimEdit.fields.entries()) {
-      const edited = constraints.find((c) => c.id === f.constraintId);
-      const v = edited
-        ? tools.dimensionValue(edited, String(parsed[index]!))
-        : null;
-      if (v === null) continue;
-      constraints = tools.dedupeDimensions(
-        constraints.map((c) => {
-          if (c.id !== f.constraintId) return c;
-          const { driven: _driven, ...driving } = {
-            ...(c as DimensionConstraint),
-            value: v,
-          };
-          return driving;
-        }) as SketchConstraint[],
-        f.constraintId,
-      );
-    }
-    if (constraints !== draft.constraints) {
-      dimCommitting.current = true;
-      try {
-        const refused = s.updateDraftSketch(draft.entities, constraints);
-        if (
-          refused &&
-          "value" in refused &&
-          (await confirm(
-            `${useStore.getState().error} Add it as a driven dimension instead?`,
-          ))
-        ) {
-          useStore.setState({ error: null });
-          s.updateDraftSketch(
-            draft.entities,
-            constraints.map((c) =>
-              c.id === refused.id ? { ...refused, driven: true } : c,
-            ),
-          );
-        }
-        await s.commitDraftSketch();
-      } finally {
-        dimCommitting.current = false;
-      }
-    }
-    setDimEdit(null);
-  }
-
   function openDimensionChoices(
     id: string,
     e: { clientX: number; clientY: number },
@@ -2275,20 +2195,6 @@ export function ViewportView({
       ],
       ...at,
     });
-  }
-
-  /** Remove the dimension whose label is being edited. */
-  async function deleteDimEdit(ids: string[]) {
-    const s = useStore.getState();
-    const draft = s.draftSketch;
-    if (draft) {
-      s.updateDraftSketch(
-        draft.entities,
-        draft.constraints.filter((c) => !ids.includes(c.id)),
-      );
-      await s.commitDraftSketch();
-    }
-    setDimEdit(null);
   }
 
   const viewport = unavailable ? (
@@ -2387,63 +2293,12 @@ export function ViewportView({
       </div>
       <SketchOffsetIndicators />
       {dimEdit && (
-        <div
-          className="dim-edit"
-          style={{ left: dimEdit.x, top: dimEdit.y }}
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node | null))
-              void commitDimEdit();
-          }}
-        >
-          {dimEdit.fields.map((f, i) => (
-            <Fragment key={f.constraintId}>
-              {f.label && <span className="dim-key">{f.label}</span>}
-              <input
-                autoFocus={i === 0}
-                aria-label={
-                  f.label ? `Dimension ${f.label}` : "Dimension value"
-                }
-                value={f.value}
-                aria-invalid={parsedDimEditValue(f, units) === null}
-                onChange={(e) =>
-                  setDimEdit({
-                    ...dimEdit,
-                    fields: dimEdit.fields.map((x) =>
-                      x === f ? { ...x, value: e.target.value } : x,
-                    ),
-                  })
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === "Return")
-                    void commitDimEdit();
-                  if (e.key === "Escape") setDimEdit(null);
-                  // Delete on an emptied box removes the dimension altogether
-                  if (
-                    (e.key === "Delete" || e.key === "Backspace") &&
-                    f.value === ""
-                  ) {
-                    e.preventDefault();
-                    void deleteDimEdit([f.constraintId]);
-                  }
-                }}
-              />
-              {f.unit && !/[a-z]$/i.test(f.value.trim()) && (
-                <span className="dim-unit">{f.unit}</span>
-              )}
-            </Fragment>
-          ))}
-          <button
-            className="dim-edit-delete"
-            title="Delete this dimension"
-            aria-label="Delete dimension"
-            onPointerDown={(e) => e.preventDefault()} // keep the input's blur from committing first
-            onClick={() =>
-              void deleteDimEdit(dimEdit.fields.map((f) => f.constraintId))
-            }
-          >
-            ✕
-          </button>
-        </div>
+        <DimensionEdit
+          key={`${dimEdit.x},${dimEdit.y},${dimEdit.fields.map((f) => f.constraintId)}`}
+          edit={dimEdit}
+          units={units}
+          onClose={() => setDimEdit(null)}
+        />
       )}
       <div className="viewcube" ref={cubeRef} />
       {gizmoLabel && (

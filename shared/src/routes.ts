@@ -6,6 +6,7 @@ import type {
   CadDocument,
   EdgeRef,
   Feature,
+  ParameterBinding,
   ParameterEdit,
   SketchEntity,
   TreeGroup,
@@ -64,41 +65,12 @@ export interface NamingUpgradeResponse extends WireMutationResponse {
   mappings: NamingMapping[];
 }
 
-export const PROJECT_FILE_FORMAT = "rockett-project";
-export const PROJECT_FILE_VERSION = 1;
-export const PROJECT_FILE_LIMIT_MB = 64;
 export const THUMBNAIL_LIMITS = {
   width: 480,
   height: 320,
   bytes: 256 * 1024,
 } as const;
 export const DEFAULT_PORT = 8788;
-
-export interface ProjectFile {
-  format: typeof PROJECT_FILE_FORMAT;
-  version: typeof PROJECT_FILE_VERSION;
-  document: CadDocument;
-  assets: Record<string, string>;
-}
-
-export function referencedAssets(doc: CadDocument): Set<string> {
-  return new Set(
-    doc.features.flatMap((f) =>
-      f.type === "referenceImage"
-        ? [f.assetId]
-        : f.type === "importStep" || f.type === "importMesh"
-          ? [f.blob]
-          : [],
-    ),
-  );
-}
-
-export const projectFileEnvelope = Type.Object({
-  format: Type.Literal(PROJECT_FILE_FORMAT),
-  version: Type.Integer({ minimum: 1 }),
-  document: Type.Object({ schemaVersion: Type.Integer({ minimum: 1 }) }),
-  assets: Type.Record(Type.String(), Type.String()),
-});
 
 import { route } from "./routeContract.js";
 export {
@@ -238,6 +210,9 @@ const parameterEditBody = Type.Object(
   { ...parameterStateSchema, held },
   { additionalProperties: false },
 );
+export const parameterBindingsBody = Type.Object({
+  parameterBindings: parameterStateSchema.parameterBindings,
+});
 
 export const viewCamera = Type.Object(
   {
@@ -366,7 +341,10 @@ export const ROUTES = {
     "document",
   ),
   updateFeature: route<
-    { feature: Partial<Feature> } & HeldMeshes,
+    {
+      feature: Partial<Feature>;
+      parameterBindings?: ParameterBinding[];
+    } & HeldMeshes,
     WireMutationResponse
   >()("PUT", "/projects/:id/features/:fid", undefined, "document"),
   projectEdge: route<

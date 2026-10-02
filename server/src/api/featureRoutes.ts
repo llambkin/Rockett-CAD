@@ -1,6 +1,8 @@
 import {
   lacksTargets,
   nextFeatureName,
+  parameterBindingsBody,
+  parse,
   pinTargets,
   ROUTES,
   startFirst,
@@ -140,6 +142,11 @@ function updateFeatureRoute(context: ApiRoutes) {
       if ("direction" in patch && !("outsideThickness" in patch))
         Reflect.deleteProperty(updated, "outsideThickness");
       validateFeature(updated);
+      const { parameterBindings } = req.body;
+      if (parameterBindings !== undefined)
+        doc.parameterBindings = parse(parameterBindingsBody, {
+          parameterBindings,
+        }).parameterBindings;
       await signed(doc, idx, updated, current);
       doc.features[idx] = updated;
       await (keepsTargets(patch)

@@ -1,5 +1,5 @@
 import {
-  resolveDocumentParameters,
+  resolvedFeatureIn,
   type CadDocument,
   type Feature,
   type ParameterBinding,
@@ -11,15 +11,7 @@ export type FieldExpressions = Readonly<Record<string, string | null>>;
 
 export function resolvedFeature<F extends Feature>(f: F): F {
   const doc = useStore.getState().document;
-  if (!doc?.parameterBindings.some((b) => b.featureId === f.id)) return f;
-  try {
-    const found = resolveDocumentParameters(doc).features.find(
-      (x) => x.id === f.id,
-    );
-    return found?.type === f.type ? (found as F) : f;
-  } catch {
-    return f;
-  }
+  return doc ? resolvedFeatureIn(doc, f) : f;
 }
 
 export function storedExpression(

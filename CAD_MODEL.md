@@ -401,8 +401,14 @@ field. A feature field names its binding path; text that uses a parameter
 links, a constant calculates once, and a handle that sets a new value unlinks.
 In a non-mm display unit a unitless linked result is stored with that unit.
 `client/src/features/bindings.ts` saves a feature and its changed bindings as
-one staged transaction, so one undo reverts both. Sketch dimensions do not link
-yet.
+one staged transaction, so one undo reverts both. Quick Edit fields link the
+same way.
+
+A sketch dimension links through the same field. A binding path names an array
+index, so `movedBindings` in `shared/src/parameters.ts` moves a binding with the
+item id it names and drops it when the item goes. `commitDraftSketch` sends the
+moved bindings with the sketch edit; a driven dimension keeps no link. A sketch
+opened for editing shows resolved dimension values.
 
 Core feature schemas live in `shared/src/schema/coreFeatures.ts`, below the
 parameter resolver and document validation. `schema/features.ts` retains their

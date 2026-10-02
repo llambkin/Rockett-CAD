@@ -13,6 +13,7 @@ import {
   type EvaluateResult,
   type ExportRequest,
   type Feature,
+  type ParameterBinding,
   type HeldMeshes,
   type MeasureRequest,
   type MutationResponse,
@@ -552,11 +553,12 @@ export const api = {
     position?: number,
     tx?: string,
     seq?: number,
+    parameterBindings?: ParameterBinding[],
   ) =>
     holding(
       ROUTES.updateFeature,
       { id, fid },
-      { feature },
+      parameterBindings ? { feature, parameterBindings } : { feature },
       { position, tx, seq },
     ),
   deleteFeature: (id: string, fid: string, tx?: string) =>
@@ -642,7 +644,4 @@ export const api = {
     request(ROUTES.asset.method, pathFor(ROUTES.asset, { id, assetId }), {
       response: "blob",
     }).then((d) => d.blob),
-
-  assetUrl: (id: string, assetId: string) =>
-    API + pathFor(ROUTES.asset, { id, assetId }),
 };

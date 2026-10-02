@@ -1,5 +1,5 @@
 client/src/App.tsx Workspace 86
-client/src/api.ts 652
+client/src/api.ts 647
 client/src/components/ControlsHelp.tsx ControlsHelp 109
 client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/ExportPanel.tsx ExportBody 93
@@ -18,8 +18,8 @@ client/src/components/Toolbar.tsx SketchToolbar 104
 client/src/components/UsersPage.tsx AddUserForm 90
 client/src/components/UsersPage.tsx UserRow 85
 client/src/components/ViewportContextMenu.tsx ViewportContextMenu 137
-client/src/components/ViewportView.tsx 2602
-client/src/components/ViewportView.tsx ViewportView 2420
+client/src/components/ViewportView.tsx 2456
+client/src/components/ViewportView.tsx ViewportView 2287
 client/src/components/ViewportView.tsx dimLabelsRef.current.map() 82
 client/src/components/ViewportView.tsx handleHover 101
 client/src/components/ViewportView.tsx handlePrimaryUp 93
@@ -30,9 +30,11 @@ client/src/components/ViewportView.tsx useEffect()#2 133
 client/src/components/form/fields.tsx 557
 client/src/features/constructionPlane.tsx PlaneForm 111
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
+client/src/sketchEditing.ts sketchActions 215
+client/src/sketchEdits.ts sketchEdits 166
 client/src/sketchTools.ts 1048
-client/src/store.ts 1159
-client/src/store.ts useStore 699
+client/src/store.ts 716
+client/src/store.ts useStore 320
 client/src/three/CadViewport.ts 1250
 client/src/three/CadViewport.ts addHighlight 85
 client/src/three/CadViewport.ts buildBody 88
@@ -52,7 +54,7 @@ server/src/geometry/tangentEdges.ts tangentEdges 110
 server/src/geometry/tessellate.ts tessellateBody 104
 server/src/store/historyStore.ts 593
 server/src/store/projectStore.ts 534
-shared/src/routes.ts 574
+shared/src/routes.ts 512
 shared/src/sketchModify.ts 738
 shared/src/sketchModify.ts joinOffsetEndpoints 110
 shared/src/sketchModify.ts offsetRoundedChain 124

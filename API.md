@@ -171,6 +171,9 @@ The document revision header is required; feature preview transaction headers
 also apply. Successful edits regenerate dependent geometry and create one history
 entry. Invalid names, cycles, numeric bounds or conflicting dimensions refuse the
 edit before saving. Project files, history and reopen preserve associations.
+`PUT /projects/:id/features/:fid` may also carry the whole `parameterBindings`
+list, so a sketch edit that renumbers its constraints saves the moved bindings
+in the same edit.
 
 ## Evaluation
 
@@ -299,7 +302,7 @@ module, in load order:
 
 ## Project file
 
-A `.rockett` file is `ProjectFile` in `shared/src/routes.ts`. Upload migrates
+A `.rockett` file is `ProjectFile` in `shared/src/projectFile.ts`. Upload migrates
 an older schema, validates, and rejects a newer `version` or `schemaVersion`
 with 400; any failure creates nothing: `server/src/api/projectFile.ts`. A
 stored project with a newer schema is listed as `tooNew`, and an invalid one
@@ -338,7 +341,7 @@ blob, so a `.rockett` file and a browser project carry them as assets.
 | Import and project file read, heap    | `ROCKETT_IMPORT_BUDGET_MB`, `IMPORT_LIMITS` in `server/src/tunables.ts`             |
 | Mesh import triangles                 | `MAX_MESH_TRIANGLES`, `server/src/geometry/importers.ts`                            |
 | 3MF expanded entry                    | `server/src/geometry/read3mf.ts`                                                    |
-| Browser project file                  | `PROJECT_FILE_LIMIT_MB`, `shared/src/routes.ts`                                     |
+| Browser project file                  | `PROJECT_FILE_LIMIT_MB`, `shared/src/projectFile.ts`                                |
 | Thumbnail                             | `THUMBNAIL_LIMITS`, `shared/src/routes.ts`                                          |
 | Reference image                       | `IMAGE_LIMIT_MB`, `server/src/store/projectStore.ts`                                |
 | History labels                        | `LABEL_LIMIT`, `shared/src/schema/history.ts`                                       |

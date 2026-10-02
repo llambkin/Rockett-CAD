@@ -29,8 +29,21 @@ export function parameterValues(
         parameterBindings: [],
         features: [],
       }).values;
-    } catch {
-      values = {};
+    } catch (error) {
+      values = Object.defineProperties(
+        {},
+        Object.fromEntries(
+          doc.parameters.map((p) => [
+            p.name,
+            {
+              enumerable: true,
+              get: () => {
+                throw error;
+              },
+            },
+          ]),
+        ),
+      );
     }
     resolved.set(doc.parameters, values);
   }
@@ -42,6 +55,7 @@ export interface FieldSpec {
   units?: Units | undefined;
   int?: boolean | undefined;
   min?: number | undefined;
+  above?: number | undefined;
   max?: number | undefined;
 }
 
@@ -100,6 +114,8 @@ export function evaluateField(
     return { error: "Enter a whole number" };
   if (spec.min !== undefined && value < spec.min)
     return { error: `Must be at least ${withUnit(spec.min, spec)}` };
+  if (spec.above !== undefined && value <= spec.above)
+    return { error: `Must be more than ${withUnit(spec.above, spec)}` };
   if (spec.max !== undefined && value > spec.max)
     return { error: `Must be at most ${withUnit(spec.max, spec)}` };
   const linked = constant
@@ -115,14 +131,25 @@ const near = (a: number, b: number) =>
 
 type State = ReturnType<typeof useStore.getState>;
 
-function boundText(s: State, path: string | undefined): string | undefined {
+export interface FieldLink {
+  text: string | undefined;
+  set: (expression: string | null | false) => void;
+}
+
+type Bind = string | FieldLink | undefined;
+
+function boundText(s: State, bind: Bind): string | undefined {
+  if (typeof bind === "object") return bind.text;
+  const path = bind;
   if (path === undefined || s.active?.id !== "design.feature") return undefined;
   const own = featureParams(s).expressions?.[path];
   if (own !== undefined) return own ?? undefined;
   return storedExpression(s.document, s.active.state.editFeatureId, path);
 }
 
-function mark(path: string, expression: string | null | false) {
+function mark(bind: string | FieldLink, expression: string | null | false) {
+  if (typeof bind === "object") return bind.set(expression);
+  const path = bind;
   const { expressions = {}, invalid = [] } = featureParams();
   const others = invalid.filter((p) => p !== path);
   setFeatureParams(
@@ -135,7 +162,8 @@ function mark(path: string, expression: string | null | false) {
   );
 }
 
-function settle(path: string) {
+function settle(path: Bind) {
+  if (typeof path !== "string") return;
   const { invalid = [] } = featureParams();
   if (invalid.includes(path))
     setFeatureParams({ invalid: invalid.filter((p) => p !== path) });
@@ -151,7 +179,7 @@ export interface ExpressionFieldProps extends FieldSpec {
   title?: string | undefined;
   autoFocus?: boolean | undefined;
   onClear?: (() => void) | undefined;
-  bind?: string | undefined;
+  bind?: Bind;
 }
 
 export function ExpressionField({
@@ -269,7 +297,7 @@ function stepped(
 }
 
 function useUnlink(
-  bind: string | undefined,
+  bind: Bind,
   value: number,
   bound: () => FieldResult | undefined,
 ) {
@@ -278,12 +306,7 @@ function useUnlink(
     if (result && "value" in result && !near(result.value, value))
       mark(bind!, null);
   }, [value]);
-  useEffect(
-    () => () => {
-      if (bind !== undefined) settle(bind);
-    },
-    [],
-  );
+  useEffect(() => () => settle(bind), []);
 }
 
 function useAutoFocus(

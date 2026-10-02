@@ -6,36 +6,25 @@ import type {
   Feature,
   HistoryStatus,
   OpenedProject,
-  PlaneRef,
   ProjectView,
-  SketchConstraint,
-  SketchEntity,
   SketchFeature,
-  SketchImport,
-  TrimTarget,
   ViewCamera,
   Visibility,
 } from "@rockett/shared";
-import {
-  emptyView,
-  newId,
-  solveSketch,
-  editedEntities,
-  OverConstrainedError,
-  createSketchOffset,
-  editSketchOffset,
-  constraintEntityRefs,
-  entityPointIds,
-  trimSketchPieces,
-  withShown,
-} from "@rockett/shared";
+import { emptyView, withShown } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import * as cameraSave from "./cameraSave";
 import { projectIdFromPath, projectPath, showPath } from "./paths";
 import * as previewBase from "./previewBase";
 export { previewBodies } from "./previewBase";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
-import { historyEditingState, sketchEditingPosition } from "./sketchEditing";
+import {
+  historyEditingState,
+  sketchActions,
+  sketchEditingPosition,
+  type SketchActions,
+} from "./sketchEditing";
+import { sketchEdits, type SketchEdits } from "./sketchEdits";
 
 import {
   selectionBeforeCommand,
@@ -44,14 +33,9 @@ import {
 } from "./selection/kinds";
 export { selectionKey, type Selection } from "./selection/kinds";
 
-import {
-  sketchState,
-  type SketchState,
-  type SketchTool,
-} from "./commands/sketch";
 export type { SketchTool } from "./commands/sketch";
 
-interface State {
+export interface State extends SketchActions, SketchEdits {
   projectId: string | null;
   access: OpenedProject["access"] | null;
   document: CadDocument | null;
@@ -92,32 +76,6 @@ interface State {
   clearActive: () => void;
   cancelDialog: () => void;
   setPickInput: (key: string) => void;
-
-  startSketchOnPlane: (ref: PlaneRef) => Promise<void>;
-  editSketch: (sketchId: string) => Promise<void>;
-  createOffset: (
-    ids: string[],
-    distance: number,
-    autoChain: boolean,
-    joinTolerance: number,
-  ) => Promise<void>;
-  editOffset: (id: string, distance: number) => Promise<void>;
-  setSketchState: (
-    state: Partial<Omit<SketchState, "sketchId" | "tool">>,
-  ) => void;
-  setSketchTool: (tool: SketchTool) => void;
-  updateDraftSketch: (
-    entities: SketchEntity[],
-    constraints: SketchConstraint[],
-  ) => SketchConstraint | null;
-  solveDraft: (drag?: { pointId: string; x: number; y: number }) => void;
-  commitDraftSketch: () => Promise<void>;
-  finishSketch: () => Promise<void>;
-
-  deleteSketchEntities: (entityIds: string[]) => Promise<void>;
-  toggleSketchConstruction: (entityIds: string[]) => Promise<void>;
-  trimSketchPieces: (targets: TrimTarget[]) => Promise<void>;
-  insertSketchImport: (format: string, imported: SketchImport) => Promise<void>;
 
   addFeature: (feature: Feature) => Promise<void>;
   updateFeature: (fid: string, patch: Partial<Feature>) => Promise<void>;
@@ -652,363 +610,8 @@ export const useStore = create<State>((set, get) => ({
   },
   setPickInput: (key) => set({ pickInput: key }),
 
-  async startSketchOnPlane(ref) {
-    const { document } = get();
-    if (!document) return;
-    const feature: SketchFeature = {
-      id: newId("sketch"),
-      type: "sketch",
-      name: "",
-      suppressed: false,
-      plane: ref,
-      entities: [],
-      constraints: [],
-    };
-    await get().mutate((tx) => api.addFeature(document.id, feature, tx));
-    const created = get().document!.features.find(
-      (f) => f.id === feature.id,
-    ) as SketchFeature;
-    set({
-      active: {
-        id: "design.sketch",
-        state: sketchState(feature.id, "line"),
-      },
-      draftSketch: JSON.parse(JSON.stringify(created)),
-      selection: [],
-    });
-  },
-
-  async editSketch(sketchId) {
-    if (get().busy) return;
-    const active = get().active;
-    if (active?.id === "design.sketch") {
-      if (active.state.sketchId === sketchId) return;
-      await get().finishSketch();
-      if (get().active?.id === "design.sketch") return;
-    }
-    const { document } = get();
-    const feature = document?.features.find(
-      (f) => f.id === sketchId && f.type === "sketch",
-    ) as SketchFeature | undefined;
-    if (!feature || !document || feature.suppressed) return;
-    set({ busy: true, error: null });
-    try {
-      const evaluation = await api.evaluate(
-        document.id,
-        document.features.indexOf(feature) + 1,
-      );
-      if (get().projectId !== document.id) return;
-      const solved = evaluation.sketches.find(
-        (sk) => sk.featureId === sketchId,
-      );
-      if (!solved)
-        throw new Error(
-          evaluation.featureStatuses.find((f) => f.featureId === sketchId)
-            ?.error ?? "Sketch could not be evaluated.",
-        );
-      set({
-        evaluation,
-        busy: false,
-        active: {
-          id: "design.sketch",
-          state: sketchState(sketchId, "select"),
-        },
-        draftSketch: {
-          ...JSON.parse(JSON.stringify(feature)),
-          entities: JSON.parse(JSON.stringify(solved.entities)),
-        },
-        selection: [],
-      });
-    } catch (e: any) {
-      if (get().projectId === document.id)
-        set({ busy: false, error: e.message });
-    }
-  },
-
-  async createOffset(ids, distance, autoChain, joinTolerance) {
-    const { draftSketch, busy } = get();
-    if (!draftSketch || busy) return;
-    const next = createSketchOffset(
-      draftSketch,
-      ids,
-      distance,
-      autoChain,
-      joinTolerance,
-    );
-    set({ draftSketch: next });
-    try {
-      await get().commitDraftSketch();
-    } catch (e) {
-      set({ draftSketch });
-      throw e;
-    }
-  },
-
-  async editOffset(id, distance) {
-    const { draftSketch, busy } = get();
-    if (!draftSketch || busy) return;
-    const next = editSketchOffset(draftSketch, id, distance);
-    const solved = solveSketch({
-      entities: next.entities,
-      constraints: next.constraints,
-    });
-    const owned = new Set((next.offsets ?? []).flatMap((o) => o.entityIds));
-    if (
-      !solved.converged ||
-      solved.entities.some((e, i) => {
-        const before = next.entities[i];
-        return (
-          owned.has(e.id) &&
-          ((e.kind === "point" &&
-            before?.kind === "point" &&
-            Math.hypot(e.x - before.x, e.y - before.y) > 1e-5) ||
-            (e.kind === "circle" &&
-              before?.kind === "circle" &&
-              Math.abs(e.radius - before.radius) > 1e-5))
-        );
-      })
-    )
-      throw new Error(
-        "Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.",
-      );
-    set({ draftSketch: { ...next, entities: solved.entities } });
-    try {
-      await get().commitDraftSketch();
-    } catch (e) {
-      set({ draftSketch });
-      throw e;
-    }
-  },
-
-  setSketchState(state) {
-    const active = get().active;
-    if (active?.id !== "design.sketch") return;
-    set({ active: { ...active, state: { ...active.state, ...state } } });
-  },
-  setSketchTool(tool) {
-    const { active } = get();
-    if (active?.id !== "design.sketch") return;
-    set({
-      active: {
-        ...active,
-        state: {
-          ...active.state,
-          tool,
-          ...(tool === "offset" && {
-            offsetManualSelection: false,
-            offsetEditId: null,
-          }),
-        },
-      },
-      selection: [],
-    });
-  },
-
-  updateDraftSketch(entities, constraints) {
-    const { draftSketch } = get();
-    if (!draftSketch) return null;
-    try {
-      set({
-        draftSketch: {
-          ...draftSketch,
-          entities: editedEntities(draftSketch.constraints, {
-            entities,
-            constraints,
-          }),
-          constraints,
-        },
-      });
-      return null;
-    } catch (e) {
-      if (!(e instanceof OverConstrainedError)) throw e;
-      set({ error: e.message });
-      return e.constraint;
-    }
-  },
-
-  solveDraft(drag) {
-    const { draftSketch } = get();
-    if (!draftSketch) return;
-    const solved = solveSketch({
-      entities: draftSketch.entities,
-      constraints: draftSketch.constraints,
-      ...(drag === undefined ? {} : { drag }),
-    });
-    set({ draftSketch: { ...draftSketch, entities: solved.entities } });
-  },
-
-  async commitDraftSketch() {
-    const { draftSketch, document } = get();
-    if (!draftSketch || !document) return;
-    const saved = document.features.find((f) => f.id === draftSketch.id);
-    if (
-      saved?.type === "sketch" &&
-      JSON.stringify([
-        saved.entities,
-        saved.constraints,
-        saved.offsets ?? [],
-      ]) ===
-        JSON.stringify([
-          draftSketch.entities,
-          draftSketch.constraints,
-          draftSketch.offsets ?? [],
-        ])
-    )
-      return;
-    await get().mutate((tx) =>
-      api.updateFeature(
-        document.id,
-        draftSketch.id,
-        {
-          entities: draftSketch.entities,
-          constraints: draftSketch.constraints,
-          offsets: draftSketch.offsets,
-        } as Partial<Feature>,
-        sketchEditingPosition(document, get().active),
-        tx,
-      ),
-    );
-    const evaluation = get().evaluation;
-    const solvedSketch = evaluation?.sketches.find(
-      (s) => s.featureId === draftSketch.id,
-    );
-    if (solvedSketch) {
-      set((s) => ({
-        draftSketch: s.draftSketch
-          ? {
-              ...s.draftSketch,
-              entities: solvedSketch.entities as SketchEntity[],
-            }
-          : null,
-      }));
-    }
-  },
-
-  async finishSketch() {
-    if (get().busy || get().active?.id !== "design.sketch") return;
-    try {
-      await get().commitDraftSketch();
-      const doc = get().document;
-      if (!doc) return;
-      set({ busy: true });
-      const evaluation = await api.evaluate(doc.id);
-      if (get().projectId !== doc.id) return;
-      set({
-        evaluation,
-        busy: false,
-        active: null,
-        draftSketch: null,
-        selection: [],
-      });
-    } catch (e: any) {
-      set({ busy: false, error: e.message });
-    }
-  },
-
-  async deleteSketchEntities(entityIds) {
-    const { draftSketch } = get();
-    if (!draftSketch || entityIds.length === 0) return;
-    const idSet = new Set(entityIds);
-
-    const gone = (e: SketchEntity) =>
-      idSet.has(e.id) || entityPointIds(e).some((id) => idSet.has(id));
-    const deletedCurvePoints = new Set(
-      draftSketch.entities.filter(gone).flatMap(entityPointIds),
-    );
-    let entities = draftSketch.entities.filter((e) => !gone(e));
-    const stillUsed = new Set(entities.flatMap(entityPointIds));
-    entities = entities.filter(
-      (e) =>
-        e.kind !== "point" ||
-        stillUsed.has(e.id) ||
-        !deletedCurvePoints.has(e.id),
-    );
-    const drivenPoints = new Set(
-      entities.flatMap((e) =>
-        e.kind !== "point" && e.projection ? entityPointIds(e) : [],
-      ),
-    );
-    entities = entities.map((e) =>
-      e.kind === "point" &&
-      e.external &&
-      deletedCurvePoints.has(e.id) &&
-      !drivenPoints.has(e.id)
-        ? { ...e, external: false }
-        : e,
-    );
-
-    const remaining = new Set(entities.map((e) => e.id));
-    const constraints = draftSketch.constraints.filter((c) =>
-      constraintEntityRefs(c).every((r) => remaining.has(r)),
-    );
-    get().updateDraftSketch(entities, constraints);
-    await get().commitDraftSketch();
-    set({ selection: [] });
-  },
-
-  async trimSketchPieces(targets) {
-    const { draftSketch, busy } = get();
-    if (!draftSketch || busy || !targets.length) return;
-    const result = trimSketchPieces(
-      draftSketch.entities,
-      draftSketch.constraints,
-      targets,
-    );
-    get().updateDraftSketch(result.entities, result.constraints);
-    try {
-      await get().commitDraftSketch();
-    } catch (e) {
-      set({ draftSketch });
-      throw e;
-    }
-    set({
-      hover: null,
-      ...(result.removedConstraints && {
-        error: `${result.removedConstraints} constraint(s) on the trimmed piece were removed. Undo restores them.`,
-      }),
-    });
-  },
-
-  async toggleSketchConstruction(entityIds) {
-    const { draftSketch } = get();
-    if (!draftSketch || entityIds.length === 0) return;
-    const idSet = new Set(entityIds);
-    const entities = draftSketch.entities.map((e) =>
-      idSet.has(e.id) ? { ...e, construction: !e.construction } : e,
-    );
-    get().updateDraftSketch(
-      entities as SketchEntity[],
-      draftSketch.constraints,
-    );
-    await get().commitDraftSketch();
-  },
-
-  async insertSketchImport(format, imported) {
-    const { draftSketch, busy } = get();
-    if (!draftSketch || busy) return;
-    const skipped =
-      imported.skipped === 0
-        ? ""
-        : `Skipped ${imported.skipped} unsupported ${format} ${imported.skipped === 1 ? "entity" : "entities"}.`;
-    if (imported.entities.length === 0) {
-      set({
-        error:
-          `This ${format} file has no lines, arcs, circles, ellipses or points to insert. ${skipped}`.trim(),
-      });
-      return;
-    }
-    get().updateDraftSketch(
-      [...draftSketch.entities, ...imported.entities],
-      draftSketch.constraints,
-    );
-    try {
-      await get().commitDraftSketch();
-    } catch {
-      set({ draftSketch });
-      return;
-    }
-    if (skipped) set({ error: skipped });
-  },
+  ...sketchActions(set, get),
+  ...sketchEdits(set, get),
 
   async addFeature(feature) {
     const { document } = get();

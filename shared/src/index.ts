@@ -18,6 +18,7 @@ export * from "./auth.js";
 export * from "./friends.js";
 export * from "./notices.js";
 export * from "./routes.js";
+export * from "./projectFile.js";
 export * from "./schema/index.js";
 export * from "./schema/features.js";
 export * from "./schema/folders.js";
