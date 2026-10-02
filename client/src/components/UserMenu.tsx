@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { User } from "@rockett/shared";
 import { openTotpScreen, signOut, useSession } from "../session";
 import { useStore } from "../store";
-import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { MenuButton, type MenuItem } from "./ContextMenu";
 import { useNoticeItems } from "./NoticeItems";
 import { PasswordDialog } from "./PasswordDialog";
 import { SettingsButton } from "./SettingsPanel";
@@ -26,9 +26,6 @@ function SignedInUserMenu({
   user: User;
   onUsers: (() => void) | undefined;
 }) {
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(
-    null,
-  );
   const [passwordOpen, setPasswordOpen] = useState(false);
   const setError = useStore((state) => state.setError);
   const { count, items: noticeItems } = useNoticeItems(user.id, setError);
@@ -55,27 +52,11 @@ function SignedInUserMenu({
   });
   return (
     <>
-      <button
-        className="icon-btn"
-        aria-expanded={position !== null}
-        aria-haspopup="menu"
-        onClick={(event) => {
-          const bounds = event.currentTarget.getBoundingClientRect();
-          setPosition({ x: Math.max(0, bounds.right - 150), y: bounds.bottom });
-        }}
-      >
-        {user.displayName}
-        {count ? ` (${count})` : ""}
-      </button>
+      <MenuButton
+        label={`${user.displayName}${count ? ` (${count})` : ""}`}
+        items={items}
+      />
       <SettingsButton />
-      {position && (
-        <ContextMenu
-          x={position.x}
-          y={position.y}
-          items={items}
-          onClose={() => setPosition(null)}
-        />
-      )}
       {passwordOpen && (
         <PasswordDialog onClose={() => setPasswordOpen(false)} />
       )}

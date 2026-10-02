@@ -25,6 +25,8 @@ import { UserMenu } from "./components/UserMenu";
 import { UsersPage } from "./components/UsersPage";
 import { bootSession, useSession } from "./session";
 import { RenameInput } from "./components/RenameInput";
+import { MenuButton } from "./components/ContextMenu";
+import { downloadBrowserProject, getBrowserProject } from "./browserProjects";
 import { VersionLabel } from "./components/VersionLabel";
 import { browserKeyFromPath } from "./paths";
 import {
@@ -226,6 +228,26 @@ function NotSavedBanner() {
   );
 }
 
+export function FileMenu() {
+  const projectId = useStore((s) => s.projectId);
+  const setError = useStore((s) => s.setError);
+  const download = () => {
+    const key = browserKeyFromPath(window.location.pathname);
+    const file =
+      key === null
+        ? api.downloadProjectFile(projectId!)
+        : getBrowserProject(key).then(downloadBrowserProject);
+    void file.then(saveDownload, (e) => setError(e.message));
+  };
+  return (
+    <MenuButton
+      label="File"
+      title="Project file"
+      items={[{ label: "Download", action: download }]}
+    />
+  );
+}
+
 function SaveIndicator() {
   const saveState = useStore((s) => s.saveState);
   const busy = useStore((s) => s.busy);
@@ -322,6 +344,7 @@ function WorkspaceTopbar({ onUsers }: { onUsers: () => void }) {
       >
         ⬢ Rockett CAD
       </button>
+      <FileMenu />
       <ProjectName name={projectName} />
       <UndoRedoButtons />
       <WorkbenchSwitcher />

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { pushKeyContext } from "../commands/keymap";
 
 export type MenuItem = {
@@ -72,5 +72,34 @@ export function ContextMenu({
         </button>
       ))}
     </div>
+  );
+}
+
+export function MenuButton({
+  label,
+  title,
+  items,
+}: {
+  label: string;
+  title?: string;
+  items: MenuItem[];
+}) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <>
+      <button
+        className="icon-btn"
+        title={title}
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        onClick={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          setAt({ x: bounds.left, y: bounds.bottom });
+        }}
+      >
+        {label}
+      </button>
+      {at && <ContextMenu {...at} items={items} onClose={() => setAt(null)} />}
+    </>
   );
 }

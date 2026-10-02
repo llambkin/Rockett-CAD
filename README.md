@@ -79,7 +79,7 @@ everything downstream against persistent topology references.
 - **Right-click menus**: project rows, tree items, timeline chips and the viewport offer their actions, sketch selections their relations; right-drag still orbits.
 - **Projects**: organise, create, move, share or delete projects and folders; refuse stale deletes; sort, filter, pick destinations by keyboard.
 - **Project snapshots**: hover or focus a project to see a picture of its model and when it was last edited.
-- **Project files**: download a project as one `.rockett` file, or open one as a new project, keeping what it hides.
+- **Project files**: the list and File menu download one `.rockett` file; opening one makes a new project, keeping what it hides.
 - **This browser**: keep projects locally; Move to transfers either way, while Share moves to the server first.
 - **Reload**: refreshing the page reopens the project you had open; Back returns to the list.
 - **Errors**: stay visible until dismissed, and their text can be copied.
