@@ -28,32 +28,44 @@ function unit(x: number, y: number, z: number): Vec {
   return [x / length, y / length, z / length];
 }
 
-export function faceSignature(face: Shape): RefSignature {
+export function surfaceNormal(
+  face: Shape,
+  surf: any,
+  at: [number, number],
+): { point: Vec; normal: Vec } {
   const k = getKernel();
   return scoped((own) => {
-    const surf = own(new k.BRepAdaptor_Surface_2(face, true));
     const p = own(pnt(0, 0, 0)),
       du = own(vec(0, 0, 0)),
       dv = own(vec(0, 0, 0));
-    surf.D1(
-      (surf.FirstUParameter() + surf.LastUParameter()) / 2,
-      (surf.FirstVParameter() + surf.LastVParameter()) / 2,
-      p,
-      du,
-      dv,
-    );
+    surf.D1(...at, p, du, dv);
     const sign =
       face.Orientation_1() === k.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
     const u: Vec = [du.X(), du.Y(), du.Z()];
     const v: Vec = [dv.X(), dv.Y(), dv.Z()];
     return {
-      type: surfaceType(surf),
-      point: faceCentroid(face),
-      direction: unit(
+      point: [p.X(), p.Y(), p.Z()],
+      normal: unit(
         sign * (u[1] * v[2] - u[2] * v[1]),
         sign * (u[2] * v[0] - u[0] * v[2]),
         sign * (u[0] * v[1] - u[1] * v[0]),
       ),
+    };
+  });
+}
+
+export function faceSignature(face: Shape): RefSignature {
+  const k = getKernel();
+  return scoped((own) => {
+    const surf = own(new k.BRepAdaptor_Surface_2(face, true));
+    const { normal } = surfaceNormal(face, surf, [
+      (surf.FirstUParameter() + surf.LastUParameter()) / 2,
+      (surf.FirstVParameter() + surf.LastVParameter()) / 2,
+    ]);
+    return {
+      type: surfaceType(surf),
+      point: faceCentroid(face),
+      direction: normal,
     };
   });
 }

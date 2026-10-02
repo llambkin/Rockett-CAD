@@ -337,8 +337,20 @@ const fixtures: {
     path: "/edges/0",
   },
   shell: {
-    valid: { ...base, type: "shell", openFaces: [], thickness: 1 },
-    invalid: { ...base, type: "shell", openFaces: [], thickness: -1 },
+    valid: {
+      ...base,
+      type: "shell",
+      openFaces: [],
+      direction: "inside",
+      thickness: 1,
+    },
+    invalid: {
+      ...base,
+      type: "shell",
+      openFaces: [],
+      direction: "inside",
+      thickness: -1,
+    },
     path: "/thickness",
   },
   combine: {

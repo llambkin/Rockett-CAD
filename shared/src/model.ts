@@ -74,6 +74,8 @@ export type PlaneRef =
   | { kind: "face"; face: FaceRef };
 
 export const ORIGIN_AXES = ["X", "Y", "Z"] as const;
+export const SHELL_DIRECTIONS = ["inside", "outside", "both"] as const;
+export type ShellDirection = (typeof SHELL_DIRECTIONS)[number];
 export type OriginAxis = (typeof ORIGIN_AXES)[number];
 
 /** An axis for revolve / circular pattern. */
@@ -320,7 +322,9 @@ export interface ShellFeature extends FeatureBase {
   /** Faces removed (opened). May be empty for a hollow closed shell. */
   openFaces: FaceRef[];
   body?: string;
+  direction: ShellDirection;
   thickness: number;
+  outsideThickness?: number;
 }
 
 export interface CombineFeature extends FeatureBase {

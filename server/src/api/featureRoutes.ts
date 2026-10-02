@@ -137,6 +137,8 @@ function updateFeatureRoute(context: ApiRoutes) {
       if (retargets(patch)) Reflect.deleteProperty(updated, "targets");
       if ("openFaces" in patch && !("body" in patch))
         Reflect.deleteProperty(updated, "body");
+      if ("direction" in patch && !("outsideThickness" in patch))
+        Reflect.deleteProperty(updated, "outsideThickness");
       validateFeature(updated);
       await signed(doc, idx, updated, current);
       doc.features[idx] = updated;

@@ -116,6 +116,7 @@ it("keeps kindless legacy inputs out of signed topology without changing them", 
     type: "shell",
     faces: [face],
     edges: [edge],
+    direction: "inside",
     thickness: 1,
   } as unknown as Feature;
   const original = structuredClone(feature);

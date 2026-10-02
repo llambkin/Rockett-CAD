@@ -24,10 +24,9 @@ export const CUT_OVERREACH =
 
 const SPREAD = [0.5, 0.25, 0.75, 0.1, 0.9];
 
-function interiorPoint(face: Shape): Shape | null {
+export function interiorUV(face: Shape, surface: any): [number, number] | null {
   const k = getKernel();
-  const result = scoped((own) => {
-    const surface = own(new k.BRepAdaptor_Surface_2(face, true));
+  return scoped((own) => {
     const u0 = surface.FirstUParameter();
     const v0 = surface.FirstVParameter();
     const du = surface.LastUParameter() - u0;
@@ -45,10 +44,18 @@ function interiorPoint(face: Shape): Shape | null {
             0.1,
           ),
         );
-        if (where.State() === k.TopAbs_State.TopAbs_IN)
-          return own.keep(own(surface.Value(u, v)));
+        if (where.State() === k.TopAbs_State.TopAbs_IN) return [u, v];
       }
     return null;
+  });
+}
+
+function interiorPoint(face: Shape): Shape | null {
+  const k = getKernel();
+  const result = scoped((own) => {
+    const surface = own(new k.BRepAdaptor_Surface_2(face, true));
+    const uv = interiorUV(face, surface);
+    return uv && own.keep(own(surface.Value(...uv)));
   });
   return result && acquire(result);
 }

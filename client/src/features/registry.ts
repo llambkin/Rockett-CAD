@@ -15,6 +15,7 @@ import {
   type FaceRef,
   type EdgeRef,
   type OriginAxis,
+  type ShellFeature,
 } from "@rockett/shared";
 import type { PickInput } from "../commands/featureCommand";
 import type { useStore, Selection } from "../store";
@@ -45,6 +46,7 @@ export type SharedInputParams = InputParams<{
   axisSource: "origin" | "edge";
   axis: OriginAxis;
   direction: ExtrudeFeature["direction"];
+  shellDirection: ShellFeature["direction"];
   tangentChain: boolean;
   method: ConstructionPlaneFeature["method"]["kind"];
   flip: boolean;
@@ -53,6 +55,7 @@ export type SharedInputParams = InputParams<{
   startOffset: number;
   radius: number;
   thickness: number;
+  outsideThickness: number;
   depth: number;
   spacing: number;
   totalAngle: number;

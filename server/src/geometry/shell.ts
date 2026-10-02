@@ -3,6 +3,7 @@ import {
   ValidationError,
   type Feature,
   type ShellFeature,
+  type Vec3,
 } from "@rockett/shared";
 import {
   acquire,
@@ -13,10 +14,12 @@ import {
   kernelCall,
   listToArray,
   planarFacePlane,
+  pnt,
   progress,
   scoped,
   shapeHash,
   shapeList,
+  solids,
   vec,
   volumeOf,
   type Shape,
@@ -24,6 +27,8 @@ import {
 import { finalizeNames, findFace, propagateNames } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { fuseNamed, hollowedByCut } from "./boolean.js";
+import { interiorUV } from "./cutValidation.js";
+import { surfaceNormal } from "./signature.js";
 import type { EvalContext } from "./featureKinds.js";
 import {
   invalidPart,
@@ -34,13 +39,43 @@ import {
   type ToolResult,
 } from "./featureState.js";
 
+interface Walls {
+  inside: number;
+  outside: number;
+}
+
+const KEPT = "the previous body has been kept";
+
+class Blocked extends Error {}
+
+function wallsOf(f: ShellFeature): Walls {
+  const walls = {
+    inside: { inside: f.thickness, outside: 0 },
+    outside: { inside: 0, outside: f.thickness },
+    both: { inside: f.thickness, outside: f.outsideThickness ?? 0 },
+  }[f.direction];
+  const used =
+    f.direction === "both" ? [walls.inside, walls.outside] : [f.thickness];
+  if (!used.every((t) => t > 0))
+    throw new Error("shell thickness must be positive");
+  return walls;
+}
+
+function sizeOf(f: ShellFeature): string {
+  if (f.direction === "both")
+    return `${f.thickness} mm inside and ${f.outsideThickness} mm outside`;
+  return f.direction === "inside"
+    ? `${f.thickness} mm`
+    : `${f.thickness} mm outside`;
+}
+
 function hollowed(before: Shape, after: Shape): boolean {
   const skin = LINEAR_TOL * areaOf(before);
   const kept = volumeOf(after);
   return kept > skin && volumeOf(before) - kept > skin;
 }
 
-function thickSolid(shape: Shape, closing: Shape[], thickness: number): any {
+function thickSolid(shape: Shape, closing: Shape[], offset: number): any {
   const k = getKernel();
   const list = shapeList(closing);
   const op = acquire(new k.BRepOffsetAPI_MakeThickSolid());
@@ -48,7 +83,7 @@ function thickSolid(shape: Shape, closing: Shape[], thickness: number): any {
   op.MakeThickSolidByJoin(
     shape,
     list,
-    -thickness,
+    offset,
     LINEAR_TOL,
     k.BRepOffset_Mode.BRepOffset_Skin,
     true,
@@ -63,17 +98,40 @@ function thickSolid(shape: Shape, closing: Shape[], thickness: number): any {
   throw new Error("shell failed: thickness may be too large");
 }
 
-function offsetInside(
+function offsetSolid(
   body: StateBody,
-  thickness: number,
+  offset: number,
   featureId: string,
-): { op: any; inner: ToolResult } {
-  const op = thickSolid(body.shape, [], thickness);
-  const shape = acquire(op.Shape());
+): { op: any; solid: ToolResult } {
+  const op = thickSolid(body.shape, [], offset);
+  const made = acquire(op.Shape());
+  const shape = volumeOf(made) < 0 ? acquire(made.Reversed()) : made;
   return {
     op,
-    inner: { shape, names: propagateNames(op, [body], shape, featureId) },
+    solid: { shape, names: propagateNames(op, [body], shape, featureId) },
   };
+}
+
+function closedShell(
+  body: StateBody,
+  offset: number,
+  featureId: string,
+): ToolResult | null {
+  const { solid } = offsetSolid(body, offset, featureId);
+  return offset < 0
+    ? hollowedByCut(body, solid, featureId)
+    : hollowedByCut({ ...body, ...solid }, body, featureId);
+}
+
+function openShell(
+  body: StateBody,
+  open: Shape[],
+  offset: number,
+  featureId: string,
+): ToolResult {
+  const op = thickSolid(body.shape, open, offset);
+  const shape = acquire(op.Shape());
+  return { shape, names: propagateNames(op, [body], shape, featureId) };
 }
 
 function prismed(
@@ -105,7 +163,7 @@ function openedThroughWalls(
   thickness: number,
   featureId: string,
 ): ToolResult | null {
-  const { op, inner } = offsetInside(body, thickness, featureId);
+  const { op, solid: inner } = offsetSolid(body, -thickness, featureId);
 
   if (invalidPart(inner.shape) || !(volumeOf(inner.shape) > 0))
     throw new Error("shell failed: the inner wall could not be offset");
@@ -114,7 +172,7 @@ function openedThroughWalls(
   for (const [i, face] of open.entries()) {
     const normal = normals[i];
     const images = listToArray(op.Generated(face));
-    if (images.length === 0) return null;
+    if (images.length === 0) throw new Blocked();
     for (const image of images) {
       const slab = normal
         ? prismed(image, normal, thickness)
@@ -130,9 +188,7 @@ function openedThroughWalls(
       );
     }
   }
-  const opened = hollowedByCut(body, tool, featureId);
-  if (!opened) throw new Error("shell failed: opening left no hollow");
-  return opened;
+  return hollowedByCut(body, tool, featureId);
 }
 
 function blendsBeside(
@@ -164,6 +220,136 @@ function blendsBeside(
   });
 }
 
+function solidAt(shape: Shape, [x, y, z]: Vec3): boolean {
+  const k = getKernel();
+  return scoped((own) => {
+    const vertex = own(
+      own(new k.BRepBuilderAPI_MakeVertex(pnt(x, y, z))).Vertex(),
+    );
+    return solids(shape).some((solid) => {
+      const dist = own(
+        new k.BRepExtrema_DistShapeShape_2(
+          solid,
+          vertex,
+          k.Extrema_ExtFlag.Extrema_ExtFlag_MIN,
+          k.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad,
+          progress(),
+        ),
+      );
+      if (!dist.IsDone())
+        throw new Error("shell failed: could not probe the wall");
+      return dist.InnerSolution();
+    });
+  });
+}
+
+function misplaced(
+  body: Shape,
+  open: Shape[],
+  result: Shape,
+  walls: Walls,
+): string | null {
+  const k = getKernel();
+  return scoped((own) => {
+    for (const face of facesOf(body).map(own)) {
+      const surf = own(new k.BRepAdaptor_Surface_2(face, true));
+      const uv = interiorUV(face, surf);
+      if (!uv) continue;
+      const { point, normal } = surfaceNormal(face, surf, uv);
+      const opened = open.some((o) => o.IsSame(face));
+      for (const depth of [-walls.inside / 2, walls.outside / 2]) {
+        if (depth === 0) continue;
+        const at = point.map((p, i) => p + normal[i]! * depth) as Vec3;
+        if (solidAt(result, at) === opened)
+          return opened
+            ? "material still closes an opened face: open another face or try a thinner wall"
+            : "a kept face has no wall of that thickness behind it: try a different wall thickness";
+      }
+    }
+    return null;
+  });
+}
+
+function qualify(
+  body: StateBody,
+  open: Shape[],
+  built: ToolResult | null,
+  walls: Walls,
+  size: string,
+): ToolResult {
+  const noHollow = `shell of ${size} left no hollow, so the wall is too thick for this body: try a thinner wall; ${KEPT}`;
+  if (!built) throw new Error(noHollow);
+  rejectInvalid(
+    built.shape,
+    body.shape,
+    "shell",
+    size,
+    "try a different wall thickness",
+  );
+  if (walls.outside === 0 && !hollowed(body.shape, built.shape))
+    throw new Error(noHollow);
+  const pieces = scoped(() => solids(built.shape).length);
+  const whole = scoped(() => solids(body.shape).length);
+  const fault =
+    pieces === whole
+      ? misplaced(body.shape, open, built.shape, walls)
+      : `the result has ${pieces} solids where the body had ${whole}: try a different wall thickness`;
+  if (fault)
+    throw new Error(`shell of ${size} did not qualify: ${fault}; ${KEPT}`);
+  return built;
+}
+
+function attempts(
+  body: StateBody,
+  open: Shape[],
+  offset: number,
+  featureId: string,
+): (() => ToolResult | null)[] {
+  if (open.length === 0) return [() => closedShell(body, offset, featureId)];
+  const direct = () => openShell(body, open, offset, featureId);
+  if (offset > 0) return [direct];
+  return [direct, () => openedThroughWalls(body, open, -offset, featureId)];
+}
+
+function side(
+  body: StateBody,
+  open: Shape[],
+  walls: Walls,
+  f: ShellFeature,
+  earlier: Feature[],
+): ToolResult {
+  const size = sizeOf(f);
+  const offset = walls.outside - walls.inside;
+  const failures: unknown[] = [];
+  for (const attempt of attempts(body, open, offset, f.id)) {
+    try {
+      return kernelCall("shell", () =>
+        qualify(body, open, attempt(), walls, size),
+      );
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  const [first, last] = [failures[0], failures.at(-1)];
+  const blocked = last instanceof Error && last.cause instanceof Blocked;
+  const blends = blocked
+    ? kernelCall("shell", () => blendsBeside(body, open, earlier))
+    : [];
+  if (blends.length > 0)
+    throw new Error(
+      `shell: shell of ${size} cannot open the body at ${blends.join(", ")}: the kernel cannot offset that blend where the shell opens, so open another face or shell before the blend; ${KEPT}`,
+    );
+  if (!(first instanceof Error) || first.message.includes(KEPT)) throw first;
+  const reason =
+    first.cause instanceof WebAssembly.Exception
+      ? `the kernel could not offset the walls by ${Math.abs(offset)} mm, which happens when a wall is thicker than a rounded face or a narrow part allows`
+      : first.message.replace(/^shell: (shell failed: )?/, "");
+  throw new Error(
+    `shell: shell of ${size} failed: ${reason}: try a thinner wall; ${KEPT}`,
+    { cause: first },
+  );
+}
+
 export function shelledBody(state: EvalState, f: ShellFeature): StateBody {
   if (f.body !== undefined && f.openFaces.some((r) => r.bodyId !== f.body))
     throw new ValidationError("shell faces must be on the chosen body");
@@ -180,25 +366,8 @@ export function evalShell(
   { state, earlier }: EvalContext,
   f: ShellFeature,
 ): void {
-  if (f.thickness <= 0) throw new Error("shell thickness must be positive");
+  const walls = wallsOf(f);
   const body = shelledBody(state, f);
-  const noHollow = `shell of ${f.thickness} mm left no hollow, so the wall is too thick for this body: try a thinner wall; the previous body has been kept`;
-  const publishable = (built: ToolResult | null): ToolResult => {
-    if (!built) throw new Error(noHollow);
-
-    rejectInvalid(
-      built.shape,
-      body.shape,
-      "shell",
-      `${f.thickness} mm`,
-      "try a different wall thickness",
-    );
-    if (!hollowed(body.shape, built.shape)) throw new Error(noHollow);
-
-    return built;
-  };
-  const publish = (built: ToolResult) =>
-    registerBodySolids(state, body.bodyId, built.shape, built.names);
   const open = kernelCall("shell", () =>
     f.openFaces.map((ref) => {
       const face = findFace(body, ref.faceName);
@@ -206,36 +375,28 @@ export function evalShell(
       return face;
     }),
   );
-  if (open.length === 0)
-    return kernelCall("shell", () => {
-      const { inner } = offsetInside(body, f.thickness, f.id);
-      publish(publishable(hollowedByCut(body, inner, f.id)));
-    });
-  let failure: unknown;
-  let built: ToolResult | null = null;
-  try {
-    built = kernelCall("shell", () => {
-      const op = thickSolid(body.shape, open, f.thickness);
-      const shape = acquire(op.Shape());
-      const names = propagateNames(op, [body], shape, f.id);
-      return publishable({ shape, names });
-    });
-  } catch (err) {
-    failure = err;
-  }
-  if (built) return publish(built);
-  try {
-    built = kernelCall("shell", () => {
-      const opened = openedThroughWalls(body, open, f.thickness, f.id);
-      return opened && publishable(opened);
-    });
-  } catch {
-    throw failure;
-  }
-  if (built) return publish(built);
-  const blends = kernelCall("shell", () => blendsBeside(body, open, earlier));
-  if (blends.length === 0) throw failure;
-  throw new Error(
-    `shell: shell of ${f.thickness} mm cannot open the body at ${blends.join(", ")}: the kernel cannot offset that blend where the shell opens, so open another face or shell before the blend; the previous body has been kept`,
-  );
+  const parts = [
+    { inside: walls.inside, outside: 0 },
+    { inside: 0, outside: walls.outside },
+  ]
+    .filter((part) => part.inside + part.outside > 0)
+    .map((part) => side(body, open, part, f, earlier));
+  const [first, second] = parts;
+  const built = second
+    ? kernelCall("shell", () =>
+        qualify(
+          body,
+          open,
+          fuseNamed(
+            first!,
+            second,
+            f.id,
+            "shell failed: could not join the inside and outside walls",
+          ),
+          walls,
+          sizeOf(f),
+        ),
+      )
+    : first!;
+  registerBodySolids(state, body.bodyId, built.shape, built.names);
 }

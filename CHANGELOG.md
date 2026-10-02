@@ -34,6 +34,8 @@ release workflow remain under development.
   the edit dialog open and refresh its preview base; OK finishes the edit.
   Existing naming-version 1 projects can review and apply a backed-up,
   undoable upgrade to version 2.
+- Shell walls go inside, outside or both sides, each with its own thickness.
+  A shell is checked for its openings and walls before it replaces the body.
 - Planar-face revolve, construction planes by angle, three points or two edges,
   plane flip and midplane offset, origin-axis picking, active dialog pick rows
   and drag handles for features with a main value.
@@ -141,6 +143,8 @@ release workflow remain under development.
   the first body.
 - Schema 25: sketches may hold exact ellipses; earlier documents load
   unchanged.
+- Schema 26: Shell stores its direction, inside, outside or both sides, and an
+  outside thickness for both sides; earlier shells load as inside.
 
 ### Known limits
 

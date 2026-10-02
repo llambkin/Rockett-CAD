@@ -31,6 +31,7 @@ const shell: ShellFeature = {
   name: "Shell1",
   suppressed: false,
   openFaces: [face("F1"), face("F2")],
+  direction: "inside",
   thickness: 1,
 };
 

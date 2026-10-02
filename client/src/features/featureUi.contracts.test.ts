@@ -163,6 +163,7 @@ describe("featureUI(type).open", () => {
     expect(featureParams(s)).toEqual({
       id: "sh1",
       name: "Shell1",
+      shellDirection: "inside",
       thickness: 1.5,
     });
     expect(s.selection).toEqual([face("b1", "f1")]);

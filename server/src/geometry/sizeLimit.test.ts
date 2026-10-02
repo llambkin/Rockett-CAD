@@ -19,6 +19,7 @@ const feature: ShellFeature = {
   type: "shell",
   suppressed: false,
   openFaces: [],
+  direction: "inside",
   thickness: 1,
 };
 const doc = createEmptyDocument("limit", "Limit");

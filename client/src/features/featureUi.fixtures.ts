@@ -12,6 +12,7 @@ export const firstShell: ShellFeature = {
   name: "Shell1",
   suppressed: false,
   openFaces: [face("b1", "f1")],
+  direction: "inside",
   thickness: 1.5,
 };
 

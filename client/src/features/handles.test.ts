@@ -174,6 +174,16 @@ it("shell reverses the selected face normal without changing the source payload"
   expect(body).toEqual(before);
 });
 
+it("an outside shell points along the selected face normal", () => {
+  expect(
+    featureHandle({
+      ...input,
+      dialog: "shell",
+      params: { shellDirection: "outside" },
+    }),
+  ).toMatchObject({ signed: false, axis: new THREE.Vector3(0, 0, 1) });
+});
+
 it("offset planes retain flip and refuse other construction methods", () => {
   const plane = {
     ...input,

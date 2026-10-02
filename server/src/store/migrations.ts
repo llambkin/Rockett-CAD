@@ -224,6 +224,14 @@ export const documentMigrations: Migrations<CadDocument> = {
     22: (doc) => ({ ...doc, parameters: [], parameterBindings: [] }),
     23: (doc) => doc,
     24: (doc) => doc,
+    25: (doc) => ({
+      ...doc,
+      features: (doc.features as Value[]).map((feature) =>
+        feature.type === "shell"
+          ? Object.assign({ direction: "inside" }, feature)
+          : feature,
+      ),
+    }),
   },
   nested: extensionFeatures,
 };

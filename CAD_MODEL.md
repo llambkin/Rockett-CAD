@@ -204,26 +204,21 @@ body.
   and loose tolerances (`cutsThrough`, `looseBlend`).
 - Shell stores an optional `body` (schema 24). With no open faces it hollows
   that body, else the first body; open faces must lie on the chosen body.
-- Shell currently accepts valid geometry with significant volume loss
-  (`server/src/geometry/shell.ts`); this does not qualify openings or thickness.
-  Closed and top-open synthetic boxes qualify independently. A 20 mm cube
-  with one vertical 2 mm corner fillet, shelled inward 1 mm at that cylinder,
-  reports success but retains material across the selected opening. Its cavity
-  is square, leaving a 0.586 mm diagonal wall. The direct kernel result passes
-  the volume guard, so the fallback is never reached. At a 2 mm wall the same
-  filleted body's top-face offset throws; the previous body survives, but its
-  error has no explanation. These are distinct failures.
-- The Shell fallback cuts the inner offset joined to a slab over each selected
-  inner face: a prism for a flat face, thickening for a rounded one. References
-  computed with that same offset cannot independently qualify its geometry.
-- Shell rebuild acceptance requires independent opening probes, inner and outer
-  dimensions, retained wall thickness and analytic volume, separately from
-  feature status and kernel validity. The rounded cylinder fixture requires
-  an unobstructed radial path through the wall between its inner top and bottom
-  planes; those end collars remain. Inside, outside and both-sides offsets must
-  qualify separately; an outside 2 mm box wall grows each dimension by 4 mm.
-  Refused, partial or unqualified results keep the previous body and explain
-  the error. Cold regeneration and previous-schema loading must also pass.
+- Shell stores `direction` (schema 26): `inside` and `outside` use
+  `thickness`; `both` uses `thickness` inside and `outsideThickness` outside,
+  which exists only for `both`. Earlier shells migrate to `inside`.
+- Shell builds each side alone and fuses inside with outside for `both`. A
+  closed side cuts the body from its offset solid; an open side uses the
+  kernel's thick solid with arc joins, so outer edges round at the wall
+  thickness. An inside opening falls back to the inner offset joined to a slab
+  over each opened inner face: a prism for a flat face, thickening for a
+  rounded one.
+- Every candidate qualifies before it replaces the body: valid, the same solid
+  count, a hollow for inside walls, and a probe at half the wall depth behind
+  each face, empty under an opened face and solid under a kept one. The
+  filleted-cube cylinder opening that once kept its wall now reaches the
+  fallback and qualifies. A refused, partial or unqualified result keeps the
+  previous body and names the size and the reason.
 - Tangent chains: `server/src/geometry/tangentEdges.ts`.
 - Mesh imports cap at `MAX_MESH_TRIANGLES` in
   `server/src/geometry/importers.ts`.

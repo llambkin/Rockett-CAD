@@ -1,5 +1,9 @@
 import { Type, type TProperties, type TSchema } from "typebox";
-import { ORIGIN_AXES, REF_SIGNATURE_TYPES } from "../model.js";
+import {
+  ORIGIN_AXES,
+  REF_SIGNATURE_TYPES,
+  SHELL_DIRECTIONS,
+} from "../model.js";
 import { LINEAR_TOL } from "../tolerance.js";
 import { MB } from "../units.js";
 
@@ -372,11 +376,18 @@ const chamfer = feature("chamfer", {
   distance: positive,
 });
 
-const shell = feature("shell", {
-  openFaces: Type.Array(faceRef),
-  body: Type.Optional(bodyId),
-  thickness: positive,
-});
+const shell = Type.Refine(
+  feature("shell", {
+    openFaces: Type.Array(faceRef),
+    body: Type.Optional(bodyId),
+    direction: Type.Enum([...SHELL_DIRECTIONS]),
+    thickness: positive,
+    outsideThickness: Type.Optional(positive),
+  }),
+  (f: { direction: string; outsideThickness?: number }) =>
+    (f.direction === "both") === (f.outsideThickness !== undefined),
+  () => "needs an outside thickness exactly when both sides",
+);
 
 const combine = feature("combine", {
   operation: Type.Enum(["join", "cut", "intersect"]),

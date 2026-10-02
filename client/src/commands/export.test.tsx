@@ -179,6 +179,7 @@ it.each(["tree", "timeline"] as const)(
       type: "shell",
       suppressed: false,
       openFaces: [],
+      direction: "inside",
       thickness: 1,
     }));
     doc.timelinePosition = 2;
