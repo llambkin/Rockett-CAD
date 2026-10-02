@@ -6,7 +6,8 @@ import {
 } from "@rockett/shared";
 import { OperationField, SelInfo } from "../components/form/fields";
 import { sections, targets } from "../commands/featureCommand";
-import { autoOperation, toolOperation } from "../extrudeReach";
+import { autoOperation, toolBase, toolOperation } from "../extrudeReach";
+import { useStore } from "../store";
 import {
   bodyTargets,
   facePicks,
@@ -35,6 +36,17 @@ function LoftForm() {
       <OperationField />
     </>
   );
+}
+
+function loftCells() {
+  const picked = useStore
+    .getState()
+    .selection.filter((sel) => sel.kind === "face" || sel.kind === "profile")
+    .map((sel) => toolBase(sel)?.triangles.flat());
+  return picked.flatMap((section, i) => {
+    const next = picked[i + 1];
+    return section && next ? [[...section, ...next]] : [];
+  });
 }
 
 export const loft: FeatureUI<LoftFeature, LoftParams> = {
@@ -75,7 +87,8 @@ export const loft: FeatureUI<LoftFeature, LoftParams> = {
       "kind" in section ? facePicks([section]) : profilePicks([section]),
     ),
   }),
-  onParamsChange: (params) => autoOperation(params, () => toolOperation()),
+  onParamsChange: (params) =>
+    autoOperation(params, () => toolOperation(loftCells())),
 };
 
 registerFeatureUI(loft);

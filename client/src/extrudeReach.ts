@@ -1,5 +1,5 @@
-import { ShapeUtils, Vector2 } from "three";
-import { extrudeOverlapsSolid } from "./extrudeOverlap";
+import { ShapeUtils, Vector2, Vector3 } from "three";
+import { cellsMeetSolid } from "./extrudeOverlap";
 import {
   findProfile,
   LINEAR_TOL,
@@ -12,11 +12,15 @@ import {
   type Vec3,
 } from "@rockett/shared";
 import type { PreviewGhost } from "./livePreview";
-import { previewBodies, previewedFeature, useStore } from "./store";
+import {
+  previewBodies,
+  previewedFeature,
+  useStore,
+  type Selection,
+} from "./store";
 
 interface Base {
-  points: Vec3[];
-  triangles?: Vec3[][];
+  triangles: Vec3[][];
   normal: Vec3;
 }
 
@@ -57,7 +61,6 @@ function profileBase(
   );
   const points = rings.flat();
   return {
-    points: framePoints(sketch.frame, profile.polygon),
     triangles: ShapeUtils.triangulateShape(rings[0]!, rings.slice(1)).map(
       (tri) =>
         framePoints(
@@ -76,19 +79,70 @@ function faceBase(
   const body = bodies.find((b) => b.bodyId === sel.bodyId);
   const face = body?.faces.find((f) => f.name === sel.faceName);
   if (!body || !face || face.surface.type !== "plane") return null;
-  const points: Vec3[] = [];
-  for (let i = face.start; i < face.start + face.count; i++) {
-    const at = body.indices[i]! * 3;
-    points.push([
-      body.positions[at]!,
-      body.positions[at + 1]!,
-      body.positions[at + 2]!,
-    ]);
-  }
-  return { points, normal: face.surface.normal };
+  const triangles: Vec3[][] = [];
+  for (let i = face.start; i + 2 < face.start + face.count; i += 3)
+    triangles.push(
+      body.indices
+        .slice(i, i + 3)
+        .map((v): Vec3 => [
+          body.positions[v * 3]!,
+          body.positions[v * 3 + 1]!,
+          body.positions[v * 3 + 2]!,
+        ]),
+    );
+  return { triangles, normal: face.surface.normal };
 }
 
-function swept({ points, normal }: Base, from: number, to: number): Bounds {
+export function toolBase(sel: Selection): Base | null {
+  const s = useStore.getState();
+  return sel.kind === "profile"
+    ? profileBase(sel, s.evaluation?.sketches ?? [])
+    : sel.kind === "face"
+      ? faceBase(sel, previewBodies(s))
+      : null;
+}
+
+const shifted = (p: Vec3, by: Vec3, t = 1): Vec3 => [
+  p[0] + by[0] * t,
+  p[1] + by[1] * t,
+  p[2] + by[2] * t,
+];
+
+export function movedCells(triangles: Vec3[][], by: Vec3): Vec3[][] {
+  return triangles.map((tri) => [...tri, ...tri.map((p) => shifted(p, by))]);
+}
+
+const TURN_STEP = Math.PI / 24;
+
+export function turnedCells(
+  triangles: Vec3[][],
+  origin: Vec3,
+  axis: Vec3,
+  angle: number,
+): Vec3[][] {
+  const o = new Vector3(...origin);
+  const dir = new Vector3(...axis).normalize();
+  const steps = Math.max(1, Math.ceil(Math.abs(angle) / TURN_STEP));
+  const step = angle / steps;
+  const turn = (p: Vec3, a: number, reach = 1): Vec3 => {
+    const v = new Vector3(...p).sub(o).applyAxisAngle(dir, a);
+    const along = dir.clone().multiplyScalar(v.dot(dir));
+    return v.sub(along).multiplyScalar(reach).add(along).add(o).toArray();
+  };
+  return triangles.flatMap((tri) =>
+    Array.from({ length: steps }, (_, i) => [
+      ...tri.map((p) => turn(p, i * step)),
+      ...tri.map((p) => turn(p, (i + 0.5) * step, 1 / Math.cos(step / 2))),
+      ...tri.map((p) => turn(p, (i + 1) * step)),
+    ]),
+  );
+}
+
+function swept(
+  { points, normal }: { points: Vec3[]; normal: Vec3 },
+  from: number,
+  to: number,
+): Bounds {
   const min: Vec3 = [Infinity, Infinity, Infinity];
   const max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const p of points)
@@ -99,13 +153,6 @@ function swept({ points, normal }: Base, from: number, to: number): Bounds {
         max[i] = Math.max(max[i]!, v);
       }
   return { min, max };
-}
-
-function overlaps(a: Bounds, b: Bounds, margin: number): boolean {
-  for (let i = 0; i < 3; i++)
-    if (a.max[i]! <= b.min[i]! + margin || b.max[i]! <= a.min[i]! + margin)
-      return false;
-  return true;
 }
 
 function span(
@@ -125,11 +172,11 @@ function span(
 
 type ToolOperation = "newBody" | "join" | "cut";
 
-export function toolOperation(tools?: Bounds[]): ToolOperation {
+export function toolOperation(cells: Vec3[][], into = false): ToolOperation {
   const bodies = previewBodies(useStore.getState());
-  return bodies.some(
-    (b) => !tools || tools.some((t) => overlaps(t, b.bbox, -LINEAR_TOL)),
-  )
+  if (into && bodies.some((b) => cellsMeetSolid(cells, b, -LINEAR_TOL)))
+    return "cut";
+  return bodies.some((b) => cellsMeetSolid(cells, b, LINEAR_TOL))
     ? "join"
     : "newBody";
 }
@@ -156,38 +203,16 @@ export function extrudeOperation(
 ): ToolOperation {
   const [from, to] = span(direction, distance, start, distance2);
   const into = to < from && (direction === "normal" || direction === "reverse");
-  const s = useStore.getState();
-  const bodies = previewBodies(s);
-  const tools = s.selection.flatMap((sel) => {
-    const base =
-      sel.kind === "profile"
-        ? profileBase(sel, s.evaluation?.sketches ?? [])
-        : sel.kind === "face"
-          ? faceBase(sel, bodies)
-          : null;
-    return base ? [{ base, bounds: swept(base, from, to) }] : [];
+  const cells = useStore.getState().selection.flatMap((sel) => {
+    const base = toolBase(sel);
+    if (!base) return [];
+    const { triangles, normal } = base;
+    return movedCells(
+      triangles.map((tri) => tri.map((p) => shifted(p, normal, from))),
+      shifted([0, 0, 0], normal, to - from),
+    );
   });
-  if (
-    into &&
-    tools.some(({ base, bounds }) =>
-      bodies.some(
-        (body) =>
-          overlaps(bounds, body.bbox, LINEAR_TOL) &&
-          extrudeOverlapsSolid(
-            base.triangles ??
-              Array.from({ length: base.points.length / 3 }, (_, i) =>
-                base.points.slice(i * 3, i * 3 + 3),
-              ),
-            base.normal,
-            [from, to],
-            body,
-            bounds,
-          ),
-      ),
-    )
-  )
-    return "cut";
-  return toolOperation(tools.map((tool) => tool.bounds));
+  return toolOperation(cells, into);
 }
 
 function across([a, b, c]: Vec3[]): Vec3 {

@@ -1,7 +1,77 @@
 import { Plane, Ray, Vector3 } from "three";
+import { ConvexHull } from "three/examples/jsm/math/ConvexHull.js";
 import { LINEAR_TOL, type BodyPayload, type Vec3 } from "@rockett/shared";
 
-function triangleInPrism(polygon: Vector3[], planes: Plane[]): boolean {
+interface Solid {
+  corners: Float64Array;
+  boxes: Float64Array;
+  shadows: Float64Array;
+  min: Vec3;
+  max: Vec3;
+}
+
+interface Cell {
+  min: Vec3;
+  max: Vec3;
+  planes: Plane[];
+  center: Vector3;
+}
+
+const solids = new WeakMap<BodyPayload, Solid>();
+
+const RAY = new Vector3(1, 0.371, 0.529).normalize();
+const ACROSS = [
+  new Vector3(0, 0, 1).cross(RAY).normalize(),
+  RAY.clone()
+    .cross(new Vector3(0, 0, 1).cross(RAY))
+    .normalize(),
+];
+
+const shadow = (p: Vector3) => ACROSS.map((axis) => p.dot(axis));
+
+const scratch = [new Vector3(), new Vector3(), new Vector3()];
+
+function triangle({ corners }: Pick<Solid, "corners">, t: number): Vector3[] {
+  for (const [k, v] of scratch.entries()) v.fromArray(corners, t * 9 + k * 3);
+  return scratch;
+}
+
+function solid(body: BodyPayload): Solid {
+  const known = solids.get(body);
+  if (known) return known;
+  const count = Math.floor(body.indices.length / 3);
+  const corners = new Float64Array(count * 9);
+  const boxes = new Float64Array(count * 6).fill(Infinity, 0, count * 6);
+  for (let t = 0; t < count; t++)
+    for (let k = 0; k < 3; k++)
+      for (let axis = 0; axis < 3; axis++) {
+        const v = body.positions[body.indices[t * 3 + k]! * 3 + axis]!;
+        corners[t * 9 + k * 3 + axis] = v;
+        boxes[t * 6 + axis] = Math.min(boxes[t * 6 + axis]!, v);
+        boxes[t * 6 + 3 + axis] =
+          k === 0 ? v : Math.max(boxes[t * 6 + 3 + axis]!, v);
+      }
+  const shadows = new Float64Array(count * 4);
+  for (let t = 0; t < count; t++) {
+    const flat = triangle({ corners }, t).map(shadow);
+    for (const i of [0, 1]) {
+      const along = flat.map((q) => q[i]!);
+      shadows[t * 4 + i * 2] = Math.min(...along) - LINEAR_TOL;
+      shadows[t * 4 + i * 2 + 1] = Math.max(...along) + LINEAR_TOL;
+    }
+  }
+  const made = {
+    corners,
+    boxes,
+    shadows,
+    min: body.bbox.min,
+    max: body.bbox.max,
+  };
+  solids.set(body, made);
+  return made;
+}
+
+function triangleInCell(polygon: Vector3[], planes: Plane[]): boolean {
   for (const plane of planes) {
     const clipped: Vector3[] = [];
     for (const [j, a] of polygon.entries()) {
@@ -17,95 +87,94 @@ function triangleInPrism(polygon: Vector3[], planes: Plane[]): boolean {
   return polygon.length > 0;
 }
 
-function prismPlanes(low: Vector3[], high: Vector3[], center: Vector3) {
-  const planes = [
-    new Plane().setFromCoplanarPoints(...(low as [Vector3, Vector3, Vector3])),
-    new Plane().setFromCoplanarPoints(...(high as [Vector3, Vector3, Vector3])),
-    ...low.map((p, i) =>
-      new Plane().setFromCoplanarPoints(p, low[(i + 1) % 3]!, high[i]!),
-    ),
-  ];
-  for (const plane of planes) {
-    if (plane.distanceToPoint(center) < 0) plane.negate();
-    plane.constant -= LINEAR_TOL;
-  }
-  return planes;
+function cellNear(points: Vec3[], body: Solid, margin: number): Cell | null {
+  const min = [0, 1, 2].map(
+    (i) => Math.min(...points.map((p) => p[i]!)) - LINEAR_TOL,
+  ) as Vec3;
+  const max = [0, 1, 2].map(
+    (i) => Math.max(...points.map((p) => p[i]!)) + LINEAR_TOL,
+  ) as Vec3;
+  if ([0, 1, 2].some((i) => max[i]! < body.min[i]! || min[i]! > body.max[i]!))
+    return null;
+  const hull = new ConvexHull().setFromPoints(
+    points.map((p) => new Vector3(...p)),
+  );
+  if (
+    hull.faces.length < 4 ||
+    hull.faces.some((face) => face.normal.lengthSq() < 0.5)
+  )
+    return null;
+  const planes = hull.faces.map(
+    (face) => new Plane(face.normal.clone().negate(), face.constant + margin),
+  );
+  const center = points
+    .reduce((sum, p) => sum.add(new Vector3(...p)), new Vector3())
+    .multiplyScalar(1 / points.length);
+  return { min, max, planes, center };
 }
 
-export function extrudeOverlapsSolid(
-  triangles: Vec3[][],
-  direction: Vec3,
-  [from, to]: [number, number],
-  body: BodyPayload,
-  bounds: BodyPayload["bbox"],
-): boolean {
-  const normal = new Vector3(...direction);
-  for (const tri of triangles) {
-    const low = tri.map((p) =>
-      new Vector3(...p).addScaledVector(normal, Math.min(from, to)),
-    );
-    const high = low.map((p) =>
-      p.clone().addScaledVector(normal, Math.abs(to - from)),
-    );
-    const center = [...low, ...high]
-      .reduce((p, q) => p.add(q), new Vector3())
-      .multiplyScalar(1 / 6);
-    const planes = prismPlanes(low, high, center);
-    const ray = new Ray(center, new Vector3(1, 0.371, 0.529).normalize());
-    const hits: { distance: number; facing: number }[] = [];
-    const vertices = [new Vector3(), new Vector3(), new Vector3()];
-    const target = new Vector3();
-    const edge = new Vector3();
-    const side = new Vector3();
-    for (let i = 0; i + 2 < body.indices.length; i += 3) {
-      let clips = true;
-      let crosses = true;
-      for (let axis = 0; axis < 3 && (clips || crosses); axis++) {
-        const a = body.positions[body.indices[i]! * 3 + axis]!;
-        const b = body.positions[body.indices[i + 1]! * 3 + axis]!;
-        const c = body.positions[body.indices[i + 2]! * 3 + axis]!;
-        const min = Math.min(a, b, c);
-        const max = Math.max(a, b, c);
-        clips &&= max > bounds.min[axis]! && min < bounds.max[axis]!;
-        crosses &&= max >= center.getComponent(axis);
-      }
-      if (!clips && !crosses) continue;
-      vertices.forEach((v, j) =>
-        v.fromArray(body.positions, body.indices[i + j]! * 3),
-      );
-      if (
-        crosses &&
-        ray.intersectTriangle(
-          vertices[0]!,
-          vertices[1]!,
-          vertices[2]!,
-          false,
-          target,
-        )
-      ) {
-        const facing = Math.sign(
-          edge
-            .subVectors(vertices[1]!, vertices[0]!)
-            .cross(side.subVectors(vertices[2]!, vertices[0]!))
-            .dot(ray.direction),
-        );
-        hits.push({ distance: center.distanceTo(target), facing });
-      }
-      if (!clips) continue;
-      if (triangleInPrism(vertices, planes)) return true;
-    }
-    hits.sort((a, b) => a.distance - b.distance);
-    const crossings = hits.filter((hit, i) => {
-      const prior = hits[i - 1];
-      return (
-        !prior ||
-        hit.facing !== prior.facing ||
-        Math.abs(hit.distance - prior.distance) >
-          Number.EPSILON * Math.max(1, hit.distance) * 8
-      );
-    });
-    if (crossings.reduce((total, hit) => total + hit.facing, 0) !== 0)
-      return true;
+function touches({ min, max, planes }: Cell, body: Solid): boolean {
+  const { boxes } = body;
+  for (let t = 0; t * 6 < boxes.length; t++) {
+    let near = true;
+    for (let i = 0; i < 3 && near; i++)
+      near = boxes[t * 6 + 3 + i]! >= min[i]! && boxes[t * 6 + i]! <= max[i]!;
+    if (near && triangleInCell(triangle(body, t), planes)) return true;
   }
   return false;
+}
+
+function inside(center: Vector3, body: Solid): boolean {
+  const c = center.toArray();
+  if ([0, 1, 2].some((i) => c[i]! < body.min[i]! || c[i]! > body.max[i]!))
+    return false;
+  const ray = new Ray(center, RAY);
+  const hits: { distance: number; facing: number }[] = [];
+  const target = new Vector3();
+  const edge = new Vector3();
+  const side = new Vector3();
+  const [u, v] = shadow(center) as [number, number];
+  const { shadows } = body;
+  for (let t = 0; t * 4 < shadows.length; t++) {
+    if (
+      u < shadows[t * 4]! ||
+      u > shadows[t * 4 + 1]! ||
+      v < shadows[t * 4 + 2]! ||
+      v > shadows[t * 4 + 3]!
+    )
+      continue;
+    const [a, b, d] = triangle(body, t) as [Vector3, Vector3, Vector3];
+    if (!ray.intersectTriangle(a, b, d, false, target)) continue;
+    const facing = Math.sign(
+      edge.subVectors(b, a).cross(side.subVectors(d, a)).dot(RAY),
+    );
+    hits.push({ distance: center.distanceTo(target), facing });
+  }
+  hits.sort((x, y) => x.distance - y.distance);
+  const crossings = hits.filter((hit, i) => {
+    const prior = hits[i - 1];
+    return (
+      !prior ||
+      hit.facing !== prior.facing ||
+      Math.abs(hit.distance - prior.distance) >
+        Number.EPSILON * Math.max(1, hit.distance) * 8
+    );
+  });
+  return crossings.reduce((total, hit) => total + hit.facing, 0) !== 0;
+}
+
+export function cellsMeetSolid(
+  cells: Vec3[][],
+  body: BodyPayload,
+  margin: number,
+): boolean {
+  const prepared = solid(body);
+  const near = cells.flatMap((points) => {
+    const cell = cellNear(points, prepared, margin);
+    return cell ? [cell] : [];
+  });
+  return (
+    near.some((cell) => touches(cell, prepared)) ||
+    near.some((cell) => inside(cell.center, prepared))
+  );
 }

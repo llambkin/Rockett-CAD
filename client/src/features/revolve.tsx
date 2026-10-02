@@ -11,7 +11,12 @@ import {
   profilesOrFaces,
   targets,
 } from "../commands/featureCommand";
-import { autoOperation, toolOperation } from "../extrudeReach";
+import {
+  autoOperation,
+  toolBase,
+  toolOperation,
+  turnedCells,
+} from "../extrudeReach";
 import { findProfile, formatAngle } from "@rockett/shared";
 import { RevolveGizmo, ringThrough, featureAxis } from "../three/RevolveGizmo";
 import { uv3 } from "../three/CadViewport";
@@ -226,6 +231,22 @@ class RevolveLayer {
   }
 }
 
+function revolveCells(params: RevolveParams) {
+  const resolved = featureAxis(params);
+  if (!resolved) return [];
+  const angle = num(params, handle.param, handle.fallback);
+  const turn =
+    (Math.sign(angle) * Math.min(Math.abs(angle), 360) * Math.PI) / 180;
+  return turnedCells(
+    useStore
+      .getState()
+      .selection.flatMap((sel) => toolBase(sel)?.triangles ?? []),
+    resolved.origin.toArray(),
+    resolved.dir.toArray(),
+    turn,
+  );
+}
+
 export const revolve: FeatureUI<RevolveFeature, RevolveParams> = {
   type: "revolve",
   handle,
@@ -269,7 +290,8 @@ export const revolve: FeatureUI<RevolveFeature, RevolveParams> = {
       ...axisSelection(f.axis),
     ],
   }),
-  onParamsChange: (params) => autoOperation(params, () => toolOperation()),
+  onParamsChange: (params) =>
+    autoOperation(params, () => toolOperation(revolveCells(params))),
 };
 
 registerFeatureUI(revolve);
