@@ -333,6 +333,12 @@ give the result the defaults gave. Add and update write them; hidden bodies
 are never default participants; evaluation never reads the view:
 `pinTargets` in `shared/src/topoRefs.ts`.
 
+An empty `targets` makes a join a new body. On a cut or intersect it fails
+the feature with `{operation} has no target body` and keeps every body. With
+no `targets` and no body, every tool operation makes a new body; only a join
+reports `[]`, so a cut or intersect never pins an empty list
+(`applyToolOperation` in `server/src/geometry/boolean.ts`).
+
 ## Loft sections
 
 Loft stores profile and planar-face references in picked order. Face sections

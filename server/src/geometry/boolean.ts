@@ -207,8 +207,11 @@ export function applyToolOperation(
     registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
     return;
   }
+  if (targets?.length === 0 && operation !== "join")
+    throw new Error(`${operation} has no target body`);
   if (targets?.length === 0 || (!targets && state.bodies.size === 0)) {
     registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
+    if (operation !== "join") return;
     return { targets: [] };
   }
 
