@@ -62,9 +62,8 @@ function blendPerBody(
       blend(body, bodyRefs);
     } catch (error) {
       if (targets.length === 1) throw error;
-      throw new Error(`${(error as Error).message} (body ${body.bodyId})`, {
-        cause: error,
-      });
+      const failure = new Error((error as Error).message, { cause: error });
+      throw Object.assign(failure, { bodyId: body.bodyId });
     }
   }
 }

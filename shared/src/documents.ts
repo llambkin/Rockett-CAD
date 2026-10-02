@@ -20,6 +20,13 @@ export interface BodyMeta {
   name: string;
 }
 
+export function bodyName(
+  doc: Pick<CadDocument, "bodyMeta">,
+  bodyId: string,
+): string {
+  return doc.bodyMeta[bodyId]?.name ?? bodyId;
+}
+
 export interface TreeGroup {
   id: string;
   name: string;

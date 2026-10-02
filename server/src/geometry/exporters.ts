@@ -10,6 +10,7 @@
 
 import { zipSync, strToU8 } from "fflate";
 import {
+  bodyName,
   createRegistry,
   LINEAR_TOL,
   ValidationError,
@@ -195,10 +196,6 @@ export const exporters = createRegistry<Exporter>(
 
 export const registerExporter = exporters.register;
 
-function bodyName(doc: CadDocument, body: NamedBody): string {
-  return doc.bodyMeta[body.bodyId]?.name ?? body.bodyId;
-}
-
 export function exporterFor(format: string): Exporter {
   const exporter = exporters.get(format);
   if (exporter) return exporter;
@@ -226,7 +223,7 @@ registerExporter({
   source: "bodies",
   write: ({ doc, bodies, options }) =>
     write3mf(
-      bodies.map((body) => ({ body, name: bodyName(doc, body) })),
+      bodies.map((body) => ({ body, name: bodyName(doc, body.bodyId) })),
       options.quality,
     ),
 });
@@ -239,7 +236,10 @@ registerExporter({
   source: "bodies",
   write: ({ doc, bodies }) =>
     writeXdeStep(
-      bodies.map((body) => ({ shape: body.shape, name: bodyName(doc, body) })),
+      bodies.map((body) => ({
+        shape: body.shape,
+        name: bodyName(doc, body.bodyId),
+      })),
     ),
 });
 

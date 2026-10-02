@@ -148,6 +148,7 @@ export interface FeatureStatus {
   featureId: string;
   status: FeatureRunStatus;
   error?: string;
+  bodyId?: string;
   warning?: string;
   targets?: string[];
   refs?: UnresolvedRef[];

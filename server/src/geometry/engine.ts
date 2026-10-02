@@ -1,4 +1,4 @@
-import { resolveDocumentParameters } from "@rockett/shared";
+import { bodyName, resolveDocumentParameters } from "@rockett/shared";
 import type {
   BodyPayload,
   CadDocument,
@@ -142,6 +142,7 @@ function failedStatus(
     featureId: feature.id,
     status: "error",
     error: err?.message ?? String(err),
+    ...(err?.bodyId && { bodyId: err.bodyId }),
     ...(refs.length > 0 && { refs }),
   };
 }
@@ -328,7 +329,7 @@ class DocumentEngine {
       let js = 0;
       for (const bytes of this.held.values()) js += bytes.byteLength;
       for (const body of state.bodies.values()) {
-        const name = doc.bodyMeta[body.bodyId]?.name ?? body.bodyId;
+        const name = bodyName(doc, body.bodyId);
         const { payload, bytes } = this.tessellated(body, name);
         bodies.push({ ...payload, name });
         js += bytes;

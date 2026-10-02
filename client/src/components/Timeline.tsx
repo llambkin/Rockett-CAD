@@ -5,11 +5,12 @@ import {
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import type {
-  CadDocument,
-  EvaluateResult,
-  Feature,
-  FeatureStatus,
+import {
+  bodyName,
+  type CadDocument,
+  type EvaluateResult,
+  type Feature,
+  type FeatureStatus,
 } from "@rockett/shared";
 import { openInDialog } from "../commands/featureCommand";
 import { activeCommand } from "../commands/active";
@@ -25,15 +26,19 @@ import { QuickEdit, quickValues } from "./QuickEdit";
 
 const typeIcon = (type: string) => featureUI(type)?.icon ?? "•";
 
-function chipTitle(
+export function chipTitle(
   f: Feature,
   st: FeatureStatus | undefined,
   document: CadDocument,
   evaluation: EvaluateResult | null,
 ): string {
+  const error =
+    st?.error && st.bodyId
+      ? `${st.error} (${bodyName(document, st.bodyId)})`
+      : st?.error;
   const notes = st?.refs?.length
     ? refNotes(st.refs, document, evaluation, evaluation?.bodies ?? [])
-    : [st?.error || st?.warning].filter(Boolean);
+    : [error || st?.warning].filter(Boolean);
   return [
     `${f.name} (${f.type})`,
     ...notes.map((n) => `⚠ ${n}`),
