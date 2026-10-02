@@ -13,6 +13,7 @@ import { DialogFooter } from "./form/DialogFooter";
 import { SizeLimitHint } from "./form/SizeLimitHint";
 import { featureUI, type DialogFeatureUI } from "../features/registry";
 import { axisMissing, axisPicks } from "../features/inputs";
+import { nextBindings, saveBound } from "../features/bindings";
 
 function attempt(build: (() => Feature) | null): Feature | null {
   try {
@@ -161,8 +162,12 @@ function DialogBody({
     }
     live.cancel();
     setPending(true);
+    const bindings =
+      document && nextBindings(document, feature, params.expressions);
     try {
-      if (editId) await update(featurePatch(feature));
+      if (bindings)
+        await saveBound(feature, editId, featurePatch(feature), bindings);
+      else if (editId) await update(featurePatch(feature));
       else await addFeature(feature);
       close();
     } catch {
@@ -183,7 +188,10 @@ function DialogBody({
         onOk={() => void ok()}
         onCancel={cancel}
         pending={pending}
-        okDisabled={axisDialog && axisMissing(params, selection, document)}
+        okDisabled={
+          !!params.invalid?.length ||
+          (axisDialog && axisMissing(params, selection, document))
+        }
         escapeAnywhere
       />
     </DraggablePanel>

@@ -40,6 +40,7 @@ function OffsetFaceForm({
         autoFocus
         value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ distance: v })}
+        bind="/distance"
       />
     </>
   );

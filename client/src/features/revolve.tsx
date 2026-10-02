@@ -1,7 +1,7 @@
 import { newId, type RevolveFeature } from "@rockett/shared";
 import {
   AxisField,
-  NumField,
+  AngleField,
   OperationField,
   SelInfo,
 } from "../components/form/fields";
@@ -81,11 +81,12 @@ function RevolveForm({ params, setParams }: FeatureFormProps<RevolveParams>) {
           clearInput("axis");
         }}
       />
-      <NumField
-        label="Angle (°)"
+      <AngleField
+        label="Angle"
         autoFocus
         value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ angle: v })}
+        bind="/angle"
       />
       <OperationField intersect />
     </>

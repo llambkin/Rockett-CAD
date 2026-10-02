@@ -62,6 +62,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps<ExtrudeParams>) {
         units={units}
         value={num(params, "startOffset", 0)}
         onChange={(v) => setParams({ startOffset: v })}
+        bind="/startOffset"
       />
       <div className="field-hint">
         0 = start on the sketch / face; ± moves the start plane along its normal
@@ -72,6 +73,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps<ExtrudeParams>) {
         autoFocus
         value={distance(params)}
         onChange={(v) => setParams({ distance: v })}
+        bind="/distance"
       />
       <div className="field-hint">
         Negative = the other side (Cut when it meets a body)
@@ -93,6 +95,7 @@ function ExtrudeForm({ params, setParams }: FeatureFormProps<ExtrudeParams>) {
           units={units}
           value={num(params, "distance2", 5)}
           onChange={(v) => setParams({ distance2: v })}
+          bind="/distance2"
         />
       )}
       <OperationField intersect />

@@ -40,6 +40,7 @@ function FilletForm({ params, setParams }: FeatureFormProps<FilletParams>) {
         autoFocus
         value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ radius: v })}
+        bind="/radius"
       />
     </>
   );

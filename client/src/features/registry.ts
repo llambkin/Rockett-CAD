@@ -18,6 +18,7 @@ import {
   type ShellFeature,
 } from "@rockett/shared";
 import type { PickInput } from "../commands/featureCommand";
+import { resolvedFeature, type FieldExpressions } from "./bindings";
 import type { useStore, Selection } from "../store";
 
 import type {
@@ -64,6 +65,8 @@ export type SharedInputParams = InputParams<{
   tx: number;
   ty: number;
   tz: number;
+  expressions: FieldExpressions;
+  invalid: string[];
 }>;
 
 export const num = <P extends object>(
@@ -299,7 +302,7 @@ export function registerFeatureUI<
       prefill: (f: Feature) => {
         if (!owns(f) || !ui.prefill)
           throw new Error(`Feature ${f.type} does not belong to ${ui.type}`);
-        const { params, selection } = ui.prefill(f);
+        const { params, selection } = ui.prefill(resolvedFeature(f));
         return { inputs: createFeatureInputs(ui, params), selection };
       },
     }),

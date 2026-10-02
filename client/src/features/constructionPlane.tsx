@@ -145,6 +145,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps<PlaneParams>) {
             autoFocus
             value={num(params, handle.param, handle.fallback)}
             onChange={(v) => setParams({ distance: v })}
+            bind="/method/distance"
           />
           {flipField}
         </>
@@ -161,6 +162,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps<PlaneParams>) {
             units={units}
             value={num(params, "offset", 0)}
             onChange={(v) => setParams({ offset: v })}
+            bind="/method/offset"
           />
           {flipField}
         </>
@@ -190,6 +192,7 @@ function PlaneForm({ params, setParams }: FeatureFormProps<PlaneParams>) {
             label="Angle"
             value={num(params, "angle", 90)}
             onChange={(v) => setParams({ angle: v })}
+            bind="/method/angle"
           />
         </>
       )}

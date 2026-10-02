@@ -34,18 +34,21 @@ function MoveForm({ params, setParams }: FeatureFormProps<MoveParams>) {
         autoFocus
         value={num(params, "tx", 0)}
         onChange={(v) => setParams({ tx: v })}
+        bind="/translation/0"
       />
       <LengthField
         label="Y"
         units={units}
         value={num(params, "ty", 0)}
         onChange={(v) => setParams({ ty: v })}
+        bind="/translation/1"
       />
       <LengthField
         label="Z"
         units={units}
         value={num(params, "tz", 0)}
         onChange={(v) => setParams({ tz: v })}
+        bind="/translation/2"
       />
     </>
   );

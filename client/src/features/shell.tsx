@@ -69,6 +69,7 @@ function ShellForm({ params, setParams }: FeatureFormProps<ShellParams>) {
         autoFocus
         value={thickness(params)}
         onChange={(v) => setParams({ thickness: v })}
+        bind="/thickness"
       />
       {direction === "both" && (
         <LengthField
@@ -76,6 +77,7 @@ function ShellForm({ params, setParams }: FeatureFormProps<ShellParams>) {
           units={units}
           value={outsideThickness(params)}
           onChange={(v) => setParams({ outsideThickness: v })}
+          bind="/outsideThickness"
         />
       )}
     </>

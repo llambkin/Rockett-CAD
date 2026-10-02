@@ -115,6 +115,7 @@ function LinearPatternForm({
         label="Quantity"
         value={num(params, "count", 3)}
         onChange={(v) => setParams({ count: v })}
+        bind="/count"
         int
       />
       <LengthField
@@ -123,6 +124,7 @@ function LinearPatternForm({
         autoFocus
         value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ spacing: v })}
+        bind="/spacing"
       />
       <CheckField
         label="Join instances"

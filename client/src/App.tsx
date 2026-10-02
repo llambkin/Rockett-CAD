@@ -29,6 +29,7 @@ import { MenuButton } from "./components/ContextMenu";
 import { downloadBrowserProject, getBrowserProject } from "./browserProjects";
 import { VersionLabel } from "./components/VersionLabel";
 import { confirm } from "./components/ConfirmPanel";
+import { PARAMETERS_PANEL } from "./components/ParametersPanel";
 import { browserKeyFromPath } from "./paths";
 import {
   closeProjectSettings,
@@ -334,6 +335,7 @@ function Workspace({
 function WorkspaceTopbar({ onUsers }: { onUsers: () => void }) {
   const showHelp = usePanelOpen(HELP_PANEL);
   const showHistory = usePanelOpen(HISTORY_PANEL);
+  const showParameters = usePanelOpen(PARAMETERS_PANEL);
   const busy = useStore((s) => s.busy);
   const projectName = useStore((s) => s.document?.name ?? "");
   return (
@@ -352,6 +354,14 @@ function WorkspaceTopbar({ onUsers }: { onUsers: () => void }) {
       {busy && <span className="busy-indicator">⟳ working…</span>}
       <SaveIndicator />
       <UserMenu onUsers={onUsers} />
+      <button
+        className="icon-btn"
+        title="Named parameters for numeric fields"
+        aria-expanded={showParameters}
+        onClick={() => togglePanel(PARAMETERS_PANEL)}
+      >
+        Parameters
+      </button>
       <button
         className="icon-btn"
         title="Undo history and checkpoints"

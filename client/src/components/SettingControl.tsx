@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { APPEARANCE_ACCENT, type SettingDefinition } from "@rockett/shared";
 import { AccentPicker } from "./AccentPicker";
 import { CheckField, NumField, SelectField } from "./form/fields";
+import { evaluateField, parameterValues } from "./form/expressionField";
+import { useStore } from "../store";
 
 export type FieldSchema = {
   type?: string;
@@ -16,12 +18,16 @@ export function numberInputError(
   schema: FieldSchema,
   target: EventTarget,
 ): string | null {
-  if (
-    !(target instanceof HTMLInputElement) ||
-    target.type !== "number" ||
-    (target.validity.valid && target.value !== "")
-  )
+  if (!(target instanceof HTMLInputElement) || target.inputMode !== "decimal")
     return null;
+  const spec = {
+    dimension: "unitless" as const,
+    int: schema.type === "integer",
+    min: schema.minimum,
+    max: schema.maximum,
+  };
+  const values = parameterValues(useStore.getState().document);
+  if (!("error" in evaluateField(target.value, spec, values))) return null;
   return `Enter a number from ${schema.minimum ?? "-∞"} to ${schema.maximum ?? "∞"}.`;
 }
 

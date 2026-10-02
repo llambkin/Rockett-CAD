@@ -1,12 +1,10 @@
 import {
   ORIGIN_AXES,
-  parseLength,
-  roundedLength,
   type Units,
   type OriginAxis,
   type ExtrudeFeature,
 } from "@rockett/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { selectionKey, useStore, type Selection } from "../../store";
 import { previewBodies, usePreviewBase } from "../../previewBase";
@@ -20,174 +18,36 @@ import {
 import { chosenTargets, several } from "../../toolTargets";
 import { pickLabel } from "../../selection/labels";
 export { pickLabel } from "../../selection/labels";
+import { ExpressionField, type ExpressionFieldProps } from "./expressionField";
 
-export function NumField({
-  label,
-  value,
-  onChange,
-  int,
-  min,
-  max,
-  step,
-  ariaLabel,
-  className,
-  title,
-  autoFocus,
-  onClear,
-}: {
-  label?: string;
-  value: number;
-  onChange: (v: number) => void;
-  int?: boolean;
-  min?: number | undefined;
-  max?: number | undefined;
-  step?: number | undefined;
-  ariaLabel?: string | undefined;
-  className?: string;
-  title?: string;
-  autoFocus?: boolean | undefined;
-  onClear?: () => void;
-}) {
-  const [text, setText] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!focused) setText(Number.isFinite(value) ? String(value) : "");
-  }, [value, focused]);
-  useEffect(() => {
-    if (!autoFocus) return;
-    const t = window.setTimeout(() => {
-      ref.current?.focus();
-      ref.current?.select();
-    });
-    return () => window.clearTimeout(t);
-  }, []);
-  const input = (
-    <input
-      ref={ref}
-      type="number"
-      className={className}
-      title={title}
-      min={min}
-      max={max}
-      step={step ?? (int ? 1 : "any")}
-      aria-label={ariaLabel}
-      value={focused ? text : Number.isFinite(value) ? String(value) : ""}
-      onFocus={() => {
-        setText(Number.isFinite(value) ? String(value) : "");
-        setFocused(true);
-      }}
-      onBlur={() => setFocused(false)}
-      onChange={(e) => {
-        setText(e.target.value);
-        const v = Number(e.target.value);
-        if (e.target.value.trim() === "") onClear?.();
-        else if (
-          Number.isFinite(v) &&
-          (min === undefined || v >= min) &&
-          (max === undefined || v <= max)
-        )
-          onChange(v);
-      }}
-    />
-  );
-  return label === undefined ? (
-    input
-  ) : (
-    <label className="field">
-      <span>{label}</span>
-      {input}
-    </label>
-  );
+type NumericProps = Omit<ExpressionFieldProps, "dimension" | "units">;
+
+export function NumField(props: NumericProps) {
+  return <ExpressionField {...props} dimension="unitless" />;
 }
 
 export function LengthField({
   label,
-  value,
   units,
-  onChange,
-  min,
-  max,
-  step,
-  ariaLabel,
-  autoFocus,
-}: {
-  label: string;
-  value: number;
-  units: Units;
-  onChange: (mm: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-  ariaLabel?: string;
-  autoFocus?: boolean;
-}) {
-  const [text, setText] = useState(String(roundedLength(value, units)));
-  const [focused, setFocused] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-  const parsed = parseLength(text, units);
-  const invalid =
-    parsed === null ||
-    (min !== undefined && parsed < min) ||
-    (max !== undefined && parsed > max);
-  useEffect(() => {
-    if (!focused && !invalid) setText(String(roundedLength(value, units)));
-  }, [value, units, focused, invalid]);
-  useEffect(() => {
-    if (!autoFocus) return;
-    const t = window.setTimeout(() => {
-      ref.current?.focus();
-      ref.current?.select();
-    });
-    return () => window.clearTimeout(t);
-  }, [autoFocus]);
+  ...props
+}: NumericProps & { label: string; units: Units }) {
   return (
-    <label className="field">
-      <span>{`${label} (${units})`}</span>
-      <input
-        ref={ref}
-        type="text"
-        inputMode="decimal"
-        aria-label={ariaLabel}
-        aria-invalid={invalid}
-        value={text}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onKeyDown={(e) => {
-          if (step === undefined || !["ArrowUp", "ArrowDown"].includes(e.key))
-            return;
-          e.preventDefault();
-          const mm = (parsed ?? value) + step * (e.key === "ArrowUp" ? 1 : -1);
-          if (mm < (min ?? -Infinity) || mm > (max ?? Infinity)) return;
-          setText(String(roundedLength(mm, units)));
-          onChange(mm);
-        }}
-        onChange={(e) => {
-          const next = e.target.value;
-          setText(next);
-          const mm = parseLength(next, units);
-          if (
-            mm !== null &&
-            (min === undefined || mm >= min) &&
-            (max === undefined || mm <= max)
-          )
-            onChange(mm);
-        }}
-      />
-    </label>
+    <ExpressionField
+      {...props}
+      label={`${label} (${units})`}
+      dimension="length"
+      units={units}
+    />
   );
 }
 
 export function AngleField({
   label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (deg: number) => void;
-}) {
-  return <NumField label={`${label} (°)`} value={value} onChange={onChange} />;
+  ...props
+}: NumericProps & { label: string }) {
+  return (
+    <ExpressionField {...props} label={`${label} (°)`} dimension="angle" />
+  );
 }
 
 export function SelectField<T extends string>({

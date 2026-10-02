@@ -64,6 +64,7 @@ function EmbossForm({ params, setParams }: FeatureFormProps<EmbossParams>) {
         autoFocus
         value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ depth: v })}
+        bind="/depth"
       />
       <SelectField
         label="Mode"

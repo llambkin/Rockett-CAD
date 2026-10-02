@@ -3,7 +3,7 @@ client/src/api.ts 652
 client/src/components/ControlsHelp.tsx ControlsHelp 109
 client/src/components/DraggablePanel.tsx DraggablePanel 130
 client/src/components/ExportPanel.tsx ExportBody 93
-client/src/components/FeatureDialog.tsx DialogBody 103
+client/src/components/FeatureDialog.tsx DialogBody 110
 client/src/components/ModelTree.tsx 626
 client/src/components/ModelTree.tsx ModelTree 494
 client/src/components/ProjectItems.tsx 598
@@ -28,7 +28,7 @@ client/src/components/ViewportView.tsx pointerToSketchUV 221
 client/src/components/ViewportView.tsx useEffect() 111
 client/src/components/ViewportView.tsx useEffect()#2 133
 client/src/components/form/fields.tsx 557
-client/src/features/constructionPlane.tsx PlaneForm 108
+client/src/features/constructionPlane.tsx PlaneForm 111
 client/src/features/referenceImage.tsx ReferenceImagePanel 195
 client/src/sketchTools.ts 1048
 client/src/store.ts 1159

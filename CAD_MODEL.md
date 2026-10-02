@@ -371,6 +371,16 @@ its bindings; undo restores them. Parameter edits use the same revision, preview
 and history owners as feature edits; rejected expressions and conflicting
 dimensions leave the saved document and history unchanged.
 
+`ExpressionField` in `client/src/components/form/expressionField.tsx` owns
+every numeric field: it evaluates text with the shared parser and the
+document's parameters, keeps bounds and stepping, and shows errors on the
+field. A feature field names its binding path; text that uses a parameter
+links, a constant calculates once, and a handle that sets a new value unlinks.
+In a non-mm display unit a unitless linked result is stored with that unit.
+`client/src/features/bindings.ts` saves a feature and its changed bindings as
+one staged transaction, so one undo reverts both. Sketch dimensions do not link
+yet.
+
 Core feature schemas live in `shared/src/schema/coreFeatures.ts`, below the
 parameter resolver and document validation. `schema/features.ts` retains their
 public exports alongside the document schemas. The cached parser lives in

@@ -6,6 +6,7 @@ import { newId, type CircularPatternFeature } from "@rockett/shared";
 import {
   AxisField,
   CheckField,
+  AngleField,
   NumField,
   SelInfo,
 } from "../components/form/fields";
@@ -76,12 +77,14 @@ function CircularPatternForm({
         autoFocus
         value={num(params, "count", 6)}
         onChange={(v) => setParams({ count: v })}
+        bind="/count"
         int
       />
-      <NumField
-        label="Total angle (°)"
+      <AngleField
+        label="Total angle"
         value={num(params, handle.param, handle.fallback)}
         onChange={(v) => setParams({ totalAngle: v })}
+        bind="/totalAngle"
       />
       <CheckField
         label="Join instances"
