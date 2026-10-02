@@ -178,7 +178,10 @@ cancel watchdog is restarted and in-flight kernel requests get 503 `kernel`:
 Stage and commit move a `namingVersion` 1 project to 2; nothing else changes
 the naming version. Both back up the project first and name the backup. The
 commit needs `If-Match` and is 409 while a `candidate` or `ambiguous` mapping
-has no choice. A project already on version 2 is 409. Types:
+has no choice. A project already on version 2 is 409. Stage gives each
+candidate and suggestion a `mesh` from the version 2 evaluation at its
+mapping's position: a face or body index range, or an edge polyline, with the
+body's `bbox`, so the client finds it in the version 1 mesh it shows. Types:
 `NamingUpgradeProposal`, `NamingMapping` and `NamingDecision` in
 `shared/src/api.ts`. Code: `server/src/store/namingUpgrade.ts`. Model rules:
 [CAD_MODEL.md](CAD_MODEL.md), Naming upgrade.

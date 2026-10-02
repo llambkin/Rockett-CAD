@@ -111,8 +111,15 @@ export interface NamingTarget {
   name?: string;
 }
 
+export type NamingMesh = Pick<BodyPayload, "bbox"> &
+  (
+    | ({ kind: "body" | "face" } & Pick<FaceInfo, "start" | "count">)
+    | ({ kind: "edge" } & Pick<EdgeInfo, "polyline">)
+  );
+
 export interface NamingCandidate extends NamingTarget {
   basis: RefCandidate["basis"];
+  mesh?: NamingMesh;
 }
 
 export interface NamingDecision {

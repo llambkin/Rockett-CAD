@@ -26,6 +26,7 @@ import type { MenuItem } from "./ContextMenu";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { pickLabel, useHoverPick } from "./form/fields";
+import { mappingKey, useNamingCandidates } from "./namingCandidates";
 
 type Ref = FaceRef | EdgeRef;
 
@@ -82,20 +83,28 @@ export function refNotes(
   );
 }
 
-function PickButton({ refFor }: { refFor: Ref }) {
+function PickToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   const busy = useStore((s) => s.busy);
-  const picking: Ref | undefined = useStore((s) => featureParams(s).repick);
-  const setParams = setFeatureParams;
-  const on = JSON.stringify(picking) === JSON.stringify(refFor);
   return (
     <button
       className="btn"
       disabled={busy}
       aria-pressed={on}
-      onClick={() => setParams({ repick: on ? undefined : refFor })}
+      onClick={onToggle}
     >
       {on ? "Stop" : "Pick"}
     </button>
+  );
+}
+
+function PickButton({ refFor }: { refFor: Ref }) {
+  const picking: Ref | undefined = useStore((s) => featureParams(s).repick);
+  const on = JSON.stringify(picking) === JSON.stringify(refFor);
+  return (
+    <PickToggle
+      on={on}
+      onToggle={() => setFeatureParams({ repick: on ? undefined : refFor })}
+    />
   );
 }
 
@@ -251,36 +260,62 @@ async function applyUpgrade(id: string, chosen: NamingDecision[]) {
 function MappingRows({
   mappings,
   stage,
+  picking,
+  setPicking,
 }: {
   mappings: NamingMapping[];
   stage: (accept: NamingDecision[]) => void;
+  picking: string | null;
+  setPicking: (key: string | null) => void;
 }) {
   const features = useStore((s) => s.document?.features);
+  const hover = useHoverPick();
   const where = (fid: string | null) =>
     fid === null
       ? "Final body"
       : (features?.find((f) => f.id === fid)?.name ?? fid);
+  const choose = (m: NamingMapping, to: NamingTarget) =>
+    stage([
+      ...decisions(mappings.filter((other) => other !== m)),
+      { featureId: m.featureId, path: m.path, to: plain(to) },
+    ]);
   const acceptButton = (m: NamingMapping, to: NamingTarget) => (
-    <AcceptButton
-      label={target(to)}
-      onAccept={() =>
-        stage([
-          ...decisions(mappings.filter((other) => other !== m)),
-          { featureId: m.featureId, path: m.path, to: plain(to) },
-        ])
-      }
-    />
+    <AcceptButton label={target(to)} onAccept={() => choose(m, to)} />
   );
+  const { here, shown } = useNamingCandidates(mappings, picking, (m, to) => {
+    setPicking(null);
+    choose(m, to);
+  });
   if (!mappings.length) return <RepairRow text="No references to map" />;
   return mappings.map((m) => {
     const only = m.to ? undefined : lone(m);
+    const key = mappingKey(m);
+    const pickable = here === null && m.featureId === null && unchosen(m);
     return (
-      <Fragment key={`${m.featureId}\n${m.path}`}>
-        <RepairRow text={mappingNote(m, where(m.featureId))}>
+      <Fragment key={key}>
+        <RepairRow
+          text={mappingNote(m, where(m.featureId))}
+          pick={only ? shown(m, only) : null}
+          hover={hover}
+        >
           {only && acceptButton(m, only)}
+          {pickable && (
+            <PickToggle
+              on={picking === key}
+              onToggle={() => {
+                if (picking !== key) useStore.getState().setSelection([]);
+                setPicking(picking === key ? null : key);
+              }}
+            />
+          )}
         </RepairRow>
         {choices(m, (c) => c).map(({ pick, from }) => (
-          <RepairRow key={target(pick)} text={`${target(pick)}, ${from}`}>
+          <RepairRow
+            key={target(pick)}
+            text={`${target(pick)}, ${from}`}
+            pick={shown(m, pick)}
+            hover={hover}
+          >
             {acceptButton(m, pick)}
           </RepairRow>
         ))}
@@ -321,7 +356,9 @@ function ApplyRows({
 function NamingUpgrade({ id, revision }: { id: string; revision: number }) {
   const busy = useStore((s) => s.busy);
   const [report, setReport] = useState<Report | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
   const stage = async (chosen: NamingDecision[]) => {
+    setPicking(null);
     setReport({ state: "loading" });
     try {
       const proposal = await api.stageNamingUpgrade(id, chosen);
@@ -334,11 +371,18 @@ function NamingUpgrade({ id, revision }: { id: string; revision: number }) {
     report?.state === "ready" && report.proposal.revision === revision
       ? report.proposal
       : null;
+  const picked = ready ? picking : null;
   return (
     <>
       <div className="sel-info">
         <span>Naming</span>
-        <b>{ready ? counts(ready.mappings) : "version 1"}</b>
+        <b>
+          {picked
+            ? "Pick a candidate in the viewport"
+            : ready
+              ? counts(ready.mappings)
+              : "version 1"}
+        </b>
       </div>
       {report?.state === "failed" && (
         <div className="error-banner" role="alert">
@@ -351,6 +395,8 @@ function NamingUpgrade({ id, revision }: { id: string; revision: number }) {
             <MappingRows
               mappings={ready.mappings}
               stage={(a) => void stage(a)}
+              picking={picked}
+              setPicking={setPicking}
             />
           ) : (
             <RepairRow text="Checking references" />
