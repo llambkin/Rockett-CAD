@@ -78,6 +78,7 @@ import {
 import { dimensionLayout, dimensionMaps } from "../dimensionLayout";
 import { SketchOffsetIndicators } from "./SketchOffsetIndicators";
 import { ViewportContextMenu } from "./ViewportContextMenu";
+import { confirm } from "./ConfirmPanel";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { previewEdit } from "../toolTargets";
 import { peekHighlight, usePeekedFeature } from "../timelinePeek";
@@ -2192,8 +2193,6 @@ export function ViewportView({
         ? tools.dimensionValue(edited, String(parsed[index]!))
         : null;
       if (v === null) continue;
-      // the edited value wins; any other dimension on the same target is a
-      // stale duplicate (older sketches could stack them) and goes away
       constraints = tools.dedupeDimensions(
         constraints.map((c) => {
           if (c.id !== f.constraintId) return c;
@@ -2213,9 +2212,9 @@ export function ViewportView({
         if (
           refused &&
           "value" in refused &&
-          window.confirm(
+          (await confirm(
             `${useStore.getState().error} Add it as a driven dimension instead?`,
-          )
+          ))
         ) {
           useStore.setState({ error: null });
           s.updateDraftSketch(

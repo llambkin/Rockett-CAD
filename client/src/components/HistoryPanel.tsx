@@ -10,6 +10,7 @@ import { useStore } from "../store";
 import { ContextMenu } from "./ContextMenu";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
+import { confirm } from "./ConfirmPanel";
 import { editedAt } from "./SnapshotPopover";
 
 export function HistoryPanel({ onClose }: { onClose: () => void }) {
@@ -34,7 +35,9 @@ export function HistoryPanel({ onClose }: { onClose: () => void }) {
   }, [projectId, revision]);
 
   const remove = async (id: string, { label, snapshot, at }: HistoryMark) => {
-    if (!window.confirm(`Delete checkpoint "${label}"? This cannot be undone.`))
+    if (
+      !(await confirm(`Delete checkpoint "${label}"? This cannot be undone.`))
+    )
       return;
     try {
       const body = { label, at, snapshot };
@@ -198,9 +201,9 @@ function MarkRow({
   onMenu: ((x: number, y: number) => void) | undefined;
 }) {
   const busy = useStore((s) => s.busy);
-  const restore = () => {
+  const restore = async () => {
     if (
-      window.confirm(
+      await confirm(
         `Restore "${mark.label}"? It becomes a new step you can undo.`,
       )
     )

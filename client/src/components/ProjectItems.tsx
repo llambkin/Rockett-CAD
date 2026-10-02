@@ -40,6 +40,7 @@ import {
   type Run,
 } from "./projectActions";
 import { BrowserShareDialog, ShareDialog } from "./ShareDialog";
+import { confirm } from "./ConfirmPanel";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
 
@@ -49,7 +50,7 @@ type Menu = { x: number; y: number; items: MenuItem[] } | null;
 
 function useDragMove(
   tree: FolderTree,
-  move: (item: Item, target: string | null) => void,
+  move: (item: Item, target: string | null, at?: Point) => void,
 ) {
   const [dragged, setDragged] = useState<Item | null>(null);
   const [over, setOver] = useState<string | null>();
@@ -83,7 +84,7 @@ function useDragMove(
       onDrop: (e: DragEvent) => {
         e.preventDefault();
         end();
-        move(dragged, id);
+        move(dragged, id, { x: e.clientX, y: e.clientY });
       },
     };
   };
@@ -202,10 +203,11 @@ const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 const BrowserGlyph = ICONS.browser;
 
-const confirmIntoBrowser = (name: string) =>
-  window.confirm(
-    `Move "${name}" to this browser? Other users lose access, and clearing this site's data deletes it.`,
-  );
+const intoBrowser = async (item: Item, run: Run, at?: Point) =>
+  (await confirm(
+    `Move "${item.name}" to this browser? Other users lose access, and clearing this site's data deletes it.`,
+    at,
+  )) && run(moveToBrowser(item.id, item.name));
 
 const moveTo = (item: Item, open: (moving: Moving) => void): RowAction => ({
   label: "Move to…",
@@ -247,14 +249,14 @@ export function ProjectItems({
   const [sharing, setSharing] = useState<Item | null>(null);
   const session = useSession();
   const actor = session.kind === "signed-in" ? session.user : null;
-  const move = (item: Item, target: string | null) =>
+  const move = (item: Item, target: string | null, at?: Point) =>
     target !== THIS_BROWSER
       ? run(
           item.kind === "project"
             ? api.placeProject(item.id, target)
             : api.moveFolder(item.id, target),
         )
-      : confirmIntoBrowser(item.name) && run(moveToBrowser(item.id, item.name));
+      : void intoBrowser(item, run, at);
   const { source, target } = useDragMove(tree, move);
   const rename = (item: Item) => (name: string | null) => {
     setRenaming(null);
@@ -327,11 +329,9 @@ export function ProjectItems({
             label: "Delete",
             glyph: "✕",
             danger: true,
-            run: () => {
-              if (n === 0 && !window.confirm(`Delete folder "${f.name}"?`))
-                return;
-              run(api.deleteFolder(f.id));
-            },
+            run: async (at) =>
+              (n > 0 || (await confirm(`Delete folder "${f.name}"?`, at))) &&
+              run(api.deleteFolder(f.id)),
           },
         ]);
       })}
@@ -391,7 +391,7 @@ export function ProjectItems({
           at={moving.at}
           onMove={(t) => {
             setMoving(null);
-            move(moving.item, t);
+            move(moving.item, t, moving.at);
           }}
           onClose={() => setMoving(null)}
         />

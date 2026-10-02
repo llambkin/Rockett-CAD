@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@rockett/shared";
 import { api } from "../api";
 import { confirmSignOut, endSession, useSession } from "../session";
+import { confirm } from "./ConfirmPanel";
 
 type Load = "loading" | "ready" | "failed";
 type NewUser = Parameters<typeof api.createUser>[0];
@@ -69,7 +70,7 @@ function useUserActions(list: ReturnType<typeof useUserList>) {
     if (
       self &&
       (change.password !== undefined || change.status === "disabled") &&
-      !confirmSignOut()
+      !(await confirmSignOut())
     )
       return false;
     const user = await run(() => api.patchUser(id, change));
@@ -225,10 +226,10 @@ function UserRow({
   const [resetOpen, setResetOpen] = useState(false);
   const [email, setEmail] = useState(user.email ?? "");
   useEffect(() => setEmail(user.email ?? ""), [user.email]);
-  const toggleStatus = () => {
+  const toggleStatus = async () => {
     if (
       user.status === "active" &&
-      !window.confirm(`Disable ${user.displayName}?`)
+      !(await confirm(`Disable ${user.displayName}?`))
     )
       return;
     void patch(user.id, {

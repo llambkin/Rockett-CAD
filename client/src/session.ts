@@ -6,6 +6,7 @@ import { leaveBrowserProject } from "./browserSession";
 import { dropCameraSave } from "./cameraSave";
 import { useStore } from "./store";
 import { clearSettings } from "./settings";
+import { confirm } from "./components/ConfirmPanel";
 
 type Setup = Awaited<ReturnType<typeof api.authStatus>>["setup"];
 
@@ -136,11 +137,11 @@ export async function completeSetup(
   await signIn(username, password);
 }
 
-export function confirmSignOut(): boolean {
+export async function confirmSignOut(): Promise<boolean> {
   const { notSaved, recovery } = useStore.getState();
   return (
     (!notSaved && !recovery) ||
-    window.confirm("Your unsaved change will be lost. Sign out?")
+    confirm("Your unsaved change will be lost. Sign out?")
   );
 }
 
@@ -166,7 +167,7 @@ async function logout(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
-  if (!confirmSignOut()) return;
+  if (!(await confirmSignOut())) return;
   await logout();
   endSession();
 }

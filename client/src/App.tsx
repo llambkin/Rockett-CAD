@@ -28,6 +28,7 @@ import { RenameInput } from "./components/RenameInput";
 import { MenuButton } from "./components/ContextMenu";
 import { downloadBrowserProject, getBrowserProject } from "./browserProjects";
 import { VersionLabel } from "./components/VersionLabel";
+import { confirm } from "./components/ConfirmPanel";
 import { browserKeyFromPath } from "./paths";
 import {
   closeProjectSettings,
@@ -194,8 +195,8 @@ export function RecoveryBanner() {
       </button>{" "}
       <button
         className="btn"
-        onClick={() => {
-          if (window.confirm("Discard your unsaved change and reload?"))
+        onClick={async () => {
+          if (await confirm("Discard your unsaved change and reload?"))
             void recover("discard");
         }}
       >

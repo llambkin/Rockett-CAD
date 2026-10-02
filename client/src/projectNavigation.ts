@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { confirm } from "./components/ConfirmPanel";
 import { leaveBrowserProject } from "./browserSession";
 import { BROWSER_PATH, folderPath, showPath } from "./paths";
 import { folderOf } from "./projectTree";
@@ -8,11 +9,11 @@ export async function backToProjects(): Promise<void> {
   const { projectId, closeProject, notSaved, recovery } = useStore.getState();
   if (
     (notSaved || recovery) &&
-    !window.confirm(
+    !(await confirm(
       notSaved
         ? "Changes not saved in this browser will be lost."
         : "Your unsaved change will be lost.",
-    )
+    ))
   )
     return;
   if (leaveBrowserProject()) showPath(BROWSER_PATH);

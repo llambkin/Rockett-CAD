@@ -1,4 +1,5 @@
 import { saveDownload, type Download } from "../download";
+import { confirm } from "./ConfirmPanel";
 
 export type Point = { x: number; y: number };
 
@@ -20,8 +21,8 @@ export const deleteAction = (
   label: "Delete",
   glyph: "✕",
   danger: true,
-  run: () => {
-    if (window.confirm(`Delete project "${name}"?`)) run(remove());
+  run: async (at) => {
+    if (await confirm(`Delete project "${name}"?`, at)) run(remove());
   },
 });
 

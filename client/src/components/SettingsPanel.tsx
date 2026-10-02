@@ -22,6 +22,7 @@ import {
   type FieldSchema,
 } from "./SettingControl";
 import { SettingsTransfer } from "./SettingsTransfer";
+import { confirm } from "./ConfirmPanel";
 
 const scopes: SettingScope[] = ["app", "user", "project"];
 
@@ -169,11 +170,11 @@ function ResetSection({
     .filter((definition) => definition.scopes.includes(scope))
     .map((definition) => definition.key);
   if (!loaded.app || !loaded[scope] || keys.length === 0) return null;
-  const reset = () => {
+  const reset = async () => {
     if (
-      !window.confirm(
+      !(await confirm(
         `Reset every ${label(section)} setting at the ${label(scope)} layer?`,
-      )
+      ))
     )
       return;
     void resetSettings(keys, scope).catch((error: Error) =>
