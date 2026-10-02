@@ -28,6 +28,7 @@ export interface PickInput {
   one?: true;
   planar?: true;
   straight?: true;
+  noConstruction?: true;
   optional?: true;
   shiftFaces?: true;
   accumulate?: true;
@@ -189,6 +190,14 @@ function fits(i: PickInput, sel: Selection, s: Store): boolean {
   return !(i.planar && sel.kind === "face" && !isPlanarFace(sel, s));
 }
 
+function sketchEntity(sel: Selection, s: Store) {
+  if (sel.kind !== "sketchEntity") return undefined;
+  const sketch = s.document?.features.find((f) => f.id === sel.sketchId);
+  return sketch?.type === "sketch"
+    ? sketch.entities.find((e) => e.id === sel.entityId)
+    : undefined;
+}
+
 function isStraight(sel: Selection, s: Store): boolean {
   if (sel.kind === "edge") {
     const body = previewBodies(s).find((b) => b.bodyId === sel.bodyId);
@@ -197,11 +206,7 @@ function isStraight(sel: Selection, s: Store): boolean {
     );
   }
   if (sel.kind !== "sketchEntity") return true;
-  const sketch = s.document?.features.find((f) => f.id === sel.sketchId);
-  return (
-    sketch?.type === "sketch" &&
-    sketch.entities.find((e) => e.id === sel.entityId)?.kind === "line"
-  );
+  return sketchEntity(sel, s)?.kind === "line";
 }
 
 function kindsOf(i: PickInput | undefined): Kind[] {
@@ -260,6 +265,7 @@ export function accepted(
     return sketchRegions(sel.sketchId);
   if (!fits(i, sel, s)) return [];
   if (i.straight && !isStraight(sel, s)) return [];
+  if (i.noConstruction && sketchEntity(sel, s)?.construction) return [];
   return [sel];
 }
 

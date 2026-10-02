@@ -47,6 +47,7 @@ const path: PickInput = {
   providers: ["sketch.entity"],
   wholeSketch: true,
   one: true,
+  noConstruction: true,
   param: {
     read: (s) => sketchPicks(featureParams(s).pathSketchId),
     write: (next) =>
@@ -76,7 +77,7 @@ function SweepForm({ params, setParams }: FeatureFormProps<SweepParams>) {
       <SelInfo
         label="Path sketch"
         input="path"
-        hint="click a curve of the path sketch"
+        hint="click a curve of the path sketch, not a construction curve"
       />
       <OperationField />
     </>
