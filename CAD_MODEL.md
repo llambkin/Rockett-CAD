@@ -95,7 +95,7 @@ only the Naming upgrade changes a stored version.
 | Extrude or revolve side from a sketch curve | `f:{featureId}:s:{sketchEntityId}`                      |
 | Extrude or revolve cap                      | `f:{featureId}:cap:start`, `f:{featureId}:cap:end`      |
 | Sweep and loft side and cap, version 2      | as extrude                                              |
-| Fillet or chamfer face from an edge         | `f:{featureId}:fe:{n}`                                  |
+| Fillet or chamfer face from an edge         | `f:{featureId}:fe:{n}`, `f:{featureId}:fe:{n}:{part}`   |
 | Press/pull moved face, version 2            | the source face's name                                  |
 | Mirror or pattern copy, version 1           | `m:{featureId}:{name}`, `p{i}:{featureId}:{name}`       |
 | Mirror or pattern copy, version 2           | `m:{featureId}:{key}{~n}`, `p{i}:{featureId}:{key}{~n}` |
@@ -103,6 +103,8 @@ only the Naming upgrade changes a stored version.
 | Anything the history cannot attribute       | `f:{featureId}:x{n}`                                    |
 
 - Names follow the kernel history (`propagateNames`, `historyNames`).
+- Every face name template lives in `server/src/geometry/naming.ts`; a
+  fillet or chamfer adds `:{part}` only when one edge makes several faces.
 - A name map is a `ShapeMap` (`server/src/geometry/shapeMap.ts`) matched by
   `IsSame`, so hash collisions keep names.
 - Duplicates get `~n` in centroid order x, y, z (`suffixDuplicates`).
