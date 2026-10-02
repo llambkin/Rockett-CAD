@@ -47,7 +47,8 @@ nothing else is: `server/src/api/routes.ts`.
 | `POST /projects/:id/timeline`                                                     | `server/src/api/routes.ts`         |
 | `POST /projects/:id/undo`, `/redo`                                                | `server/src/api/routes.ts`         |
 | `POST /projects/:id/previews/:tx/commit`, `DELETE /projects/:id/previews/:tx`     | `server/src/api/routes.ts`         |
-| `GET /projects/:id/history`, `POST /projects/:id/checkpoints`, `/history/restore` | `server/src/api/routes.ts`         |
+| `GET /projects/:id/history`, `POST /projects/:id/checkpoints`, `/history/restore` | `server/src/api/historyRoutes.ts`  |
+| `DELETE /projects/:id/checkpoints`                                                | `server/src/api/historyRoutes.ts`  |
 | `PUT /projects/:id/bodies/:bodyId`                                                | `server/src/api/routes.ts`         |
 | `PUT /projects/:id/groups`                                                        | `server/src/api/routes.ts`         |
 | `POST /projects/:id/upgrade-naming`, `/commit`                                    | `server/src/api/routes.ts`         |
@@ -132,7 +133,12 @@ restore are document edits; nothing to undo or redo is 409:
 `server/src/store/historyStore.ts`. Entries and checkpoints carry `by`, the
 signed-in user's id; the history list and a new checkpoint add `byName`. Both
 are absent on older entries. Checkpoints keep their snapshots and blobs:
-`server/src/store/blobGc.ts`.
+`server/src/store/blobGc.ts`. Checkpoints have a bound far above real use (see
+Limits); one more is 409 with a plain message and keeps the rest.
+`DELETE /projects/:id/checkpoints` with a listed checkpoint's `label`, `at` and
+`snapshot` removes it and rewrites the log without snapshots nothing else
+holds, so blobs nothing else references become collectable; an unknown
+checkpoint is 404.
 
 A feature add or edit with `X-Rockett-Preview` (`PREVIEW_HEADER`) and
 `X-Rockett-Tx` stages the edit in memory for that user and session instead of
@@ -264,6 +270,7 @@ projects.
 | Thumbnail                             | `THUMBNAIL_LIMITS`, `shared/src/routes.ts`                                          |
 | Reference image                       | `IMAGE_LIMIT_MB`, `server/src/store/projectStore.ts`                                |
 | History entries, labels               | `HISTORY_LIMIT`, `LABEL_LIMIT`, `shared/src/schema/history.ts`                      |
+| Checkpoints                           | `HISTORY_LIMITS.checkpoints`, `server/src/tunables.ts`                              |
 | Tool targets                          | `MAX_TARGETS`, `shared/src/schema/features.ts`                                      |
 | Previews, jobs, timeouts, size search | `server/src/tunables.ts`                                                            |
 | Settings import                       | `SETTINGS_IMPORT_MAX_BYTES`; nodes and depth in `server/src/store/settingsStore.ts` |

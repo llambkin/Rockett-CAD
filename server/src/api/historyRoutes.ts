@@ -32,6 +32,13 @@ export function historyRoutes(context: ApiRoutes) {
     }),
   );
   on(
+    ROUTES.deleteCheckpoint,
+    wrap(async (req, res) => {
+      await history.deleteCheckpoint(req.params.id, req.body);
+      res.json({ ok: true });
+    }),
+  );
+  on(
     ROUTES.restoreHistory,
     mutateProject(async (current, req) => {
       const restored = await history.restore(current, req.body.snapshot);

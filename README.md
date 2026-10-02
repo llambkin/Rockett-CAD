@@ -70,7 +70,7 @@ everything downstream against persistent topology references.
 - **Toolbar**: wheel scrolling in design and sketch; tools show icons above labels, constraints only icons; tooltips show shortcuts.
 - **Shortcuts**: single keys start tools; ? lists every keyboard and mouse control in a resizable panel that fills the window.
 - **Undo and redo**: undo any edit, even in a sketch, separately from the timeline; an unchanged OK adds nothing; tooltips name the step.
-- **History**: the History button lists edits and checkpoints with who made them; restore one after a confirm, then undo it.
+- **History**: lists edits and checkpoints with who made them; restore one after a confirm, then undo it; right-click deletes a checkpoint.
 - **Tool panels**: open with the main number selected and list each pick to remove; Enter confirms, Escape reverts.
 - **Pick fields**: clicks fill the active row; completed single picks advance to missing inputs, then back to multiple picks.
 - **Groups**: gather selected bodies or sketches into named, collapsible tree folders with Ctrl+G or right-click.

@@ -49,6 +49,7 @@ export const PREVIEW_LIMITS = {
 
 export const HISTORY_LIMITS = {
   snapshotBytes: 2 * PROJECT_FILE_LIMIT_MB * MB,
+  checkpoints: 1000,
 } as const;
 
 export const ENGINE_CACHE = {

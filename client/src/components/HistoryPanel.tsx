@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   LABEL_LIMIT,
+  ROUTES,
   type HistoryList,
   type HistoryMark,
 } from "@rockett/shared";
-import { api } from "../api";
+import { api, send } from "../api";
 import { useStore } from "../store";
+import { ContextMenu } from "./ContextMenu";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { editedAt } from "./SnapshotPopover";
@@ -31,12 +33,34 @@ export function HistoryPanel({ onClose }: { onClose: () => void }) {
     if (projectId) void load(projectId);
   }, [projectId, revision]);
 
+  const remove = async (id: string, { label, snapshot, at }: HistoryMark) => {
+    if (!window.confirm(`Delete checkpoint "${label}"? This cannot be undone.`))
+      return;
+    try {
+      const body = { label, at, snapshot };
+      await send(ROUTES.deleteCheckpoint, { id }, { body });
+      await load(id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   return (
     <DraggablePanel title="History">
       <div className="dialog-body">
         {error && <div className="error-banner">{error}</div>}
         {!list && !error && <div className="tree-empty">Loading history…</div>}
-        {list && <HistoryMarks list={list} canRestore={canEdit} />}
+        {list && (
+          <HistoryMarks
+            list={list}
+            canRestore={canEdit}
+            onDelete={
+              canEdit && projectId
+                ? (mark) => void remove(projectId, mark)
+                : undefined
+            }
+          />
+        )}
         {canEdit && projectId && (
           <CheckpointForm
             projectId={projectId}
@@ -53,12 +77,26 @@ export function HistoryPanel({ onClose }: { onClose: () => void }) {
 function HistoryMarks({
   list,
   canRestore,
+  onDelete,
 }: {
   list: HistoryList;
   canRestore: boolean;
+  onDelete: ((mark: HistoryMark) => void) | undefined;
 }) {
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    mark: HistoryMark;
+  }>();
   const current = list.entries[list.position - 1]?.snapshot;
-  const marks = (items: HistoryMark[], undoneFrom = Infinity) =>
+  const menuFor =
+    onDelete &&
+    ((mark: HistoryMark) => (x: number, y: number) => setMenu({ x, y, mark }));
+  const marks = (
+    items: HistoryMark[],
+    undoneFrom = Infinity,
+    menuOf?: typeof menuFor,
+  ) =>
     items.map((mark, i) => (
       <MarkRow
         key={i}
@@ -66,6 +104,7 @@ function HistoryMarks({
         current={mark.snapshot === current}
         undone={i >= undoneFrom}
         canRestore={canRestore}
+        onMenu={menuOf?.(mark)}
       />
     ));
   return (
@@ -79,7 +118,21 @@ function HistoryMarks({
       {list.checkpoints.length === 0 && (
         <div className="tree-empty">No checkpoints yet</div>
       )}
-      {marks(list.checkpoints)}
+      {marks(list.checkpoints, Infinity, menuFor)}
+      {menu && onDelete && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[
+            {
+              label: "Delete",
+              danger: true,
+              action: () => onDelete(menu.mark),
+            },
+          ]}
+          onClose={() => setMenu(undefined)}
+        />
+      )}
     </>
   );
 }
@@ -136,11 +189,13 @@ function MarkRow({
   current,
   undone,
   canRestore,
+  onMenu,
 }: {
   mark: HistoryMark;
   current: boolean;
   undone: boolean;
   canRestore: boolean;
+  onMenu: ((x: number, y: number) => void) | undefined;
 }) {
   const busy = useStore((s) => s.busy);
   const restore = () => {
@@ -152,7 +207,16 @@ function MarkRow({
       void useStore.getState().restore(mark.snapshot);
   };
   return (
-    <div className={undone ? "measure-row dimmed" : "measure-row"}>
+    <div
+      className={undone ? "measure-row dimmed" : "measure-row"}
+      onContextMenu={
+        onMenu &&
+        ((e) => {
+          e.preventDefault();
+          onMenu(e.clientX, e.clientY);
+        })
+      }
+    >
       <b>{mark.label}</b>
       <span>
         {editedAt(mark.at)}

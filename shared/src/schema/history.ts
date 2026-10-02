@@ -1,4 +1,6 @@
 import { Type, type Static } from "typebox";
+import type { HistoryList, HistoryMark } from "../api.js";
+import { route } from "../routeContract.js";
 
 export const HISTORY_VERSION = 2;
 export const HISTORY_LIMIT = 50;
@@ -51,3 +53,23 @@ export const historyRecord = Type.Union([
 ]);
 
 export type HistoryRecord = Static<typeof historyRecord>;
+
+export const CHECKPOINT_ROUTES = {
+  history: route<never, HistoryList>()("GET", "/projects/:id/history"),
+  createCheckpoint: route<{ label: string }, { checkpoint: HistoryMark }>()(
+    "POST",
+    "/projects/:id/checkpoints",
+    Type.Object({ label }),
+  ),
+  deleteCheckpoint: route<
+    Pick<HistoryMark, "label" | "at" | "snapshot">,
+    { ok: true }
+  >()(
+    "DELETE",
+    "/projects/:id/checkpoints",
+    Type.Object(
+      { label, at: Type.String(), snapshot: snapshotHash },
+      { additionalProperties: false },
+    ),
+  ),
+};

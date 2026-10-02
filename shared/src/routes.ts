@@ -18,8 +18,6 @@ import type {
   FolderTree,
   Formats,
   HeldMeshes,
-  HistoryList,
-  HistoryMark,
   HistoryStatus,
   MeasureRequest,
   MeasureResult,
@@ -41,7 +39,7 @@ import { VIEW_PROJECTION } from "./settings.js";
 import { edgeRef, faceRef, groupsSchema, vec3 } from "./schema/features.js";
 import { namingUpgradeBody } from "./schema/documents.js";
 import { parameterStateSchema } from "./schema/parameters.js";
-import { LABEL_LIMIT, snapshotHash } from "./schema/history.js";
+import { CHECKPOINT_ROUTES, snapshotHash } from "./schema/history.js";
 import {
   createFolderBody,
   folderId,
@@ -424,14 +422,7 @@ export const ROUTES = {
     "DELETE",
     "/projects/:id/previews/:tx",
   ),
-  history: route<never, HistoryList>()("GET", "/projects/:id/history"),
-  createCheckpoint: route<{ label: string }, { checkpoint: HistoryMark }>()(
-    "POST",
-    "/projects/:id/checkpoints",
-    Type.Object({
-      label: Type.String({ minLength: 1, maxLength: LABEL_LIMIT }),
-    }),
-  ),
+  ...CHECKPOINT_ROUTES,
   restoreHistory: route<
     { snapshot: string } & HeldMeshes,
     WireMutationResponse

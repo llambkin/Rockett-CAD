@@ -206,7 +206,12 @@ export class HistoryStore {
         await this.revision(id);
         throw new StoreError(`project ${id} has no history to checkpoint`);
       }
-      const { base, entries, position } = replay(opened.heads);
+      const { base, entries, position, checkpoints } = replay(opened.heads);
+      if (checkpoints.length >= HISTORY_LIMITS.checkpoints)
+        throw new StoreError(
+          `This project has ${checkpoints.length} checkpoints, the most it keeps. Delete one to save another.`,
+          "conflict",
+        );
       const mark = {
         label: label.slice(0, LABEL_LIMIT),
         at: new Date().toISOString(),
@@ -215,6 +220,20 @@ export class HistoryStore {
       };
       await this.append(id, opened, [frame({ kind: "checkpoint", ...mark })]);
       return mark;
+    });
+  }
+
+  deleteCheckpoint(id: string, { label, at, snapshot }: HistoryMark) {
+    return this.store.exclusive(id, async () => {
+      const opened = await this.open(id, () => this.revision(id));
+      const history = replay(opened?.heads ?? []);
+      const index = history.checkpoints.findIndex(
+        (m) => m.label === label && m.at === at && m.snapshot === snapshot,
+      );
+      if (!opened || index < 0)
+        throw new StoreError("This checkpoint is already gone.", "not_found");
+      history.checkpoints.splice(index, 1);
+      await this.rewrite(id, opened, history);
     });
   }
 
@@ -362,9 +381,13 @@ export class HistoryStore {
   private async compact(id: string): Promise<void> {
     const opened = await this.open(id, () => this.revision(id));
     if (!opened || waste(opened) < HISTORY_LIMIT) return;
+    await this.rewrite(id, opened, replay(opened.heads));
+  }
+
+  private async rewrite(id: string, opened: Opened, history: History) {
     const file = this.path(id, LOG);
     const log = await this.storage.read(file);
-    const bytes = await compose(replay(opened.heads), async (hash) =>
+    const bytes = await compose(history, async (hash) =>
       log.subarray(...opened.bodies.get(hash)!),
     );
     await this.storage.writeAtomic(file, bytes);
