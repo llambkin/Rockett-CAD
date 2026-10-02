@@ -14,6 +14,7 @@ import {
   computeEdgeNames,
   finalizeNames,
   findFace,
+  geometryName,
   type NameMap,
   type NamedBody,
 } from "./naming.js";
@@ -135,7 +136,7 @@ export function geometryNames(shape: Shape, featureId: string): NameMap {
       const key = sha256(
         JSON.stringify([cell(sig.point), cell(sig.direction)]),
       ).slice(0, 16);
-      provisional.set(face, `f:${featureId}:g:${sig.type}:${key}`);
+      provisional.set(face, geometryName(featureId, sig.type, key));
     }
 
     return finalizeNames(shape, provisional, featureId);

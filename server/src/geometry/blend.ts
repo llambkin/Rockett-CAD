@@ -32,7 +32,12 @@ import {
   wires as wiresOf,
   type Shape,
 } from "./kernel.js";
-import { computeEdgeNames, propagateNames, type NamedBody } from "./naming.js";
+import {
+  blendFaceName,
+  computeEdgeNames,
+  propagateNames,
+  type NamedBody,
+} from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { tangentEdges } from "./tangentEdges.js";
 import {
@@ -308,7 +313,7 @@ function chamferByEnvelope(
         });
         if (best < 0) continue;
         const idx = selected.findIndex((s) => s.edge.IsSame(mids[best]!.e));
-        envNames.set(face, `f:${featureId}:fe:${idx + 1}`);
+        envNames.set(face, blendFaceName(featureId, idx));
       }
 
       const common = own(commonOperation(current.shape, envelope));

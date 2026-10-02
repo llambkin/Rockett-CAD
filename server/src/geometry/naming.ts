@@ -200,10 +200,7 @@ export function sweptNames(
     }
     caps.forEach((cap, i) => {
       for (const face of faces(cap))
-        provisional.set(
-          face,
-          `f:${featureId}:cap:${i === 0 ? "start" : "end"}`,
-        );
+        provisional.set(face, capName(featureId, i === 0 ? "start" : "end"));
     });
     nameFromEdges(shape, provisional, edgeNames);
 
@@ -211,7 +208,6 @@ export function sweptNames(
   });
 }
 
-/** Assign fallback names + disambiguate duplicates. Returns final NameMap. */
 export function finalizeNames(
   shape: Shape,
   provisional: ShapeMap<string>,
@@ -219,7 +215,6 @@ export function finalizeNames(
 ): NameMap {
   return scoped(() => {
     const allFaces = faces(shape);
-    // Group by provisional name
     const byName = new Map<string, Shape[]>();
     const unnamed: Shape[] = [];
     for (const f of allFaces) {
@@ -238,8 +233,6 @@ export function finalizeNames(
     }
     if (unnamed.length > 0) {
       const sorted = sortByPosition(unnamed, faceCentroid, active);
-      // fallback numbers skip names already present, so a feature that names
-      // its faces in several passes never hands out the same name twice
       const taken = new Set(result.values());
       let n = 0;
       for (const { item: face, tied } of sorted) {
@@ -254,10 +247,6 @@ export function finalizeNames(
   });
 }
 
-/**
- * Propagate names from input shapes through an operation exposing the
- * standard OCCT history API (Modified / Generated / IsDeleted).
- */
 export function propagateNames(
   op: any,
   inputs: Array<{ shape: Shape; names: ShapeMap<string> }>,
@@ -287,7 +276,6 @@ export function propagateNames(
           // no modification info
         }
         if (!mapped) {
-          // face may survive unchanged (same TShape) in the result
           provisional.set(f, name);
         }
       }
@@ -296,12 +284,6 @@ export function propagateNames(
   });
 }
 
-/**
- * Propagate names through a BRepTools_History (ShapeUpgrade_UnifySameDomain
- * and friends). Several input faces may merge into one result face: it takes
- * their shared base name with the ~n split suffix dropped, or the first
- * distinct base name in sorted order when they differ.
- */
 export function historyNames(
   history: any,
   input: { shape: Shape; names: ShapeMap<string> },
@@ -346,6 +328,27 @@ export function instanceName(
   return `${prefix}:${nameKey(name.slice(0, name.length - suffix.length))}${suffix}`;
 }
 
+export const sideName = (featureId: string, entityId: string) =>
+  `f:${featureId}:s:${entityId}`;
+
+export const capName = (featureId: string, end: "start" | "end") =>
+  `f:${featureId}:cap:${end}`;
+
+export const blendFaceName = (
+  featureId: string,
+  edge: number,
+  part = 0,
+  parts = 1,
+) => `f:${featureId}:fe:${edge + 1}${parts > 1 ? `:${part + 1}` : ""}`;
+
+export const geometryName = (featureId: string, type: string, key: string) =>
+  `f:${featureId}:g:${type}:${key}`;
+
+export const mirrorPrefix = (featureId: string) => `m:${featureId}`;
+
+export const patternPrefix = (instance: number, featureId: string) =>
+  `p${instance}:${featureId}`;
+
 export function edgeName(faceNames: string[]): string {
   const sorted = [...new Set(faceNames)].sort();
   return sorted.length >= 2
@@ -353,7 +356,6 @@ export function edgeName(faceNames: string[]): string {
     : `e[${sorted[0] ?? "?"}|seam]`;
 }
 
-/** Copy names through a BRepBuilderAPI_Transform (ModifiedShape API). */
 export function transformNames(
   transformOp: any,
   input: { shape: Shape; names: NameMap },
@@ -376,12 +378,7 @@ export function transformNames(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Edge / vertex naming from adjacent faces
-// ---------------------------------------------------------------------------
-
 export interface EdgeNames {
-  /** persistent edge name → edge shape */
   byName: Map<string, Shape>;
 }
 
@@ -415,7 +412,6 @@ export function computeEdgeNames(body: NamedBody): EdgeNames {
       entries.push({ edge, base });
     }
 
-    // Disambiguate identical base names deterministically.
     const groups = new Map<string, Entry[]>();
     for (const e of entries) {
       const arr = groups.get(e.base) ?? [];
@@ -488,7 +484,6 @@ export function computeVertexNames(body: NamedBody): VertexNames {
   return { byName };
 }
 
-/** Find a face in a body by persistent name. */
 export function findFace(body: NamedBody, faceName: string): Shape | null {
   const found = scoped((own) => {
     for (const face of faces(body.shape))

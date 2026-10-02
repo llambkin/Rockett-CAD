@@ -76,11 +76,15 @@ import {
   type Shape,
 } from "./kernel.js";
 import {
+  capName,
   computeEdgeNames,
   computeVertexNames,
   finalizeNames,
   findFace,
+  mirrorPrefix,
   namingVersion,
+  patternPrefix,
+  sideName,
   sweptNames,
   transformNames,
   type NamedBody,
@@ -333,7 +337,6 @@ function buildPrism(
     const shape = acquire(prism.Shape());
 
     const provisional = new ShapeMap<string>();
-    // side faces from profile edges
     const faceEdges = edgesOf(face);
     for (const e of faceEdges) {
       const entityId = offsetEdgeEntity.get(e);
@@ -341,22 +344,15 @@ function buildPrism(
       const gen = listToArray(prism.Generated(e));
       for (const g of gen) {
         if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(g, `f:${featureId}:s:${entityId}`);
+          provisional.set(g, sideName(featureId, entityId));
         }
       }
     }
 
-    // caps
-    const firstShape = acquire(prism.FirstShape_1());
-    const startCaps = facesOf(firstShape);
-    for (const cap of startCaps) {
-      provisional.set(cap, `f:${featureId}:cap:start`);
-    }
-    const lastShape = acquire(prism.LastShape_1());
-    const endCaps = facesOf(lastShape);
-    for (const cap of endCaps) {
-      provisional.set(cap, `f:${featureId}:cap:end`);
-    }
+    for (const cap of facesOf(acquire(prism.FirstShape_1())))
+      provisional.set(cap, capName(featureId, "start"));
+    for (const cap of facesOf(acquire(prism.LastShape_1())))
+      provisional.set(cap, capName(featureId, "end"));
 
     const names = finalizeNames(shape, provisional, featureId);
     return { shape, names };
@@ -717,7 +713,7 @@ export function evalMirror(state: EvalState, f: MirrorFeature) {
       if (!body) throw new Error(`body ${bodyId} not found`);
       const tr = transformOp(body.shape, trsf);
       const mirrored = acquire(tr.Shape());
-      const mirroredNames = transformNames(tr, body, `m:${f.id}`);
+      const mirroredNames = transformNames(tr, body, mirrorPrefix(f.id));
       if (f.combine) {
         const fused = fuseNamed(
           body,
@@ -817,7 +813,7 @@ export function evalLinearPattern(state: EvalState, f: LinearPatternFeature) {
       const copies: { shape: Shape }[] = [body];
       for (let i = 1; i < f.count; i++) {
         const offset = V.scale(V.scale(direction, f.spacing), i);
-        const prefix = `p${i}:${f.id}`;
+        const prefix = patternPrefix(i, f.id);
         const trsf = placementToTrsf(Placement.fromTranslation(offset));
         const tr = transformOp(body.shape, trsf);
         const instance = acquire(tr.Shape());
@@ -878,7 +874,7 @@ export function evalCircularPattern(
         );
         const tr = transformOp(body.shape, trsf);
         const instance = acquire(tr.Shape());
-        const instNames = transformNames(tr, body, `p${i}:${f.id}`);
+        const instNames = transformNames(tr, body, patternPrefix(i, f.id));
         if (f.combine) {
           copies.push({ shape: instance });
           combined = {

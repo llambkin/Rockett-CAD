@@ -5,7 +5,12 @@ import {
   scoped,
   type Shape,
 } from "./kernel.js";
-import { finalizeNames, type NameMap, type NamedBody } from "./naming.js";
+import {
+  blendFaceName,
+  finalizeNames,
+  type NameMap,
+  type NamedBody,
+} from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 
 export function blendNames(
@@ -33,10 +38,7 @@ export function blendNames(
       const gen = listToArray(op.Generated(se.edge));
       gen.forEach((g, j) => {
         if (g.ShapeType() === k.TopAbs_ShapeEnum.TopAbs_FACE) {
-          provisional.set(
-            g,
-            `f:${featureId}:fe:${i + 1}${gen.length > 1 ? `:${j + 1}` : ""}`,
-          );
+          provisional.set(g, blendFaceName(featureId, i, j, gen.length));
         }
       });
     });

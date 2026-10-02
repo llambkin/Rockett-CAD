@@ -13,6 +13,7 @@ import {
   type Own,
 } from "./kernel.js";
 import { looseBlend } from "./blendValidity.js";
+import { blendFaceName } from "./naming.js";
 
 export function mixedFilletHistory(
   operation: any,
@@ -202,7 +203,7 @@ function otherHistory(
       : faces.map((face, part) => ({
           face,
           name: chosen[index]!.name
-            ? `f:${featureId}:fe:${index + 1}${faces.length > 1 ? `:${part + 1}` : ""}`
+            ? blendFaceName(featureId, index, part, faces.length)
             : undefined,
           made: true,
           from: [chosen[index]!.edge],

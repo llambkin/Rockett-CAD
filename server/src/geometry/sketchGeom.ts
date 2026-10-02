@@ -25,6 +25,7 @@ import {
   scoped,
   type Shape,
 } from "./kernel.js";
+import { sideName } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { pieceEdge } from "./sketchEdges.js";
 
@@ -221,7 +222,7 @@ export function sideEdgeNames(
   const named = scoped((own) =>
     (edges ?? edgesOf(pf.face)).flatMap((edge): Array<[Shape, string]> => {
       const entityId = pf.edgeEntity.get(edge);
-      return entityId ? [[own.keep(edge), `f:${featureId}:s:${entityId}`]] : [];
+      return entityId ? [[own.keep(edge), sideName(featureId, entityId)]] : [];
     }),
   );
   if (!edges) for (const [edge] of named) acquire(edge);

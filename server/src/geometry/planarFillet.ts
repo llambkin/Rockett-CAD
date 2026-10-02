@@ -23,7 +23,7 @@ import {
   type Shape,
   type Own,
 } from "./kernel.js";
-import { finalizeNames, type NamedBody } from "./naming.js";
+import { blendFaceName, finalizeNames, type NamedBody } from "./naming.js";
 import { ShapeMap } from "./shapeMap.js";
 import { planeBoundarySample } from "./planeBoundary.js";
 import { planarFilletSurface } from "./planarFilletSurface.js";
@@ -401,7 +401,7 @@ function filletCells(
         face,
         name:
           planeIndices[index]! < selectedCount
-            ? `f:${featureId}:fe:${planeIndices[index]! + 1}`
+            ? blendFaceName(featureId, planeIndices[index]!)
             : undefined,
         made: true,
       })),
