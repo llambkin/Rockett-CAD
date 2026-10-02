@@ -1,5 +1,6 @@
 import { featureParams, setFeatureParams } from "../commands/featureCommand";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { create } from "zustand";
 import type {
   BodyPayload,
   CadDocument,
@@ -421,6 +422,12 @@ function NamingUpgrade({ id, revision }: { id: string; revision: number }) {
   );
 }
 
+type PanelAt = { id: string; x: number; y: number } | null;
+
+const upgradeAt = create<{ at: PanelAt }>(() => ({ at: null }));
+
+const setAt = (at: PanelAt) => upgradeAt.setState({ at });
+
 export function RefRepair() {
   const fid = useStore((s) =>
     s.active?.id === "design.feature"
@@ -428,11 +435,12 @@ export function RefRepair() {
       : undefined,
   );
   const document = useStore((s) => s.document);
+  const inPanel = upgradeAt((s) => s.at?.id === document?.id);
   if (!fid || !document) return null;
   return (
     <>
       <RefProblems fid={fid} />
-      {document.namingVersion === 1 && (
+      {document.namingVersion === 1 && !inPanel && (
         <NamingUpgrade id={document.id} revision={document.revision} />
       )}
     </>
@@ -441,12 +449,13 @@ export function RefRepair() {
 
 export function useNamingUpgradePanel() {
   const document = useStore((s) => s.document);
-  const [at, setAt] = useState<{ id: string; x: number; y: number } | null>(
-    null,
-  );
+  const at = upgradeAt((s) => s.at);
   const version1 = document?.namingVersion === 1 ? document : null;
   const shown = at && at.id === version1?.id ? at : null;
-  if (at && !shown) setAt(null);
+  useEffect(() => {
+    if (at && !shown) setAt(null);
+  });
+  useEffect(() => () => setAt(null), []);
   return {
     items: (x: number, y: number): MenuItem[] =>
       version1
