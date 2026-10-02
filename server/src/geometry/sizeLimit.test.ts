@@ -9,7 +9,7 @@ import { sizeLimit } from "./sizeLimit.js";
 vi.mock("./engine.js", () => ({ trialBuild: vi.fn() }));
 vi.mock("./kernel.js", async (original) => ({
   ...(await original<typeof import("./kernel.js")>()),
-  volumeOf: () => 4,
+  volumeOf: (shape: { volume?: number }) => shape.volume ?? 4,
   areaOf: () => 1,
 }));
 
@@ -138,4 +138,24 @@ it("a resumed state's wait does not consume the search deadline", async () => {
       .mock.calls.slice(1)
       .map((call) => call[0]),
   ).toEqual(Array.from({ length: found.builds - 1 }, () => recovered));
+});
+
+it("a closed shell sizes the chosen body, not the first", async () => {
+  accept(() => true);
+  const two = state();
+  two.bodies.set("chosen", {
+    bodyId: "chosen",
+    shape: { volume: 8 },
+    names: new NameMap(2),
+  });
+  await sizeLimit(two, doc, undefined, { ...feature, body: "chosen" });
+  expect(trials[0]!.size).toBe(24);
+});
+
+it("a closed shell refuses a chosen body that is gone without a trial", async () => {
+  accept(() => true);
+  await expect(
+    sizeLimit(state(), doc, undefined, { ...feature, body: "gone" }),
+  ).rejects.toThrow("no body to shell");
+  expect(trialBuild).not.toHaveBeenCalled();
 });

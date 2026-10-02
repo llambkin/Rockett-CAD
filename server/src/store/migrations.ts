@@ -222,6 +222,7 @@ export const documentMigrations: Migrations<CadDocument> = {
     20: (doc) => ({ ...doc, modifiedBy: null }),
     21: (doc) => doc,
     22: (doc) => ({ ...doc, parameters: [], parameterBindings: [] }),
+    23: (doc) => doc,
   },
   nested: extensionFeatures,
 };

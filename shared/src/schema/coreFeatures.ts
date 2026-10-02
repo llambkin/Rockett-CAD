@@ -366,6 +366,7 @@ const chamfer = feature("chamfer", {
 
 const shell = feature("shell", {
   openFaces: Type.Array(faceRef),
+  body: Type.Optional(bodyId),
   thickness: positive,
 });
 

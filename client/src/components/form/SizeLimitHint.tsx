@@ -40,7 +40,9 @@ function sizeText(
 
 function sizePicks(draft: Feature | null): string | null {
   if (draft?.type === "shell")
-    return draft.openFaces.length ? JSON.stringify(draft.openFaces) : null;
+    return draft.openFaces.length || draft.body !== undefined
+      ? JSON.stringify([draft.openFaces, draft.body])
+      : null;
   if (draft?.type !== "fillet" && draft?.type !== "chamfer") return null;
   return draft.edges.length
     ? JSON.stringify([draft.edges, draft.tangentChain])

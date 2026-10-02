@@ -1,4 +1,9 @@
-import { LINEAR_TOL, type Feature, type ShellFeature } from "@rockett/shared";
+import {
+  LINEAR_TOL,
+  ValidationError,
+  type Feature,
+  type ShellFeature,
+} from "@rockett/shared";
 import {
   acquire,
   areaOf,
@@ -24,6 +29,7 @@ import {
   invalidPart,
   registerBodySolids,
   rejectInvalid,
+  type EvalState,
   type StateBody,
   type ToolResult,
 } from "./featureState.js";
@@ -158,14 +164,24 @@ function blendsBeside(
   });
 }
 
+export function shelledBody(state: EvalState, f: ShellFeature): StateBody {
+  if (f.body !== undefined && f.openFaces.some((r) => r.bodyId !== f.body))
+    throw new ValidationError("shell faces must be on the chosen body");
+  const bodyId = f.body ?? f.openFaces[0]?.bodyId;
+  const body =
+    bodyId === undefined
+      ? state.bodies.values().next().value
+      : state.bodies.get(bodyId);
+  if (!body) throw new ValidationError("no body to shell");
+  return body;
+}
+
 export function evalShell(
   { state, earlier }: EvalContext,
   f: ShellFeature,
 ): void {
   if (f.thickness <= 0) throw new Error("shell thickness must be positive");
-  const bodyId = f.openFaces[0]?.bodyId ?? [...state.bodies.keys()][0];
-  const body = bodyId === undefined ? undefined : state.bodies.get(bodyId);
-  if (bodyId === undefined || !body) throw new Error("no body to shell");
+  const body = shelledBody(state, f);
   const noHollow = `shell of ${f.thickness} mm left no hollow, so the wall is too thick for this body: try a thinner wall; the previous body has been kept`;
   const publishable = (built: ToolResult | null): ToolResult => {
     if (!built) throw new Error(noHollow);
@@ -182,7 +198,7 @@ export function evalShell(
     return built;
   };
   const publish = (built: ToolResult) =>
-    registerBodySolids(state, bodyId, built.shape, built.names);
+    registerBodySolids(state, body.bodyId, built.shape, built.names);
   const open = kernelCall("shell", () =>
     f.openFaces.map((ref) => {
       const face = findFace(body, ref.faceName);

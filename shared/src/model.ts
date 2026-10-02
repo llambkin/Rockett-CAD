@@ -315,6 +315,7 @@ export interface ShellFeature extends FeatureBase {
   type: "shell";
   /** Faces removed (opened). May be empty for a hollow closed shell. */
   openFaces: FaceRef[];
+  body?: string;
   thickness: number;
 }
 

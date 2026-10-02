@@ -30,7 +30,7 @@ export function featureChanges(
   patch: Partial<Feature>,
 ) {
   const was: Record<string, unknown> = { targets: [], ...stored };
-  return Object.entries({ targets: [], ...patch }).some(
+  return Object.entries({ targets: [], body: undefined, ...patch }).some(
     ([k, v]) => picked(was[k]) !== picked(v),
   );
 }

@@ -33,7 +33,7 @@ everything downstream against persistent topology references.
 
 - **Solid features**: extrude, revolve, sweep, loft, emboss and deboss from sketch profiles; extrude, revolve and ordered loft sections also take planar faces.
 - **Tool targets**: join, cut and intersect act on bodies you pick from the list or by click; Auto takes visible ones.
-- **Modify**: fillet, chamfer, shell, combine, split, press/pull and move bodies; shell with no open face hollows the body.
+- **Modify**: fillet, chamfer, shell, combine, split, press/pull and move bodies; shell with no open face hollows the picked or first body.
 - **Tangent chains**: fillet and chamfer pick smooth connected edges in one click, on one or several bodies.
 - **Size hints**: fillet, chamfer and shell show the largest size that builds for the current picks.
 - **Replicate**: mirror, rectangular pattern and circular pattern.

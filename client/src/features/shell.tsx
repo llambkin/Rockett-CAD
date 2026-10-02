@@ -7,7 +7,7 @@ import {
 import { newId, type ShellFeature } from "@rockett/shared";
 import { LengthField, SelInfo } from "../components/form/fields";
 import { useSetting } from "../settings";
-import { facePicks, faceRefs, num } from "./inputs";
+import { bodyIds, bodyPicks, facePicks, faceRefs, num } from "./inputs";
 import {
   registerFeatureUI,
   type FeatureFormProps,
@@ -41,6 +41,7 @@ function ShellForm({ params, setParams }: FeatureFormProps<ShellParams>) {
         input="faces"
         hint="click faces to open"
       />
+      <SelInfo label="Body" input="body" hint="click the body to hollow" />
       <LengthField
         label="Thickness"
         units={units}
@@ -59,19 +60,29 @@ export const shell: FeatureUI<ShellFeature, ShellParams> = {
   icon: "▢",
   title: "Shell",
   group: "modify",
-  picks: [{ key: "faces", providers: ["design.face"] }],
+  picks: [
+    { key: "faces", providers: ["design.face"] },
+    { key: "body", providers: ["design.body"], one: true, optional: true },
+  ],
   Form: ShellForm,
-  build: (params, selection) => ({
-    id: params.id ?? newId("shell"),
-    type: "shell",
-    name: params.name ?? "",
-    suppressed: false,
-    openFaces: faceRefs(selection),
-    thickness: thickness(params),
-  }),
+  build: (params, selection) => {
+    const [body] = bodyIds(selection);
+    return {
+      id: params.id ?? newId("shell"),
+      type: "shell",
+      name: params.name ?? "",
+      suppressed: false,
+      openFaces: faceRefs(selection),
+      thickness: thickness(params),
+      ...(body !== undefined && { body }),
+    };
+  },
   prefill: (f) => ({
     params: { id: f.id, name: f.name, thickness: f.thickness },
-    selection: facePicks(f.openFaces),
+    selection: [
+      ...facePicks(f.openFaces),
+      ...bodyPicks(f.body === undefined ? [] : [f.body]),
+    ],
   }),
 };
 

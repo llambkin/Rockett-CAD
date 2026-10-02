@@ -18,6 +18,7 @@ import {
   volumeOf,
 } from "./kernel.js";
 import { computeEdgeNames } from "./naming.js";
+import { shelledBody } from "./shell.js";
 
 const SIZE = { fillet: "radius", chamfer: "distance", shell: "thickness" };
 const CLOSE_ENOUGH = 1.25;
@@ -52,9 +53,7 @@ function edgeRoom(state: EvalState, refs: EdgeRef[]): number {
 
 function estimate(state: EvalState, feature: SizedFeature): number {
   if (feature.type !== "shell") return edgeRoom(state, feature.edges);
-  const bodyId = feature.openFaces[0]?.bodyId ?? [...state.bodies.keys()][0];
-  const body = bodyId === undefined ? undefined : state.bodies.get(bodyId);
-  if (!body) throw new ValidationError("no body to shell");
+  const body = shelledBody(state, feature);
   return (3 * volumeOf(body.shape)) / areaOf(body.shape);
 }
 
