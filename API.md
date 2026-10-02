@@ -33,13 +33,13 @@ nothing else is: `server/src/api/routes.ts`.
 | `GET /health`                                                                     | `server/src/api/routes.ts`         |
 | `GET /formats`                                                                    | `server/src/api/routes.ts`         |
 | `GET`, `POST /projects`                                                           | `server/src/api/routes.ts`         |
-| `GET`, `DELETE /projects/:id`                                                     | `server/src/api/routes.ts`         |
-| `POST /projects/:id/duplicate`, `/rename`                                         | `server/src/api/routes.ts`         |
+| `GET`, `DELETE /projects/:id`                                                     | `server/src/api/projectRoutes.ts`  |
+| `POST /projects/:id/duplicate`, `/rename`                                         | `server/src/api/projectRoutes.ts`  |
 | `GET`, `PUT /projects/:id/members`                                                | `server/src/api/projectMembers.ts` |
 | `GET /projects/:id/file`, `POST /projects/file`                                   | `server/src/api/projectFile.ts`    |
-| `POST /projects/import`, `/projects/:id/import`                                   | `server/src/api/routes.ts`         |
+| `POST /projects/import`, `/projects/:id/import`                                   | `server/src/api/importRoutes.ts`   |
 | `PUT /projects/:id/parameters`                                                    | `server/src/api/documentRoutes.ts` |
-| `POST /projects/:id/evaluate`                                                     | `server/src/api/routes.ts`         |
+| `POST /projects/:id/evaluate`                                                     | `server/src/api/geometryRoutes.ts` |
 | `GET /projects/:id/meshes/:hash`                                                  | `server/src/api/meshRoute.ts`      |
 | `GET /jobs/:jobId/events`, `DELETE /jobs/:jobId`                                  | `server/src/api/jobRoutes.ts`      |
 | `POST /projects/:id/features`                                                     | `server/src/api/routes.ts`         |
