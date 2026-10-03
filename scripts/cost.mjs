@@ -75,12 +75,20 @@ function deriveName(text, column) {
 }
 
 function measure() {
-  const tracked = new Set(run("git", ["ls-files", "-z"]).split("\0"));
+  const measured = new Set(
+    run("git", [
+      "ls-files",
+      "-z",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+    ]).split("\0"),
+  );
   const isTest =
     /(^|\/)(test|tests|__tests__)\/|\.(test|spec|bench)\.[cm]?[jt]sx?$/;
   const files = new Map();
   for (const d of lintSizes()) {
-    if (!tracked.has(d.filename) || isTest.test(d.filename)) continue;
+    if (!measured.has(d.filename) || isTest.test(d.filename)) continue;
     const file = files.get(d.filename) ?? {
       path: d.filename,
       lines: 0,
@@ -145,17 +153,27 @@ function ratchet(files) {
       ]),
   );
   const current = marked(files);
-  const rises = [...current]
-    .filter(([key, n]) => !base.has(key) || n > base.get(key))
-    .map(
-      ([key, n]) => `${key}: lines ${n}, baseline ${base.get(key) ?? "none"}`,
-    );
+  const grown = [...current].filter(
+    ([key, n]) => !base.has(key) || n > base.get(key),
+  );
+  const report = ([key, n]) =>
+    `${key}: lines ${n}, baseline ${base.get(key) ?? "none"}`;
+  const rises = grown.map(report);
+  const raised = grown
+    .filter(([key]) => base.has(key) && !key.includes(" "))
+    .map(report);
   const falls = [...base]
     .filter(([key, n]) => (current.get(key) ?? 0) < n)
     .map(
       ([key, n]) =>
         `${key}: lines ${current.get(key) ?? "under the limit"}, baseline ${n}`,
     );
+  if (mode === "--update" && raised.length) {
+    for (const rise of raised) console.error(`cost check failed: ${rise}`);
+    fail(
+      "a file over the limit never grows; split it first, then run npm run cost -- --update",
+    );
+  }
   if (mode === "--update") {
     for (const change of [...rises, ...falls]) console.log(`updated ${change}`);
     writeFileSync(
@@ -165,12 +183,7 @@ function ratchet(files) {
   } else if (rises.length) {
     for (const rise of rises) console.error(`cost check failed: ${rise}`);
     fail(
-      "a marked file or function grew or a new one crossed a limit; tidy it, or run npm run cost -- --update and say why in the commit body",
-    );
-  } else if (falls.length) {
-    for (const fall of falls) console.error(`cost check failed: ${fall}`);
-    fail(
-      "marked code shrank; shrink the baseline in this commit with npm run cost -- --update",
+      "a marked file or function grew or a new one crossed a limit; tidy it, split a grown file, or run npm run cost -- --update and say why in the commit body",
     );
   }
   const functions = [...current.keys()].filter((key) =>

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { CadDocument, EvaluateResult } from "@rockett/shared";
 import { type CadViewport, uv3 } from "./CadViewport";
-import { clearGroup } from "./dispose";
+import type { LayerHandle } from "./sceneLayers";
 
 interface CachedTexture {
   texture: THREE.Texture;
@@ -10,7 +10,7 @@ interface CachedTexture {
 
 interface ImageLayer {
   vp: CadViewport;
-  root: THREE.Group;
+  root: LayerHandle;
   textures: Map<string, CachedTexture>;
   used: Set<string>;
 }
@@ -18,17 +18,20 @@ interface ImageLayer {
 const layers = new WeakMap<CadViewport, ImageLayer>();
 
 function layerFor(vp: CadViewport): ImageLayer {
-  let layer = layers.get(vp);
-  if (!layer) {
-    layer = {
-      vp,
-      root: new THREE.Group(),
-      textures: new Map(),
-      used: new Set(),
-    };
-    vp.scene.add(layer.root);
-    layers.set(vp, layer);
-  }
+  const existing = layers.get(vp);
+  if (existing) return existing;
+  const layer: ImageLayer = {
+    vp,
+    root: vp.addLayer("referenceImages"),
+    textures: new Map(),
+    used: new Set(),
+  };
+  layer.root.group.addEventListener("removed", () => {
+    layers.delete(vp);
+    layer.used.clear();
+    evictUnused(layer);
+  });
+  layers.set(vp, layer);
   return layer;
 }
 
@@ -65,7 +68,7 @@ export function syncReferenceImages(
   hidden: ReadonlySet<string>,
 ) {
   const layer = layerFor(vp);
-  clearGroup(layer.root);
+  layer.root.clear();
   layer.used.clear();
   if (doc) addImages(layer, doc, evaluation, hidden);
   evictUnused(layer);
@@ -108,6 +111,6 @@ function addImages(
     );
     mesh.applyMatrix4(new THREE.Matrix4().multiplyMatrices(m, rot));
     mesh.renderOrder = -2;
-    layer.root.add(mesh);
+    layer.root.group.add(mesh);
   }
 }

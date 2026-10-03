@@ -1,6 +1,6 @@
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
-import type { Folder, FolderTree, ProjectSummary } from "@rockett/shared";
-import { api, saveDownload, type Download } from "../api";
+import type { FolderTree, ProjectSummary } from "@rockett/shared";
+import { api } from "../api";
 import {
   deleteBrowserProject,
   downloadBrowserProject,
@@ -14,30 +14,35 @@ import {
 } from "../browserProjects";
 import { openBrowserProject } from "../browserSession";
 import { ICONS } from "../icons";
+import { useSession } from "../session";
 import {
   canMoveTo,
   itemCount,
-  projectsIn,
-  subfolders,
+  projectView,
   THIS_BROWSER,
   trail,
   type Item,
 } from "../projectTree";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { ProjectBreadcrumb, type DropTarget } from "./ProjectBreadcrumb";
 import { MoveDialog } from "./MoveDialog";
 import { RenameInput } from "./RenameInput";
+import {
+  editedAt,
+  useSnapshotPeek,
+  type SnapshotTarget,
+} from "./SnapshotPopover";
+import {
+  deleteAction,
+  projectActions,
+  type Point,
+  type RowAction,
+  type Run,
+} from "./projectActions";
+import { BrowserShareDialog, ShareDialog } from "./ShareDialog";
+import { confirm } from "./ConfirmPanel";
 
 export type Renaming = Pick<Item, "kind" | "id"> | null;
-
-type Point = { x: number; y: number };
-
-interface RowAction {
-  label: string;
-  glyph: string;
-  title?: string;
-  danger?: boolean;
-  run: (at: Point) => void;
-}
 
 type Moving = { item: Item; at: Point } | null;
 
@@ -45,7 +50,7 @@ type Menu = { x: number; y: number; items: MenuItem[] } | null;
 
 function useDragMove(
   tree: FolderTree,
-  move: (item: Item, target: string | null) => void,
+  move: (item: Item, target: string | null, at?: Point) => void,
 ) {
   const [dragged, setDragged] = useState<Item | null>(null);
   const [over, setOver] = useState<string | null>();
@@ -79,44 +84,11 @@ function useDragMove(
       onDrop: (e: DragEvent) => {
         e.preventDefault();
         end();
-        move(dragged, id);
+        move(dragged, id, { x: e.clientX, y: e.clientY });
       },
     };
   };
   return { source, target };
-}
-
-type DropTarget = ReturnType<ReturnType<typeof useDragMove>["target"]>;
-
-function Breadcrumb({
-  folders,
-  onOpen,
-  target,
-}: {
-  folders: Pick<Folder, "id" | "name">[];
-  onOpen: (id: string | null) => void;
-  target: (id: string | null) => DropTarget;
-}) {
-  const crumbs = [{ id: null, name: "Projects" }, ...folders];
-  const current = crumbs.pop()!;
-  return (
-    <div className="breadcrumb">
-      {crumbs.map((c) => {
-        const { active, ...drop } = target(c.id);
-        return (
-          <button
-            key={c.id ?? ""}
-            className={active ? "drop-target" : undefined}
-            onClick={() => onOpen(c.id)}
-            {...drop}
-          >
-            {c.name}
-          </button>
-        );
-      })}
-      <span>{current.name}</span>
-    </div>
-  );
 }
 
 function ItemRow({
@@ -131,6 +103,7 @@ function ItemRow({
   onRename = () => {},
   onMenu,
   drag,
+  snapshot,
 }: {
   item: Item;
   meta: ReactNode;
@@ -143,8 +116,10 @@ function ItemRow({
   onRename?: (name: string | null) => void;
   onMenu: (menu: Menu) => void;
   drag?: ReturnType<ReturnType<typeof useDragMove>["source"]>;
+  snapshot?: SnapshotTarget | undefined;
 }) {
   const { active, ...dropHandlers } = drop;
+  const peek = useSnapshotPeek(snapshot);
   return (
     <div
       className={`project-row${active ? " drop-target" : ""}${dimmed ? " dimmed" : ""}`}
@@ -184,6 +159,7 @@ function ItemRow({
           disabled={!onOpen}
           onClick={onOpen}
           onDoubleClick={(e) => e.preventDefault()}
+          {...peek.handlers}
         >
           {glyph && (
             <span className="tree-icon" aria-hidden="true">
@@ -208,12 +184,13 @@ function ItemRow({
           {a.glyph}
         </button>
       ))}
+      {peek.popover}
     </div>
   );
 }
 
 const features = (p: Pick<ProjectSummary, "featureCount" | "modifiedAt">) =>
-  `${p.featureCount} features · ${new Date(p.modifiedAt).toLocaleString()}`;
+  `${p.featureCount} features · ${editedAt(p.modifiedAt)}`;
 
 const unreadable = (p: ProjectSummary) =>
   p.status === "tooNew"
@@ -224,58 +201,34 @@ const unreadable = (p: ProjectSummary) =>
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-type Run = (work: Promise<unknown>) => void;
-
-const deleteAction = (
-  name: string,
-  run: Run,
-  remove: () => Promise<unknown>,
-): RowAction => ({
-  label: "Delete",
-  glyph: "✕",
-  danger: true,
-  run: () => {
-    if (window.confirm(`Delete project "${name}"?`)) run(remove());
-  },
-});
-
-function projectActions(
-  name: string,
-  run: Run,
-  ops: {
-    rename: () => void;
-    duplicate: () => Promise<unknown>;
-    download: () => Promise<Download>;
-    remove: () => Promise<unknown>;
-  },
-  moveTo: RowAction[] = [],
-): RowAction[] {
-  return [
-    { label: "Rename", glyph: "✎", run: ops.rename },
-    { label: "Duplicate", glyph: "⎘", run: () => run(ops.duplicate()) },
-    {
-      label: "Download",
-      glyph: "⤓",
-      title: "Download project file",
-      run: () => run(ops.download().then(saveDownload)),
-    },
-    ...moveTo,
-    deleteAction(name, run, ops.remove),
-  ];
-}
-
 const BrowserGlyph = ICONS.browser;
 
-const confirmIntoBrowser = (name: string) =>
-  window.confirm(
-    `Move "${name}" to this browser? Other users lose access, and clearing this site's data deletes it.`,
-  );
+const intoBrowser = async (item: Item, run: Run, at?: Point) =>
+  (await confirm(
+    `Move "${item.name}" to this browser? Other users lose access, and clearing this site's data deletes it.`,
+    at,
+  )) && run(moveToBrowser(item.id, item.name));
 
 const moveTo = (item: Item, open: (moving: Moving) => void): RowAction => ({
   label: "Move to…",
   glyph: "⇥",
   run: (at) => open({ item, at }),
 });
+
+type ProjectItemsProps = {
+  controls?: ReactNode;
+  filter?: string;
+  projects: ProjectSummary[];
+  tree: FolderTree;
+  folderId: string | null;
+  kept: number | null;
+  renaming: Renaming;
+  setRenaming: (r: Renaming) => void;
+  onOpenFolder: (id: string | null) => void;
+  onOpenBrowser: () => void;
+  onOpenProject: (id: string) => void;
+  run: Run;
+};
 
 export function ProjectItems({
   projects,
@@ -288,28 +241,22 @@ export function ProjectItems({
   onOpenBrowser,
   onOpenProject,
   run,
-}: {
-  projects: ProjectSummary[];
-  tree: FolderTree;
-  folderId: string | null;
-  kept: number | null;
-  renaming: Renaming;
-  setRenaming: (r: Renaming) => void;
-  onOpenFolder: (id: string | null) => void;
-  onOpenBrowser: () => void;
-  onOpenProject: (id: string) => void;
-  run: Run;
-}) {
+  controls,
+  filter = "",
+}: ProjectItemsProps) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Moving>(null);
-  const move = (item: Item, target: string | null) =>
+  const [sharing, setSharing] = useState<Item | null>(null);
+  const session = useSession();
+  const actor = session.kind === "signed-in" ? session.user : null;
+  const move = (item: Item, target: string | null, at?: Point) =>
     target !== THIS_BROWSER
       ? run(
           item.kind === "project"
             ? api.placeProject(item.id, target)
             : api.moveFolder(item.id, target),
         )
-      : confirmIntoBrowser(item.name) && run(moveToBrowser(item.id, item.name));
+      : void intoBrowser(item, run, at);
   const { source, target } = useDragMove(tree, move);
   const rename = (item: Item) => (name: string | null) => {
     setRenaming(null);
@@ -320,7 +267,12 @@ export function ProjectItems({
         : api.renameFolder(item.id, name),
     );
   };
-  const row = (item: Item, meta: string, actions: RowAction[]) => (
+  const row = (
+    item: Item,
+    meta: string,
+    actions: RowAction[],
+    snapshot?: SnapshotTarget,
+  ) => (
     <ItemRow
       key={`${item.kind}:${item.id}`}
       item={item}
@@ -335,18 +287,24 @@ export function ProjectItems({
       onRename={rename(item)}
       onMenu={setMenu}
       drag={source(item)}
+      snapshot={snapshot}
     />
   );
-  const folders = subfolders(tree, folderId);
-  const here = projectsIn(tree, projects, folderId);
-  const pinned = folderId === null ? kept : null;
+  const { folders, here, pinned, meta, empty } = projectView(
+    tree,
+    projects,
+    folderId,
+    kept,
+    filter,
+  );
   return (
     <>
-      <Breadcrumb
+      <ProjectBreadcrumb
         folders={trail(tree, folderId)}
         onOpen={onOpenFolder}
         target={target}
       />
+      {controls}
       {pinned !== null && (
         <ItemRow
           item={{ kind: "folder", id: THIS_BROWSER, name: "This browser" }}
@@ -361,18 +319,19 @@ export function ProjectItems({
       {folders.map((f) => {
         const item: Item = { kind: "folder", ...f };
         const n = itemCount(tree, projects, f.id);
-        return row(item, count(n, "item"), [
+        return row(item, meta(item, count(n, "item")), [
           { label: "Rename", glyph: "✎", run: () => setRenaming(item) },
+          ...(actor && (actor.role === "admin" || f.owner === actor.id)
+            ? [{ label: "Share", glyph: "♧", run: () => setSharing(item) }]
+            : []),
           moveTo(item, setMoving),
           {
             label: "Delete",
             glyph: "✕",
             danger: true,
-            run: () => {
-              if (n === 0 && !window.confirm(`Delete folder "${f.name}"?`))
-                return;
-              run(api.deleteFolder(f.id));
-            },
+            run: async (at) =>
+              (n > 0 || (await confirm(`Delete folder "${f.name}"?`, at))) &&
+              run(api.deleteFolder(f.id)),
           },
         ]);
       })}
@@ -384,17 +343,23 @@ export function ProjectItems({
             <ItemRow
               key={`project:${p.id}`}
               item={item}
-              meta={reason}
+              meta={meta(
+                item,
+                `${reason} · Owner: ${p.ownerName ?? "Unclaimed"}`,
+              )}
               dimmed
+              snapshot={p}
               actions={[
-                deleteAction(p.name, run, () => api.deleteProject(p.id)),
+                deleteAction(p.name, run, () =>
+                  api.deleteProject(p.id, false, p.deleteTag ?? p.revision),
+                ),
               ]}
               onMenu={setMenu}
             />
           );
         return row(
           item,
-          features(p),
+          meta(item, `${features(p)} · Owner: ${p.ownerName ?? "Unclaimed"}`),
           projectActions(
             p.name,
             run,
@@ -402,18 +367,21 @@ export function ProjectItems({
               rename: () => setRenaming(item),
               duplicate: () => api.duplicateProject(p.id),
               download: () => api.downloadProjectFile(p.id),
-              remove: () => api.deleteProject(p.id),
+              remove: () =>
+                api.deleteProject(p.id, false, p.deleteTag ?? p.revision),
             },
-            [moveTo(item, setMoving)],
+            [
+              ...(actor && (actor.role === "admin" || p.owner === actor.id)
+                ? [{ label: "Share", glyph: "♧", run: () => setSharing(item) }]
+                : []),
+              moveTo(item, setMoving),
+            ],
           ),
+          p,
         );
       })}
       {folders.length + here.length + (pinned ?? 0) === 0 && (
-        <div className="tree-empty">
-          {folderId === null
-            ? "No projects yet"
-            : "This folder is empty. Drag a project here or Move to."}
-        </div>
+        <div className="tree-empty">{empty}</div>
       )}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {moving && (
@@ -423,9 +391,20 @@ export function ProjectItems({
           at={moving.at}
           onMove={(t) => {
             setMoving(null);
-            move(moving.item, t);
+            move(moving.item, t, moving.at);
           }}
           onClose={() => setMoving(null)}
+        />
+      )}
+      {sharing && actor && (
+        <ShareDialog
+          target={sharing}
+          actor={actor}
+          onSaved={() => {
+            setSharing(null);
+            run(Promise.resolve());
+          }}
+          onClose={() => setSharing(null)}
         />
       )}
     </>
@@ -463,9 +442,14 @@ export function BrowserItems({
 }) {
   const [menu, setMenu] = useState<Menu>(null);
   const [moving, setMoving] = useState<Moving>(null);
+  const [sharing, setSharing] = useState<
+    BrowserProject | { id: string; name: string } | null
+  >(null);
+  const session = useSession();
+  const actor = session.kind === "signed-in" ? session.user : null;
   return (
     <>
-      <Breadcrumb
+      <ProjectBreadcrumb
         folders={[{ id: THIS_BROWSER, name: "This browser" }]}
         onOpen={onOpenFolder}
         target={() => ({ active: false })}
@@ -493,7 +477,10 @@ export function BrowserItems({
                 download: () => downloadBrowserProject(r),
                 remove: () => deleteBrowserProject(r.key),
               },
-              [moveTo(item, setMoving)],
+              [
+                { label: "Share", glyph: "♧", run: () => setSharing(r) },
+                moveTo(item, setMoving),
+              ],
             )}
             onOpen={() => void openBrowserProject(r.key)}
             onRename={(name) => {
@@ -521,6 +508,28 @@ export function BrowserItems({
           onClose={() => setMoving(null)}
         />
       )}
+      {sharing &&
+        actor &&
+        ("key" in sharing ? (
+          <BrowserShareDialog
+            project={sharing}
+            onMoved={(id) => {
+              setSharing({ id, name: sharing.name });
+              run(Promise.resolve());
+            }}
+            onClose={() => setSharing(null)}
+          />
+        ) : (
+          <ShareDialog
+            target={{ kind: "project", ...sharing }}
+            actor={actor}
+            onSaved={() => {
+              setSharing(null);
+              run(Promise.resolve());
+            }}
+            onClose={() => setSharing(null)}
+          />
+        ))}
     </>
   );
 }

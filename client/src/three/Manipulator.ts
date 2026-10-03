@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { disposeGroup } from "./dispose";
-import { clientToNdc, worldToClient } from "./screen";
+import { clientRay, clientToNdc, worldToClient } from "./screen";
 
 const HIT_PX = 9;
 const SNAP_SERIES = [
@@ -46,11 +46,9 @@ export abstract class Manipulator {
   }
 
   protected rayAt(clientX: number, clientY: number): THREE.Ray {
-    this.raycaster.setFromCamera(
-      clientToNdc(this.host.canvasRect(), clientX, clientY),
-      this.host.camera,
-    );
-    return this.raycaster.ray;
+    const { camera } = this.host;
+    const rect = this.host.canvasRect();
+    return clientRay(this.raycaster, rect, camera, clientX, clientY);
   }
 
   protected hitTolerance(): number {

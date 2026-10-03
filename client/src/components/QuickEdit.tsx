@@ -9,37 +9,53 @@ import type { Feature } from "@rockett/shared";
 import { createLivePreview } from "../livePreview";
 import { panelPlacement } from "../panelPlacement";
 import { useStore } from "../store";
-import { LengthField, NumField } from "./form/fields";
+import { useSetting } from "../settings";
+import { storedTargets } from "../toolTargets";
+import { AngleField, LengthField, NumField } from "./form/fields";
+import { featureChanges } from "./FeatureDialog";
+import type { FieldLink } from "./form/expressionField";
+import {
+  nextBindings,
+  resolvedFeature,
+  saveBound,
+  storedExpression,
+} from "../features/bindings";
 
 interface QuickValue {
   label: string;
   kind: "length" | "angle" | "count";
-  read: (f: any) => number;
-  write: (f: any, v: number) => Partial<Feature>;
+  path: string;
 }
 
 const key = (
   name: string,
   label: string,
   kind: QuickValue["kind"] = "length",
-): QuickValue => ({
-  label,
-  kind,
-  read: (f) => f[name],
-  write: (_f, v) => ({ [name]: v }) as Partial<Feature>,
-});
+): QuickValue => ({ label, kind, path: `/${name}` });
 
 const offset = (i: number, label: string): QuickValue => ({
   label,
   kind: "length",
-  read: (f) => f.translation[i],
-  write: (f, v) =>
-    ({
-      translation: f.translation.map((x: number, j: number) =>
-        j === i ? v : x,
-      ),
-    }) as Partial<Feature>,
+  path: `/translation/${i}`,
 });
+
+function read(f: Feature, path: string): number {
+  let at: any = f;
+  for (const part of path.slice(1).split("/")) at = at[part];
+  return at;
+}
+
+function write(f: Feature, path: string, v: number): Partial<Feature> {
+  const [top, ...rest] = path.slice(1).split("/") as [string, ...string[]];
+  const set = (at: any, parts: string[]): any => {
+    if (!parts.length) return v;
+    const [part, ...more] = parts as [string, ...string[]];
+    const copy = Array.isArray(at) ? [...at] : { ...at };
+    copy[part] = set(at[part], more);
+    return copy;
+  };
+  return { [top]: set((f as any)[top], rest) } as Partial<Feature>;
+}
 
 export function quickValues(f: Feature): QuickValue[] {
   const anyF = f as any;
@@ -71,15 +87,7 @@ export function quickValues(f: Feature): QuickValue[] {
       ];
     case "constructionPlane":
       return anyF.method?.kind === "offset"
-        ? [
-            {
-              label: "Offset",
-              kind: "length",
-              read: (f) => f.method.distance,
-              write: (f, v) =>
-                ({ method: { ...f.method, distance: v } }) as Partial<Feature>,
-            },
-          ]
+        ? [{ label: "Offset", kind: "length", path: "/method/distance" }]
         : [];
     case "move":
       return [offset(0, "X"), offset(1, "Y"), offset(2, "Z")];
@@ -88,15 +96,10 @@ export function quickValues(f: Feature): QuickValue[] {
   }
 }
 
-const differs = (f: Feature | undefined, patch: Partial<Feature>) =>
-  Object.entries(patch).some(
-    ([k, v]) => JSON.stringify((f as any)?.[k]) !== JSON.stringify(v),
-  );
-
 async function sendPreview(fid: string, patch: Partial<Feature>) {
   const s = useStore.getState();
   if (
-    differs(
+    featureChanges(
       s.document?.features.find((f) => f.id === fid),
       patch,
     )
@@ -126,35 +129,80 @@ function QuickField({
   value,
   draft,
   autoFocus,
+  bind,
   onChange,
 }: {
   value: QuickValue;
   draft: Feature;
   autoFocus: boolean;
+  bind: FieldLink;
   onChange: (v: number) => void;
 }) {
+  const units = useSetting("units.length");
   if (value.kind === "length")
     return (
       <LengthField
         label={value.label}
-        units="mm"
-        value={value.read(draft)}
+        units={units}
+        value={read(draft, value.path)}
         autoFocus={autoFocus}
+        bind={bind}
         onChange={onChange}
       />
     );
-  const count = value.kind === "count";
+  if (value.kind === "angle")
+    return (
+      <AngleField
+        label={value.label}
+        value={read(draft, value.path)}
+        autoFocus={autoFocus}
+        bind={bind}
+        onChange={onChange}
+      />
+    );
   return (
     <NumField
-      label={count ? value.label : `${value.label} (°)`}
-      int={count}
-      min={count ? 2 : undefined}
-      max={count ? 500 : undefined}
-      value={value.read(draft)}
+      label={value.label}
+      int
+      min={2}
+      value={read(draft, value.path)}
       autoFocus={autoFocus}
+      bind={bind}
       onChange={onChange}
     />
   );
+}
+
+function useLinks(featureId: string) {
+  const [links, setLinks] = useState<Record<string, string | null>>({});
+  const [invalid, setInvalid] = useState<string[]>([]);
+  const link = (path: string): FieldLink => ({
+    text: Object.hasOwn(links, path)
+      ? (links[path] ?? undefined)
+      : storedExpression(useStore.getState().document, featureId, path),
+    set: (expression) => {
+      setInvalid((all) => [
+        ...all.filter((p) => p !== path),
+        ...(expression === false ? [path] : []),
+      ]);
+      if (expression !== false)
+        setLinks((all) => ({ ...all, [path]: expression }));
+    },
+  });
+  return { links, invalid, link };
+}
+
+function save(
+  feature: Feature,
+  patch: Partial<Feature>,
+  links: Record<string, string | null>,
+): Promise<void> | null {
+  const s = useStore.getState();
+  const edited = { ...feature, ...patch } as Feature;
+  const bindings = s.document && nextBindings(s.document, edited, links);
+  if (bindings) return saveBound(edited, feature.id, patch, bindings);
+  if (!featureChanges(feature, patch)) return null;
+  return s.updateFeature(feature.id, patch);
 }
 
 export function QuickEdit({
@@ -166,12 +214,14 @@ export function QuickEdit({
   anchor: { left: number; top: number };
   onClose: () => void;
 }) {
-  const [patch, setPatch] = useState<Partial<Feature>>({});
+  const [patch, setPatch] = useState(() => storedTargets(feature));
+  const [shown] = useState(() => resolvedFeature(feature));
+  const { links, invalid, link } = useLinks(feature.id);
   const ref = useRef<HTMLDivElement>(null);
   const at = useAbove(ref, anchor);
   const committed = useRef(false);
   const [live] = useState(() => createLivePreview({ send: sendPreview }));
-  const draft = { ...feature, ...patch } as Feature;
+  const draft = { ...shown, ...patch } as Feature;
   const close = useRef(onClose);
   close.current = onClose;
 
@@ -188,21 +238,23 @@ export function QuickEdit({
   }, [live]);
 
   const change = (value: QuickValue, v: number) => {
-    const next = { ...patch, ...value.write(draft, v) } as Partial<Feature>;
+    const next = {
+      ...patch,
+      ...write(draft, value.path, v),
+    } as Partial<Feature>;
     setPatch(next);
     live.dwell(feature.id, next);
   };
 
   const commit = async () => {
     live.cancel();
-    if (!differs(feature, patch)) return onClose();
-    committed.current = await useStore
-      .getState()
-      .updateFeature(feature.id, patch)
-      .then(
-        () => true,
-        () => false,
-      );
+    if (invalid.length) return;
+    const saving = save(feature, patch, links);
+    if (!saving) return onClose();
+    committed.current = await saving.then(
+      () => true,
+      () => false,
+    );
     if (committed.current) onClose();
   };
 
@@ -222,6 +274,7 @@ export function QuickEdit({
           value={value}
           draft={draft}
           autoFocus={i === 0}
+          bind={link(value.path)}
           onChange={(v) => change(value, v)}
         />
       ))}

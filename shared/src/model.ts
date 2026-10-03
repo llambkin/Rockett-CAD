@@ -1,3 +1,6 @@
+import type { Static } from "typebox";
+import type { FEATURE_SCHEMAS } from "./schema/features.js";
+
 /**
  * Rockett CAD — parametric document model.
  *
@@ -9,9 +12,7 @@
  * server/src/store/migrations.ts whenever the shape of this model changes.
  */
 
-import type { Units } from "./units.js";
-
-export const SCHEMA_VERSION = 12;
+export type NamingVersion = 1 | 2;
 
 // ---------------------------------------------------------------------------
 // Persistent topology references
@@ -25,12 +26,14 @@ export interface FaceRef {
   kind: "face";
   bodyId: string;
   faceName: string;
+  sig?: RefSignature;
 }
 
 export interface EdgeRef {
   kind: "edge";
   bodyId: string;
   edgeName: string;
+  sig?: RefSignature;
 }
 
 export interface VertexRef {
@@ -41,6 +44,27 @@ export interface VertexRef {
 
 export type TopoRef = FaceRef | EdgeRef | VertexRef;
 
+export type PointRef =
+  VertexRef | { kind: "sketchPoint"; sketchId: string; entityId: string };
+
+export const REF_SIGNATURE_TYPES = [
+  "plane",
+  "cylinder",
+  "cone",
+  "sphere",
+  "torus",
+  "bspline",
+  "line",
+  "circle",
+  "other",
+] as const;
+
+export interface RefSignature {
+  type: (typeof REF_SIGNATURE_TYPES)[number];
+  point: [number, number, number];
+  direction: [number, number, number];
+}
+
 export type OriginPlaneName = "XY" | "XZ" | "YZ";
 
 /** Where a sketch / construction plane / mirror plane lives. */
@@ -49,15 +73,16 @@ export type PlaneRef =
   | { kind: "construction"; featureId: string }
   | { kind: "face"; face: FaceRef };
 
+export const ORIGIN_AXES = ["X", "Y", "Z"] as const;
+export const SHELL_DIRECTIONS = ["inside", "outside", "both"] as const;
+export type ShellDirection = (typeof SHELL_DIRECTIONS)[number];
+export type OriginAxis = (typeof ORIGIN_AXES)[number];
+
 /** An axis for revolve / circular pattern. */
 export type AxisRef =
-  | { kind: "originAxis"; axis: "X" | "Y" | "Z" }
+  | { kind: "originAxis"; axis: OriginAxis }
   | { kind: "sketchLine"; sketchId: string; entityId: string }
   | { kind: "edge"; edge: EdgeRef };
-
-// ---------------------------------------------------------------------------
-// Sketch geometry
-// ---------------------------------------------------------------------------
 
 export interface SketchPoint {
   id: string;
@@ -90,10 +115,6 @@ export interface SketchCircle {
   external?: boolean;
 }
 
-/**
- * Arc through center + two endpoint points, counter-clockwise from start to
- * end. The solver adds an implicit |c-s| = |c-e| residual.
- */
 export interface SketchArc {
   projection?: EdgeRef;
   id: string;
@@ -105,11 +126,21 @@ export interface SketchArc {
   external?: boolean;
 }
 
-export type SketchEntity = SketchPoint | SketchLine | SketchCircle | SketchArc;
+export interface SketchEllipse {
+  projection?: EdgeRef;
+  id: string;
+  kind: "ellipse";
+  center: string;
+  major: string;
+  minor: string;
+  start?: string;
+  end?: string;
+  construction?: boolean;
+  external?: boolean;
+}
 
-// ---------------------------------------------------------------------------
-// Sketch constraints
-// ---------------------------------------------------------------------------
+export type SketchEntity =
+  SketchPoint | SketchLine | SketchCircle | SketchArc | SketchEllipse;
 
 interface ConstraintBase {
   id: string;
@@ -136,8 +167,12 @@ export type GeometricConstraint =
   | (ConstraintBase & { type: "pointOnLine"; point: string; line: string })
   | (ConstraintBase & { type: "pointOnCircle"; point: string; circle: string });
 
+interface DimensionBase extends ConstraintBase {
+  driven?: true;
+}
+
 export type DimensionConstraint =
-  | (ConstraintBase & {
+  | (DimensionBase & {
       type: "distance";
       a: string; // point id
       b: string; // point id
@@ -145,11 +180,28 @@ export type DimensionConstraint =
       axis: "x" | "y" | null;
       value: number; // mm
     })
-  | (ConstraintBase & { type: "length"; line: string; value: number })
-  | (ConstraintBase & { type: "lineAngle"; line: string; value: number })
-  | (ConstraintBase & { type: "radius"; entity: string; value: number })
-  | (ConstraintBase & { type: "diameter"; entity: string; value: number })
-  | (ConstraintBase & { type: "angle"; a: string; b: string; value: number }); // degrees
+  | (DimensionBase & { type: "length"; line: string; value: number })
+  | (DimensionBase & {
+      type: "pointLineDistance";
+      point: string;
+      line: string;
+      value: number;
+    })
+  | (DimensionBase & {
+      type: "lineDistance";
+      a: string;
+      b: string;
+      value: number;
+    })
+  | (DimensionBase & {
+      type: "lineAngle";
+      line: string;
+      axis?: "y";
+      value: number;
+    })
+  | (DimensionBase & { type: "radius"; entity: string; value: number })
+  | (DimensionBase & { type: "diameter"; entity: string; value: number })
+  | (DimensionBase & { type: "angle"; a: string; b: string; value: number }); // degrees
 
 export type SketchConstraint = GeometricConstraint | DimensionConstraint;
 
@@ -171,6 +223,10 @@ interface FeatureBase {
   suppressed: boolean;
 }
 
+interface ToolFeatureBase extends FeatureBase {
+  targets?: string[];
+}
+
 export interface SketchFeature extends FeatureBase {
   type: "sketch";
   plane: PlaneRef;
@@ -178,8 +234,6 @@ export interface SketchFeature extends FeatureBase {
   constraints: SketchConstraint[];
   /** Editable offset operations, in creation order. */
   offsets?: SketchOffset[];
-  /** false hides the sketch in the viewport (regions not shaded or pickable). */
-  visible?: boolean;
 }
 
 export interface SketchOffset {
@@ -197,7 +251,7 @@ export interface ProfileRef {
   profileId: string;
 }
 
-export interface ExtrudeFeature extends FeatureBase {
+export interface ExtrudeFeature extends ToolFeatureBase {
   type: "extrude";
   profiles: ProfileRef[];
   /**
@@ -224,15 +278,16 @@ export interface ExtrudeFeature extends FeatureBase {
   operation: BooleanOperation;
 }
 
-export interface RevolveFeature extends FeatureBase {
+export interface RevolveFeature extends ToolFeatureBase {
   type: "revolve";
   profiles: ProfileRef[];
+  faces?: FaceRef[];
   axis: AxisRef;
   angle: number; // degrees; 360 = full
   operation: BooleanOperation;
 }
 
-export interface SweepFeature extends FeatureBase {
+export interface SweepFeature extends ToolFeatureBase {
   type: "sweep";
   profiles: ProfileRef[];
   /** Path: open chain of sketch entities in the given sketch. */
@@ -240,7 +295,7 @@ export interface SweepFeature extends FeatureBase {
   operation: BooleanOperation;
 }
 
-export interface LoftFeature extends FeatureBase {
+export interface LoftFeature extends ToolFeatureBase {
   type: "loft";
   sections: (ProfileRef | FaceRef)[];
   operation: BooleanOperation;
@@ -264,7 +319,10 @@ export interface ShellFeature extends FeatureBase {
   type: "shell";
   /** Faces removed (opened). May be empty for a hollow closed shell. */
   openFaces: FaceRef[];
+  body?: string;
+  direction: ShellDirection;
   thickness: number;
+  outsideThickness?: number;
 }
 
 export interface CombineFeature extends FeatureBase {
@@ -281,11 +339,7 @@ export interface SplitBodyFeature extends FeatureBase {
   tool: PlaneRef;
 }
 
-export interface OffsetFaceFeature extends FeatureBase {
-  type: "offsetFace";
-  faces: FaceRef[];
-  distance: number;
-}
+export type OffsetFaceFeature = Static<typeof FEATURE_SCHEMAS.offsetFace>;
 
 export interface MirrorFeature extends FeatureBase {
   type: "mirror";
@@ -299,7 +353,7 @@ export interface LinearPatternFeature extends FeatureBase {
   type: "linearPattern";
   bodies: string[];
   direction:
-    { kind: "axis"; axis: "X" | "Y" | "Z" } | { kind: "edge"; edge: EdgeRef };
+    { kind: "axis"; axis: OriginAxis } | { kind: "edge"; edge: EdgeRef };
   count: number;
   spacing: number; // mm
   combine: boolean;
@@ -317,8 +371,17 @@ export interface CircularPatternFeature extends FeatureBase {
 export interface ConstructionPlaneFeature extends FeatureBase {
   type: "constructionPlane";
   method:
-    | { kind: "offset"; base: PlaneRef; distance: number }
-    | { kind: "midplane"; a: PlaneRef; b: PlaneRef };
+    | { kind: "offset"; base: PlaneRef; distance: number; flip?: boolean }
+    | {
+        kind: "midplane";
+        a: PlaneRef;
+        b: PlaneRef;
+        offset?: number;
+        flip?: boolean;
+      }
+    | { kind: "angle"; axis: AxisRef; base: PlaneRef; angle: number }
+    | { kind: "threePoints"; points: [PointRef, PointRef, PointRef] }
+    | { kind: "twoEdges"; a: AxisRef; b: AxisRef };
 }
 
 export interface ReferenceImageFeature extends FeatureBase {
@@ -337,7 +400,6 @@ export interface ReferenceImageFeature extends FeatureBase {
     scale: number;
   };
   opacity: number; // 0..1
-  visible?: boolean;
   /** Natural image size in pixels (for aspect + calibration). */
   width: number;
   height: number;
@@ -350,7 +412,7 @@ export interface MoveFeature extends FeatureBase {
   translation: [number, number, number];
 }
 
-export interface EmbossFeature extends FeatureBase {
+export interface EmbossFeature extends ToolFeatureBase {
   type: "emboss";
   profiles: ProfileRef[];
   depth: number; // positive = emboss (raise), handled with `mode`
@@ -368,10 +430,20 @@ export interface ImportMeshFeature extends FeatureBase {
   type: "importMesh";
   filename: string;
   format: "stl" | "obj" | "3mf";
-  data: string;
+  blob: string;
 }
 
-export type Feature =
+export type ExtensionType = `${string}.${string}`;
+
+export interface ExtensionFeature<
+  P = Record<string, unknown>,
+> extends FeatureBase {
+  type: ExtensionType;
+  version: number;
+  params: P;
+}
+
+export type CoreFeature =
   | ImportStepFeature
   | ImportMeshFeature
   | SketchFeature
@@ -393,50 +465,15 @@ export type Feature =
   | EmbossFeature
   | MoveFeature;
 
-export type FeatureType = Feature["type"];
+export type Feature = CoreFeature | ExtensionFeature;
+
+export type FeatureType = CoreFeature["type"];
 
 // ---------------------------------------------------------------------------
 // Document
 // ---------------------------------------------------------------------------
 
-export interface BodyMeta {
-  name: string;
-}
-
-export interface TreeGroup {
-  id: string;
-  name: string;
-  kind: "body" | "sketch";
-  members: string[];
-}
-
-export interface ExtensionData {
-  version: number;
-  data: unknown;
-}
-
-export interface CadDocument {
-  schemaVersion: number;
-  revision: number;
-  savedWith: { version: string; commit: string | null } | null;
-  id: string;
-  name: string;
-  units: Units;
-  createdAt: string;
-  modifiedAt: string;
-  features: Feature[];
-  /**
-   * Timeline marker: number of features currently "active" (rolled back when
-   * < features.length). New features insert at this position.
-   */
-  timelinePosition: number;
-  /** Display names per body id. */
-  bodyMeta: Record<string, BodyMeta>;
-  /** Per-type counters used for default names (Sketch1, Extrude2, ...). */
-  counters: Record<string, number>;
-  groups: TreeGroup[];
-  extensions: Record<string, ExtensionData>;
-}
+export * from "./documents.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -458,64 +495,4 @@ export function newId(prefix: string): string {
   const time = Date.now().toString(36);
   const count = idCounter.toString(36).padStart(3, "0");
   return `${prefix}-${time}${count}${rand}`;
-}
-
-export const FEATURE_LABELS: Record<FeatureType, string> = {
-  importStep: "Import STEP",
-  importMesh: "Import mesh",
-  sketch: "Sketch",
-  extrude: "Extrude",
-  revolve: "Revolve",
-  sweep: "Sweep",
-  loft: "Loft",
-  fillet: "Fillet",
-  chamfer: "Chamfer",
-  shell: "Shell",
-  combine: "Combine",
-  splitBody: "SplitBody",
-  offsetFace: "OffsetFace",
-  mirror: "Mirror",
-  linearPattern: "LinearPattern",
-  circularPattern: "CircularPattern",
-  constructionPlane: "Plane",
-  referenceImage: "Canvas",
-  emboss: "Emboss",
-  move: "Move",
-};
-
-/** Allocate the default name for a new feature and bump the counter. */
-export function nextFeatureName(doc: CadDocument, type: FeatureType): string {
-  const label = FEATURE_LABELS[type];
-  const n = (doc.counters[type] ?? 0) + 1;
-  doc.counters[type] = n;
-  return `${label}${n}`;
-}
-
-export function createEmptyDocument(id: string, name: string): CadDocument {
-  const now = new Date().toISOString();
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    revision: 0,
-    savedWith: null,
-    id,
-    name,
-    units: "mm",
-    createdAt: now,
-    modifiedAt: now,
-    features: [],
-    timelinePosition: 0,
-    bodyMeta: {},
-    counters: {},
-    groups: [],
-    extensions: {},
-  };
-}
-
-/** Features that can produce/modify solid bodies (used for dependency logic). */
-export function featureProducesGeometry(f: Feature): boolean {
-  return (
-    f.type !== "sketch" &&
-    f.type !== "constructionPlane" &&
-    f.type !== "referenceImage"
-  );
 }

@@ -1,311 +1,366 @@
 # REST API
 
-Base path: `/api`. All bodies are JSON unless noted. Types live in
-`shared/src/api.ts` and `shared/src/model.ts`.
+Base path `/api`, JSON unless noted. The route tables own method, path, body
+schema and the request and response types (the `route<Req, Res>` generics):
 
-Every route is declared once in `ROUTES` in `shared/src/routes.ts`. The server
-registers each handler from its entry, and the client builds each path with
-`pathFor`, which URL-encodes every parameter. The client sends every call
-through `request` in `client/src/api.ts`, which turns an error response into
-`ApiError` with its `status` and `code`. A body without `error` and `code`
-becomes code `internal`.
+- `ROUTES`, `AUTH_ROUTES` and `DOCUMENT_EDITS` in `shared/src/routes.ts`;
+- settings entries in `shared/src/settingsRoutes.ts`;
+- tangent edges and reference signing in `shared/src/refRepairRoutes.ts`;
+- `FRIEND_ROUTES` in `shared/src/friends.ts`, `NOTICE_ROUTES` in
+  `shared/src/notices.ts`.
 
-Route errors return `ApiErrorBody`: `{ "error": string, "code": ApiErrorCode,
-"detail"?: string }`. `error` is a message for the user. The code fixes the
-status:
+Wire types live in `shared/src/api.ts` and `shared/src/model.ts`. The client
+builds paths with `pathFor` and sends every call through `request` in
+`client/src/api.ts`. Every `ROUTES` entry is registered with its method and
+nothing else is: `server/src/api/routes.ts`.
 
-| Code                    | Status | Meaning                                                   |
-| ----------------------- | ------ | --------------------------------------------------------- |
-| `validation`            | 400    | The request, upload or feature is invalid.                |
-| `not_found`             | 404    | The project, folder, feature, body or asset is missing.   |
-| `too_large`             | 413    | An upload is over its limit.                              |
-| `conflict`              | 409    | The request conflicts with current state.                 |
-| `precondition_required` | 428    | A document edit arrived without `If-Match`.               |
-| `unprocessable`         | 422    | A stored project fails validation.                        |
-| `kernel`                | 503    | The geometry kernel cannot serve the request.             |
-| `internal`              | 500    | Server fault. The message is generic; the log has detail. |
+## Routes
 
-Mutating endpoints return `{ document, evaluation }`: the updated document
-plus a fresh incremental evaluation (bodies with tagged tessellation, feature
-statuses, solved sketches with profiles, construction-plane frames). The
-server persists on every mutation (autosave).
+| Route                                                                             | Handler                            |
+| --------------------------------------------------------------------------------- | ---------------------------------- |
+| `GET /auth/status`, `POST /auth/setup`                                            | `server/src/auth/bootstrap.ts`     |
+| `POST /auth/login`                                                                | `server/src/auth/routes.ts`        |
+| `POST /auth/logout`, `GET /me`                                                    | `server/src/auth/routes.ts`        |
+| `POST /me/password`                                                               | `server/src/auth/routes.ts`        |
+| `POST /auth/totp`, `POST /me/totp`                                                | `server/src/auth/totpRoutes.ts`    |
+| `POST /me/totp/confirm`, `DELETE /me/totp`                                        | `server/src/auth/totpRoutes.ts`    |
+| `GET /users`, `POST /users`, `PATCH /users/:id`                                   | `server/src/auth/users.ts`         |
+| `/me/friends` and below                                                           | `server/src/auth/friendRoutes.ts`  |
+| `GET /me/notices`, `POST /me/notices/*/:id/open`                                  | `server/src/auth/friendRoutes.ts`  |
+| `GET`, `PATCH /settings`                                                          | `server/src/api/settingsRoutes.ts` |
+| `GET`, `PATCH /me/settings`, `POST /me/settings/import`                           | `server/src/api/settingsRoutes.ts` |
+| `GET`, `PATCH /projects/:id/settings`                                             | `server/src/api/settingsRoutes.ts` |
+| `GET /health`                                                                     | `server/src/api/routes.ts`         |
+| `GET /formats`                                                                    | `server/src/api/routes.ts`         |
+| `GET /modules`                                                                    | `server/src/api/routes.ts`         |
+| `GET`, `POST /projects`                                                           | `server/src/api/routes.ts`         |
+| `GET`, `DELETE /projects/:id`                                                     | `server/src/api/projectRoutes.ts`  |
+| `POST /projects/:id/duplicate`, `/rename`                                         | `server/src/api/projectRoutes.ts`  |
+| `GET`, `PUT /projects/:id/members`                                                | `server/src/api/projectMembers.ts` |
+| `GET /projects/:id/file`, `POST /projects/file`                                   | `server/src/api/projectFile.ts`    |
+| `POST /projects/import`, `/projects/:id/import`                                   | `server/src/api/importRoutes.ts`   |
+| `PUT /projects/:id/parameters`                                                    | `server/src/api/documentRoutes.ts` |
+| `POST /projects/:id/evaluate`                                                     | `server/src/api/geometryRoutes.ts` |
+| `GET /projects/:id/meshes/:hash`                                                  | `server/src/api/meshRoute.ts`      |
+| `GET /jobs/:jobId/events`, `DELETE /jobs/:jobId`                                  | `server/src/api/jobRoutes.ts`      |
+| `POST /projects/:id/features`                                                     | `server/src/api/routes.ts`         |
+| `PUT`, `DELETE /projects/:id/features/:fid`                                       | `server/src/api/routes.ts`         |
+| `POST /projects/:id/features/:fid/project`, `/signature`                          | `server/src/api/routes.ts`         |
+| `POST /projects/:id/timeline`                                                     | `server/src/api/routes.ts`         |
+| `POST /projects/:id/undo`, `/redo`                                                | `server/src/api/routes.ts`         |
+| `POST /projects/:id/previews/:tx/commit`, `DELETE /projects/:id/previews/:tx`     | `server/src/api/routes.ts`         |
+| `GET /projects/:id/history`, `POST /projects/:id/checkpoints`, `/history/restore` | `server/src/api/historyRoutes.ts`  |
+| `DELETE /projects/:id/checkpoints`                                                | `server/src/api/historyRoutes.ts`  |
+| `PUT /projects/:id/bodies/:bodyId`                                                | `server/src/api/routes.ts`         |
+| `PUT /projects/:id/groups`                                                        | `server/src/api/routes.ts`         |
+| `POST /projects/:id/upgrade-naming`, `/commit`                                    | `server/src/api/routes.ts`         |
+| `POST /projects/:id/maintenance/gc`                                               | `server/src/api/routes.ts`         |
+| `GET`, `PUT /projects/:id/thumbnail`                                              | `server/src/api/routes.ts`         |
+| `GET`, `PUT /projects/:id/view`                                                   | `server/src/api/routes.ts`         |
+| `POST /projects/:id/tangent-edges`                                                | `server/src/api/routes.ts`         |
+| `POST /projects/:id/size-limit`                                                   | `server/src/api/routes.ts`         |
+| `POST /projects/:id/measure`                                                      | `server/src/api/measureRoutes.ts`  |
+| `POST /projects/:id/export`                                                       | `server/src/api/routes.ts`         |
+| `POST /projects/:id/assets`, `GET /projects/:id/assets/:assetId`                  | `server/src/api/routes.ts`         |
+| `/folders` and below, `PUT /projects/:id/folder`                                  | `server/src/api/folderRoutes.ts`   |
 
-Each body carries `meshKey`, a SHA-256 of its mesh, faces, edges, vertices
-and bbox, without its name or visibility. The client keeps a body's viewport
-objects while its key is unchanged. A JSON response of 64 KiB or more is
-gzipped when the request accepts gzip.
+## Errors
 
-A mutating request with a JSON body may carry `held`, the `meshKey`s the
-client already holds (`HeldMeshes`). A body whose key is in `held` comes back
-as `HeldBodyPayload`, `{ bodyId, name, visible, meshKey }`, with no mesh,
-faces, edges, vertices or bbox; every other body comes in full
-(`WireEvaluateResult`). Without `held` every body comes in full. A `held`
-that is not an array of strings is 400 `validation` with detail `/held` or
-`/held/N`. `client/src/api.ts` sends the keys of the last mutation response
-or whole-timeline evaluation it received and refills each omitted body from
-the payloads it held when it sent that request, so its callers get full
-`BodyPayload`s.
+Project, folder, settings and job routes answer `ApiErrorBody`
+(`shared/src/api.ts`). `STATUS` in `server/src/api/apiErrors.ts` fixes the
+status for each `code`. `internal` is 500 with a generic message; the log has
+the detail. A 409 on a document edit carries the stored `revision`, and on a
+preview commit also the staged `draft`. `client/src/api.ts` turns any error
+into `ApiError`; a body without `code` becomes `internal`.
 
-`GET /projects/:id/evaluate`, `PUT /projects/:id/features/:fid`, and
-`PUT /projects/:id/document` accept an optional `?position=N` for the returned
-evaluation. This temporarily evaluates the first N features without moving the
-document's saved timeline marker, for sketch editing and undo/redo in a sketch.
+An unknown `/api` path answers 404 `not_found`, malformed JSON 400
+`validation` and a body over its size limit 413 `too_large`.
 
-`GET /projects/:id/evaluate` never writes the project. A body without saved
-display metadata gets the default (its name is the body id) in the response
-only; mutating routes save new body metadata.
+These answer `{ "error": string }` without `code`: the origin check, the
+session guard (401 `unauthenticated`), the 403 `forbidden` from the project
+access guard, `requireAdmin` and the members routes, the rate limiter (429
+`rate limited` with `Retry-After` in seconds), and the auth, user, friend and
+notice routes.
 
-Requests targeting the same project run sequentially within one API server,
-including evaluation. Separate projects have independent queues. Run only one
-server process against a data directory; the queues do not lock across
-processes.
+## Identity
 
-### Document revisions
+- A request that is not `GET`, `HEAD` or `OPTIONS` needs an `Origin` listed in
+  `ROCKETT_ALLOWED_ORIGINS`, checked before the session:
+  `server/src/auth/origin.ts`.
+- `PUBLIC_ROUTES` in `server/src/auth/middleware.ts` need no session. Every
+  other route needs a session cookie or, when `ROCKETT_CF_ACCESS_TEAM` and
+  `ROCKETT_CF_ACCESS_AUD` are set, a verified `Cf-Access-Jwt-Assertion` whose
+  email matches an active user: `server/src/auth/cfAccess.ts`.
+- `GET /health` returns only `{ ok: true }` without a full signed-in identity.
+  Build, schema and kernel diagnostics require that identity; health stays
+  available to anonymous and step-session callers.
+- Admins must use TOTP; members may opt in. A sign-in that needs a code or
+  enrolment gets a step session limited to `STEP_ROUTES` in
+  `server/src/auth/middleware.ts`.
+- Sessions end after `auth.sessionDays` or `auth.sessionMaxDays` unused
+  (`shared/src/settings.ts`): `server/src/auth/sessions.ts`.
+- Login takes a username or an email in any case; both names share one
+  failure limit: `server/src/auth/userStore.ts`, `server/src/auth/rateLimit.ts`.
+- Password policy: `server/src/auth/password.ts`.
+- A public `User` never carries a password hash or TOTP secret:
+  `toPublicUser` in `server/src/auth/userStore.ts`.
+- User routes and blob collection are admin only. Project members routes need
+  the owner or an admin. Anyone without project access gets 404, not 403. A
+  `view` member may only read, plus the routes in `VIEWER_WRITES`
+  (`server/src/api/projectAccess.ts`).
+- Folder members inherit their role on the folder's projects: `folderRole`
+  in `server/src/api/projectAccess.ts`.
 
-The ETag of a project names its document: `document.json` and its
-`revision`, which every save raises by one. `GET /projects/:id` and every
-document edit answer with `ETag: "<revision>"`, the same value as
-`document.revision`. `GET /projects` gives each readable project's `revision`.
+## Document revisions
 
-The document edits, listed in `DOCUMENT_EDITS` in `shared/src/routes.ts`, are
-rename, `PUT /document`, import into a project, and the feature, timeline,
-body and group routes. Each needs `If-Match: "<revision>"` with the revision
-the caller last received. Inside the project queue the server compares it
-with the stored document:
+A project's `ETag` is `"<revision>"`, equal to `document.revision`; every
+save raises it by one. Every route in `DOCUMENT_EDITS`, and every route
+module mutation, needs `If-Match: "<revision>"`, checked inside the project
+queue: missing is 428, malformed is 400, stale is 409, and none writes:
+`server/src/api/revision.ts`. Other writes (view, thumbnail, checkpoints,
+folders, members, settings, assets, export `retain`) take no revision.
+Project deletion also requires the revision shown in the project list; a stale
+request leaves the project intact. Unreadable projects list a `deleteTag`, a
+quoted SHA256 of the stored document bytes. An unreadable manifest also binds
+its stored bytes into the tag; only an admin may delete such a project. Deletion
+needs that exact tag and refuses changed or now-readable contents. Storage
+failures refuse listing and deletion. Temporary cleanup needs no revision.
 
-- no header: 428 `precondition_required`, nothing written;
-- a header that is not one quoted integer: 400 `validation`;
-- a different revision: 409 `conflict` with the stored `revision` in the
-  error body, nothing written.
+## History
 
-Creating, duplicating, uploading and deleting a project, placing it in a
-folder, saving its view state, uploading an image and retaining an export do
-not edit the document and take no `If-Match`. `client/src/api.ts` remembers
-the highest revision it has received per project and sends it on every
-document edit.
+Every document edit except a project rename saves the document and one
+labelled undo entry together. An edit that fails before its document file
+lands writes nothing. One that fails after it lands keeps the edit and its
+entry and answers 500 `kept`, never `internal`; the client then reloads the
+project, so the edit shows and Undo names it:
+`server/src/api/projectMutations.ts`, `client/src/store.ts`. Edits sharing an
+`X-Rockett-Tx` (`TX_HEADER`) fold into the latest entry. Undo, redo and
+restore are document edits; nothing to undo or redo is 409:
+`server/src/store/historyStore.ts`. Entries and checkpoints carry `by`, the
+signed-in user's id; the history list and a new checkpoint add `byName`. Both
+are absent on older entries. Checkpoints keep their snapshots and blobs:
+`server/src/store/blobGc.ts`. Checkpoints have a bound far above real use (see
+Limits); one more is 409 with a plain message and keeps the rest.
+`DELETE /projects/:id/checkpoints` with a listed checkpoint's `label`, `at` and
+`snapshot` removes it and rewrites the log without snapshots nothing else
+holds, so blobs nothing else references become collectable; an unknown
+checkpoint is 404.
 
-## Projects
+The log stores each feature once, keyed by the SHA256 of its JSON, and each
+snapshot as the document with its features replaced by those keys:
+`server/src/store/historyLog.ts`. A snapshot's hash is the SHA256 of that
+form. Entries have no count limit. A project's log has a disk byte budget
+(see Limits). Past it, the log drops its oldest entries until it fits in
+what checkpoints, the current state and redo entries take, plus half the rest
+of the budget. Those always stay, and so does one undo step while the log
+still fits the budget. A version 2 log, one whole gzipped document per
+snapshot, is backed up as `history2-<hash>` and rewritten on first open:
+`server/src/store/historyUpgrade.ts`. A snapshot it cannot read is dropped
+with its checkpoints, and undo steps over the gap; with none readable, history
+starts again at the next edit. Snapshot hashes change then; a restore naming
+an old hash is 404.
 
-| Method & path                  | Body                   | Returns                                                                                                                                         |
-| ------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                  | none                   | `{ ok: true, version, schemaVersion, commit, describe }` (`commit` from `ROCKETT_COMMIT`, `describe` from `ROCKETT_DESCRIBE`, each else `null`) |
-| `GET /projects`                | none                   | `ProjectSummary[]`                                                                                                                              |
-| `POST /projects`               | `{ name?, folderId? }` | `{ document }`                                                                                                                                  |
-| `GET /projects/:id`            | none                   | `{ document }`                                                                                                                                  |
-| `DELETE /projects/:id`         | none                   | `{ ok }`                                                                                                                                        |
-| `POST /projects/:id/duplicate` | `{ name? }`            | `{ document }` (assets copied)                                                                                                                  |
-| `POST /projects/:id/rename`    | `{ name }`             | `{ document }`                                                                                                                                  |
+A feature add or edit with `X-Rockett-Preview` (`PREVIEW_HEADER`) and
+`X-Rockett-Tx` stages the edit in memory for that user and session instead of
+saving it. Only the preview commit route saves it. A restart drops open
+previews: `Previews` in `server/src/api/routes.ts`.
 
-Every stored project is listed. `status` is `ok`, `invalid` or `tooNew`, and
-the last two carry `error`. A `tooNew` project also carries the
-`schemaVersion` it was saved with. Loading a project validates it after
-migration; an invalid one is 422 naming the first failure.
+Parameter and expression associations update together through
+`PUT /projects/:id/parameters` with `parameters` and `parameterBindings`.
+The document revision header is required; feature preview transaction headers
+also apply. Successful edits regenerate dependent geometry and create one history
+entry. Invalid names, cycles, numeric bounds or conflicting dimensions refuse the
+edit before saving. Project files, history and reopen preserve associations.
+`PUT /projects/:id/features/:fid` may also carry the whole `parameterBindings`
+list, so a sketch edit that renumbers its constraints saves the moved bindings
+in the same edit.
 
-### Project file
+## Evaluation
 
-A project travels as one `.rockett` file, JSON of shape
-`{ format: "rockett-project", version: 1, document, assets }`. `assets` maps
-each sha256 a reference image names in `assetId` or an `importStep` feature
-names in `blob` to its bytes in base64, so a file holds only the files the
-document references.
+- Mutations answer `WireMutationResponse` (`shared/src/routes.ts`).
+- A request may send `held` (`HeldMeshes`); a body whose `meshKey` is held
+  comes back as `HeldBodyPayload`: `server/src/api/heldMeshes.ts`.
+- Stored sketch points are the model. A feature add or edit solves a sketch
+  once when it adds or changes a constraint its points do not meet, and
+  otherwise stores the points as sent. Evaluation re-solves a sketch only when
+  a projected source moves: `editedEntities` in `shared/src/solver.ts`.
+- `?position=N` evaluates the first N features without moving the saved
+  marker: `evaluationPosition` in `server/src/api/routes.ts`.
+- Mesh bytes come from the mesh route only for a hash in the project's current
+  evaluation: `server/src/api/meshRoute.ts`.
+- JSON responses from `GZIP_FROM_BYTES` up are gzipped when accepted:
+  `server/src/api/gzipJson.ts`.
+- Requests for one project run in order; projects run independently:
+  `server/src/store/projectQueue.ts`. The queue does not lock across
+  processes, so run one server per data directory.
 
-`GET /projects/:id/file` returns the file as an attachment named after the
-project: an ASCII `filename` plus a UTF-8 `filename*`.
+### Kernel jobs
 
-`POST /projects/file` takes multipart field `file`, up to 64 MB, and returns
-`{ document }` for a new project with a new id. An older document schema is
-migrated as a saved project is on load, then the document is validated as
-`PUT /projects/:id/document` validates it. Every asset must be referenced by
-the document and decode from base64, and its bytes must hash to its key. An
-image asset also passes the image upload rules. Every referenced asset must be
-present. A file from before schema 9 may key its images by their old
-`<16hex>.<ext>` ids and may hold STEP sources inline; migration hashes both
-and rekeys them. A file with a newer
-`version` or `schemaVersion` gets 400 naming both versions. Any failure
-returns 400 and creates nothing: a project half made when an asset fails is
-removed.
+A request may send `Rockett-Job: <UUID v4>` to follow its kernel work at the
+job events route (`text/event-stream`) or cancel it. Jobs belong to the
+submitting user and project; anyone else gets 404. A worker that misses the
+cancel watchdog is restarted and in-flight kernel requests get 503 `kernel`:
+`server/src/kernel/jobs.ts`, `server/src/kernel/workerKernel.ts`.
 
-Two optional text fields go with `file`. `folderId` places the new project in
-that folder in the same write, as `POST /projects` does; a missing folder is
-400 and creates nothing. `temporary` set to `true` makes a temporary project.
-Any other `temporary` value is 400, and so is `temporary` with `folderId`.
+## Naming upgrade
 
-### Temporary projects
+Stage and commit move a `namingVersion` 1 project to 2; nothing else changes
+the naming version. Both back up the project first and name the backup. The
+commit needs `If-Match` and is 409 while a `candidate` or `ambiguous` mapping
+has no choice. A project already on version 2 is 409. Stage gives each
+candidate and suggestion a `mesh` from the version 2 evaluation at its
+mapping's position: a face or body index range, or an edge polyline, with the
+body's `bbox`, so the client finds it in the version 1 mesh it shows. Types:
+`NamingUpgradeProposal`, `NamingMapping` and `NamingDecision` in
+`shared/src/api.ts`. Code: `server/src/store/namingUpgrade.ts`. Model rules:
+[CAD_MODEL.md](CAD_MODEL.md), Naming upgrade.
 
-A temporary project is the server copy of a project kept in the browser. It
-is an ordinary project directory plus `temporary.json`,
-`{ owner, touchedAt }`, with `owner` `null` until accounts own copies. Every
-route that works on a project works on it. `GET /projects` leaves it out,
-`PUT /projects/:id/folder` answers 400 for it, and `DELETE /projects/:id`
-removes it. Any request to `/projects/:id` or a path below it refreshes
-`touchedAt`, written at most once a minute. A sweep at startup and every hour
-deletes temporary projects untouched for 24 hours; a request after that gets 404. A temporary project is never backed up before a migration.
+## View state
 
-## Folders
+Each user has their own view of a project (`projectView` in
+`shared/src/routes.ts`), with its own `ETag`; a stale `If-Match` is 409.
+Saving a view never edits the document, evaluates or raises the revision.
+Visibility lives only in the view: a document edit carrying `visible` is 400.
+Code: `server/src/store/viewStore.ts`.
 
-One folder tree is shared by every user. `GET /folders` returns
-`{ folders: Folder[], placement }`: each folder is `{ id, name, parentId }`
-with `parentId` `null` at the root, and `placement` maps a project id to its
-folder id. A project missing from `placement` sits at the root. Folders live
-in `folders.json`, apart from the documents, so a move never changes a
-document or its `modifiedAt`.
+## Settings layers
 
-| Method & path              | Body                   | Returns      |
-| -------------------------- | ---------------------- | ------------ |
-| `GET /folders`             | none                   | `FolderTree` |
-| `POST /folders`            | `{ name, parentId? }`  | `{ folder }` |
-| `PATCH /folders/:id`       | `{ name?, parentId? }` | `{ folder }` |
-| `DELETE /folders/:id`      | none                   | `{ ok }`     |
-| `PUT /projects/:id/folder` | `{ folderId }`         | `{ ok }`     |
-
-A `null` `parentId` or `folderId` means the root. A name is 1 to 200
-characters. A `parentId` or `folderId` naming a missing folder is 400, and so
-is a move into the folder itself or a folder inside it. An unknown folder in
-the path is 404, as is an unknown project. Deleting a folder that holds a
-folder or a project is 409 and deletes nothing.
-
-`POST /projects` with a `folderId` creates the project in that folder in one
-call. A missing folder is 400 and creates nothing. Deleting a project drops
-its placement.
-
-## Model
-
-### STEP, IGES and BREP import
-
-`POST /projects/import-step` creates a project named from the filename.
-`POST /projects/:id/import-step` inserts into an existing project's timeline
-at the current marker. Both accept multipart field `file` (`.step`/`.stp`,
-`.igs`/`.iges`, `.brep`, `.stl`, `.obj` or `.3mf`) and return
-`{ document, evaluation }`. The upload streams to `uploads/` while it is
-hashed. Two limits apply, each 10 MB by default: the upload limit stops the
-transfer with 413 as soon as it is passed, and the import limit returns 413
-before the kernel reads a file over it. A STEP, IGES or BREP source moves
-from `uploads/` into the blob store once the import succeeds. A
-cancelled, oversized or unreadable upload removes its own file in `uploads/`
-and keeps no new project. Exact files must contain solid bodies. A file with
-none is 400 naming its format, for example `No solid found in the IGES file.`
-A mesh over 200,000 triangles is 400 with its count, for example
-`The STL mesh has 200,001 triangles; the limit is 200,000.` An open mesh
-imports with feature status `warning` and a `warning` message. A 3MF zip entry
-that expands past 256 MB is 400. Invalid files are rejected before a new
-project is kept. A STEP, IGES or BREP source is stored in the project's blob
-store and the feature names its sha256 in `blob`; a mesh source is embedded in
-the document, and uploads that take the document beyond 40 MB are rejected.
-
-| Method & path                        | Body                    | Notes                                                                        |
-| ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |
-| `GET /projects/:id/evaluate`         | none                    | Evaluate to the timeline marker; returns `EvaluateResult`                    |
-| `PUT /projects/:id/document`         | `{ document }`          | Full replace (undo/redo restore); validated; 404 if project no longer exists |
-| `POST /projects/:id/features`        | `{ feature }`           | Insert **at the timeline marker**; empty `name` → server assigns `Extrude2`… |
-| `PUT /projects/:id/features/:fid`    | `{ feature }` (partial) | Edit parameters/name/suppressed; id immutable                                |
-| `DELETE /projects/:id/features/:fid` | none                    | Marker adjusts if needed                                                     |
-| `POST /projects/:id/timeline`        | `{ position }`          | Move the rollback marker                                                     |
-| `PUT /projects/:id/bodies/:bodyId`   | `{ name?, visible? }`   | Rename a body; `visible` writes `view.json`, as below                        |
-| `PUT /projects/:id/groups`           | `{ groups }`            | Replace the model tree groups; never changes evaluation                      |
-
-### View state
-
-`GET /projects/:id/view` returns the project's view state from
-`projects/<id>/view.json`:
-`{ version: 1, hidden: { bodies: string[], features: string[] } }`. A project
-with no saved view returns empty lists. `PUT /projects/:id/view` replaces it
-with a body of the same shape and echoes it back. The body is validated, with
-unknown fields rejected, and a bad one is 400 with nothing written. The PUT
-never edits the document, never evaluates and never raises the revision, so
-it takes no `If-Match`; the last write wins. A missing project is 404. The
-view stays with the project and is shared by everyone who opens it. A GET on
-a project saved before schema 11 reports the visibility its document held. A
-PUT first migrates that document on disk, after its backup, so the old flags
-cannot return over the new view.
-
-Visibility lives only in the view. Until DOC-020 the old paths still work
-through it: `visible` in a body PUT or a feature patch writes `view.json`, and
-a patch with nothing else saves no document and keeps the revision. Responses
-report `visible` from the view: on each body, and on each sketch and reference
-image in the document. `PUT /projects/:id/document` moves any `visible` it
-carries into the view.
+App, user and project layers are sparse; clients resolve defaults with
+`resolveSettings` (`shared/src/settings.ts`). `PATCH` needs the layer `ETag`
+in `If-Match`. App writes need an admin; project layers use project access:
+`server/src/api/settingsRoutes.ts`. Import keeps unknown keys that match the
+key grammar, so removed plugin values survive:
+`server/src/store/settingsStore.ts`.
 
 ## Inspection & output
 
-| Method & path                | Body                                                             | Returns                                                                                                                                                                   |
-| ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                                             |
-| `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = every body the view does not hide. `retain: true` also stores a copy under the project's `exports/` dir |
+- `format` must name a registered exporter; `GET /formats` lists the exporter
+  and importer registries.
+- Export refuses a body blocked by an unresolved reference (`namingVersion` 2)
+  with 422 `unprocessable`, and an id that is not a body with 400.
+  Measure answers 400 for a body or name the live evaluation lacks.
+- Writers: `server/src/geometry/exporters.ts`, `server/src/geometry/xde.ts`
+  (STEP), `server/src/geometry/dxf.ts`.
 
-Export returns 400 when an id in `bodyIds` is not a body of the evaluated
-model; the error names the offending ids. `format` is required, and `stl` is
-always binary. `quality` is the tessellation tolerance in mm: a number,
-default 0.05, clamped to 0.001 to 1.
+## Extension points
 
-## Assets (reference images)
+- `registerRouteModule` (`server/src/api/routeModules.ts`) mounts project
+  routes behind the access guard and project queue. `projectMutation` needs
+  `If-Match`. A non-core module id `<moduleId>.<name>` must mount under
+  `/projects/:id/m/<moduleId>/`, or mounting throws.
+- `registerExporter` (`server/src/geometry/exporters.ts`) and
+  `registerImporter` (`server/src/api/importers.ts`) return a disposer.
+- Document `extensions` (`shared/src/model.ts`) survive upload, edits and
+  reload. Blob collection skips a project that holds them:
+  `server/src/store/blobGc.ts`.
 
-| Method & path                       | Body              | Notes                                                 |
-| ----------------------------------- | ----------------- | ----------------------------------------------------- |
-| `POST /projects/:id/assets`         | multipart `image` | PNG/JPEG/WebP by magic bytes, ≤ 25 MB → `{ assetId }` |
-| `GET /projects/:id/assets/:assetId` | none              | Serves the image with its sniffed type                |
+## Modules
 
-`assetId` is the sha256 of the image bytes, and the image lives in the
-project's blob store. An id that is not a sha256, or names a blob that is not
-an image, is 404.
+`GET /modules` returns one `ModuleInfo` (`shared/src/api.ts`) per listed
+module, in load order:
+
+```json
+[
+  {
+    "id": "acme",
+    "name": "Acme",
+    "version": "1.2.3",
+    "licence": "MIT",
+    "author": "Acme Ltd",
+    "status": "loaded",
+    "error": null
+  }
+]
+```
+
+- `status` is `loaded`, `failed`, `incompatible` or `disabled`.
+- `error` is null for `loaded`. Otherwise it is the manifest error, the
+  thrown registration or activation message, or the plugin API range reason.
+- `server/src/modules/host.ts` loads every module before the router mounts
+  route modules. A module that throws during activation keeps none of its
+  registrations; the others still load.
+- A manifest that fails `parseManifest` reports `failed` with whichever of
+  its identity fields are strings; the rest are empty.
+- `activate` receives `ServerContext` (`plugin-api/src/index.ts`):
+  `register` and `startKernelJob`. `register.routeModule` and
+  `register.kernelJob` take `plugin-api` types; `exporter`, `importer`,
+  `featureKind` and `extensionSpec` still take core types. Each call is
+  tracked under the module's one disposer.
+- A route module's `projectRoute` and `projectMutation` handlers get
+  `params` from the route path and `body` as the route's request type when
+  it has a body schema, `unknown` without one. Every route module receives
+  `kernel` at runtime, but only the core `ModuleApi` type declares it.
+- `register.kernelJob(id, entry)` registers a kernel job: `id` starts with
+  the module id and a dot, and `entry` is the URL of a file whose default
+  export, from `defineKernelJobs`, holds the job under that id.
+- `startKernelJob(id, input, { onProgress, signal })` runs one of the
+  module's own jobs in the kernel worker and resolves to its result. A job is
+  synchronous; one that returns a promise is refused. The job
+  receives the OCCT instance, `own` for every handle it makes and
+  `progress(done, total, label)`. Its handles are freed when it returns,
+  throws or is cancelled; an aborted signal cancels it at its next
+  `progress` call.
+- After sign-in, `client/src/modules/host.ts` activates the client part of
+  each listed module that this route reports `loaded`, with `ClientContext`:
+  `register` and `project`. `register.command`, `toolbarGroup`, `panel` and
+  `workbench` take `plugin-api` types; `selectionKind` and `pickProvider`
+  still take core types. Activation is atomic as on the server. A command
+  `Control` and a workbench `tree` and `bar` draw inside the panel error
+  boundary.
+- A workbench's optional `tree` draws in the left dock and `bar` in the
+  timeline row, in place of the model tree and timeline. The view toolbar
+  group shows at the right end of every workbench.
+- `project.get()` returns `{projectId, document}` for the open project,
+  the same object until either changes; `project.subscribe(listener)` calls
+  the listener on each change and returns its disposer. Both fit
+  `useSyncExternalStore`.
+
+## Project file
+
+A `.rockett` file is `ProjectFile` in `shared/src/projectFile.ts`. Upload migrates
+an older schema, validates, and rejects a newer `version` or `schemaVersion`
+with 400; any failure creates nothing: `server/src/api/projectFile.ts`. A
+stored project with a newer schema is listed as `tooNew`, and an invalid one
+is 422 on load: `server/src/store/projectStore.ts`, which also owns temporary
+projects.
+
+Imports and project files stream to disk under `uploads/`. A file over the
+import budget is 413 before it is read: `server/src/api/uploads.ts`. Imported
+STEP and mesh sources live in the project blob store; the feature holds the
+hash in `blob`, and `GET /projects/:id/assets/:assetId` serves any project
+blob, so a `.rockett` file and a browser project carry them as assets.
 
 ## Validation
 
-Routes with a JSON body outside the feature and document routes parse it
-against the JSON Schema on their `ROUTES` entry in `shared/src/routes.ts`
-before the handler runs. A mismatch returns 400 with the failing JSON Pointer
-in `detail`, such as `/edge/bodyId`.
+- A route with a `body` schema parses it before the handler; a mismatch is
+  400 with the failing JSON Pointer in `detail`: `parseBody` in
+  `server/src/api/routes.ts`.
+- Features are checked by `validateFeature` in `server/src/api/validate.ts`
+  through their registered `FeatureSpec` (`shared/src/featureSpec.ts`); an
+  unregistered type is 400 `unknown feature type <type>`. Core schemas and
+  `documentSchema` live in `shared/src/schema/features.ts`.
+  `registerExtensionSpec` builds a dotted type's spec from its `params`
+  schema and `version`; a feature at another version is 400.
+- Feature add and update fill a missing reference `sig` from the model
+  (`server/src/geometry/signature.ts`). They also write `targets`, leaving
+  out bodies the caller's view hides: `server/src/api/routes.ts`. See
+  [CAD_MODEL.md](CAD_MODEL.md), Tool targets.
+- A validation failure writes nothing.
 
-`server/src/api/validate.ts` bounds every modelling parameter (finite numbers,
-sane ranges, entity/constraint counts) and rejects duplicate feature ids;
-project/asset ids are pattern-checked against path traversal. The API exposes
-controlled modelling operations only.
+## Limits
 
-A feature must be a plain object with only the top-level keys its type
-declares, and `suppressed` must be a boolean. An update patch must also be an
-object; its keys are checked against the stored feature's type. The validator
-checks profile, face, edge, plane and axis references in depth, every list
-item, and each enum and flag (`operation`, extrude `direction`, emboss `mode`,
-`combine`, `keepTools`, `visible`).
-
-Every feature is parsed against its type's schema in
-`shared/src/schema/features.ts`, which also checks each sketch entity and
-constraint shape and requires a non-empty `name`. The declared top-level keys
-are that schema's properties. A mismatch returns the JSON Pointer inside the
-feature in `detail`, such as `/transform/scale`.
-
-`PUT /projects/:id/document` also parses the document against
-`documentSchema` in the same file: `schemaVersion` equals the current version,
-`revision` is a non-negative integer, `savedWith` is `null` or
-`{ version, commit }` with `commit` a string or `null`,
-`units` is `mm`, `cm`, `m` or `in`, `bodyMeta` values are
-`{ name: string }`, `counters` are non-negative integers,
-`groups` have unique ids, a name of 1 to 200 characters, `kind` `body` or
-`sketch`, and no member in two groups,
-`extensions` keys match `^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$` and each
-value is `{ version, data }` with `version` a non-negative integer and `data`
-any JSON value,
-`createdAt` and `modifiedAt` are non-empty strings and `timelinePosition` is an
-integer no greater than the feature count. Loading a saved project migrates
-it without validating.
-
-Every validation failure returns 400 and nothing is saved.
-
-## WebSockets
-
-Not used. Evaluation is fast enough to return synchronously for single-user
-loads; the response envelope (`document + evaluation`) is designed so a future
-job/progress channel can slot in without breaking clients.
-
-### POST /api/projects/:id/features/:fid/project
-
-Read-only projection preparation for a sketch. Body: { edge: EdgeRef, entityId: string }.
-Returns { entities: SketchEntity[] } with stable generated IDs and source references.
-Resolves source geometry before the target sketch; downstream or unsupported
-geometry returns 400. Persist the returned entities using the normal feature
-update endpoint, which also provides undo/redo integration in the client.
-
-### POST /api/projects/:id/tangent-edges
-
-Read-only chain query: { edge: EdgeRef, beforeFeatureId?: string } returns
-{ edges: EdgeRef[] }. An edit supplies beforeFeatureId to resolve its inputs
-before the feature. Source errors return 400; no document changes are persisted.
+| Limit                                 | Owner                                                                               |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| JSON request body                     | `JSON_BODY_LIMIT_BYTES`, `server/src/api/uploads.ts`                                |
+| Import and project file upload, disk  | `ROCKETT_UPLOAD_MAX_MB`, `IMPORT_LIMITS` in `server/src/tunables.ts`                |
+| Import and project file read, heap    | `ROCKETT_IMPORT_BUDGET_MB`, `IMPORT_LIMITS` in `server/src/tunables.ts`             |
+| Mesh import triangles                 | `MAX_MESH_TRIANGLES`, `server/src/geometry/importers.ts`                            |
+| 3MF expanded entry                    | `server/src/geometry/read3mf.ts`                                                    |
+| Browser project file                  | `PROJECT_FILE_LIMIT_MB`, `shared/src/projectFile.ts`                                |
+| Thumbnail                             | `THUMBNAIL_LIMITS`, `shared/src/routes.ts`                                          |
+| Reference image                       | `IMAGE_LIMIT_MB`, `server/src/store/projectStore.ts`                                |
+| History labels                        | `LABEL_LIMIT`, `shared/src/schema/history.ts`                                       |
+| History disk bytes, checkpoints       | `HISTORY_LIMITS.bytes`, `HISTORY_LIMITS.checkpoints`, `server/src/tunables.ts`      |
+| Tool targets                          | `MAX_TARGETS`, `shared/src/schema/features.ts`                                      |
+| Previews, jobs, timeouts, size search | `server/src/tunables.ts`                                                            |
+| Settings import                       | `SETTINGS_IMPORT_MAX_BYTES`; nodes and depth in `server/src/store/settingsStore.ts` |

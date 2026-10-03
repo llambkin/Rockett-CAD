@@ -1,23 +1,27 @@
+import { useContext } from "react";
 import { useEffect, useRef } from "react";
-import { sketchOffsetAnchor } from "@rockett/shared";
+import { formatLength, sketchOffsetAnchor } from "@rockett/shared";
+import { useSetting } from "../settings";
 import { useStore } from "../store";
-import { viewportHandle } from "../viewportRef";
+import { ViewportContext } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
 import { worldToClient } from "../three/screen";
 
 /** Screen-space badges remain attached to the sketch while panning and zooming. */
 export function SketchOffsetIndicators() {
+  const viewport = useContext(ViewportContext);
+  const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
-  const mode = useStore((s) => s.mode);
+  const active = useStore((s) => s.active);
   const evaluation = useStore((s) => s.evaluation);
   const busy = useStore((s) => s.busy);
   const layer = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (mode.name !== "sketch" || !draft) return;
+    if (active?.id !== "design.sketch" || !draft) return;
     const frame = evaluation?.sketches.find(
       (s) => s.featureId === draft.id,
     )?.frame;
-    const vp = viewportHandle.current;
+    const vp = viewport.current;
     if (!frame || !vp) return;
     const update = () => {
       if (!layer.current) return;
@@ -41,8 +45,8 @@ export function SketchOffsetIndicators() {
     };
     vp.requestRender();
     return vp.onRender(update);
-  }, [draft, mode.name, evaluation]);
-  if (mode.name !== "sketch" || !draft) return null;
+  }, [draft, active?.id, evaluation, viewport]);
+  if (active?.id !== "design.sketch" || !draft) return null;
   return (
     <div className="dim-label-layer" ref={layer}>
       {(draft.offsets ?? []).map((offset, i) => (
@@ -51,20 +55,20 @@ export function SketchOffsetIndicators() {
           data-offset={offset.id}
           className="dim-label offset-label"
           title={`Edit Offset ${i + 1}`}
-          aria-label={`Edit Offset ${i + 1}, ${offset.distance} mm`}
+          aria-label={`Edit Offset ${i + 1}, ${formatLength(offset.distance, units)}`}
           disabled={busy}
           onPointerDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
           onClick={() => {
             const s = useStore.getState();
             s.setSketchTool("offset");
-            s.setDialogParams({
-              editOffsetId: offset.id,
-              sketchOffset: offset.distance,
+            s.setSketchState({
+              offsetEditId: offset.id,
+              offsetDistance: offset.distance,
             });
           }}
         >
-          ↔ Offset {i + 1}: {offset.distance} mm
+          ↔ Offset {i + 1}: {formatLength(offset.distance, units)}
         </button>
       ))}
     </div>

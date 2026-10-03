@@ -1,13 +1,18 @@
 name: rockett-cad
 
 # One file, many instances: pick the instance with `-p` and the environment.
-#   ROCKETT_BIND       host address to publish on (default 127.0.0.1; the app has no auth)
+#   ROCKETT_BIND       host address to publish on (default 127.0.0.1)
 #   ROCKETT_HOST_PORT  host port (default 8788)
 #   ROCKETT_TAG        image tag (default local)
 #   ROCKETT_MEM_LIMIT  container memory cap (default 6g)
 #   ROCKETT_COMMIT     git revision baked into the image and /api/health
 #   ROCKETT_DESCRIBE   git describe output baked into the image and /api/health
 #   ROCKETT_ALLOWED_ORIGINS  comma-separated browser origins, such as https://cad.example.com (required)
+#   ROCKETT_SETUP_TOKEN      one-time first-admin setup token (unset after setup)
+#   ROCKETT_COOKIE_SECURE    true for HTTPS (default), false for plain HTTP
+#   ROCKETT_TRUST_PROXY      proxy hop count or proxy addresses whose X-Forwarded-For is trusted (default none)
+#   ROCKETT_UPLOAD_MAX_MB    largest import or project file upload in MB (default 1024)
+#   ROCKETT_IMPORT_BUDGET_MB largest import or project file read into memory in MB (default 256)
 services:
   rockett-cad:
     build:
@@ -22,6 +27,13 @@ services:
     mem_limit: ${ROCKETT_MEM_LIMIT:-6g}
     environment:
       ROCKETT_ALLOWED_ORIGINS: ${ROCKETT_ALLOWED_ORIGINS:-}
+      ROCKETT_SETUP_TOKEN: ${ROCKETT_SETUP_TOKEN:-}
+      ROCKETT_COOKIE_SECURE: ${ROCKETT_COOKIE_SECURE:-}
+      ROCKETT_TRUST_PROXY: ${ROCKETT_TRUST_PROXY:-}
+      ROCKETT_CF_ACCESS_TEAM: ${ROCKETT_CF_ACCESS_TEAM:-}
+      ROCKETT_CF_ACCESS_AUD: ${ROCKETT_CF_ACCESS_AUD:-}
+      ROCKETT_UPLOAD_MAX_MB: ${ROCKETT_UPLOAD_MAX_MB:-}
+      ROCKETT_IMPORT_BUDGET_MB: ${ROCKETT_IMPORT_BUDGET_MB:-}
     labels:
       com.centurylinklabs.watchtower.enable: "false"
     volumes:

@@ -5,10 +5,14 @@
  */
 
 import * as THREE from "three";
-import type { PlaneFrame, Profile } from "@rockett/shared";
+import { findProfile, type PlaneFrame, type Profile } from "@rockett/shared";
+import { useStore } from "../store";
+import { baseBodies } from "../previewBase";
+import { faceCentroid, frameAlong, profileCentroid } from "./featureHandles";
 import { disposeObject } from "./dispose";
 import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
 import { themeColor } from "../theme/tokens";
+import { GIZMO_APPEARANCE, PREVIEW_APPEARANCE } from "../tunables";
 
 export interface GizmoSource {
   /** Base plane frame; the arrow points along frame.normal. */
@@ -77,16 +81,21 @@ export class ExtrudeGizmo extends Manipulator {
       color: themeColor("gizmo"),
       depthTest: false,
       transparent: true,
-      opacity: 0.95,
+      opacity: GIZMO_APPEARANCE.shaftOpacity,
     });
     this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 12), mat);
     this.cone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 16), mat.clone());
     this.shaft.renderOrder = 20;
     this.cone.renderOrder = 20;
+    this.shaft.userData.themeToken = "gizmo";
+    this.cone.userData.themeToken = "gizmo";
     (this.shaft.userData as any).extrudeGizmo = true;
     (this.cone.userData as any).extrudeGizmo = true;
-    this.group.add(this.shaft);
-    this.group.add(this.cone);
+    for (const mesh of [this.shaft, this.cone]) {
+      mesh.frustumCulled = false;
+      mesh.onBeforeRender = () => this.layoutArrow();
+      this.group.add(mesh);
+    }
     this.update(initialValue);
   }
 
@@ -103,6 +112,7 @@ export class ExtrudeGizmo extends Manipulator {
     if (this.cut === cut) return;
     this.cut = cut;
     if (this.previewMesh) {
+      this.previewMesh.userData.themeToken = cut ? "gizmo-cut" : "gizmo";
       (this.previewMesh.material as THREE.MeshBasicMaterial).color.set(
         themeColor(cut ? "gizmo-cut" : "gizmo"),
       );
@@ -111,13 +121,17 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   private previewMaterial(): THREE.MeshBasicMaterial {
-    return new THREE.MeshBasicMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: themeColor(this.cut ? "gizmo-cut" : "gizmo"),
       transparent: true,
-      opacity: this.cut ? 0.3 : 0.22,
+      opacity: this.cut
+        ? PREVIEW_APPEARANCE.gizmoCutOpacity
+        : PREVIEW_APPEARANCE.gizmoAddOpacity,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
+    material.userData.themeToken = this.cut ? "gizmo-cut" : "gizmo";
+    return material;
   }
 
   private removePreview() {
@@ -131,12 +145,22 @@ export class ExtrudeGizmo extends Manipulator {
   /** Re-position arrow + preview for a (signed) distance value. */
   update(value: number) {
     this.value = value;
+    this.layoutArrow();
+    this.updatePreview(value);
+    this.host.requestRender();
+  }
+
+  private length(): number {
+    return Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4);
+  }
+
+  private layoutArrow() {
     const wpp = this.host.worldPerPixel();
     const shaftRadius = wpp * 1.6;
     const coneH = wpp * 16;
     const coneR = wpp * 5;
-    const sign = value >= 0 ? 1 : -1;
-    const len = Math.max(Math.abs(value), wpp * 4);
+    const sign = this.value >= 0 ? 1 : -1;
+    const len = this.length();
 
     const tip = this.origin
       .clone()
@@ -155,9 +179,8 @@ export class ExtrudeGizmo extends Manipulator {
     this.cone.position.copy(tip);
     this.cone.quaternion.copy(quat);
     this.cone.scale.set(coneR, coneH, coneR);
-
-    this.updatePreview(value);
-    this.host.requestRender();
+    this.shaft.updateMatrixWorld();
+    this.cone.updateMatrixWorld();
   }
 
   private updatePreview(value: number) {
@@ -263,9 +286,9 @@ export class ExtrudeGizmo extends Manipulator {
 
   private tip(extra = 0): THREE.Vector3 {
     const sign = this.value >= 0 ? 1 : -1;
-    const len =
-      Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4) + extra;
-    return this.origin.clone().addScaledVector(this.axis, sign * len);
+    return this.origin
+      .clone()
+      .addScaledVector(this.axis, sign * (this.length() + extra));
   }
 
   hitTest(clientX: number, clientY: number): boolean {
@@ -277,11 +300,10 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   setHover(hover: boolean) {
-    this.paint(
-      themeColor(hover ? "gizmo-hover" : "gizmo"),
-      this.shaft,
-      this.cone,
-    );
+    const token = hover ? "gizmo-hover" : "gizmo";
+    this.shaft.userData.themeToken = token;
+    this.cone.userData.themeToken = token;
+    this.paint(themeColor(token), this.shaft, this.cone);
   }
 
   dragValue(clientX: number, clientY: number): number {
@@ -300,4 +322,47 @@ export class ExtrudeGizmo extends Manipulator {
   tipScreenPosition(): { x: number; y: number } {
     return this.labelPosition(this.tip());
   }
+}
+
+export function extrudeGizmoSource(): GizmoSource | null {
+  const s = useStore.getState();
+  if (s.active?.id !== "design.feature" || s.active.state.type !== "extrude")
+    return null;
+  const profSel = s.selection.find((x) => x.kind === "profile");
+  if (profSel) {
+    const sk = s.evaluation?.sketches.find(
+      (x) => x.featureId === profSel.sketchId,
+    );
+    const p = sk && findProfile(sk, profSel.profileId);
+    if (sk && p && p.polygon.length >= 6)
+      return { frame: sk.frame, anchorUV: profileCentroid(p), profile: p };
+  }
+  const faceSel = s.selection.find((x) => x.kind === "face");
+  if (!faceSel) return null;
+  const body = baseBodies(s).find((b) => b.bodyId === faceSel.bodyId);
+  const face = body?.faces.find((f) => f.name === faceSel.faceName);
+  if (!body || !face || face.surface.type !== "plane") return null;
+  const centroid = faceCentroid(body, face);
+  if (!centroid) return null;
+  const remap = new Map<number, number>();
+  const positions: number[] = [];
+  const indices: number[] = [];
+  for (let i = face.start; i < face.start + face.count; i++) {
+    const vi = body.indices[i]!;
+    let ni = remap.get(vi);
+    if (ni === undefined) {
+      ni = positions.length / 3;
+      remap.set(vi, ni);
+      positions.push(...body.positions.slice(vi * 3, vi * 3 + 3));
+    }
+    indices.push(ni);
+  }
+  const boundary = body.edges
+    .filter((ed) => ed.name.includes(faceSel.faceName))
+    .map((ed) => ed.polyline);
+  return {
+    frame: frameAlong(centroid, new THREE.Vector3(...face.surface.normal)),
+    anchorUV: [0, 0],
+    faceGhost: { positions, indices, boundary },
+  };
 }

@@ -1,9 +1,10 @@
-/** Typed client for the Rockett CAD REST API. */
-
 import {
   DOCUMENT_EDITS,
+  AUTH_ROUTES,
   pathFor,
+  PREVIEW_HEADER,
   ROUTES,
+  TX_HEADER,
   type ApiErrorBody,
   type ApiErrorCode,
   type BodyPayload,
@@ -12,23 +13,28 @@ import {
   type EvaluateResult,
   type ExportRequest,
   type Feature,
-  type Health,
+  type ParameterBinding,
   type HeldMeshes,
   type MeasureRequest,
   type MutationResponse,
+  type NamingDecision,
+  type ParameterEdit,
   type PathParams,
   type ProjectView,
+  type ProjectMember,
   type Route,
+  type User,
+  type SizedFeature,
   type TreeGroup,
   type WireEvaluateResult,
   type WireMutationResponse,
 } from "@rockett/shared";
+import type { Download } from "./download";
+export { saveDownload, type Download } from "./download";
+import { TIMING_MS } from "./tunables";
 
 export type { Health, MutationResponse } from "@rockett/shared";
-
 const API = "/api";
-
-let health: Promise<Health> | undefined;
 
 export class ApiError extends Error {
   constructor(
@@ -37,26 +43,59 @@ export class ApiError extends Error {
     readonly code: ApiErrorCode,
     readonly detail?: string,
     readonly revision?: number,
+    readonly retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
+export class UnauthorizedError extends ApiError {
+  constructor(message: string) {
+    super(message, 401, "internal");
+    this.name = "UnauthorizedError";
+  }
+}
+
+let onUnauthorized: (() => void) | null = null;
+
+export function watchUnauthorized(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 async function toApiError(res: Response): Promise<ApiError> {
   const body: Partial<ApiErrorBody> | null = await res.json().catch(() => null);
-  if (typeof body?.error === "string" && typeof body.code === "string")
+  const rawRetryAfter =
+    res.status === 429 ? Number(res.headers.get("Retry-After")) : undefined;
+  const retryAfter =
+    rawRetryAfter !== undefined &&
+    Number.isFinite(rawRetryAfter) &&
+    rawRetryAfter > 0
+      ? rawRetryAfter
+      : undefined;
+  if (res.status === 401)
+    return new UnauthorizedError(
+      typeof body?.error === "string" ? body.error : "Unauthenticated",
+    );
+  if (
+    typeof body?.error === "string" &&
+    (typeof body.code === "string" || res.status === 400 || res.status === 409)
+  )
     return new ApiError(
       body.error,
       res.status,
-      body.code,
+      typeof body.code === "string" ? body.code : "internal",
       body.detail,
       body.revision,
+      retryAfter,
     );
   return new ApiError(
     res.statusText || `HTTP ${res.status}`,
     res.status,
     "internal",
+    undefined,
+    undefined,
+    retryAfter,
   );
 }
 
@@ -65,6 +104,103 @@ interface RequestOptions {
   headers?: Record<string, string>;
   signal?: AbortSignal | undefined;
   keepalive?: boolean;
+  jobId?: string;
+  onEtag?: (etag: string | null) => void;
+}
+
+export type JobEvent =
+  | { type: "start"; id: string }
+  | { type: "progress"; id: string; label: string; done: number; total: number }
+  | { type: "done" | "failed" | "cancelled"; id: string };
+
+let onJob: ((event: JobEvent) => void) | null = null;
+let activeJob: {
+  id: string;
+  source: EventSource | null;
+  timer: ReturnType<typeof setTimeout>;
+  settleTimer?: ReturnType<typeof setTimeout>;
+} | null = null;
+
+export function watchJob(handler: ((event: JobEvent) => void) | null): void {
+  onJob = handler;
+}
+
+function startJob(id: string): void {
+  forgetJob();
+  if (typeof EventSource === "undefined") return;
+  onJob?.({ type: "start", id });
+  const timer = setTimeout(() => subscribeJob(id), TIMING_MS.jobHintDelay);
+  activeJob = { id, source: null, timer };
+}
+
+function subscribeJob(id: string): void {
+  if (activeJob?.id !== id) return;
+  const source = new EventSource(
+    API + pathFor(ROUTES.jobEvents, { jobId: id }),
+  );
+  activeJob.source = source;
+  source.addEventListener("progress", (event) => {
+    if (activeJob?.id !== id) return;
+    let data: unknown;
+    try {
+      data = JSON.parse((event as MessageEvent).data);
+    } catch {
+      return;
+    }
+    if (!data || typeof data !== "object") return;
+    const { label, done, total } = data as Record<string, unknown>;
+    if (
+      typeof label === "string" &&
+      typeof done === "number" &&
+      typeof total === "number" &&
+      Number.isFinite(done) &&
+      Number.isFinite(total)
+    )
+      onJob?.({ type: "progress", id, label, done, total });
+  });
+  for (const type of ["done", "failed", "cancelled"] as const)
+    source.addEventListener(type, () => {
+      if (activeJob?.id !== id) return;
+      forgetJob();
+      onJob?.({ type, id });
+    });
+}
+
+function settleJob(id: string): void {
+  if (activeJob?.id !== id) return;
+  if (activeJob.source) {
+    activeJob.settleTimer = setTimeout(
+      () => finishJob(id),
+      TIMING_MS.jobTerminalWait,
+    );
+    return;
+  }
+  finishJob(id);
+}
+
+function finishJob(id: string): void {
+  if (activeJob?.id !== id) return;
+  forgetJob();
+  onJob?.({ type: "done", id });
+}
+
+export function cancelJob(): Promise<{ ok: true }> {
+  const id = activeJob?.id;
+  return id
+    ? request<{ ok: true }>(
+        ROUTES.cancelJob.method,
+        pathFor(ROUTES.cancelJob, { jobId: id }),
+      )
+    : Promise.resolve({ ok: true });
+}
+
+export function forgetJob(): void {
+  if (activeJob) {
+    clearTimeout(activeJob.timer);
+    clearTimeout(activeJob.settleTimer);
+    activeJob.source?.close();
+  }
+  activeJob = null;
 }
 
 export interface ProjectWatch {
@@ -85,6 +221,14 @@ function received(document: { id?: unknown; revision?: unknown } | undefined) {
   if (document.revision > known) revisions.set(document.id, document.revision);
 }
 
+let viewTag: { id: string; etag: string } | null = null;
+
+function keepViewTag(id: string) {
+  return (etag: string | null) => {
+    viewTag = etag ? { id, etag } : null;
+  };
+}
+
 export function watchProject(watch: ProjectWatch | null): void {
   watched = watch;
 }
@@ -94,11 +238,6 @@ function watching(path: string): ProjectWatch | null {
   return root !== null && (path === root || path.startsWith(`${root}/`))
     ? watched
     : null;
-}
-
-export interface Download {
-  blob: Blob;
-  fileName: string | undefined;
 }
 
 export function request<T>(
@@ -119,34 +258,50 @@ export async function request(
     headers,
     signal,
     keepalive,
+    jobId,
     response,
+    onEtag,
   }: RequestOptions & { response?: "blob" } = {},
 ): Promise<unknown> {
-  const form = body instanceof FormData;
+  const raw = body instanceof FormData || body instanceof Blob;
   const watch = watching(path);
   const sent = {
-    ...(body !== undefined && !form && { "Content-Type": "application/json" }),
+    ...(body !== undefined && !raw && { "Content-Type": "application/json" }),
     ...headers,
+    ...(jobId && { "Rockett-Job": jobId }),
   };
-  const res = await fetch(API + path, {
+  const pending = fetch(API + path, {
     method,
     ...(Object.keys(sent).length > 0 && { headers: sent }),
-    ...(body !== undefined && { body: form ? body : JSON.stringify(body) }),
+    ...(body !== undefined && { body: raw ? body : JSON.stringify(body) }),
     ...(signal && { signal }),
     ...(keepalive && { keepalive }),
   }).catch((e: unknown) => {
     if (e instanceof Error && e.name === "AbortError") throw e;
     throw new ApiError("Could not reach the server.", 0, "internal");
   });
+  if (jobId) startJob(jobId);
+  const res = await pending.catch((error: unknown) => {
+    if (jobId) finishJob(jobId);
+    throw error;
+  });
   if (!res.ok) {
+    if (jobId) finishJob(jobId);
     const error = await toApiError(res);
+    if (error instanceof UnauthorizedError) onUnauthorized?.();
     if (res.status === 404) watch?.onMissing();
     throw error;
   }
+  if (jobId) settleJob(jobId);
+  onEtag?.(res.headers.get("ETag")?.replace(/^W\//, "") ?? null);
   if (response !== "blob") {
     const json = await res.json();
     received(json?.document);
-    if (method !== "GET" && json?.document?.id === watch?.id)
+    if (
+      method !== "GET" &&
+      !headers?.[PREVIEW_HEADER] &&
+      json?.document?.id === watch?.id
+    )
       watch?.onDocument(json.document);
     return json;
   }
@@ -160,53 +315,63 @@ export async function request(
   };
 }
 
-export function saveDownload({ blob, fileName }: Download): void {
-  const a = window.document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = fileName ?? "";
-  a.click();
-  URL.revokeObjectURL(a.href);
+interface Stamp {
+  position?: number | undefined;
+  tx?: string | undefined;
+  seq?: number | undefined;
 }
 
-function send<P extends string, Req, Res>(
+export function send<P extends string, Req, Res>(
   route: Route<P, Req, Res>,
   params: PathParams<P>,
   {
     body,
     signal,
     position,
+    tx,
+    seq,
+    ifMatch,
+    onEtag,
   }: {
     body?: Req;
     signal?: AbortSignal | undefined;
-    position?: number | undefined;
-  } = {},
+    ifMatch?: string | undefined;
+    onEtag?: (etag: string | null) => void;
+  } & Stamp = {},
 ): Promise<Res> {
   const query = position === undefined ? "" : `?position=${position}`;
   const id: string | undefined = (params as Partial<Record<string, string>>).id;
   const revision =
-    DOCUMENT_EDITS.has(route) && id !== undefined
-      ? revisions.get(id)
-      : undefined;
+    DOCUMENT_EDITS(route) && id !== undefined ? revisions.get(id) : undefined;
+  const match =
+    ifMatch ?? (revision === undefined ? undefined : `"${revision}"`);
   return request<Res>(route.method, pathFor(route, params) + query, {
     body,
     signal,
-    ...(revision !== undefined && {
-      headers: { "If-Match": `"${revision}"` },
+    ...(onEtag && { onEtag }),
+    ...((DOCUMENT_EDITS(route) || route === ROUTES.importProject) && {
+      jobId: crypto.randomUUID(),
     }),
+    headers: {
+      ...(match !== undefined && { "If-Match": match }),
+      ...(tx !== undefined && { [TX_HEADER]: tx }),
+      ...(seq !== undefined && { [PREVIEW_HEADER]: String(seq) }),
+    },
   });
 }
 
+type Held = ReadonlyMap<string, BodyPayload>;
 let meshes = new Map<string, BodyPayload>();
+let staged: { tx?: string | undefined; held: string[] } | undefined;
+let closed: typeof staged;
 
-function keep(evaluation: EvaluateResult): EvaluateResult {
-  meshes = new Map(evaluation.bodies.map((body) => [body.meshKey, body]));
+function keep(evaluation: EvaluateResult, held: Held): EvaluateResult {
+  if (held === meshes)
+    meshes = new Map(evaluation.bodies.map((body) => [body.meshKey, body]));
   return evaluation;
 }
 
-function refill(
-  evaluation: WireEvaluateResult,
-  held: ReadonlyMap<string, BodyPayload>,
-): EvaluateResult {
+function refill(evaluation: WireEvaluateResult, held: Held): EvaluateResult {
   return {
     ...evaluation,
     bodies: evaluation.bodies.map((body) => {
@@ -218,26 +383,28 @@ function refill(
   };
 }
 
-async function holding<P extends string, Req>(
-  route: Route<P, Req & HeldMeshes, WireMutationResponse>,
+async function sendHeld<P extends string, Req, Res>(
+  route: Route<P, Req & HeldMeshes, Res>,
   params: PathParams<P>,
   body: Req,
-  position?: number,
-): Promise<MutationResponse> {
-  const held = meshes;
-  const response = await send(route, params, {
-    body: { ...body, held: [...held.keys()] },
-    position,
-  });
-  return {
-    document: response.document,
-    evaluation: keep(refill(response.evaluation, held)),
-  };
+  stamp: Stamp = {},
+): Promise<[Res, Held]> {
+  const [held, keys] = [meshes, [...meshes.keys()]];
+  if (stamp.seq === 1) staged = { tx: stamp.tx, held: keys };
+  const options = { body: { ...body, held: keys }, ...stamp };
+  return [await send(route, params, options), held];
 }
 
-function viewless<T extends Partial<Feature>>(feature: T): T {
-  const { visible: _visible, ...rest } = feature as T & { visible?: boolean };
-  return rest as T;
+export { holding as sendMutation };
+async function holding<P extends string, Req, Res extends WireMutationResponse>(
+  route: Route<P, Req & HeldMeshes, Res>,
+  params: PathParams<P>,
+  body: Req,
+  stamp?: Stamp,
+): Promise<Omit<Res, "evaluation"> & MutationResponse> {
+  const [response, held] = await sendHeld(route, params, body, stamp);
+  const evaluation = keep(refill(response.evaluation, held), held);
+  return { ...response, evaluation };
 }
 
 function fileForm(name: string, file: File): FormData {
@@ -247,12 +414,55 @@ function fileForm(name: string, file: File): FormData {
 }
 
 export const api = {
-  health: () => (health ??= send(ROUTES.health, {})),
+  watchJob,
+  cancelJob,
+  forgetJob,
+  authStatus: () => send(AUTH_ROUTES.status, {}),
+  me: () => send(AUTH_ROUTES.me, {}),
+  login: (username: string, password: string) =>
+    send(AUTH_ROUTES.login, {}, { body: { username, password } }),
+  setup: (
+    token: string,
+    username: string,
+    displayName: string,
+    password: string,
+  ) =>
+    send(
+      AUTH_ROUTES.setup,
+      {},
+      { body: { token, username, displayName, password } },
+    ),
+  logout: () => send(AUTH_ROUTES.logout, {}),
+  totpEnrol: () => send(AUTH_ROUTES.totpEnrol, {}),
+  totpCode: (route: "totp" | "totpConfirm" | "totpOff", code: string) =>
+    send(AUTH_ROUTES[route], {}, { body: { code } }),
+  changePassword: (current: string, next: string) =>
+    send(AUTH_ROUTES.passwordChange, {}, { body: { current, next } }),
+  listUsers: () => send(AUTH_ROUTES.users, {}),
+  createUser: (user: {
+    email?: string;
+    username: string;
+    displayName: string;
+    role: User["role"];
+    password: string;
+  }) => send(AUTH_ROUTES.userCreate, {}, { body: user }),
+  patchUser: (
+    id: string,
+    patch: {
+      role?: User["role"];
+      status?: User["status"];
+      password?: string;
+      email?: string | null;
+    },
+  ) => send(AUTH_ROUTES.userPatch, { id }, { body: patch }),
+  health: () => send(ROUTES.health, {}),
+  formats: () => send(ROUTES.formats, {}),
+  modules: () => send(ROUTES.modules, {}),
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
     const options = { body: fileForm("file", file), signal };
     return projectId
-      ? send(ROUTES.importStepInto, { id: projectId }, options)
-      : send(ROUTES.importStep, {}, options);
+      ? send(ROUTES.importInto, { id: projectId }, options)
+      : send(ROUTES.importProject, {}, options);
   },
   listProjects: () =>
     send(ROUTES.listProjects, {}).then((projects) => {
@@ -266,11 +476,25 @@ export const api = {
       { body: folderId === null ? { name } : { name, folderId } },
     ),
   getProject: (id: string) => send(ROUTES.getProject, { id }),
-  deleteProject: (id: string, keepalive = false) =>
+  getProjectMembers: (id: string) => send(ROUTES.getProjectMembers, { id }),
+  projectMembers: (
+    id: string,
+    owner: string | null,
+    members: ProjectMember[],
+  ) => send(ROUTES.projectMembers, { id }, { body: { owner, members } }),
+  deleteProject: (id: string, keepalive = false, revision?: number | string) =>
     request<{ ok: true }>(
       ROUTES.deleteProject.method,
       pathFor(ROUTES.deleteProject, { id }),
-      { keepalive },
+      {
+        keepalive,
+        ...(revision !== undefined && {
+          headers: {
+            "If-Match":
+              typeof revision === "number" ? `"${revision}"` : revision,
+          },
+        }),
+      },
     ),
   duplicateProject: (id: string, name?: string) =>
     send(ROUTES.duplicateProject, { id }, { body: { name } }),
@@ -301,47 +525,87 @@ export const api = {
     send(ROUTES.updateFolder, { id }, { body: { parentId } }),
   deleteFolder: (id: string) => send(ROUTES.deleteFolder, { id }),
 
-  evaluate: (id: string, position?: number) =>
-    send(ROUTES.evaluate, { id }, { position }).then((evaluation) =>
-      position === undefined ? keep(evaluation) : evaluation,
-    ),
+  forgetMeshes: () => {
+    meshes = new Map();
+    closed = staged;
+  },
+  evaluate: async (id: string, position?: number) => {
+    const stamp = { position };
+    const [wire, held] = await sendHeld(ROUTES.evaluate, { id }, {}, stamp);
+    const evaluation = refill(wire, held);
+    return position === undefined ? keep(evaluation, held) : evaluation;
+  },
   tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
     send(ROUTES.tangentEdges, { id }, { body: { edge, beforeFeatureId } }),
+  sizeLimit: (id: string, feature: SizedFeature, position: number) =>
+    send(ROUTES.sizeLimit, { id }, { body: { feature }, position }),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
     send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 
-  addFeature: (id: string, feature: Feature) =>
-    holding(ROUTES.addFeature, { id }, { feature: viewless(feature) }),
+  updateParameters: (id: string, edit: ParameterEdit, stamp?: Stamp) =>
+    holding(ROUTES.updateParameters, { id }, edit, stamp),
+  addFeature: (id: string, feature: Feature, tx?: string, seq?: number) =>
+    holding(ROUTES.addFeature, { id }, { feature }, { tx, seq }),
   updateFeature: (
     id: string,
     fid: string,
     feature: Partial<Feature>,
     position?: number,
+    tx?: string,
+    seq?: number,
+    parameterBindings?: ParameterBinding[],
   ) =>
     holding(
       ROUTES.updateFeature,
       { id, fid },
-      { feature: viewless(feature) },
-      position,
+      parameterBindings ? { feature, parameterBindings } : { feature },
+      { position, tx, seq },
     ),
-  deleteFeature: (id: string, fid: string) =>
-    send(ROUTES.deleteFeature, { id, fid }),
-  setTimeline: (id: string, position: number) =>
-    holding(ROUTES.setTimeline, { id }, { position }),
-  replaceDocument: (id: string, document: CadDocument, position?: number) =>
-    holding(
-      ROUTES.replaceDocument,
-      { id },
-      { document: { ...document, features: document.features.map(viewless) } },
-      position,
-    ),
-  updateBody: (id: string, bodyId: string, patch: { name: string }) =>
-    holding(ROUTES.updateBody, { id, bodyId }, patch),
-  updateGroups: (id: string, groups: TreeGroup[]) =>
-    holding(ROUTES.updateGroups, { id }, { groups }),
-  getView: (id: string) => send(ROUTES.getView, { id }),
+  deleteFeature: (id: string, fid: string, tx?: string) =>
+    holding(ROUTES.deleteFeature, { id, fid }, {}, { tx }),
+  setTimeline: (id: string, position: number, tx?: string) =>
+    holding(ROUTES.setTimeline, { id }, { position }, { tx }),
+  undo: (id: string, position?: number) =>
+    holding(ROUTES.undo, { id }, {}, { position }),
+  redo: (id: string, position?: number) =>
+    holding(ROUTES.redo, { id }, {}, { position }),
+  commitPreview: (id: string, tx: string) =>
+    holding(ROUTES.commitPreview, { id, tx }, {}),
+  abortPreview: async (id: string, tx: string) => {
+    if (closed?.tx !== tx) return holding(ROUTES.abortPreview, { id, tx }, {});
+    const { held } = closed;
+    await send(ROUTES.abortPreview, { id, tx }, { body: { held } });
+    return null;
+  },
+  history: (id: string) => send(ROUTES.history, { id }),
+  createCheckpoint: (id: string, label: string) =>
+    send(ROUTES.createCheckpoint, { id }, { body: { label } }),
+  restoreHistory: (id: string, snapshot: string) =>
+    holding(ROUTES.restoreHistory, { id }, { snapshot }),
+  updateBody: (
+    id: string,
+    bodyId: string,
+    patch: { name: string },
+    tx?: string,
+  ) => holding(ROUTES.updateBody, { id, bodyId }, patch, { tx }),
+  updateGroups: (id: string, groups: TreeGroup[], tx?: string) =>
+    holding(ROUTES.updateGroups, { id }, { groups }, { tx }),
+  stageNamingUpgrade: (id: string, accept: NamingDecision[] = []) =>
+    send(ROUTES.stageNamingUpgrade, { id }, { body: { accept } }),
+  commitNamingUpgrade: (id: string, accept: NamingDecision[] = []) =>
+    holding(ROUTES.commitNamingUpgrade, { id }, { accept }),
+  getView: (id: string) =>
+    send(ROUTES.getView, { id }, { onEtag: keepViewTag(id) }),
   putView: (id: string, view: ProjectView) =>
-    send(ROUTES.putView, { id }, { body: view }),
+    send(
+      ROUTES.putView,
+      { id },
+      {
+        body: view,
+        ifMatch: viewTag?.id === id ? viewTag.etag : undefined,
+        onEtag: keepViewTag(id),
+      },
+    ),
 
   measure: (id: string, refs: MeasureRequest["refs"]) =>
     send(ROUTES.measure, { id }, { body: { refs } }),
@@ -369,11 +633,15 @@ export const api = {
     );
   },
 
+  getThumbnail: (id: string) =>
+    request(ROUTES.getThumbnail.method, pathFor(ROUTES.getThumbnail, { id }), {
+      response: "blob",
+    }).then((d) => d.blob),
+  putThumbnail: (id: string, png: Blob) =>
+    send(ROUTES.putThumbnail, { id }, { body: png }),
+
   readAsset: (id: string, assetId: string) =>
     request(ROUTES.asset.method, pathFor(ROUTES.asset, { id, assetId }), {
       response: "blob",
     }).then((d) => d.blob),
-
-  assetUrl: (id: string, assetId: string) =>
-    API + pathFor(ROUTES.asset, { id, assetId }),
 };

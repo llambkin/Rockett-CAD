@@ -1,84 +1,67 @@
 # Feature timeline
 
-The timeline is the chronological list of parametric features at the bottom of
-the workspace. It is the _product_: everything else exists to keep it
-editable.
+The timeline is the chronological list of features at the bottom of the
+workspace. It is the _product_: everything else exists to keep it editable.
+The user guide covers the controls.
 
 ## Semantics
 
-- `document.features` is the ordered history; every modelling operation is a
-  feature (`Sketch1`, `Extrude1`, `Fillet1`, …) with a stable id, a display
-  name, a `suppressed` flag, parameters, and references to its inputs
-  (profiles by sketch+profile id, topology by persistent face/edge names,
-  bodies by body id, see CAD_MODEL.md).
-- `document.timelinePosition` is the marker: the number of currently active
-  features. Features after the marker exist but are **rolled back**: they are
-  ghosted in the UI and skipped by the engine.
+- `document.features` is the ordered history. Each feature has a stable id,
+  a name, a `suppressed` flag, parameters and references to its inputs:
+  profiles, persistent face and edge names, body ids (CAD_MODEL.md).
+- `document.timelinePosition` is the marker: the count of active features.
+  Features after it are rolled back, ghosted and skipped.
+- New features insert at the marker, and the marker moves past them.
+- Suppressed features keep their place and are skipped.
 
-## Operations
+## Rollback contract
 
-| Action                | Mechanics                                                                                                                                      |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Select / hover        | Chip click; tooltip shows type + any error; resting 0.3 s on a chip shows the model after it without changing the document                     |
-| Rename                | Context menu → inline edit (stored on the feature)                                                                                             |
-| Edit                  | Double-click or context menu; sketches open the sketch editor, other features open their parameter dialog pre-filled (same dialog as creation) |
-| Suppress / unsuppress | Context menu; suppressed features are skipped during evaluation but keep their place in history                                                |
-| Delete                | Context menu (no confirm, Ctrl+Z restores)                                                                                                     |
-| Roll back / forward   | Click any marker gap, the ⏮◀▶⏭ controls, or drag intent via repeated stepping                                                                  |
-| Insert mid-history    | Roll back to the insertion point, then create features normally. New features insert **at the marker**, and the marker advances past them      |
+At marker _k_ the model is exactly as it was after feature _k_. You can pick
+its faces, sketch on them, add features there and edit earlier ones. Later
+features then rebuild through their persistent references.
 
-## Rollback contract (the fundamental requirement)
-
-Rolling the marker back to position _k_ shows the model exactly as it existed
-after feature _k_. While rolled back you can:
-
-- select faces that exist _at that point in history_,
-- sketch on them, dimension, constrain,
-- create features, which are inserted at the marker,
-- edit earlier features (double-click),
-- then return to the end of the timeline.
-
-Later features rebuild against the modified model through their persistent
-references. This is exercised end-to-end by
-`server/test/geometry.test.ts` and `server/test/api.test.ts` (the MVP
-workflow: 100×50 plate → hole → fillet → roll back → widen to 120 → roll
-forward → hole and fillet regenerate).
+Code: `server/src/geometry/engine.ts`.
 
 ## Dependencies and failures
 
-Feature references form the dependency graph implicitly: a feature that
-consumes `sketchId`s, `bodyId`s, or persistent face/edge names depends on
-whatever produces them. The engine evaluates chronologically, so dependencies
-are always evaluated first; an edit invalidates exactly the downstream suffix
-(snapshot cache, CAD_MODEL.md → "Regeneration").
+References form the dependency graph. The engine evaluates in order, so an
+edit invalidates exactly the downstream suffix:
+`server/src/geometry/engine.ts`. CAD_MODEL.md, Regeneration engine.
 
-Snapshots own the kernel shapes and face name maps in their state. The
-kernel never frees a shape by itself, so when snapshots are truncated,
-invalidated or their engine is dropped, `releaseSnapshots` in `engine.ts`
-deletes every body shape and name map that only discarded snapshots hold. A
-shape or map a kept snapshot shares through `cloneState` stays. A failed
-feature releases its partial state the same way. Name maps made while a
-feature evaluates are released when it ends unless a body in its result holds
-them.
-A caller that needs a shape after its engine is dropped reads what it needs
-first. Short-lived handles, such as explored faces and edges, name lookups
-and adaptors, are deleted by the code that made them.
+A feature whose reference is gone fails, is marked, and contributes nothing;
+the pre-failure state carries forward. Its error names the reference. Under
+`namingVersion` 2 it also blocks later features that use its bodies
+(CAD_MODEL.md, Resolution). A reference can still land on the wrong face
+without an error; see CAD_MODEL.md, Known limitations.
 
-If an upstream change removes geometry a downstream feature references, that
-feature is marked in the timeline:
+Nothing uses a proposed candidate until the user accepts it:
+`client/src/components/RefRepair.tsx`. API.md, Naming upgrade, owns the upgrade
+contract.
 
-> ⚠ Fillet1: referenced edge no longer exists: e[f:…|f:…]
+## Peek highlight
 
-The model is **never silently corrupted**: the failed feature contributes
-nothing, the pre-failure state carries forward, and the error text names the
-missing reference. Fixing the upstream edit (or editing the failed feature to
-re-select) clears the error. A guided "repair reference" flow is on the
-roadmap.
+Resting on a chip evaluates up to that feature and lights what it did: the
+faces it named, its sketch or its plane, and the faces it modified. Each
+feature status carries `modified`, face names by body id. A face counts when
+it kept an earlier name through the kernel history but is a new kernel face
+with a different area or centre, so Move, Combine, Press/Pull and blends
+light the faces they reshaped: `server/src/geometry/modified.ts`,
+`client/src/timelinePeek.ts`.
 
-## Undo/redo is not the timeline
+## Kernel memory
 
-Undo (Ctrl+Z) restores whole document snapshots. It un-does _your editing
-actions_ (created a feature, changed a dimension, renamed, deleted…). The
-timeline is part of the document being snapshotted. The two are independent
-axes, as in mainstream CAD: undo moves through editing history, the marker
-moves through modelling history.
+The kernel never frees a shape by itself.
+
+- Snapshots own their shapes and face name maps. `releaseSnapshots` in
+  `server/src/geometry/engine.ts` frees what only discarded snapshots hold;
+  a failed feature is released the same way.
+- Short-lived handles (explored faces, lookups, adaptors) are deleted by the
+  code that made them.
+- Nobody deletes the shared `progress()` range.
+- Read what you need from a shape before its engine is dropped.
+
+## Undo is not the timeline
+
+Undo restores whole document snapshots and walks your editing actions. The
+timeline is part of the document. Undo moves through editing history; the
+marker moves through modelling history: `server/src/store/historyStore.ts`.

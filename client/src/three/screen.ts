@@ -13,6 +13,20 @@ export function clientToNdc(
   );
 }
 
+export function clientRay(
+  raycaster: THREE.Raycaster,
+  rect: ScreenRect,
+  camera: THREE.Camera,
+  clientX: number,
+  clientY: number,
+): THREE.Ray {
+  raycaster.setFromCamera(clientToNdc(rect, clientX, clientY), camera);
+  const { ray } = raycaster;
+  if (camera instanceof THREE.OrthographicCamera)
+    ray.origin.addScaledVector(ray.direction, camera.near);
+  return ray;
+}
+
 export function worldToClient(
   rect: ScreenRect,
   camera: THREE.Camera,

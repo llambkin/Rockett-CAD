@@ -1,0 +1,636 @@
+{
+  "operationId": "op1",
+  "toolId": "t1",
+  "pass": "rough",
+  "spindle": {
+    "rpm": 18000,
+    "dir": "cw"
+  },
+  "coolant": "mist",
+  "moves": [
+    {
+      "kind": "rapid",
+      "to": [-3, 0, 15]
+    },
+    {
+      "kind": "rapid",
+      "to": [-3, 0, 3]
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 0, -1],
+      "feed": 300,
+      "role": "plunge"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 0, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 3, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 3, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 6, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 6, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 9, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 9, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 12, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 12, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 15, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 15, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 18, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 18, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 21, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 21, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 24, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 24, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 27, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 27, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 30, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 30, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 33, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 33, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 36, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 36, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 39, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 39, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 42, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 42, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 45, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 45, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 48, -1],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 48, -1],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 48, -2],
+      "feed": 300,
+      "role": "plunge"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 48, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 45, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 45, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 42, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 42, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 39, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 39, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 36, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 36, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 33, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 33, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 30, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 30, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 27, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 27, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 24, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 24, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 21, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 21, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 18, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 18, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 15, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 15, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 12, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 12, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 9, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 9, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 6, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 6, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 3, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 3, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 0, -2],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 0, -2],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 0, -2.5],
+      "feed": 300,
+      "role": "plunge"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 0, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 3, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 3, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 6, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 6, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 9, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 9, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 12, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 12, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 15, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 15, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 18, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 18, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 21, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 21, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 24, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 24, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 27, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 27, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 30, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 30, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 33, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 33, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 36, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 36, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 39, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 39, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 42, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 42, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 45, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 45, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "feed",
+      "to": [-3, 48, -2.5],
+      "feed": 1000,
+      "role": "link"
+    },
+    {
+      "kind": "feed",
+      "to": [103, 48, -2.5],
+      "feed": 1000,
+      "role": "cut"
+    },
+    {
+      "kind": "rapid",
+      "to": [103, 48, 15]
+    }
+  ]
+}

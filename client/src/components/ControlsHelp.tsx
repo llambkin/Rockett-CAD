@@ -1,11 +1,28 @@
 import { useLayoutEffect, useRef } from "react";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
-import { IDLE_SHORTCUTS, LINE_SHORTCUTS, SKETCH_SHORTCUTS } from "../shortcuts";
+import { lineShortcuts } from "../commands/sketch";
+import { keyBindings } from "../commands/keymap";
+import { useRegistrations } from "../commands/registry";
 
 let lastSize: { width: string; height: string } | null = null;
 
+function Bindings({ context }: { context: string }) {
+  return (
+    <p>
+      {keyBindings(context).map((x, i) => (
+        <span key={x.id}>
+          {i > 0 && " · "}
+          <kbd>{x.chord}</kbd>
+          {` ${x.label}`}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 export function ControlsHelp({ onClose }: { onClose: () => void }) {
+  useRegistrations();
   const body = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const panel = body.current!.parentElement!;
@@ -28,9 +45,6 @@ export function ControlsHelp({ onClose }: { onClose: () => void }) {
             Shift+middle-drag orbits. Wheel or pinch zooms to the cursor.
           </p>
           <p>
-            <kbd>Shift</kbd> + <kbd>F</kbd> — fit model in view
-          </p>
-          <p>
             In the model tree, <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click adds or
             removes a body or sketch and <kbd>Shift</kbd> + click selects a
             range; right-click a selected row to act on all of them.{" "}
@@ -40,25 +54,12 @@ export function ControlsHelp({ onClose }: { onClose: () => void }) {
           <p className="help-heading">
             <b>Modelling</b>
           </p>
-          <p>
-            {IDLE_SHORTCUTS.map((x, i) => (
-              <span key={x.key}>
-                {i > 0 && " · "}
-                <kbd>{x.key}</kbd> {x.label}
-              </span>
-            ))}
-          </p>
+          <Bindings context="design" />
+          <Bindings context="global" />
           <p className="help-heading">
             <b>Sketching</b>
           </p>
-          <p>
-            {SKETCH_SHORTCUTS.map((x, i) => (
-              <span key={x.key}>
-                {i > 0 && " · "}
-                <kbd>{x.key}</kbd> {x.label}
-              </span>
-            ))}
-          </p>
+          <Bindings context="design.sketch" />
           <p>
             <kbd>X</kbd> Construction (applies to whatever tool you draw with
             next: lines, rectangles, circles, arcs, polygons, slots)
@@ -80,7 +81,7 @@ export function ControlsHelp({ onClose }: { onClose: () => void }) {
           </p>
           <p>
             Line:{" "}
-            {LINE_SHORTCUTS.map((x, i) => (
+            {lineShortcuts.map((x, i) => (
               <span key={x.key}>
                 {i > 0 && " · "}
                 <kbd>{x.key}</kbd> {x.label}
@@ -108,17 +109,13 @@ export function ControlsHelp({ onClose }: { onClose: () => void }) {
             to Cut and the preview turns red.
           </p>
           <p>
-            Sketches stay visible after use — used regions shade faintly but
-            stay selectable; the eye in the tree hides a sketch. While editing
-            an extrude or revolve, hold <kbd>Ctrl</kbd> / <kbd>⌘</kbd> to see
-            the model without it and pick regions to add or remove.
+            Sketches stay visible after use. Used regions shade faintly but stay
+            selectable; the eye in the tree hides a sketch. While editing an
+            extrude or revolve, hold <kbd>Ctrl</kbd> / <kbd>⌘</kbd> to see the
+            model without it and pick regions to add or remove.
           </p>
           <p>
             <kbd>Delete</kbd> removes selected sketch geometry.
-          </p>
-          <p>
-            <kbd>Ctrl</kbd> + <kbd>Z</kbd> Undo · <kbd>Ctrl</kbd> + <kbd>Y</kbd>{" "}
-            Redo
           </p>
         </div>
       </div>

@@ -7,12 +7,13 @@
 import * as THREE from "three";
 import type { PlaneFrame } from "@rockett/shared";
 import { themeColor } from "../theme/tokens";
+import { PREVIEW_APPEARANCE } from "../tunables";
 
 function ghostMaterial(): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
     color: themeColor("gizmo"),
     transparent: true,
-    opacity: 0.22,
+    opacity: PREVIEW_APPEARANCE.gizmoAddOpacity,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
@@ -45,7 +46,7 @@ export function buildRevolveGhost(
 ): THREE.Group {
   const group = new THREE.Group();
   const angle = THREE.MathUtils.degToRad(
-    Math.max(-360, Math.min(360, angleDeg || 360)),
+    Math.max(-360, Math.min(360, angleDeg)),
   );
   if (Math.abs(angle) < 1e-6) return group;
   const full = Math.abs(Math.abs(angleDeg) - 360) < 1e-9;

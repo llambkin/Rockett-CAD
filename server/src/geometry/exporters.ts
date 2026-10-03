@@ -9,10 +9,20 @@
  */
 
 import { zipSync, strToU8 } from "fflate";
-import { LINEAR_TOL } from "@rockett/shared";
-import { getKernel } from "./kernel.js";
-import { meshShape } from "./mesh.js";
+import {
+  bodyName,
+  createRegistry,
+  LINEAR_TOL,
+  ValidationError,
+  type CadDocument,
+  type ExportFormat,
+} from "@rockett/shared";
+import { writeDxf, type Drawing } from "./dxf.js";
+import { meshCopy } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
+import { writeXdeStep } from "./xde.js";
+
+export const EXPORT_QUALITY = 0.05;
 
 interface Mesh {
   positions: number[];
@@ -20,31 +30,22 @@ interface Mesh {
 }
 
 /** Tessellate a body at export quality. */
-export function exportMesh(body: NamedBody, quality = 0.05): Mesh {
+export function exportMesh(body: NamedBody, quality = EXPORT_QUALITY): Mesh {
   const positions: number[] = [];
   const indices: number[] = [];
-  const copy = new (getKernel().BRepBuilderAPI_Copy_2)(
-    body.shape,
-    false,
-    false,
-  );
-  try {
-    for (const m of meshShape(copy.Shape(), {
-      linear: quality,
-      angular: 0.3,
-    })) {
-      const offset = positions.length / 3;
-      for (const p of m.positions) positions.push(p);
-      for (const i of m.indices) indices.push(offset + i);
-    }
-  } finally {
-    copy.delete();
+  for (const m of meshCopy(body.shape, { linear: quality, angular: 0.3 })) {
+    const offset = positions.length / 3;
+    for (const p of m.positions) positions.push(p);
+    for (const i of m.indices) indices.push(offset + i);
   }
   return { positions, indices };
 }
 
 /** Binary STL of one or more bodies merged into a single mesh. */
-export function writeStl(bodies: NamedBody[], quality = 0.05): Buffer {
+export function writeStl(
+  bodies: NamedBody[],
+  quality = EXPORT_QUALITY,
+): Buffer {
   const meshes = bodies.map((b) => exportMesh(b, quality));
   const triCount = meshes.reduce((s, m) => s + m.indices.length / 3, 0);
   const buffer = Buffer.alloc(84 + triCount * 50);
@@ -124,7 +125,7 @@ function weld({ positions: P, indices }: Mesh): Mesh {
 /** 3MF: one <object> per body, names preserved, units = millimeter. */
 export function write3mf(
   bodies: { body: NamedBody; name: string }[],
-  quality = 0.05,
+  quality = EXPORT_QUALITY,
 ): Buffer {
   const objectsXml: string[] = [];
   const itemsXml: string[] = [];
@@ -177,3 +178,76 @@ export function write3mf(
   });
   return Buffer.from(zipped);
 }
+
+export interface ExportContext extends Drawing {
+  doc: CadDocument;
+  bodies: NamedBody[];
+  options: { quality: number };
+}
+
+export interface Exporter extends ExportFormat {
+  write(ctx: ExportContext): Buffer;
+}
+
+export const exporters = createRegistry<Exporter>(
+  "exporter",
+  (exporter) => exporter.format,
+);
+
+export const registerExporter = exporters.register;
+
+export function exporterFor(format: string): Exporter {
+  const exporter = exporters.get(format);
+  if (exporter) return exporter;
+  const supported = exporters.list().map((e) => e.format);
+  throw new ValidationError(
+    `export format ${format} is not one of ${supported.join(", ")}`,
+    "/format",
+  );
+}
+
+registerExporter({
+  format: "stl",
+  label: "STL (binary)",
+  ext: "stl",
+  mime: "model/stl",
+  source: "bodies",
+  write: ({ bodies, options }) => writeStl(bodies, options.quality),
+});
+
+registerExporter({
+  format: "3mf",
+  label: "3MF (multi-body, named)",
+  ext: "3mf",
+  mime: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+  source: "bodies",
+  write: ({ doc, bodies, options }) =>
+    write3mf(
+      bodies.map((body) => ({ body, name: bodyName(doc, body.bodyId) })),
+      options.quality,
+    ),
+});
+
+registerExporter({
+  format: "step",
+  label: "STEP AP214 (named solids)",
+  ext: "step",
+  mime: "model/step",
+  source: "bodies",
+  write: ({ doc, bodies }) =>
+    writeXdeStep(
+      bodies.map((body) => ({
+        shape: body.shape,
+        name: bodyName(doc, body.bodyId),
+      })),
+    ),
+});
+
+registerExporter({
+  format: "dxf",
+  label: "DXF R12 (sketch or face)",
+  ext: "dxf",
+  mime: "image/vnd.dxf",
+  source: ["sketch", "face"],
+  write: ({ sketch, polylines }) => writeDxf(sketch, polylines),
+});

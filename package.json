@@ -1,17 +1,19 @@
 {
   "name": "rockett-cad",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Self-hosted, browser-based parametric CAD for 3D printing (B-Rep kernel, feature timeline)",
+  "description": "Self-hosted parametric CAD with a B-Rep kernel and feature timeline, aimed at CNC, PCB and electrical manufacture workspaces",
   "workspaces": [
     "shared",
     "server",
-    "client"
+    "client",
+    "plugin-api",
+    "modules/*"
   ],
   "scripts": {
     "bench:client": "vitest bench --run --reporter=default client/test",
     "build": "npm run build --workspace shared --if-present && npm run build --workspace server && npm run build --workspace client",
-    "check": "run-s lint format:check lint:comments lint:cost lint:writing lint:readme lint:pins lint:notices build test test:browser && sh scripts/check-work-order.sh",
+    "check": "run-s lint format:check lint:comments lint:cost lint:writing lint:readme lint:pins lint:notices build test test:browser && { [ ! -f scripts/check-work-order.sh ] || sh scripts/check-work-order.sh; }",
     "cost": "node scripts/cost.mjs",
     "dev": "npm-run-all --parallel dev:server dev:client",
     "dev:client": "npm run dev --workspace client",
@@ -21,7 +23,7 @@
     "lint:comments": "sh scripts/check-comments.sh",
     "lint:cost": "node scripts/cost.mjs --check",
     "lint:notices": "sh scripts/check-notices.sh",
-    "lint:pins": "grep -nE '\"[~^*]' package.json shared/package.json server/package.json client/package.json; [ $? -eq 1 ]",
+    "lint:pins": "grep -nE '\"[~^*]' package.json shared/package.json server/package.json client/package.json plugin-api/package.json modules/*/package.json; [ $? -eq 1 ]",
     "lint:readme": "sh scripts/check-readme.sh",
     "lint:writing": "test -f ~/masterrulez/scripts/lint-writing || { echo 'masterrulez lint-writing is missing; clone masterrulez to ~/masterrulez' >&2; exit 1; } && node ~/masterrulez/scripts/lint-writing",
     "prepare": "husky",
@@ -29,7 +31,8 @@
     "test": "npm run typecheck && vitest run --project node --project dom",
     "test:browser": "vitest run --project browser",
     "test:client": "vitest run --project node --project dom client/test",
-    "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
+    "test:focused": "node scripts/test-focused.mjs",
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client && tsc -p plugin-api && for m in modules/*/package.json; do tsc -p \"${m%/package.json}\" || exit 1; done"
   },
   "devDependencies": {
     "gltf-validator": "2.0.0-dev.3.10",

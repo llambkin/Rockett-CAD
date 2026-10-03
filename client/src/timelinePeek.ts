@@ -1,13 +1,53 @@
 import { useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import type { EvaluateResult } from "@rockett/shared";
 import { api } from "./api";
 import { createLivePreview } from "./livePreview";
-import { useStore } from "./store";
+import { useStore, isIdle, type Selection } from "./store";
+import { TIMING_MS } from "./tunables";
+
+const peeked = create<{ featureId: string | null }>(() => ({
+  featureId: null,
+}));
+
+export const usePeekedFeature = () => peeked((s) => s.featureId);
+
+const NAMER = /^(?:f|m|p\d+):/;
+
+export function peekHighlight(
+  evaluation: EvaluateResult,
+  featureId: string,
+): Selection[] {
+  if (evaluation.planes.some((p) => p.featureId === featureId))
+    return [
+      { kind: "plane", ref: { kind: "construction", featureId }, label: "" },
+    ];
+  const modified = evaluation.featureStatuses.find(
+    (s) => s.featureId === featureId,
+  )?.modified;
+  const made = (bodyId: string, name: string) => {
+    const head = NAMER.exec(name)?.[0];
+    return (
+      (!!head && name.startsWith(`${featureId}:`, head.length)) ||
+      !!modified?.[bodyId]?.includes(name)
+    );
+  };
+  return evaluation.bodies.flatMap((b) =>
+    b.faces
+      .filter((f) => made(b.bodyId, f.name))
+      .map((f) => ({
+        kind: "face" as const,
+        bodyId: b.bodyId,
+        faceName: f.name,
+      })),
+  );
+}
 
 function createTimelinePeek(blocked: () => boolean) {
   let shown: { saved: EvaluateResult; peek: EvaluateResult } | null = null;
   let seq = 0;
   const live = createLivePreview({
+    dwellMs: TIMING_MS.timelinePeekDwell,
     send: async (fid) => {
       const { document, evaluation } = useStore.getState();
       const index = document?.features.findIndex((f) => f.id === fid) ?? -1;
@@ -25,11 +65,13 @@ function createTimelinePeek(blocked: () => boolean) {
         return;
       shown = { saved: evaluation, peek };
       useStore.setState({ evaluation: peek });
+      peeked.setState({ featureId: fid });
     },
   });
   const leave = () => {
     live.cancel();
     seq++;
+    peeked.setState({ featureId: null });
     if (shown && useStore.getState().evaluation === shown.peek)
       useStore.setState({ evaluation: shown.saved });
     shown = null;
@@ -45,7 +87,7 @@ function createTimelinePeek(blocked: () => boolean) {
 
 export function useTimelinePeek(quickEditOpen: boolean) {
   const busy = useStore((s) => s.busy);
-  const idle = useStore((s) => s.mode.name === "idle");
+  const idle = useStore(isIdle);
   const blocked = busy || !idle || quickEditOpen;
   const block = useRef(blocked);
   block.current = blocked;

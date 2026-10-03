@@ -4,7 +4,16 @@
  * extruded from the tree.
  */
 
-import type { CadDocument } from "@rockett/shared";
+import {
+  featureRefs,
+  findProfile,
+  pointInPolygon,
+  type CadDocument,
+  type Profile,
+  type SketchPayload,
+} from "@rockett/shared";
+
+type Sketch = Pick<SketchPayload, "featureId" | "entities" | "profiles">;
 
 export interface SketchUsage {
   /** `${sketchId}:${profileId}` of every region referenced by a feature */
@@ -16,20 +25,51 @@ export interface SketchUsage {
 export const profileKey = (sketchId: string, profileId: string) =>
   `${sketchId}:${profileId}`;
 
-export function sketchUsage(document: CadDocument): SketchUsage {
+const inside = (x: number, y: number, p: Profile) =>
+  pointInPolygon(x, y, p.polygon) &&
+  !p.holePolygons.some((h) => pointInPolygon(x, y, h));
+
+function interior(p: Profile): [number, number] {
+  const v = p.polygon;
+  const n = v.length / 2;
+  let i = 0;
+  const length = (k: number) =>
+    Math.hypot(
+      v[((k + 1) % n) * 2]! - v[k * 2]!,
+      v[((k + 1) % n) * 2 + 1]! - v[k * 2 + 1]!,
+    );
+  for (let k = 1; k < n; k++) if (length(k) > length(i)) i = k;
+  const [x0, y0] = [v[i * 2]!, v[i * 2 + 1]!];
+  const [x1, y1] = [v[((i + 1) % n) * 2]!, v[((i + 1) % n) * 2 + 1]!];
+  const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
+  const [nx, ny] = [(y0 - y1) * 1e-3, (x1 - x0) * 1e-3];
+  return inside(mx + nx, my + ny, p) ? [mx + nx, my + ny] : [mx - nx, my - ny];
+}
+
+export function savedRegionIds(sketch: Sketch, profileId: string): string[] {
+  const saved = findProfile(sketch, profileId);
+  if (!saved) return [];
+  if (sketch.profiles.includes(saved)) return [saved.id];
+  return sketch.profiles
+    .filter((p) => inside(...interior(p), saved))
+    .map((p) => p.id);
+}
+
+export function sketchUsage(
+  document: CadDocument,
+  evaluated: readonly Sketch[] = [],
+): SketchUsage {
   const profiles = new Set<string>();
   const sketches = new Set<string>();
-  for (const f of document.features) {
-    const anyF = f as any;
-    for (const p of anyF.profiles ?? [])
-      profiles.add(profileKey(p.sketchId, p.profileId));
-    for (const p of anyF.sections ?? []) {
-      if (p.kind === "face") continue;
-      if (p.profileId) profiles.add(profileKey(p.sketchId, p.profileId));
-      else sketches.add(p.sketchId);
+  for (const f of document.features)
+    for (const ref of featureRefs(f)) {
+      if (ref.kind === "sketch") sketches.add(ref.sketch);
+      if (ref.kind !== "profile") continue;
+      const { sketchId, profileId } = ref.profile;
+      const sketch = evaluated.find((s) => s.featureId === sketchId);
+      for (const id of sketch ? savedRegionIds(sketch, profileId) : [profileId])
+        profiles.add(profileKey(sketchId, id));
     }
-    if (anyF.pathSketchId) sketches.add(anyF.pathSketchId);
-  }
   return { profiles, sketches };
 }
 

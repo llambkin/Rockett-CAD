@@ -1,0 +1,133 @@
+{
+  "id": "fluidnc",
+  "label": "FluidNC",
+  "extension": "nc",
+  "capabilities": {
+    "arcs": true,
+    "cycles": false,
+    "toolChange": true
+  },
+  "words": [
+    "G0",
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G17",
+    "G18",
+    "G19",
+    "G20",
+    "G21",
+    "G54",
+    "G55",
+    "G56",
+    "G57",
+    "G58",
+    "G59",
+    "G59.1",
+    "G59.2",
+    "G59.3",
+    "G90",
+    "G91.1",
+    "G94",
+    "M0",
+    "M1",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "M7",
+    "M8",
+    "M9",
+    "M30"
+  ],
+  "formats": {
+    "X": {
+      "decimals": 4,
+      "trim": true
+    },
+    "Y": {
+      "decimals": 4,
+      "trim": true
+    },
+    "Z": {
+      "decimals": 4,
+      "trim": true
+    },
+    "I": {
+      "decimals": 4,
+      "trim": true
+    },
+    "J": {
+      "decimals": 4,
+      "trim": true
+    },
+    "K": {
+      "decimals": 4,
+      "trim": true
+    },
+    "F": {
+      "decimals": 1,
+      "trim": true
+    },
+    "S": {
+      "decimals": 0,
+      "trim": true
+    },
+    "P": {
+      "decimals": 3,
+      "trim": true
+    },
+    "T": {
+      "decimals": 0,
+      "trim": true
+    }
+  },
+  "modal": [
+    ["G0", "G1", "G2", "G3"],
+    ["G17", "G18", "G19"],
+    ["M3", "M4", "M5"],
+    ["M7", "M8", "M9"],
+    "X",
+    "Y",
+    "Z",
+    "F",
+    "S"
+  ],
+  "workOffsets": [
+    "G54",
+    "G55",
+    "G56",
+    "G57",
+    "G58",
+    "G59",
+    "G59.1",
+    "G59.2",
+    "G59.3"
+  ],
+  "templates": {
+    "header": ["G90 G94 G91.1 G17 {units}", "{offset}"],
+    "footer": ["M5", "M9", "M30"],
+    "toolChange": ["M5", "M9", "T{tool} M6"],
+    "toolLength": [],
+    "spindleCw": ["M3 S{rpm}"],
+    "spindleCcw": ["M4 S{rpm}"],
+    "spindleOff": ["M5"],
+    "coolantFlood": ["M8"],
+    "coolantMist": ["M7"],
+    "coolantOff": ["M9"],
+    "rapid": ["G0 X{x} Y{y} Z{z}"],
+    "linear": ["G1 X{x} Y{y} Z{z} F{feed}"],
+    "arcCw": ["{plane} G2 X{x} Y{y} Z{z} I{i} J{j} K{k} F{feed}"],
+    "arcCcw": ["{plane} G3 X{x} Y{y} Z{z} I{i} J{j} K{k} F{feed}"],
+    "drill": [],
+    "drillDwell": [],
+    "peck": [],
+    "cycleEnd": [],
+    "dwell": ["G4 P{seconds}"],
+    "stop": ["M0"],
+    "optionalStop": ["M1"],
+    "comment": "; {text}"
+  },
+  "toolChangeDefault": false
+}

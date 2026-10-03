@@ -1,34 +1,44 @@
+import { useContext } from "react";
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import {
   findOffsetConnector,
+  formatLength,
   offsetSketchSelection,
-  sampleArc,
+  curveSamples,
+  sketchCurves,
+  type SketchFeature,
+  type SketchEntity,
+  type PlaneFrame,
   editSketchOffset,
 } from "@rockett/shared";
 import { useStore } from "../store";
-import { viewportHandle } from "../viewportRef";
-import { uv3 } from "../three/CadViewport";
-import { disposeGroup } from "../three/dispose";
+import type { SketchState } from "../commands/sketch";
+import { useSetting } from "../settings";
+import { ViewportContext } from "../viewportRef";
+import { uv3, type CadViewport } from "../three/CadViewport";
+import { themeColor } from "../theme/tokens";
+import { SKETCH_APPEARANCE } from "../tunables";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { LengthField } from "./form/fields";
 
-export function SketchOffsetPanel() {
-  const mode = useStore((s) => s.mode);
-  return mode.name === "sketch" && mode.tool === "offset" ? (
-    <OffsetBody />
-  ) : null;
+export function SketchOffset() {
+  const sketch = useStore((s) =>
+    s.active?.id === "design.sketch" ? s.active.state : null,
+  );
+  return sketch && <SketchOffsetPanel sketch={sketch} />;
 }
 
-function OffsetBody() {
+function SketchOffsetPanel({ sketch }: { sketch: SketchState }) {
+  const viewport = useContext(ViewportContext);
+  const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
   const selection = useStore((s) => s.selection);
   const evaluation = useStore((s) => s.evaluation);
-  const params = useStore((s) => s.dialogParams);
   const busy = useStore((s) => s.busy);
-  const setParams = useStore((s) => s.setDialogParams);
-  const editing = draft?.offsets?.find((o) => o.id === params.editOffsetId);
+  const setParams = useStore((s) => s.setSketchState);
+  const editing = draft?.offsets?.find((o) => o.id === sketch.offsetEditId);
   const ids = useMemo(
     () =>
       selection.flatMap((s) =>
@@ -38,10 +48,10 @@ function OffsetBody() {
       ),
     [selection, draft?.id],
   );
-  const manual = params.offsetManualSelection === true || ids.length > 1;
-  const amount = Number(params.sketchOffset ?? 2);
-  const chain = params.offsetChain !== false;
-  const joinTolerance = Number(params.offsetJoinTolerance ?? 0.01);
+  const manual = sketch.offsetManualSelection || ids.length > 1;
+  const amount = sketch.offsetDistance;
+  const chain = sketch.offsetChain;
+  const joinTolerance = sketch.offsetJoinTolerance;
   const preview = useMemo(() => {
     if (!draft || (!editing && !ids.length))
       return { result: null, error: null };
@@ -75,80 +85,26 @@ function OffsetBody() {
       : null;
 
   useEffect(() => {
-    const vp = viewportHandle.current;
+    const vp = viewport.current;
     const frame = evaluation?.sketches.find(
       (s) => s.featureId === draft?.id,
     )?.frame;
     if (!vp || !frame || !preview.result || !draft) return;
-    const group = new THREE.Group();
-    const original = new Set(draft.entities.map((e) => e.id));
-    if (editing) for (const id of editing.entityIds) original.delete(id);
-    const points = new Map(
-      preview.result.entities
-        .filter((e) => e.kind === "point")
-        .map((e) => [e.id, e]),
+    const group = offsetPreviewGroup(
+      preview.result,
+      draft,
+      frame,
+      vp,
+      editing?.entityIds,
     );
-    for (const e of preview.result.entities) {
-      if (original.has(e.id) || e.kind === "point") continue;
-      let coords: number[] = [];
-      if (e.kind === "line") {
-        const a = points.get(e.p1)!,
-          b = points.get(e.p2)!;
-        coords = [a.x, a.y, b.x, b.y];
-      } else if (e.kind === "circle") {
-        const c = points.get(e.center)!;
-        for (let i = 0; i <= 96; i++)
-          coords.push(
-            c.x + e.radius * Math.cos((i * Math.PI) / 48),
-            c.y + e.radius * Math.sin((i * Math.PI) / 48),
-          );
-      } else {
-        const c = points.get(e.center)!,
-          a = points.get(e.start)!,
-          b = points.get(e.end)!;
-        coords = sampleArc(c.x, c.y, a.x, a.y, b.x, b.y, 64);
-      }
-      const positions: THREE.Vector3[] = [];
-      for (let i = 0; i + 1 < coords.length; i += 2)
-        positions.push(uv3(frame, coords[i]!, coords[i + 1]!));
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(positions),
-        new THREE.LineBasicMaterial({
-          color: 0xffcc66,
-          depthTest: false,
-          transparent: true,
-          opacity: 0.9,
-        }),
-      );
-      line.renderOrder = 9;
-      group.add(line);
-    }
-    if (preview.result.offsetChain && !preview.result.offsetChain.closed) {
-      const positions: THREE.Vector3[] = [],
-        size = vp.worldPerPixel() * 6;
-      for (const p of preview.result.offsetChain.ends) {
-        positions.push(
-          uv3(frame, p.x - size, p.y),
-          uv3(frame, p.x + size, p.y),
-          uv3(frame, p.x, p.y - size),
-          uv3(frame, p.x, p.y + size),
-        );
-      }
-      const markers = new THREE.LineSegments(
-        new THREE.BufferGeometry().setFromPoints(positions),
-        new THREE.LineBasicMaterial({ color: 0xff9933, depthTest: false }),
-      );
-      markers.renderOrder = 10;
-      group.add(markers);
-    }
-    vp.scene.add(group);
+    const layer = vp.addLayer("sketchOffsetPreview");
+    layer.group.add(group);
     vp.requestRender();
     return () => {
-      vp.scene.remove(group);
-      disposeGroup(group);
+      layer.dispose();
       vp.requestRender();
     };
-  }, [preview, draft, evaluation, editing]);
+  }, [preview, draft, evaluation, editing, viewport]);
 
   const close = () => useStore.getState().setSketchTool("select");
   const apply = async () => {
@@ -174,16 +130,16 @@ function OffsetBody() {
         </p>
         <LengthField
           label="Distance"
-          units="mm"
+          units={units}
           step={0.5}
           ariaLabel="Offset distance"
           autoFocus
           value={amount}
-          onChange={(v) => setParams({ sketchOffset: v })}
+          onChange={(v) => setParams({ offsetDistance: v })}
         />
         <button
           className="btn"
-          onClick={() => setParams({ sketchOffset: -amount })}
+          onClick={() => setParams({ offsetDistance: -amount })}
         >
           Reverse direction
         </button>
@@ -206,7 +162,7 @@ function OffsetBody() {
         {!editing && manual && (
           <LengthField
             label="Join gaps up to"
-            units="mm"
+            units={units}
             min={0}
             max={1}
             step={0.001}
@@ -218,15 +174,15 @@ function OffsetBody() {
         {preview.result?.joinedGaps && (
           <p className="field-hint">
             Joined {preview.result.joinedGaps.count} small gap(s), up to{" "}
-            {Number(preview.result.joinedGaps.maxDistance.toFixed(6))} mm, in
-            the offset copy. Original sketch unchanged.
+            {formatLength(preview.result.joinedGaps.maxDistance, units)}, in the
+            offset copy. Original sketch unchanged.
           </p>
         )}
         {preview.result?.offsetChain && (
           <p className="field-hint">
             {preview.result.offsetChain.closed
-              ? "Closed outline — ready to offset."
-              : `Open chain — orange crosses mark ends ${Number(preview.result.offsetChain.endGap.toFixed(6))} mm apart. Select the missing side to make a closed outline.`}
+              ? "Closed outline, ready to offset."
+              : `Open chain: orange crosses mark ends ${formatLength(preview.result.offsetChain.endGap, units)} apart. Select the missing side to make a closed outline.`}
           </p>
         )}
         {connector && (
@@ -234,7 +190,7 @@ function OffsetBody() {
             className="btn"
             onClick={() => {
               const s = useStore.getState();
-              s.setDialogParams({ offsetManualSelection: true });
+              s.setSketchState({ offsetManualSelection: true });
               s.toggleSelection(
                 {
                   kind: "sketchEntity",
@@ -264,4 +220,59 @@ function OffsetBody() {
       />
     </DraggablePanel>
   );
+}
+
+function offsetPreviewGroup(
+  result: {
+    entities: readonly SketchEntity[];
+    offsetChain?: ReturnType<typeof offsetSketchSelection>["offsetChain"];
+  },
+  draft: SketchFeature,
+  frame: PlaneFrame,
+  vp: CadViewport,
+  editingIds?: readonly string[],
+) {
+  const group = new THREE.Group();
+  const original = new Set(draft.entities.map((e) => e.id));
+  if (editingIds) for (const id of editingIds) original.delete(id);
+  for (const curve of sketchCurves(result.entities, true)) {
+    if (original.has(curve.id)) continue;
+    const coords = curveSamples(curve, 96);
+    const positions: THREE.Vector3[] = [];
+    for (let i = 0; i + 1 < coords.length; i += 2)
+      positions.push(uv3(frame, coords[i]!, coords[i + 1]!));
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(positions),
+      new THREE.LineBasicMaterial({
+        color: themeColor("offset"),
+        depthTest: false,
+        transparent: true,
+        opacity: SKETCH_APPEARANCE.previewLineOpacity,
+      }),
+    );
+    line.renderOrder = 9;
+    group.add(line);
+  }
+  if (result.offsetChain && !result.offsetChain.closed) {
+    const positions: THREE.Vector3[] = [],
+      size = vp.worldPerPixel() * 6;
+    for (const p of result.offsetChain.ends) {
+      positions.push(
+        uv3(frame, p.x - size, p.y),
+        uv3(frame, p.x + size, p.y),
+        uv3(frame, p.x, p.y - size),
+        uv3(frame, p.x, p.y + size),
+      );
+    }
+    const markers = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(positions),
+      new THREE.LineBasicMaterial({
+        color: themeColor("offset-end"),
+        depthTest: false,
+      }),
+    );
+    markers.renderOrder = 10;
+    group.add(markers);
+  }
+  return group;
 }

@@ -1,0 +1,87 @@
+{
+  "irVersion": 1,
+  "units": "mm",
+  "setupId": "setup-1",
+  "offsetIndex": 1,
+  "tools": [
+    {
+      "id": "t1",
+      "number": 1,
+      "name": "6 mm spot drill",
+      "kind": "drill",
+      "diameter": 6,
+      "fluteLength": 12,
+      "overallLength": 50,
+      "shankDiameter": 6,
+      "flutes": 2,
+      "centreCutting": true,
+      "tipAngle": 90
+    },
+    {
+      "id": "t2",
+      "number": 2,
+      "name": "5 mm drill",
+      "kind": "drill",
+      "diameter": 5,
+      "fluteLength": 52,
+      "overallLength": 86,
+      "shankDiameter": 5,
+      "flutes": 2,
+      "centreCutting": true,
+      "tipAngle": 118
+    }
+  ],
+  "sections": [
+    {
+      "operationId": "spot-1",
+      "toolId": "t1",
+      "pass": "finish",
+      "spindle": { "rpm": 6000, "dir": "cw" },
+      "coolant": "off",
+      "moves": [
+        { "kind": "comment", "text": "Spot 3 holes" },
+        { "kind": "rapid", "to": [10, 10, 15] },
+        {
+          "kind": "cycle",
+          "cycle": "drill",
+          "points": [
+            [10, 10],
+            [30, 10],
+            [30, 25]
+          ],
+          "clear": 2,
+          "top": 0,
+          "bottom": -1.5,
+          "feed": 150
+        },
+        { "kind": "rapid", "to": [30, 25, 15] }
+      ]
+    },
+    {
+      "operationId": "drill-1",
+      "toolId": "t2",
+      "pass": "rough",
+      "spindle": { "rpm": 4000, "dir": "cw" },
+      "coolant": "flood",
+      "moves": [
+        { "kind": "comment", "text": "Peck drill 3 holes 5 mm x 12 deep" },
+        { "kind": "rapid", "to": [10, 10, 15] },
+        {
+          "kind": "cycle",
+          "cycle": "peck",
+          "points": [
+            [10, 10],
+            [30, 10],
+            [30, 25]
+          ],
+          "clear": 2,
+          "top": 0,
+          "bottom": -12,
+          "peck": 4,
+          "feed": 200
+        },
+        { "kind": "rapid", "to": [30, 25, 15] }
+      ]
+    }
+  ]
+}

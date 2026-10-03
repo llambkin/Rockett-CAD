@@ -1,0 +1,17 @@
+{
+  "name": "@rockett/plugin-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@rockett/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

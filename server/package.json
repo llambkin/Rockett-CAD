@@ -5,17 +5,18 @@
   "type": "module",
   "scripts": {
     "bench": "vitest bench --run --reporter=default --reporter=json --outputFile.json=dist/bench.json",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:opencascade.js --external:express --external:multer --external:fflate --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "build": "sh build.sh",
     "dev": "tsx watch --clear-screen=false src/index.ts",
-    "start": "node dist/server.js",
+    "start": "node dist/server.mjs",
     "test": "vitest run"
   },
   "dependencies": {
+    "@rockett/plugin-api": "0.1.0",
     "@rockett/shared": "0.1.0",
     "express": "5.2.1",
     "fflate": "0.8.3",
     "multer": "2.4.0",
-    "opencascade.js": "2.0.0-beta.b5ff984"
+    "opencascade.js": "https://github.com/msegec/opencascade.js/releases/download/v2.0.0-msegec.occt801.4/opencascade.js-2.0.0-msegec.occt801.4.tgz"
   },
   "devDependencies": {
     "@types/express": "5.0.6",

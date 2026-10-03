@@ -1,3 +1,6 @@
+import { TIMING_MS } from "../tunables";
+import { getSetting } from "../settings";
+
 export interface WheelInput {
   deltaX: number;
   deltaY: number;
@@ -14,7 +17,6 @@ const LINE_PX = NOTCH_PX / 3;
 const PAGE_PX = 800;
 const PINCH_GAIN = 0.01;
 const MAX_EVENT_FACTOR = 1.25;
-const GESTURE_IDLE_MS = 150;
 const TRACKPAD_MAX_PX = 40;
 const MAC_MOUSE_PX = 4.000244140625;
 
@@ -24,8 +26,8 @@ function pixels(delta: number, deltaMode: number) {
   return delta;
 }
 
-function clampedFactor(exponent: number) {
-  const limit = Math.log(MAX_EVENT_FACTOR);
+function clampedFactor(exponent: number, maxFactor = MAX_EVENT_FACTOR) {
+  const limit = Math.log(maxFactor);
   return Math.exp(Math.max(-limit, Math.min(limit, exponent)));
 }
 
@@ -35,9 +37,12 @@ export function wheelZoomFactor(
   invert = false,
 ) {
   const px = pixels(e.deltaY || e.deltaX, e.deltaMode);
-  if (e.ctrlKey) return clampedFactor(px * PINCH_GAIN);
+  if (e.ctrlKey) return clampedFactor((invert ? -px : px) * PINCH_GAIN);
   const notches = (Math.sign(px) * Math.max(Math.abs(px), NOTCH_PX)) / NOTCH_PX;
-  return clampedFactor((invert ? -notches : notches) * Math.log(step));
+  return clampedFactor(
+    (invert ? -notches : notches) * Math.log(step),
+    Math.max(MAX_EVENT_FACTOR, step),
+  );
 }
 
 export function wheelPan(
@@ -63,7 +68,7 @@ export function wheelGesture() {
   let last = -Infinity;
   return {
     classify(e: WheelInput): WheelKind {
-      const fresh = e.timeStamp - last > GESTURE_IDLE_MS;
+      const fresh = e.timeStamp - last > TIMING_MS.wheelGestureIdle;
       last = e.timeStamp;
       if (e.ctrlKey) kind = "pinch";
       else if (fresh || kind === "pinch")
@@ -71,7 +76,7 @@ export function wheelGesture() {
       return kind;
     },
     pinching(now: number) {
-      return kind === "pinch" && now - last <= GESTURE_IDLE_MS;
+      return kind === "pinch" && now - last <= TIMING_MS.wheelGestureIdle;
     },
   };
 }
@@ -93,14 +98,25 @@ export function listenWheel(el: HTMLElement, vp: WheelTarget) {
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     if (gesture.classify(e) === "pan") vp.queuePan(...wheelPan(e));
-    else vp.queueZoom(wheelZoomFactor(e), e.clientX, e.clientY);
+    else
+      vp.queueZoom(
+        wheelZoomFactor(
+          e,
+          getSetting("view.zoomStep"),
+          getSetting("view.invertZoom"),
+        ),
+        e.clientX,
+        e.clientY,
+      );
   };
   const onGesture = (e: Event) => {
     e.preventDefault();
     const g = e as SafariGesture;
     if (e.type === "gesturechange" && !gesture.pinching(e.timeStamp))
       vp.queueZoom(
-        gestureZoomFactor(gestureScale, g.scale),
+        getSetting("view.invertZoom")
+          ? 1 / gestureZoomFactor(gestureScale, g.scale)
+          : gestureZoomFactor(gestureScale, g.scale),
         g.clientX,
         g.clientY,
       );

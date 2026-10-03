@@ -255,6 +255,15 @@ export const ICONS = {
       <circle cx="20" cy="18" r="1" fill="currentColor" />
     </>,
   ),
+  ellipse: svg(
+    <>
+      <ellipse cx="12" cy="12" rx="9" ry="5.5" />
+      <g opacity=".45">
+        <path d="M12 12h9M12 12V6.5" />
+      </g>
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+    </>,
+  ),
   polygon: svg(
     <>
       <path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9Z" />

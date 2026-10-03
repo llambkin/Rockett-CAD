@@ -156,11 +156,13 @@ button.doc-name:hover .doc-name-pen {
   border-bottom: 1px solid var(--border);
   padding: 2px 6px;
   min-height: 46px;
+  flex-shrink: 0;
   overflow-x: auto;
 }
 
 .tb-group {
   display: grid;
+  flex-shrink: 0;
   grid-auto-flow: column;
   align-items: center;
   gap: 2px;
@@ -179,17 +181,8 @@ button.doc-name:hover .doc-name-pen {
   border-right: none;
 }
 
-.toolbar.sketch {
-  flex-wrap: wrap;
-  overflow-x: hidden;
-  flex-shrink: 0;
-}
 .toolbar.sketch .tb-group {
   min-height: 40px;
-  max-width: 100%;
-}
-.toolbar.sketch .tb-row {
-  flex-wrap: wrap;
 }
 .toolbar.sketch label {
   display: flex;
@@ -277,13 +270,35 @@ button.doc-name:hover .doc-name-pen {
 
 /* ---------- model tree ---------- */
 
-.model-tree {
-  width: 220px;
-  min-width: 220px;
+.tree-pane {
+  position: relative;
+  display: flex;
+  flex: none;
   background: var(--bg1);
-  border-right: 1px solid var(--border);
+}
+
+.model-tree {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 6px 0;
+}
+
+.splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -3px;
+  z-index: 1;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  background: linear-gradient(var(--border), var(--border)) 2px 0 / 1px 100%
+    no-repeat;
+}
+.splitter:hover,
+.splitter.dragging {
+  background-image: linear-gradient(var(--accent), var(--accent));
 }
 
 .tree-doc {
@@ -550,6 +565,12 @@ button.doc-name:hover .doc-name-pen {
   font-weight: 600;
 }
 
+.dim-field[aria-invalid="true"],
+.dim-edit input[aria-invalid="true"],
+.field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
 .dim-key,
 .dim-unit {
   color: var(--text-dim);
@@ -729,13 +750,97 @@ button:focus-visible,
 .dialog-panel.controls-help {
   left: 12px;
   right: auto;
-  width: min(90vw, calc(100% - 150px));
+  width: 60vw;
+  height: 60vh;
   min-width: min(265px, 90vw);
   max-width: 90vw;
   min-height: 160px;
   max-height: min(85vh, calc(100% - 20px));
   overflow: hidden;
   resize: both;
+}
+
+.dialog-panel.settings-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: min(720px, calc(100vw - 24px));
+  height: min(540px, calc(100vh - 24px));
+  max-height: calc(100vh - 24px);
+  transform: translate(-50%, -50%);
+}
+
+.settings-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.settings-layout nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+  padding: 10px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.settings-layout nav button {
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 3px;
+}
+.settings-layout nav button.active {
+  color: var(--accent);
+  background: var(--bg2);
+}
+.settings-content {
+  flex: 1;
+}
+.settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.settings-heading h2 {
+  font-size: 15px;
+  margin: 4px 0 10px;
+}
+.settings-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-field-row fieldset {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.settings-source {
+  border: 1px solid var(--border);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.settings-source.active {
+  border-color: var(--accent);
+}
+.settings-error {
+  color: var(--err);
+}
+.settings-entry.invalid input,
+.settings-entry.invalid select {
+  border-color: var(--err);
+}
+.settings-warning {
+  color: var(--warn);
 }
 .controls-help .dialog-body {
   flex: 1;
@@ -780,6 +885,7 @@ kbd {
 }
 
 .field input[type="number"],
+.field input[type="text"],
 .field select {
   width: 110px;
 }
@@ -810,6 +916,16 @@ kbd {
   color: var(--accent);
 }
 
+.sel-info.selected {
+  background: var(--accent-dim);
+  border-style: solid;
+}
+
+.sel-info.selected span,
+.sel-info.selected b {
+  color: var(--on-accent);
+}
+
 .btn {
   padding: 5px 14px;
   border-radius: 4px;
@@ -819,6 +935,11 @@ kbd {
 
 .btn:hover {
   background: var(--bg2);
+}
+
+a.btn {
+  color: inherit;
+  text-decoration: none;
 }
 
 .btn.primary {
@@ -950,6 +1071,11 @@ kbd {
   border-color: var(--accent);
 }
 
+.tl-chip.selected {
+  background: var(--accent-dim);
+  color: var(--on-accent);
+}
+
 .tl-chip.error {
   border-color: var(--err);
   color: var(--err);
@@ -1004,10 +1130,13 @@ kbd {
   color: var(--err);
 }
 
-.ctx-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
+.context-menu button:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.context-menu button:disabled:hover {
+  background: transparent;
 }
 
 /* ---------- error toast ---------- */
@@ -1059,10 +1188,38 @@ kbd {
 
 .project-list-card h1 {
   font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-list-card h1 > :not(.logo) {
+  font-size: 1rem;
+  font-weight: normal;
+}
+
+.project-list-card h1 .icon-btn:first-of-type {
+  margin-left: auto;
 }
 
 .project-list-card .logo {
   color: var(--accent);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auth-form .btn {
+  align-self: flex-start;
 }
 
 .tagline {
@@ -1116,6 +1273,41 @@ kbd {
 }
 
 .project-open span {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.snapshot-popover {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px var(--shadow-menu);
+  pointer-events: none;
+}
+
+.snapshot-popover img,
+.snapshot-empty {
+  display: block;
+  width: 240px;
+  height: 160px;
+  border-radius: 3px;
+}
+
+.snapshot-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.snapshot-popover span {
+  padding: 0 4px 2px;
   color: var(--text-dim);
   font-size: 11px;
 }
@@ -1201,13 +1393,29 @@ kbd {
   padding: 3px 7px;
 }
 
-.version-label {
+.version-label,
+.pick-readout {
   position: absolute;
-  right: 8px;
   bottom: 6px;
-  z-index: 1;
   font-size: 10px;
+}
+
+.version-label {
+  right: 8px;
+  z-index: 1;
   color: var(--text-dim);
   opacity: 0.6;
   cursor: default;
+}
+
+.pick-readout {
+  left: 8px;
+  z-index: 5;
+  color: var(--text);
+  text-shadow:
+    0 0 1px var(--shadow-strong),
+    0 0 2px var(--shadow-strong),
+    0 0 3px var(--shadow-strong);
+  white-space: nowrap;
+  pointer-events: none;
 }

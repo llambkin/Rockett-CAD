@@ -1,9 +1,23 @@
+import {
+  featureCommand,
+  type FeatureCommandState,
+} from "../commands/featureCommand";
+import { runCommand } from "../commands/registry";
+import { useContext, useMemo } from "react";
 import { useStore, type Selection } from "../store";
-import { viewportHandle } from "../viewportRef";
+import {
+  ViewportContext,
+  alignCameraToActiveSketch,
+  type ViewportRef,
+} from "../viewportRef";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { NAMED_VIEWS } from "../three/camera";
-import { addSketchConstraints, toggleProjection } from "./Toolbar";
-import { relationsFor, sketchSelectionIds } from "../sketchRelations";
+import { toggleProjection } from "../commands/design";
+import {
+  addSketchConstraints,
+  relationsFor,
+  sketchSelectionIds,
+} from "../sketchRelations";
 
 async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   const s = useStore.getState();
@@ -20,71 +34,73 @@ async function toggleSketchConstruction(sketchId: string, entityIds: string[]) {
   await s.updateFeature(sketchId, { entities } as any);
 }
 
-function viewItems(): MenuItem[] {
+function viewItems(viewport: ViewportRef): MenuItem[] {
   return [
-    { label: "Fit", action: () => viewportHandle.current?.zoomToFit() },
+    { label: "Fit", action: () => viewport.current?.zoomToFit() },
     ...NAMED_VIEWS.map((v) => ({
       label: v.label,
-      action: () => viewportHandle.current?.setView(v.dir, v.up),
+      action: () => viewport.current?.setView(v.dir, v.up),
     })),
     {
       label:
-        viewportHandle.current?.projection === "orthographic"
+        viewport.current?.projection === "orthographic"
           ? "Perspective"
           : "Orthographic",
-      action: toggleProjection,
+      action: () => toggleProjection({ ...useStore.getState(), viewport }),
     },
   ];
 }
 
-function relationItems(): MenuItem[] {
-  const s = useStore.getState();
-  if (s.mode.name !== "sketch" || !s.draftSketch) return [];
-  return relationsFor(s.draftSketch, sketchSelectionIds(s.selection)).map(
-    (r) => ({
-      label: r.label,
-      action: () => void addSketchConstraints(r.constraints),
-    }),
+function useRelationItems(): MenuItem[] {
+  const draft = useStore((s) =>
+    s.active?.id === "design.sketch" ? s.draftSketch : null,
   );
+  const selection = useStore((s) => s.selection);
+  const relations = useMemo(
+    () => (draft ? relationsFor(draft, sketchSelectionIds(selection)) : []),
+    [draft, selection],
+  );
+  return relations.map((r) => ({
+    label: r.label,
+    action: () => void addSketchConstraints(r.constraints),
+  }));
 }
 
 export function ViewportContextMenu({
   menu,
   onClose,
   isPlanarFace,
-  alignToSketch,
   onDimension,
 }: {
   menu: { x: number; y: number; sel: Selection | null };
   onClose: () => void;
   isPlanarFace: (sel: Selection) => boolean;
-  alignToSketch: () => void;
   onDimension: (
     entityId: string,
     pos: { clientX: number; clientY: number },
   ) => void;
 }) {
+  const viewport = useContext(ViewportContext);
+  const alignToSketch = () => alignCameraToActiveSketch(viewport);
   const { sel } = menu;
   const s = useStore.getState();
-  const items = relationItems();
+  const items = useRelationItems();
   const shown = () => (
     <ContextMenu x={menu.x} y={menu.y} items={items} onClose={onClose} />
   );
 
   if (!sel) {
-    items.push(...viewItems());
+    items.push(...viewItems(viewport));
     return shown();
   }
 
-  const openDialog = (dialog: any, selection: Selection[] = [sel]) => {
-    s.setMode({ name: "dialog", dialog });
-    s.setSelection(selection);
-  };
+  const open = (type: FeatureCommandState["type"], selection = [sel]) =>
+    featureCommand.enter(type, { selection });
 
   if (sel.kind === "sketchEntity" || sel.kind === "sketchPoint") {
     const selectedIds = sketchSelectionIds(s.selection);
     const many = selectedIds.length > 1;
-    if (s.mode.name !== "sketch") {
+    if (s.active?.id !== "design.sketch") {
       if (sel.kind === "sketchEntity") {
         items.push({
           label: many
@@ -140,15 +156,15 @@ export function ViewportContextMenu({
       });
       items.push({
         label: "Extrude face",
-        action: () => openDialog("extrude"),
+        action: () => open("extrude"),
       });
       items.push({
         label: "Press / Pull",
-        action: () => openDialog("offsetFace"),
+        action: () => open("offsetFace"),
       });
       items.push({
         label: "Shell (open this face)",
-        action: () => openDialog("shell"),
+        action: () => open("shell"),
       });
     }
     items.push({
@@ -157,18 +173,21 @@ export function ViewportContextMenu({
         void s.setVisible({ bodies: { [sel.bodyId]: false }, features: {} }),
     });
   } else if (sel.kind === "edge") {
-    items.push({ label: "Fillet edge", action: () => openDialog("fillet") });
-    items.push({ label: "Chamfer edge", action: () => openDialog("chamfer") });
+    items.push({ label: "Fillet edge", action: () => open("fillet") });
+    items.push({
+      label: "Chamfer edge",
+      action: () => open("chamfer"),
+    });
   } else if (sel.kind === "profile") {
     const regions = s.selection.filter((x) => x.kind === "profile");
     const many = regions.length > 1;
     items.push({
       label: many ? `Extrude (${regions.length} regions)` : "Extrude region",
-      action: () => openDialog("extrude", regions),
+      action: () => open("extrude", regions),
     });
     items.push({
       label: many ? `Revolve (${regions.length} regions)` : "Revolve region",
-      action: () => openDialog("revolve", regions),
+      action: () => open("revolve", regions),
     });
   }
 
@@ -176,9 +195,8 @@ export function ViewportContextMenu({
     items.push({
       label: "Measure",
       action: () => {
-        s.setMode({ name: "measure" });
         s.setSelection([sel]);
-        void s.runMeasure();
+        void runCommand("inspect.measure", viewport);
       },
     });
   }

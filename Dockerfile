@@ -1,23 +1,37 @@
 # Rockett CAD — self-hosted parametric CAD
 #
-# Multi-stage build: workspace build → slim runtime.
+# Multi-stage build: dependencies → server and client builds → slim runtime.
 # The runtime runs as a non-root user and stores all state under /data.
 
 # ---------- build ----------
-FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS build
+FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
+COPY plugin-api/package.json plugin-api/package.json
+COPY modules/cam/package.json modules/cam/package.json
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
+FROM deps AS server
 COPY shared shared
+COPY plugin-api plugin-api
+COPY modules modules
 COPY server server
+RUN npm run build --workspace server
+
+FROM deps AS client
+COPY shared shared
+COPY plugin-api plugin-api
+COPY modules modules
 COPY client client
-RUN npm run build --workspace server \
-  && npm run build --workspace client
+RUN npm run build --workspace client
+
+FROM deps AS notices
+COPY THIRD-PARTY-NOTICES.md ./
+COPY scripts/check-notices.sh scripts/
 
 # ---------- runtime ----------
 FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS runtime
@@ -39,20 +53,25 @@ COPY package.json package-lock.json ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
+COPY plugin-api/package.json plugin-api/package.json
+COPY modules/cam/package.json modules/cam/package.json
 RUN npm ci --omit=dev --workspace server --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
+COPY THIRD-PARTY-NOTICES.md ./
+RUN --mount=type=bind,from=notices,source=/app,target=/build \
+  sh /build/scripts/check-notices.sh --collect /app/licences
 
-COPY --from=build /app/server/dist/server.js server.mjs
-COPY --from=build /app/client/dist client/dist
+COPY --from=server /app/server/dist/server.mjs /app/server/dist/kernel-worker.mjs /app/server/dist/blend.wasm ./
+COPY --from=client /app/client/dist client/dist
 
 # Non-root user; /data is the single persistent volume.
 RUN groupadd -r rockett && useradd -r -g rockett rockett \
   && mkdir -p /data && chown rockett:rockett /data
 USER rockett
 VOLUME /data
-EXPOSE 8788
+EXPOSE $ROCKETT_PORT
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=10 \
-  CMD node -e "fetch('http://127.0.0.1:8788/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=10 \
+  CMD node -e "fetch('http://127.0.0.1:$ROCKETT_PORT/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "server.mjs"]

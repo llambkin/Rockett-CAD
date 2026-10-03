@@ -1,32 +1,26 @@
-/**
- * Sketch tool geometry builders — pure functions that turn tool clicks into
- * entities + constraints. Interaction state lives in the viewport component.
- */
-
-import type { SketchConstraint, SketchEntity } from "@rockett/shared";
-import { newId, normalizeDegrees } from "@rockett/shared";
+import type { SketchConstraint, SketchEntity, Units } from "@rockett/shared";
+import {
+  LINEAR_TOL,
+  newId,
+  normalizeDegrees,
+  parseLength,
+  UNIT_DOT_TOL,
+} from "@rockett/shared";
 
 export interface Created {
   entities: SketchEntity[];
   constraints: SketchConstraint[];
-  /** ids of points that can keep being chained (line tool) */
   chainPointId?: string;
 }
 
 export interface UV {
   x: number;
   y: number;
-  /** id of an existing point snapped to, if any */
   snapPointId?: string | undefined;
-  /** id of a line the click snapped onto (adds pointOnLine) */
   snapLineId?: string | undefined;
-  /** id of a circle/arc the click snapped onto (adds pointOnCircle) */
   snapCircleId?: string | undefined;
-  /** id of a line whose midpoint the click snapped to (adds midpoint) */
   snapMidLineId?: string | undefined;
-  /** id of a connected line the new line snapped perpendicular to (adds perpendicular) */
   snapPerpLineId?: string | undefined;
-  /** what kind of snap engaged (drives the on-screen snap glyph) */
   snapKind?: "point" | "midpoint" | "curve" | "origin" | "perpendicular";
 }
 
@@ -180,9 +174,6 @@ function pointOrExisting(
       uv.snapKind === "midpoint" ||
       uv.snapKind === "point"
     ) {
-      // Face corners/midpoints and the origin have no sketch entity to
-      // constrain against. Preserve their snapped position during solving.
-      // Sketch references above retain their relational constraints instead.
       constraints.push({ id: newId("c"), type: "fix", point: id });
     }
   }
@@ -202,14 +193,11 @@ export function createLine(a: UV, b: UV, construction?: boolean): Created {
     p2,
     ...(construction === undefined ? {} : { construction }),
   });
-  // Auto-constrain lines drawn exactly axis-aligned (alignment snapping
-  // produces exact coordinates; freehand clicks never coincide exactly).
   if (a.x === b.x && a.y !== b.y) {
     constraints.push({ id: newId("c"), type: "vertical", line: lineId });
   } else if (a.y === b.y && a.x !== b.x) {
     constraints.push({ id: newId("c"), type: "horizontal", line: lineId });
   } else if (b.snapPerpLineId) {
-    // snapped to 90° from a connected line: keep it that way
     constraints.push({
       id: newId("c"),
       type: "perpendicular",
@@ -283,9 +271,27 @@ export function createCircle(center: UV, edge: UV): Created {
   return { entities, constraints };
 }
 
-/** 3-point arc: start, end, then a point on the arc. */
+export function ellipseMinor(c: UV, m: UV, q: UV): UV | null {
+  const [ux, uy] = [m.x - c.x, m.y - c.y];
+  const a = Math.hypot(ux, uy);
+  const side = (ux * (q.y - c.y) - uy * (q.x - c.x)) / (a || 1);
+  if (!(a > LINEAR_TOL && Math.abs(side) > LINEAR_TOL)) return null;
+  return { x: c.x - (uy / a) * side, y: c.y + (ux / a) * side };
+}
+
+export function createEllipse(c: UV, m: UV, q: UV): Created | null {
+  const n = ellipseMinor(c, m, q);
+  if (!n) return null;
+  const entities: SketchEntity[] = [];
+  const constraints: SketchConstraint[] = [];
+  const center = pointOrExisting(c, undefined, entities, constraints);
+  const major = pointOrExisting(m, undefined, entities, constraints);
+  const minor = pointOrExisting(n, undefined, entities);
+  entities.push({ id: newId("el"), kind: "ellipse", center, major, minor });
+  return { entities, constraints };
+}
+
 export function createArc3(start: UV, end: UV, on: UV): Created | null {
-  // circumcenter of the three points
   const ax = start.x,
     ay = start.y,
     bx = on.x,
@@ -316,7 +322,6 @@ export function createArc3(start: UV, end: UV, on: UV): Created | null {
   });
   const s = pointOrExisting(start, undefined, entities, arcConstraints);
   const e = pointOrExisting(end, undefined, entities, arcConstraints);
-  // arc goes CCW from start to end; flip when the on-point lies the other way
   const a0 = Math.atan2(ay - uy, ax - ux);
   let a1 = Math.atan2(cy - uy, cx - ux);
   let am = Math.atan2(by - uy, bx - ux);
@@ -333,46 +338,94 @@ export function createArc3(start: UV, end: UV, on: UV): Created | null {
   return { entities, constraints: arcConstraints };
 }
 
-export function createPolygon(center: UV, vertex: UV, sides: number): Created {
+export type PolygonType = "inscribed" | "circumscribed";
+
+export interface PolygonOptions {
+  sides: number;
+  type: PolygonType;
+  angle: number | null;
+}
+
+export function polygonVertices(
+  center: UV,
+  cursor: UV,
+  { sides, type, angle }: PolygonOptions,
+): { x: number; y: number }[] {
+  const r = Math.hypot(cursor.x - center.x, cursor.y - center.y);
+  const reach = type === "inscribed" ? r : r / Math.cos(Math.PI / sides);
+  const a0 =
+    angle === null
+      ? Math.atan2(cursor.y - center.y, cursor.x - center.x)
+      : (angle * Math.PI) / 180;
+  return Array.from({ length: sides }, (_, i) => {
+    const a = a0 + (i / sides) * Math.PI * 2;
+    return {
+      x: center.x + reach * Math.cos(a),
+      y: center.y + reach * Math.sin(a),
+    };
+  });
+}
+
+export function createPolygon(
+  center: UV,
+  cursor: UV,
+  options: PolygonOptions,
+): Created {
   const entities: SketchEntity[] = [];
   const constraints: SketchConstraint[] = [];
-  const r = Math.hypot(vertex.x - center.x, vertex.y - center.y);
-  const a0 = Math.atan2(vertex.y - center.y, vertex.x - center.x);
-  const pointIds: string[] = [];
-  for (let i = 0; i < sides; i++) {
-    const a = a0 + (i / sides) * Math.PI * 2;
+  const point = (v: { x: number; y: number }, construction = false) => {
     const id = newId("pt");
-    entities.push({
-      id,
-      kind: "point",
-      x: center.x + r * Math.cos(a),
-      y: center.y + r * Math.sin(a),
-    });
-    pointIds.push(id);
-  }
-  const lineIds: string[] = [];
-  for (let i = 0; i < sides; i++) {
+    entities.push({ id, kind: "point", x: v.x, y: v.y, construction });
+    return id;
+  };
+  const line = (p1: string, p2: string, construction = false) => {
     const id = newId("ln");
-    entities.push({
-      id,
-      kind: "line",
-      p1: pointIds[i]!,
-      p2: pointIds[(i + 1) % sides]!,
-    });
-    lineIds.push(id);
+    entities.push({ id, kind: "line", p1, p2, construction });
+    return id;
+  };
+  const c = pointOrExisting(center, undefined, entities, constraints);
+  const circle = newId("ci");
+  const radius = Math.hypot(cursor.x - center.x, cursor.y - center.y);
+  entities.push({
+    id: circle,
+    kind: "circle",
+    center: c,
+    radius,
+    construction: true,
+  });
+  const vertices = polygonVertices(center, cursor, options);
+  const pointIds = vertices.map((v) => point(v));
+  const lineIds = pointIds.map((p, i) =>
+    line(p, pointIds[(i + 1) % pointIds.length]!),
+  );
+  for (const [i, l] of lineIds.entries()) {
+    constraints.push(
+      options.type === "inscribed"
+        ? { id: newId("c"), type: "pointOnCircle", point: pointIds[i]!, circle }
+        : { id: newId("c"), type: "tangent", a: l, b: circle },
+    );
+    if (i > 0)
+      constraints.push({ id: newId("c"), type: "equal", a: lineIds[0]!, b: l });
   }
-  for (let i = 1; i < sides; i++) {
+  if (options.type === "circumscribed" && vertices.length % 2 === 0) {
+    const [a, b] = [vertices[0]!, vertices[1]!];
+    const touch = point({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, true);
+    const spoke = line(c, touch, true);
+    constraints.push(
+      { id: newId("c"), type: "midpoint", point: touch, line: lineIds[0]! },
+      { id: newId("c"), type: "perpendicular", a: spoke, b: lineIds[0]! },
+    );
+  }
+  if (options.angle !== null)
     constraints.push({
       id: newId("c"),
-      type: "equal",
-      a: lineIds[0]!,
-      b: lineIds[i]!,
+      type: "lineAngle",
+      line: line(c, pointIds[0]!, true),
+      value: normalizeDegrees(options.angle),
     });
-  }
   return { entities, constraints };
 }
 
-/** Slot: two center clicks + a radius from the second click drag point. */
 export function createSlot(c1: UV, c2: UV, r: number): Created {
   const entities: SketchEntity[] = [];
   const constraints: SketchConstraint[] = [];
@@ -427,55 +480,193 @@ export function createPoint(at: UV, construction?: boolean): Created {
   return { entities, constraints };
 }
 
-/**
- * Build the right dimensional constraint for the current selection.
- * Returns null when the selection doesn't support a dimension.
- */
-export function dimensionFor(
-  targets: Array<
-    | { kind: "point"; id: string }
-    | { kind: "line"; id: string }
-    | { kind: "circle"; id: string }
-    | { kind: "arc"; id: string }
-  >,
-  value: number,
-): SketchConstraint | null {
-  if (targets.length === 1) {
-    const t = targets[0]!;
-    if (t.kind === "line") {
-      return { id: newId("c"), type: "length", line: t.id, value };
+export type DimTarget = {
+  kind: "point" | "line" | "circle" | "arc";
+  id: string;
+};
+
+type XY = { x: number; y: number };
+
+function geometry(entities: SketchEntity[]) {
+  const at = new Map(entities.map((e) => [e.id, e]));
+  const point = (id: string): XY => {
+    const p = at.get(id);
+    if (p?.kind !== "point") throw new Error(`unknown point ${id}`);
+    return p;
+  };
+  const line = (id: string) => {
+    const l = at.get(id);
+    if (l?.kind !== "line") throw new Error(`unknown line ${id}`);
+    return { a: point(l.p1), b: point(l.p2) };
+  };
+  const radius = (id: string) => {
+    const e = at.get(id);
+    if (e?.kind === "circle") return e.radius;
+    if (e?.kind === "arc") {
+      const c = point(e.center);
+      const p = point(e.start);
+      return Math.hypot(p.x - c.x, p.y - c.y);
     }
-    if (t.kind === "circle" || t.kind === "arc") {
-      return { id: newId("c"), type: "diameter", entity: t.id, value };
-    }
-    return null;
-  }
-  if (targets.length === 2) {
-    const a = targets[0]!;
-    const b = targets[1]!;
-    if (a.kind === "point" && b.kind === "point") {
-      return {
-        id: newId("c"),
-        type: "distance",
-        a: a.id,
-        b: b.id,
-        axis: null,
-        value,
-      };
-    }
-    if (a.kind === "line" && b.kind === "line") {
-      return { id: newId("c"), type: "angle", a: a.id, b: b.id, value };
-    }
-  }
-  return null;
+    throw new Error(`entity ${id} has no radius`);
+  };
+  const offset = (lineId: string, p: XY) => {
+    const { a, b } = line(lineId);
+    const dx = b.x - a.x,
+      dy = b.y - a.y;
+    return (dx * (p.y - a.y) - dy * (p.x - a.x)) / (Math.hypot(dx, dy) || 1);
+  };
+  const direction = (lineId: string) => {
+    const { a, b } = line(lineId);
+    return Math.atan2(b.y - a.y, b.x - a.x);
+  };
+  return { point, line, radius, offset, direction };
 }
 
-/**
- * Mark everything a tool just created as construction geometry (points and
- * curves alike) so any tool — rectangle, circle, polygon, slot… — can draw
- * reference geometry, not only the line tool. Existing snapped-to points are
- * not in `created.entities` and stay as they are.
- */
+const degrees = (radians: number) => (radians * 180) / Math.PI;
+
+export function measureDimension(
+  c: SketchConstraint,
+  entities: SketchEntity[],
+): number {
+  const g = geometry(entities);
+  switch (c.type) {
+    case "length": {
+      const { a, b } = g.line(c.line);
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    case "distance": {
+      const a = g.point(c.a),
+        b = g.point(c.b);
+      if (c.axis === "x") return Math.abs(b.x - a.x);
+      if (c.axis === "y") return Math.abs(b.y - a.y);
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    case "radius":
+      return g.radius(c.entity);
+    case "diameter":
+      return 2 * g.radius(c.entity);
+    case "angle": {
+      const diff = g.direction(c.b) - g.direction(c.a);
+      return degrees(Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff))));
+    }
+    case "lineAngle":
+      return normalizeDegrees(
+        degrees(g.direction(c.line)) - (c.axis === "y" ? 90 : 0),
+      );
+    case "pointLineDistance":
+      return Math.abs(g.offset(c.line, g.point(c.point)));
+    case "lineDistance":
+      return Math.abs(g.offset(c.a, g.line(c.b).a));
+    default:
+      return 0;
+  }
+}
+
+function measured(c: SketchConstraint, entities: SketchEntity[]) {
+  return { ...c, value: measureDimension(c, entities) } as SketchConstraint;
+}
+
+function parallel(entities: SketchEntity[], a: string, b: string): boolean {
+  const g = geometry(entities);
+  return Math.abs(Math.sin(g.direction(a) - g.direction(b))) < UNIT_DOT_TOL;
+}
+
+export function dimensionFor(
+  targets: DimTarget[],
+  entities: SketchEntity[],
+): SketchConstraint | null {
+  const [a, b, ...rest] = targets.filter(
+    (t, i) => targets.findIndex((u) => u.id === t.id) === i,
+  );
+  if (!a || rest.length) return null;
+  const id = newId("c");
+  const value = 0;
+  if (!b) {
+    if (a.kind === "line")
+      return measured({ id, type: "length", line: a.id, value }, entities);
+    if (a.kind === "circle" || a.kind === "arc")
+      return measured({ id, type: "diameter", entity: a.id, value }, entities);
+    return null;
+  }
+  if (a.kind === "point" && b.kind === "point")
+    return measured(
+      { id, type: "distance", a: a.id, b: b.id, axis: null, value },
+      entities,
+    );
+  const point = [a, b].find((t) => t.kind === "point");
+  const line = [a, b].find((t) => t.kind === "line");
+  if (point && line)
+    return measured(
+      { id, type: "pointLineDistance", point: point.id, line: line.id, value },
+      entities,
+    );
+  if (a.kind !== "line" || b.kind !== "line") return null;
+  const type = parallel(entities, a.id, b.id) ? "lineDistance" : "angle";
+  return measured({ id, type, a: a.id, b: b.id, value }, entities);
+}
+
+const kind = (label: string, constraint: SketchConstraint) => ({
+  label,
+  constraint,
+});
+
+function dimensionKinds(c: SketchConstraint) {
+  const { id } = c;
+  const value = 0;
+  switch (c.type) {
+    case "distance": {
+      const pair = { id, type: c.type, a: c.a, b: c.b, value };
+      return [
+        kind("Aligned distance", { ...pair, axis: null }),
+        kind("Horizontal distance", { ...pair, axis: "x" }),
+        kind("Vertical distance", { ...pair, axis: "y" }),
+      ];
+    }
+    case "radius":
+    case "diameter":
+      return [
+        kind("Radius", { id, type: "radius", entity: c.entity, value }),
+        kind("Diameter", { id, type: "diameter", entity: c.entity, value }),
+      ];
+    case "length":
+    case "lineAngle": {
+      const angle = { id, type: "lineAngle", line: c.line, value } as const;
+      return [
+        kind("Length", { id, type: "length", line: c.line, value }),
+        kind("Angle to X axis", angle),
+        kind("Angle to Y axis", { ...angle, axis: "y" }),
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
+const dimensionKind = (c: SketchConstraint) =>
+  `${c.type}:${"axis" in c ? (c.axis ?? "") : ""}`;
+
+export function dimensionChoices(
+  c: SketchConstraint,
+  entities: SketchEntity[],
+) {
+  return dimensionKinds(c)
+    .filter((k) => dimensionKind(k.constraint) !== dimensionKind(c))
+    .map(({ label, constraint }) => ({
+      label,
+      constraint: measured(constraint, entities),
+    }));
+}
+
+export function chooseDimension(
+  constraints: SketchConstraint[],
+  choice: SketchConstraint,
+): SketchConstraint[] {
+  return dedupeDimensions(
+    withoutAxisLocks(constraints.map((c) => (c.id === choice.id ? choice : c))),
+    choice.id,
+  );
+}
+
 export function asConstruction(created: Created): Created {
   return {
     ...created,
@@ -502,6 +693,10 @@ export function dimensionKey(c: SketchConstraint): string | null {
       return `distance:${[x.a, x.b].sort().join("|")}:${x.axis ?? ""}`;
     case "angle":
       return `angle:${[x.a, x.b].sort().join("|")}`;
+    case "lineDistance":
+      return `lineDistance:${[x.a, x.b].sort().join("|")}`;
+    case "pointLineDistance":
+      return `pointLine:${x.point}|${x.line}`;
     default:
       return null;
   }
@@ -550,7 +745,7 @@ export type DimKey = "length" | "angle" | "width" | "height" | "diameter";
 export interface DimField {
   key: DimKey;
   label: string;
-  unit: string;
+  unit: Units | "°" | "";
   /** shown text: live cursor value until typed, then what the user typed */
   text: string;
   locked: boolean;
@@ -561,8 +756,11 @@ export function fmt2(v: number): string {
 }
 
 /** Which sizes a tool exposes for typing; null = readout only. */
-export function dimFieldsFor(tool: string): DimField[] | null {
-  const f = (key: DimKey, label: string, unit: string): DimField => ({
+export function dimFieldsFor(
+  tool: string,
+  units: Units = "mm",
+): DimField[] | null {
+  const f = (key: DimKey, label: string, unit: Units | "°"): DimField => ({
     key,
     label,
     unit,
@@ -571,12 +769,12 @@ export function dimFieldsFor(tool: string): DimField[] | null {
   });
   switch (tool) {
     case "line":
-      return [f("length", "L", "mm"), f("angle", "∠", "°")];
+      return [f("length", "L", units), f("angle", "∠", "°")];
     case "rect":
     case "centerRect":
-      return [f("width", "W", "mm"), f("height", "H", "mm")];
+      return [f("width", "W", units), f("height", "H", units)];
     case "circle":
-      return [f("diameter", "⌀", "mm")];
+      return [f("diameter", "⌀", units)];
     default:
       return null;
   }
@@ -610,9 +808,12 @@ export function liveDimValues(
 export function lockedValue(fields: DimField[], key: DimKey): number | null {
   const f = fields.find((x) => x.key === key);
   if (!f?.locked) return null;
-  const v = parseFloat(f.text);
-  if (!Number.isFinite(v)) return null;
-  return key === "angle" || v > 0 ? v : null;
+  if (key === "angle") {
+    const v = Number(f.text);
+    return f.text.trim() && Number.isFinite(v) ? v : null;
+  }
+  const mm = parseLength(f.text, f.unit === "°" ? "mm" : f.unit || "mm");
+  return mm !== null && mm > 0 ? mm : null;
 }
 
 /**
@@ -681,19 +882,32 @@ function pointAtAngle(a: UV, length: number, deg: number): UV {
   return { x: a.x + length * Math.cos(rad), y: a.y + length * Math.sin(rad) };
 }
 
-export const ANGLE_SNAP_STEP = 15;
-
-export function snapAngle(deg: number, step: number): number {
-  return Math.round(deg / step) * step;
+export function snapAngle(
+  deg: number,
+  step: number,
+  angles: readonly number[],
+): number {
+  let best = Math.round(deg / step) * step;
+  for (const angle of angles)
+    for (const target of [angle, angle + 180]) {
+      const near = target + Math.round((deg - target) / 360) * 360;
+      if (Math.abs(near - deg) < Math.abs(best - deg)) best = near;
+    }
+  return best;
 }
 
-export function snapLineEnd(a: UV, c: UV): UV {
+export function snapLineEnd(
+  a: UV,
+  c: UV,
+  step: number,
+  angles: readonly number[],
+): UV {
   const dx = c.x - a.x;
   const dy = c.y - a.y;
   const length = Math.hypot(dx, dy);
   if (length < 1e-9) return { x: c.x, y: c.y };
   const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  return pointAtAngle(a, length, snapAngle(deg, ANGLE_SNAP_STEP));
+  return pointAtAngle(a, length, snapAngle(deg, step, angles));
 }
 
 export function toggleAngleLock(fields: DimField[], live: number): void {

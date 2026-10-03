@@ -1,21 +1,18 @@
+import { raw, type RequestHandler } from "express";
 import multer from "multer";
-import { PROJECT_FILE_LIMIT_MB, type ApiErrorBody } from "@rockett/shared";
+import {
+  importLabels,
+  MB,
+  THUMBNAIL_LIMITS,
+  type ApiErrorBody,
+  type ImportFormat,
+} from "@rockett/shared";
 import { IMAGE_LIMIT_MB, StoreError } from "../store/projectStore.js";
+import { THUMBNAIL_RULE } from "../store/thumbnailStore.js";
 import type { Staged, Uploads } from "../store/blobStore.js";
+import { megabytes } from "./importers.js";
 
-const MB = 1024 * 1024;
-const megabytes = (bytes: number) =>
-  `${Number((bytes / MB).toPrecision(3))} MB`;
-
-export interface ImportLimits {
-  uploadBytes: number;
-  importBytes: number;
-}
-
-export const IMPORT_LIMITS: ImportLimits = {
-  uploadBytes: 10 * MB,
-  importBytes: 10 * MB,
-};
+export const JSON_BODY_LIMIT_BYTES = 50 * MB;
 
 export type Upload = Staged & { originalname: string };
 
@@ -56,39 +53,52 @@ export const receiveImage = multipart(
   `Upload one PNG, JPEG or WebP image, up to ${IMAGE_LIMIT_MB} MB.`,
 );
 
-export const receiveProjectFile = multipart(
-  "file",
-  PROJECT_FILE_LIMIT_MB * MB,
-  `Upload one .rockett project file, up to ${PROJECT_FILE_LIMIT_MB} MB.`,
-);
+const rawThumbnail = raw({ type: () => true, limit: THUMBNAIL_LIMITS.bytes });
 
-export const receiveImport = (uploads: Uploads, bytes: number) =>
+export const receiveThumbnail: RequestHandler = (req, res, next) =>
+  rawThumbnail(req, res, (err?: unknown) => {
+    if (!err) return next();
+    const body: ApiErrorBody = { error: THUMBNAIL_RULE, code: "validation" };
+    res.status(400).json(body);
+  });
+
+export const receiveProjectFile = (uploads: Uploads, bytes: number) =>
   multipart(
     "file",
     bytes,
-    `Upload one STEP, IGES, BREP, STL, OBJ or 3MF file, up to ${megabytes(bytes)}.`,
+    `Upload one .rockett project file, up to ${megabytes(bytes)}.`,
+    staging(uploads),
+  );
+
+export function withinImportBudget(file: Staged, bytes: number): void {
+  if (file.size > bytes)
+    throw new StoreError(
+      `This file is ${megabytes(file.size)}; imports are limited to ${megabytes(bytes)}.`,
+      "too_large",
+    );
+}
+
+export const receiveImport = (
+  uploads: Uploads,
+  bytes: number,
+  formats: readonly ImportFormat[],
+) =>
+  multipart(
+    "file",
+    bytes,
+    `Upload one ${importLabels(formats)} file, up to ${megabytes(bytes)}.`,
     staging(uploads),
   );
 
 export const discarding =
-  (uploads: Uploads, handle: (req: any, res: any) => Promise<void>) =>
-  async (req: any, res: any) => {
+  <Context>(
+    uploads: Uploads,
+    handle: (req: any, res: any, ctx: Context) => Promise<void>,
+  ) =>
+  async (req: any, res: any, ctx: Context) => {
     try {
-      await handle(req, res);
+      await handle(req, res, ctx);
     } finally {
       if (req.file) await uploads.discard(req.file);
     }
   };
-
-export function readUpload(
-  uploads: Uploads,
-  file: Upload,
-  limit: number,
-): Promise<Buffer> {
-  if (file.size > limit)
-    throw new StoreError(
-      `Imports are limited to ${megabytes(limit)}.`,
-      "too_large",
-    );
-  return uploads.read(file);
-}

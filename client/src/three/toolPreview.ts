@@ -4,41 +4,64 @@
  */
 
 import * as THREE from "three";
-import type { PlaneFrame } from "@rockett/shared";
+import { curveSamples, ellipseAxes, type PlaneFrame } from "@rockett/shared";
 import { CadViewport, uv3 } from "./CadViewport";
 import { themeColor } from "../theme/tokens";
-import { clearGroup } from "./dispose";
+import { SKETCH_APPEARANCE } from "../tunables";
+import type { LayerHandle } from "./sceneLayers";
 import type { SketchTool } from "../store";
-import type { UV } from "../sketchTools";
+import {
+  ellipseMinor,
+  polygonVertices,
+  type PolygonOptions,
+  type UV,
+} from "../sketchTools";
 
-let group: THREE.Group | null = null;
+const layers = new WeakMap<CadViewport, LayerHandle>();
 
 function ensureGroup(viewport: CadViewport): THREE.Group {
   viewport.requestRender();
-  if (!group || group.parent !== viewport.scene) {
-    group = new THREE.Group();
-    group.renderOrder = 9;
-    viewport.scene.add(group);
+  let layer = layers.get(viewport);
+  if (!layer) {
+    layer = viewport.addLayer("toolPreview");
+    layer.group.renderOrder = 9;
+    layers.set(viewport, layer);
   }
-  return group;
+  return layer.group;
 }
 
 export function clearToolPreview(viewport: CadViewport | null): void {
-  if (!viewport || !group) return;
-  clearGroup(group);
+  if (!viewport) return;
+  const layer = layers.get(viewport);
+  if (!layer) return;
+  layer.clear();
   viewport.requestRender();
 }
 
 function ghostLine(pts: THREE.Vector3[]): THREE.Line {
-  return new THREE.Line(
+  const line = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.LineBasicMaterial({
       color: themeColor("hover"),
       transparent: true,
-      opacity: 0.9,
+      opacity: SKETCH_APPEARANCE.previewLineOpacity,
       depthTest: false,
     }),
   );
+  line.userData.themeToken = "hover";
+  return line;
+}
+
+const trace = (frame: PlaneFrame, flat: number[]) =>
+  flat.flatMap((u, i) => (i % 2 ? [] : [uv3(frame, u, flat[i + 1]!)]));
+
+const circlePts = (frame: PlaneFrame, cx: number, cy: number, r: number) =>
+  trace(frame, curveSamples({ id: "", kind: "circle", cx, cy, r }, 48));
+
+function ellipseRim(c: UV, m: UV, cursor: UV): number[] {
+  const n = ellipseMinor(c, m, cursor);
+  if (!n) return [c.x, c.y, m.x, m.y];
+  return curveSamples({ id: "", kind: "ellipse", ...ellipseAxes(c, m, n) }, 48);
 }
 
 /**
@@ -51,20 +74,11 @@ export function updateToolPreview(
   tool: SketchTool,
   clicks: UV[],
   cursor: UV,
-  polygonSides = 6,
+  polygon: PolygonOptions = { sides: 6, type: "inscribed", angle: null },
 ): boolean {
   clearToolPreview(viewport);
   const g = ensureGroup(viewport);
   const P = (u: number, v: number) => uv3(frame, u, v);
-
-  const circlePts = (cx: number, cy: number, r: number): THREE.Vector3[] => {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= 48; i++) {
-      const t = (i / 48) * Math.PI * 2;
-      pts.push(P(cx + r * Math.cos(t), cy + r * Math.sin(t)));
-    }
-    return pts;
-  };
 
   switch (tool) {
     case "line": {
@@ -106,7 +120,7 @@ export function updateToolPreview(
       if (clicks.length < 1) return false;
       const c = clicks[0]!;
       const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
-      if (r > 1e-6) g.add(ghostLine(circlePts(c.x, c.y, r)));
+      if (r > 1e-6) g.add(ghostLine(circlePts(frame, c.x, c.y, r)));
       return true;
     }
     case "arc3": {
@@ -117,7 +131,6 @@ export function updateToolPreview(
         return true;
       }
       if (clicks.length === 2) {
-        // arc through start, cursor, end (circumcircle sample)
         const s = clicks[0]!;
         const e = clicks[1]!;
         const b = cursor;
@@ -138,10 +151,7 @@ export function updateToolPreview(
         let am = Math.atan2(b.y - uy, b.x - ux);
         while (a1 <= a0) a1 += Math.PI * 2;
         while (am <= a0) am += Math.PI * 2;
-        if (am > a1) {
-          // go the other way round
-          [a0, a1] = [a1 - Math.PI * 2, a0];
-        }
+        if (am > a1) [a0, a1] = [a1 - Math.PI * 2, a0];
         const pts: THREE.Vector3[] = [];
         for (let i = 0; i <= 32; i++) {
           const t = a0 + ((a1 - a0) * i) / 32;
@@ -152,17 +162,19 @@ export function updateToolPreview(
       }
       return false;
     }
+    case "ellipse": {
+      const [c, m] = clicks;
+      if (!c) return false;
+      const rim = m ? ellipseRim(c, m, cursor) : [c.x, c.y, cursor.x, cursor.y];
+      g.add(ghostLine(trace(frame, rim)));
+      return true;
+    }
     case "polygon": {
       if (clicks.length < 1) return false;
-      const c = clicks[0]!;
-      const r = Math.hypot(cursor.x - c.x, cursor.y - c.y);
-      const a0 = Math.atan2(cursor.y - c.y, cursor.x - c.x);
-      const pts: THREE.Vector3[] = [];
-      for (let i = 0; i <= polygonSides; i++) {
-        const t = a0 + (i / polygonSides) * Math.PI * 2;
-        pts.push(P(c.x + r * Math.cos(t), c.y + r * Math.sin(t)));
-      }
-      g.add(ghostLine(pts));
+      const pts = polygonVertices(clicks[0]!, cursor, polygon).map((v) =>
+        P(v.x, v.y),
+      );
+      g.add(ghostLine([...pts, pts[0]!]));
       return true;
     }
     case "slot": {
@@ -193,8 +205,8 @@ export function updateToolPreview(
             P(c2.x - nx * r, c2.y - ny * r),
           ]),
         );
-        g.add(ghostLine(circlePts(c1.x, c1.y, r)));
-        g.add(ghostLine(circlePts(c2.x, c2.y, r)));
+        g.add(ghostLine(circlePts(frame, c1.x, c1.y, r)));
+        g.add(ghostLine(circlePts(frame, c2.x, c2.y, r)));
         return true;
       }
       return false;

@@ -1,451 +1,416 @@
 # CAD model
 
-How Rockett CAD represents, regenerates, names, tessellates, measures and
-exports geometry. This is the most load-bearing document in the repo.
+The document is a recipe. Geometry is rebuilt from it and never saved. This
+file keeps the contracts code cannot show and names the code that owns each.
 
-## B-Rep representation
+Parameter shapes live in the types, not here: `CadDocument` in
+`shared/src/documents.ts`, one module per feature in `shared/src/features/`, JSON
+schemas in `shared/src/schema/`.
 
-The authoritative model is OpenCascade B-Rep: each **body** is a
-`TopoDS_Solid` (occasionally several solids when an operation splits a body).
-The document (`shared/src/model.ts`) stores the _recipe_: sketches with
-constraints, features with parameters and references, and embedded source
-data for imported geometry.
-Geometry exists only inside the evaluation state and its caches, and is
-rebuilt from the recipe on demand. Saved projects are JSON, and the modelling
-history survives close/reopen; embedded imports increase document size.
+## Saved projects
 
-### Loft sections
+Saved projects are user data. A shape change ships a migration, a backup and
+a test that loads the previous schema.
 
-Schema 12 lets a loft's ordered `sections` mix sketch `ProfileRef` entries
-with planar `FaceRef` entries. Existing sketch-only lofts keep their references
-and evaluation unchanged. The 11 to 12 migration changes only the schema
-version; the existing project store backs up the old document before saving.
+- `SCHEMA_VERSION` in `shared/src/documents.ts` is the document version. A shape
+  change bumps it and adds the step from the old version to
+  `documentMigrations` in `server/src/store/migrations.ts`.
+- `migrate` refuses a newer file with `TooNewError` and a gap with
+  `MissingStepError`.
+- Load migrates in memory. The first save backs up the complete project
+  through `NamespaceBackup` in `server/src/store/jsonStore.ts`, then writes
+  one generation.
+- Boot lists outdated projects and migrates none: `server/src/index.ts`.
+- Loading never writes. `pinRefs` in `server/src/geometry/pinRefs.ts` pins
+  `targets` and `sig` in memory only.
+- An optional field needs no step when documents saved without it read the
+  same, as an `importStep` without `format` reads as STEP:
+  `shared/src/features/importStep.ts`.
+- The store sets `revision` to the stored value plus one on every write:
+  `server/src/store/projectStore.ts`.
+- STEP, IGES and BREP bytes live in the project blob store under their
+  sha256 (`server/src/store/blobStore.ts`). The feature holds `blob`.
+- `extensions` values keep their `{ version, data }` envelope. The server
+  never reads `data`.
+- A feature is a `CoreFeature` or an `ExtensionFeature`, whose dotted
+  `type` names its module and whose own `version` and `params` its
+  `FeatureSpec` owns. Load runs the spec's `migrate` through `migrate`, with
+  the type as namespace (`documentMigrations.nested`). Core features carry no
+  `version` and load unchanged; an unregistered type stays as stored.
 
-Face sections must have one closed outline and no holes. Curved faces and
-faces with holes report a feature error. Join combines the loft with every
-body referenced by its face sections, retaining the first selected body's ID.
-New body keeps the source bodies. Loft interpolates smoothly through the
-ordered sections; two sections may produce straight sides. Intermediate
-profiles can define a bend. Guide curves and endpoint tangency constraints
-are not supported.
+### Schema steps
 
-### STEP, IGES and BREP imports
-
-Schema version 3 adds `importStep` features containing `filename` and the
-original STEP text in `data`. Schema 8 moves that text to the project's blob
-store: the feature holds `blob`, the sha256 of the UTF-8 bytes, and
-`projects/<id>/blobs/<sha256>` holds the bytes the kernel reads. Routes load
-the blobs a document names before they evaluate it, so the engine's cache key
-for the feature is its small JSON, not the file. The 7 to 8 migration hashes
-each inline `data`, and the next save writes the blob before the document
-that drops `data`; until then a read serves the bytes from the stored
-document. OCCT reads this source during regeneration,
-normalizes lengths to millimetres, and registers each solid as a body. The
-source travels with document snapshots and duplicates. Imports can be
-suppressed, deleted, or rolled back, and downstream features reference their
-named faces and edges. Assembly hierarchy, appearance, and source design
-history are not retained. Surface-only files are rejected; solid bodies are
-retained from mixed files. Each upload is limited to 10 MB.
-
-An `importStep` feature may also hold an IGES or BREP file, marked by an
-optional `format` of `iges` or `brep`; absent means STEP. IGES reads through
-`IGESControl_Reader`, converting to millimetres, and BREP through
-`BRepTools::Read` (the ASCII format that `BRepTools::Write` produces).
-`server/src/geometry/importers.ts` owns all three readers. A file that yields
-no solid is rejected as `No solid found in the IGES file.`, naming its format,
-so an IGES file written as trimmed faces only is rejected rather than sewn.
-The field needs no schema step: documents saved before it have no `format`
-and still read as STEP, so schema 5 stands. A build older than this one reads
-an IGES or BREP import as STEP and reports that feature as failed.
-
-### STL, OBJ and 3MF imports
-
-An `importMesh` feature holds `filename`, `format` (`stl`, `obj` or `3mf`) and
-the original file as base64 in `data`, so binary STL survives JSON.
-Regeneration reads STL and OBJ with `RWStl` or `RWObj`, which merge coincident
-nodes. Each triangle becomes a planar face over shared vertices and edges, and
-`BRepBuilderAPI_Sewing` joins them. With no free edges each shell becomes a
-solid, reversed if its volume is negative. Otherwise the sewn shell is the body
-and the feature status is `warning`, naming the open edge count. Meshes over
-200,000 triangles fail with their count. Faces stay triangles, so a mesh body
-is not parametric and has one face per triangle.
-
-OCCT's STL reader takes a file as ASCII when its first 134 bytes are all
-printable, which misreads a binary cube with small coordinates. When the size
-is exactly 84 bytes plus 50 per declared facet, the reader's copy gets a
-non-ASCII first header byte, forcing the binary path. The stored data is not
-changed.
-
-A 3MF is read in TypeScript: a central-directory zip reader over `node:zlib`
-finds the model part named by `_rels/.rels` (else `3D/3dmodel.model`) and
-inflates it with a 256 MB output cap. Each build item's mesh object is scaled
-from the model `unit` to millimetres, moved by the item transform and sewn on
-its own, so touching objects stay separate bodies. If any object is open, the
-whole file is one shell body with the warning. Objects built from `components`
-are rejected.
-
-The feature needs no schema step: no saved document changes meaning, so
-schema 5 stands. A build older than this one loads such a project, reports the
-`importMesh` feature as an unknown type error and refuses to save a full
-document containing it, so nothing is lost.
+| Step     | Change                                             |
+| -------- | -------------------------------------------------- |
+| 1 to 5   | version only: projection, offsets, `lineAngle`     |
+| 5 to 6   | `groups: []`                                       |
+| 6 to 7   | `revision: 0`, `savedWith: null`                   |
+| 7 to 8   | inline STEP `data` becomes a `blob`                |
+| 8 to 9   | reference image asset becomes a blob               |
+| 9 to 10  | `extensions: {}`                                   |
+| 10 to 11 | `visible` moves to the user view, `camera` dropped |
+| 11 to 12 | `namingVersion: 1`                                 |
+| 12 to 13 | stale `visible` dropped                            |
+| 13 to 14 | version only: refs may carry `sig`                 |
+| 14 to 15 | version only: tools may carry `targets`            |
+| 15 to 16 | version only: revolve `faces`                      |
+| 16 to 17 | version only: sketch distances, `lineAngle.axis`   |
+| 17 to 18 | version only: construction plane `method` kinds    |
+| 18 to 19 | `units` moves to the project settings layer        |
+| 19 to 20 | version 2 join `targets` sorted by `compareNames`  |
+| 20 to 21 | `modifiedBy: null`                                 |
 
 ## Body identity
 
-Bodies get stable ids derived from the feature that created them:
+Owners: `orderBodyPieces` in `server/src/geometry/naming.ts`, `derivedBodyId`
+and `compareNames` in `shared/src/topoRefs.ts`.
 
-- `b:{featureId}`: a `newBody` extrude/revolve/sweep/loft. A `newBody`
-  extrude/revolve of several sketch regions makes one body per region, in
-  selection order (`b:x`, `b:x:2`, …); `join` is what merges regions into a
-  single solid (with no existing body to join, the merged solid becomes the new
-  body).
-- Boolean join/cut keep the _target_ body's id.
-- An operation that leaves multiple solids appends ordinal suffixes ordered
-  by volume (`b:x`, `b:x:2`, …); `splitBody` orders along the split-plane
-  normal (`b:x`, `b:x:s2`).
+- A new body is `b:{featureId}`. Extra pieces are `b:{featureId}:2`, and so
+  on.
+- Join and cut keep the target's id. Bodies one tool bridges keep the first
+  id in `targets`, else the first by `compareNames`.
+- Split pieces: version 1 orders by volume. Version 2 orders by each piece's
+  smallest unshared face name, and a piece with no name of its own fails as
+  an identity conflict. The first piece keeps the target's id. Under version
+  2 a join, cut or intersect names the rest `b:{featureId}:{n}`, numbered
+  from 2 across the feature, so the id never grows with chain depth; version
+  1 appends `:{n}` to the target's id.
+- Mirror and pattern copies are `b:{featureId}:{n}`, fixed length at any
+  depth. The first `splitBody` piece keeps its id.
+- A fresh process gives the same ids and names.
+- Display names live in `document.bodyMeta`. Visibility lives in the user
+  view; see [API.md](API.md), View state. `document.groups` never reaches
+  evaluation.
 
-A body's display name lives in `document.bodyMeta[bodyId]` and is assigned
-server-side the first time a body id appears (`Body1`, `Body2`, …). Which
-bodies, sketches and reference images are hidden lives outside the document,
-in `view.json` (see [API.md](API.md), View state). The 10 to 11 migration
-moves every `visible` flag there and drops the unused `camera`.
+## Topological naming
 
-`document.groups` holds model tree folders: `{ id, name, kind, members }`,
-where `kind` is `body` or `sketch` and `members` are body ids or sketch feature
-ids, each in at most one group. Groups never reach evaluation or export. After
-an evaluation the server drops sketch members whose feature is gone and, when
-the evaluation reaches the end of the timeline, body members it did not
-produce. A rolled back timeline keeps them; an empty group stays until
-ungrouped. Components with their own coordinate systems belong to assemblies.
-
-## Topological naming (persistent references)
-
-The classic CAD problem: "Fillet the third face" breaks the moment an
-upstream edit renumbers faces. Rockett CAD never references topology by
-index. Instead:
+Never reference topology by index. `server/src/geometry/naming.ts` owns
+names. The document's `namingVersion` picks the rules. New projects get 2;
+only the Naming upgrade changes a stored version.
 
 ### Face names
 
-Every face of every body carries a persistent string name assigned when it is
-created and _propagated_ through later operations:
+| Origin                                      | Name                                                    |
+| ------------------------------------------- | ------------------------------------------------------- |
+| Extrude or revolve side from a sketch curve | `f:{featureId}:s:{sketchEntityId}`                      |
+| Extrude or revolve cap                      | `f:{featureId}:cap:start`, `f:{featureId}:cap:end`      |
+| Sweep and loft side and cap, version 2      | as extrude                                              |
+| Fillet or chamfer face from an edge         | `f:{featureId}:fe:{n}`, `f:{featureId}:fe:{n}:{part}`   |
+| Press/pull moved face, version 2            | the source face's name                                  |
+| Mirror or pattern copy, version 1           | `m:{featureId}:{name}`, `p{i}:{featureId}:{name}`       |
+| Mirror or pattern copy, version 2           | `m:{featureId}:{key}{~n}`, `p{i}:{featureId}:{key}{~n}` |
+| STEP, IGES or BREP import face, version 2   | `f:{featureId}:g:{surface}:{key}`                       |
+| Anything the history cannot attribute       | `f:{featureId}:x{n}`                                    |
 
-| Origin                                                  | Name                                                               |
-| ------------------------------------------------------- | ------------------------------------------------------------------ |
-| Extrude/revolve side face generated from a sketch curve | `f:{featureId}:s:{sketchEntityId}`                                 |
-| Extrude/revolve cap                                     | `f:{featureId}:cap:start` / `f:{featureId}:cap:end`                |
-| Fillet/chamfer face generated from an edge              | `f:{featureId}:fe:{n}`                                             |
-| Mirrored / patterned copy                               | `m:{featureId}:{originalName}` / `p{i}:{featureId}:{originalName}` |
-| Anything the history cannot attribute                   | `f:{featureId}:x{n}` (deterministic centroid order)                |
-
-Propagation uses the kernel's own history API. For every boolean, fillet,
-chamfer, shell, or offset operation we walk the input faces and ask OCCT
-`IsDeleted` / `Modified` / `Generated`:
-
-- deleted → the name dies with the face;
-- modified → each resulting face inherits the input face's name;
-- untouched → the face (same TShape) keeps its name;
-- new faces → named by their generating entity where the operation reports it
-  (e.g. `MakePrism.Generated(edge)`, `MakeFillet.Generated(edge)`), otherwise
-  the deterministic fallback.
-
-A name map is a `ShapeMap` (`server/src/geometry/shapeMap.ts`): the shape hash
-only picks a bucket, and a lookup matches with OCCT's `IsSame` (same TShape
-and location), so two faces whose hashes collide keep their own names.
-
-When one input face yields several result faces (e.g. a boolean splits a
-face) the copies are disambiguated with a `~n` suffix in centroid order: by
-x, then y, then z. `suffixDuplicates` in `server/src/geometry/naming.ts` owns
-that order for faces, edges and vertices; a vertex sorts by its point.
-
-An extrude's `distance` is signed: a negative value builds the prism on the
-opposite side of the sketch plane (after `direction` is applied; `symmetric`
-ignores the sign). An optional `startOffset` moves the start plane along the
-profile's (or face's) own normal before the distance is applied (Fusion's
-"Start → Offset"), so a boss or cut can begin above or below the sketch. The dialog treats a typed negative value as "into the part"
-and switches Join to Cut, previewing the tool in red.
-
-Extrude and revolve tools built from several sketch regions pass through
-`ShapeUpgrade_UnifySameDomain` before the boolean, so adjacent regions become
-one face instead of showing the sketch's internal boundaries as edges. Names
-follow the unify history: a face merged from several inputs takes their shared
-base name (the `~n` suffix dropped), or the first distinct base name in sorted
-order when they differ. This runs on the tool only. A later join whose cap is
-coplanar with an existing face keeps that edge, so downstream references to
-existing faces never move. Two cylinder faces merge only when their surfaces
-share the same X and Y axes. OCCT 7.6 never returns from merging a fillet's
-cylinder with a coaxial prism cylinder whose angle starts a quarter turn away,
-so cylinders whose axes differ keep the edge between them (BUG-041).
-
-Chamfers go through the kernel's `BRepFilletAPI_MakeChamfer` first. That
-algorithm cannot remove a face the chamfer consumes entirely (two 3.5 mm
-chamfers meeting mid-wall on a 7 mm plate), so when it fails and the selected
-edges are the complete outline of a planar cap ringed by perpendicular planar
-walls at least `distance` deep, the chamfer is built as a boolean instead: the
-body is intersected with an envelope made of exact planar quads between each
-outline edge (moved `distance` deeper) and its inward-offset counterpart, plus
-a generous prism beyond. Holes in the cap are left alone (only the outer
-outline is offset), so a through-hole survives untouched. The new faces are
-named `f:{featureId}:fe:{n}` per source edge, exactly as the kernel path names
-them.
-
-Sketch-curve attribution deserves a note: wire construction can rebuild edge
-shapes (vertex merging), so after building a profile face we re-derive the
-edge→sketch-entity map _geometrically_ (each face edge's midpoint is matched
-against the sketch curves) rather than trusting construction-time handles.
+- Names follow the kernel history (`propagateNames`, `historyNames`).
+- Every face name template lives in `server/src/geometry/naming.ts`; a
+  fillet or chamfer adds `:{part}` only when one edge makes several faces.
+- A name map is a `ShapeMap` (`server/src/geometry/shapeMap.ts`) matched by
+  `IsSame`, so hash collisions keep names.
+- Duplicates get `~n` in centroid order x, y, z (`suffixDuplicates`).
+  Version 2 rounds to `LINEAR_TOL` first and marks equal cells `~?n`.
+  Fallback faces in an equal cell become `f:{featureId}:x~?{n}`.
+- Version 2 names a face its history missed from the profile edge whose
+  midpoint lies on it. A face touched by several takes the first name with
+  `~?1`.
+- A face reference to a `~?` name never resolves; the resolver reports it.
+- Version 2 `key` is the first 16 hex digits of the SHA-256 of the source
+  name without its `~n` or `~?n` suffix, so a copy name keeps one length at
+  any mirror or pattern depth.
+- A face merged by unify takes its inputs' shared base name. Version 1 keeps
+  the seams it always had.
 
 ### Edge and vertex names
 
-Edges and vertices are named from their adjacent faces, inheriting face-name
-stability:
-
 ```
 e[{faceA}|{faceB}]          edge bounded by two faces (names sorted)
-e[{faceA}|seam]             seam edge (cylinder seam etc.)
-v[{faceA}|{faceB}|{faceC}]  vertex named by its adjacent faces
+e[{faceA}|seam]             seam edge
+v[{faceA}|{faceB}|{faceC}]  vertex named by its adjacent faces, version 1
+v[{key}]                    vertex, version 2: key of the sorted face names
 ```
 
-Multiple edges sharing the same face pair (e.g. the two circles bounding a
-cylindrical hole wall meet the same faces in some topologies) get `~n`
-suffixes in deterministic centroid order.
+`computeEdgeNames` and `computeVertexNames` own them. Duplicates take `~n` as
+faces do. Stored names are bounded only by the request size.
+
+### Signatures
+
+`server/src/geometry/signature.ts` describes a face or edge as a
+`RefSignature` of type, point and direction. Under
+version 2, `geometryNames` names import faces from their signature, so two
+imports of one file name faces alike. Mesh imports keep
+`x{n}` names.
+
+### Resolution
+
+`resolveRefs` in `server/src/geometry/resolve.ts` sorts each reference into
+`resolved`, `candidate`, `ambiguous` or `missing`.
+
+- A name its body still bears is `resolved`. Under version 2, a picked `~?n`
+  edge also resolves when its stored signature uniquely matches that name.
+  Unsigned ties require repair; coincident matches report both edge names.
+- Version 2: a name whose `sig` now matches a renumbered sibling is a
+  `candidate`, not followed.
+- Otherwise lineage decides, then the `sig` on the referenced body. Other
+  bodies give `suggestions` only.
+- Evaluation never writes a candidate or a `sig`. Only a feature update, the
+  repair, changes a stored reference's name.
+- Version 2: an unresolved reference fails its feature and blocks later
+  features that name its bodies. Other bodies build. Export refuses a
+  blocked body.
+- Version 1: nothing blocks. Failures still report their references.
+- Measurement skips the resolver. It measures the live pick by its exact
+  name, a tied `~?` name included, and never repairs or stores it.
 
 ### Known limitations
 
-- Centroid-ordered `~n` disambiguation can swap if an upstream edit moves
-  duplicates past each other; the reference then attaches to the sibling
-  subshape. This is rare in practice and fails loudly (wrong-edge fillet or a
-  reported error), never silently.
-- A reference whose face genuinely disappears (e.g. the filleted edge is
-  consumed) marks the downstream feature as **error** in the timeline with an
-  actionable message; the model up to that feature is preserved. A repair UI
-  (re-pick reference) is on the roadmap.
+- `~n` order swaps when an upstream edit moves duplicates past each other.
+  Version 2 still swaps across a rounding step.
+- Split pieces renumber. A signed reference becomes a `candidate`; an
+  unsigned one moves silently, as every version 1 one does.
+- A save evaluated only up to an open sketch refreshes no `sig` after that
+  sketch, and finishing the sketch only evaluates. Those references keep
+  their old `sig` until a later save changes a feature before them.
+- A failure that is not a reference, such as a fillet too large, blocks
+  nothing. Later features build on the unchanged body.
+- A consumed face errors its feature; the edit dialog repairs it. See
+  [FEATURE_TIMELINE.md](FEATURE_TIMELINE.md).
 
-## Sketches
+## Regeneration
 
-A sketch stores entities (points, lines, circles, center+endpoints arcs) and
-constraints. Points are first-class entities referenced by id, so endpoint
-sharing is exact. The solver (`shared/src/solver.ts`) builds residual
-functions per constraint and minimises with Levenberg-Marquardt over the free
-variables (point coordinates, circle radii); degrees of freedom are computed
-from the Jacobian rank at the solution, driving the
-unconstrained / partially / fully / over-constrained badge.
+`DocumentEngine` in `server/src/geometry/engine.ts`.
 
-**Drawing inference** (client, `client/src/sketchTools.ts`): while a line is
-being drawn, the cursor snaps first to existing points, the origin and line
-midpoints. Otherwise a _direction lock_ may engage from the start point: axis
-alignment, or a right angle to any line that ends there when within 4°
-(`perpendicularSnap`). Curve snapping then runs on the steered cursor: a
-hit on a line is placed exactly where the locked direction crosses it
-(`rayLineIntersection`), so a shape can be closed onto another line while
-staying square. Snaps that imply geometry become constraints on the created
-entities (coincident via shared point ids, `pointOnLine`, `pointOnCircle`,
-`midpoint`, `horizontal`/`vertical`, `perpendicular`, in combination when
-several engage); a typed angle overrides all direction snapping, a typed
-length keeps it.
+1. Features evaluate in timeline order. Each sees only the state before it.
+2. Each feature stores a snapshot keyed by `featureKey`, and by that key with
+   its reported `targets` when it had none.
+3. The longest unchanged prefix is reused, so an edit to feature _k_
+   re-evaluates _k..end_.
+4. The marker truncates evaluation; later features report `rolledBack`.
+   `shouldStop` cancels between features and inside kernel calls, and the
+   next run resumes at the first `cancelled`.
+5. A failing feature records `error` and evaluation continues from the state
+   before it.
+6. Suppressed features skip evaluation but keep their snapshot slot.
+7. A changed `namingVersion` drops the cached timeline.
 
-**Profiles** (closed regions) are detected by planar half-edge traversal
-(`shared/src/profiles.ts`): non-construction curves split where they cross,
-where one ends on another, and where they touch tangentially within
-`1e-6` mm; minimal enclosed cycles become selectable regions; an unsplit
-circle forms a disc region; containment builds an even-odd region tree so
-inner loops become holes. A profile's id is a hash of the entity ids bounding
-it, stable across regeneration while the same entities enclose the region.
-Regions bounded by the same entities, such as the lens and crescents of two
-overlapping circles, add a hash of each boundary's orientation to that id.
-`findProfile` resolves a saved id missing from this split through the
-detection before tangent splitting and those suffixes, so projects saved
-earlier keep their regions (DEC-101). `curveHits` reports where each curve
-meets the others by line fraction or arc and circle angle.
+## Feature guards
 
-**Sketch planes** resolve to a frame (origin, x-axis, y-axis, normal):
+A kernel success is not trusted. Each guard errors and keeps the previous
+body.
 
-- Origin planes have canonical frames (XY: +Z, XZ: x=(1,0,0),y=(0,0,1),
-  YZ: x=(0,1,0),y=(0,0,1)).
-- Face planes: normal = outward face normal; origin = the point on the plane
-  closest to the global origin (stable under lateral model edits: the sketch
-  rides the face if it moves along its normal); axes derived deterministically
-  from the global axes.
-- Construction planes: base frame offset along its normal / averaged for
-  midplanes.
-
-## Regeneration engine
-
-`server/src/geometry/engine.ts`:
-
-1. Features evaluate strictly in timeline order against an evaluation state
-   (bodies + solved sketches + construction frames). Each evaluator sees only
-   the features before it, so a later feature cannot change an earlier result
-   behind its cache key.
-2. After each feature a **snapshot** is stored, keyed by the feature's JSON.
-3. On the next evaluation the longest prefix whose feature JSON is unchanged
-   is reused; evaluation restarts from the first changed feature, so editing
-   feature _k_ re-evaluates only _k..end_ ("retain valid cached state,
-   invalidate downstream").
-4. The timeline marker simply truncates evaluation; rolled-back features are
-   reported as `rolledBack`.
-5. A failing feature records `error` with the kernel's message; evaluation
-   continues from the pre-failure state so independent downstream features
-   still build. Nothing is silently discarded.
-
-Suppressed features skip evaluation but still occupy a snapshot slot, so
-toggling suppression invalidates exactly the right suffix.
+- Cut tool operations, Combine cuts, Press/Pull cuts and Shell hollow cuts
+  run through `checkedCut` in `server/src/geometry/boolean.ts`.
+- Every join ends in `finishJoin` in `server/src/geometry/booleanNaming.ts`.
+  Two guards warn instead: zero-thickness detection in
+  `server/src/geometry/joinCheck.ts` and contact-only joins in
+  `server/src/geometry/boolean.ts`. A join, or
+  an extrude, revolve, sweep, loft or emboss cut, that leaves a zero-thickness
+  edge its inputs lacked builds, and the feature status is `warning` naming
+  the edge length. A join tool that touches a body only along an edge or at a
+  vertex stays a separate body, and the status is `warning` saying so.
+- Extrude, revolve, sweep and loft bodies of every operation, and Combine
+  results, pass `rejectInvalidBody` in `server/src/geometry/featureState.ts`
+  on the final shape, after `unifyTool`. `invalidPart` first rejects a slit
+  face, whose boundary runs out along an edge and back, from topology alone;
+  seam edges of periodic faces are exempt.
+- Fillet and Chamfer check validity, shell count, cut-through, run-past ends
+  and loose tolerances (`cutsThrough`, `looseBlend`).
+- Shell stores an optional `body` (schema 24). With no open faces it hollows
+  that body, else the first body; open faces must lie on the chosen body.
+- Shell stores `direction` (schema 26): `inside` and `outside` use
+  `thickness`; `both` uses `thickness` inside and `outsideThickness` outside,
+  which exists only for `both`. Earlier shells migrate to `inside`.
+- Shell builds each side alone and fuses inside with outside for `both`. A
+  closed side cuts the body from its offset solid; an open side uses the
+  kernel's thick solid with arc joins, so outer edges round at the wall
+  thickness. An inside opening falls back to the inner offset joined to a slab
+  over each opened inner face: a prism for a flat face, thickening for a
+  rounded one.
+- Every candidate qualifies before it replaces the body: valid, the same solid
+  count, a hollow for inside walls, and a probe at half the wall depth behind
+  each face, empty under an opened face and solid under a kept one. The
+  filleted-cube cylinder opening that once kept its wall now reaches the
+  fallback and qualifies. A refused, partial or unqualified result keeps the
+  previous body and names the size and the reason.
+- Tangent chains: `server/src/geometry/tangentEdges.ts`.
+- Mesh imports cap at `MAX_MESH_TRIANGLES` in
+  `server/src/geometry/importers.ts`.
 
 ## Tolerances
 
-`shared/src/tolerance.ts` owns the modelling tolerances. Each quantity has its
-own constant, even where two numbers match.
+`shared/src/tolerance.ts` owns `LINEAR_TOL`, `ANGULAR_TOL_DEG` and
+`UNIT_DOT_TOL`, one constant per quantity even where values match.
+`MIN_OFFSET_MM` in `shared/src/features/sketch.ts` is an
+input bound, not a tolerance.
 
-- `LINEAR_TOL = 1e-6` mm: coincidence, sewing, loft, thick solid, face
-  classification, zero length and the smallest positive fillet, chamfer, shell,
-  emboss and extrude size.
-- `ANGULAR_TOL_DEG = 1e-9` degrees: full-turn tests in revolve and circular
-  pattern.
-- `UNIT_DOT_TOL = 1e-6`, no unit: the dot product of unit normals in parallel
-  and perpendicular face tests.
-- `MIN_OFFSET_MM = 1e-7` mm, in `server/src/api/validate.ts`: the smallest
-  sketch offset distance the API accepts. It is an input bound, not a
-  tolerance.
+## Sketches
 
-Areas in mm2 are squared lengths and never compare against `LINEAR_TOL`.
-Solver convergence and pivot guards stay in `shared/src/solver.ts`, sketch
-region merging in `shared/src/profiles.ts`. No fingerprint quantisation exists
-yet; it gets its own constant when it does.
+- The solver is `shared/src/solver.ts`: `shared/test/solver.test.ts`.
+- A profile id hashes its bounding entity ids. `findProfile` in
+  `shared/src/profiles.ts` still finds ids saved before tangent splitting
+  (DEC-101): `shared/test/profiles.test.ts`.
+- Region detection drops every piece with a free end, repeatedly, before it
+  traces loops, so a dangling line neither enters nor splits a profile. An id
+  whose saved loop ran into a spur resolves only when exactly one pruned
+  profile has the same area and directed curves that all lie on that loop. A
+  sketch without spurs resolves every id as it did before pruning:
+  `shared/src/profiles.test.ts`.
+- A planar face supports a sketch independently of its boundary curves.
+  Automatic boundary import retains exact straight edges, circles, ellipses
+  and their arcs. If any curve is unsupported, the sketch starts empty and reports that
+  limit instead of importing a partial profile. Reference import classifies
+  unsupported curves without sampling them; DXF export still samples them.
+  Project can import supported edges individually; unsupported edges report
+  their limit.
+- Projections (`shared/src/projection.ts`) keep child ids `:a`, `:b` across
+  regeneration. A missing source fails the sketch rather
+  than keep stale points. A circle parallel to the sketch stays a circle or
+  arc. A tilted circle or an ellipse projects to an exact ellipse with ids
+  `:c`, `:m`, `:n`, plus `:a`, `:b` for an arc; an edge seen edge-on refuses.
+  Edge signatures still record an elliptical edge as `other`.
+- A sketch arc runs counter-clockwise from `start` to `end` about `center`.
+  The solver holds both ends at one radius.
+- `editSketchOffset` in `shared/src/sketchOffsets.ts` keeps generated entity
+  ids: `shared/test/sketchOffsets.test.ts`.
+- Trim (`shared/src/sketchTrim.ts`) and extend (`extendSketch` in
+  `shared/src/sketchModify.ts`) keep unchanged endpoints:
+  `shared/test/sketchModify.test.ts`.
+- `editedEntities` in `shared/src/solver.ts` refuses a write whose added or
+  changed constraints stop a converging sketch from converging, and names the
+  first such constraint. Client and server both call it. A sketch already in
+  conflict is not refused.
+- Schema 25 adds the sketch `ellipse`: `center`, `major` and `minor` point ids,
+  with the longer axis taken as major. The solver keeps the axes perpendicular
+  as it keeps arc radii equal. Validation in `shared/src/features/sketch.ts`
+  refuses zero or non-perpendicular axes. On the ellipse curve it accepts only
+  `pointOnCircle` and `tangent` to a line, solved by `ellipseLevel` and
+  `ellipseLineGap` in `shared/src/sketchCurves.ts`; other constraints refuse.
+  A solve weakly holds the points of every ellipse not being dragged, so a new
+  constraint moves the other curve rather than resizing the ellipse:
+  `shared/test/ellipseConstraints.test.ts`. Schema 28 adds optional `start`
+  and `end` points: an elliptical arc runs counter-clockwise from start to
+  end, and the solver holds each end on the curve. A line splits an ellipse
+  or elliptical arc at their exact intersections. Contact with a circle, arc
+  or other ellipse forms no region and the sketch warns; profile ids saved
+  earlier still resolve. Trim, extend, offset and sweep paths refuse
+  ellipses. `pieceEdge` in `server/src/geometry/sketchEdges.ts` builds the
+  exact `gp_Elips` edge between snapped ends: `shared/test/ellipse.test.ts`,
+  `shared/test/ellipticalArc.test.ts`.
+- The solver skips a dimension with `driven: true`. The field is optional, so
+  sketches saved without it load unchanged with no schema step.
 
-## Placements
+## Frame conventions
 
-`shared/src/placement.ts` defines `Placement`: a unit quaternion `rotation`
-`[x, y, z, w]` and a `translation` in mm. Its functions compose, invert and
-apply placements to points, directions and sketch frames.
-`placementToTrsf` in `server/src/geometry/kernel.ts` turns one into an OCCT
-transform. Move, linear pattern and circular pattern build their transforms
-this way, and a move carries its bodies' sketch frames with `applyToFrame`.
-The document is unchanged: `MoveFeature` still stores a `translation`.
+`server/src/geometry/frames.ts` owns sketch frames. Origin planes use
+`ORIGIN_FRAMES`. A face frame's origin is the point on its plane closest to
+the global origin, so a sketch rides its face. Construction plane methods:
+`shared/src/features/constructionPlane.ts`. Placements:
+`shared/src/placement.ts`, `shared/test/placement.test.ts`.
 
 ## Tessellation
 
-`BRepMesh_IncrementalMesh` produces per face triangulations. The viewport uses
-0.35 rad and a linear deflection of 0.0005 times the body's bounding-box
-diagonal, clamped to 0.005 to 0.5 mm. The payload keeps the CAD structure:
-each face's triangle range is tagged with its persistent name, each edge is a
-sampled polyline tagged with its name, each vertex a named point. The client
-raycasts triangles/segments/points and resolves hits to persistent CAD
-references, so selection is CAD topology, never "triangle 512". Face normals
-come from the kernel (`ComputeNormals`), respecting face orientation.
-Tessellations are cached per body id and shape hash, and a hit must be the
-same live shape (`IsSame`); export meshes a copy of each
-body at user-selected quality, so neither mesh reuses the other. Both go
-through `meshShape` in `server/src/geometry/mesh.ts`, the one loop that reads
-face triangulations.
+`server/src/geometry/tessellate.ts` and `server/src/geometry/mesh.ts`. Every
+face triangle range, edge polyline and vertex carries its persistent name, so
+selection is topology, never a triangle index. The viewport and STL export
+both mesh through `meshShape`. Export formats:
+`server/src/geometry/exporters.ts`.
 
-## Measurement
+## Naming upgrade
 
-`BRepExtrema_DistShapeShape` between resolved references gives minimum
-distance and the closest-point pair (→ ΔX/ΔY/ΔZ); per-selection properties
-use `BRepGProp` (edge length, face area) and surface/curve adaptors (radius,
-diameter); angles come from plane normals / line directions.
+`server/src/store/namingUpgrade.ts` moves a version 1 document to version 2
+only when the user asks, after a `naming1-{hash}` backup of the complete
+project. A browser project first keeps its version 1 record in this browser
+as `<name> (before naming upgrade)`, and nothing commits if that copy fails
+(`client/src/browserProjects.ts`). `planNamingUpgrade` in `server/src/geometry/upgradeNaming.ts` proves
+a mapping by provenance only, never by an `x{n}` or `~n` name. The commit
+refuses while a `candidate` or `ambiguous` mapping lacks a choice, and writes
+one save. After the save it remaps each user's hidden body ids through the
+final-body mappings; a remap failure after the save is a `kept` error. Vertex references are not mapped. A version 1 copy name compares
+by its version 2 form, each `m:` or `p{i}:` prefix applied as a key from
+the inside out.
 
-## Export
+## Reference signatures
 
-- **STL**: binary, written directly from the export-quality tessellation
-  (selected bodies merged), units mm.
-- **3MF**: OPC container written directly (`fflate` zip +
-  `3D/3dmodel.model` XML), `unit="millimeter"`, one `<object>` per body with
-  the body's display name preserved, so multi-body prints arrive in the slicer
-  as separate named objects. Vertices on a 1e-6 mm grid (`LINEAR_TOL`) are
-  welded across faces and triangles that collapse are dropped, so each object
-  is a closed mesh with every edge shared by two outward triangles.
+Feature add and update fill each missing `sig` from the state before the
+feature and keep one sent with the reference. A reference sent without `sig`
+keeps the one its name already had, so reference repair signs an accepted or
+re-picked reference first (`ROUTES.refSignature`) and sends that `sig`.
+`collectTopoRefs` in `shared/src/topoRefs.ts` derives face and edge paths
+from `FeatureSpec.refs`.
+The same contract owns body and feature dependencies, including references
+inside planes, axes and points. Opaque extension parameters are not references
+unless their registered spec declares them.
 
-## Associative sketch projection (schema 2)
+A save that changes a feature refreshes the stored `sig` of each reference
+that still resolves on its name in every later feature the save left
+unchanged, from the state before that feature, so a later renumbering is
+still caught. A reference that no longer resolves, or whose body is blocked,
+keeps its `sig`. Only features the save evaluates refresh; one past the
+timeline marker refreshes when the timeline rolls forward over it. A preview
+refreshes at commit. `refreshSigs` in `server/src/api/projectMutations.ts`
+owns this and runs after the save's evaluation. Evaluation never writes `sig`.
 
-A projected line, circle, or arc stores an optional EdgeRef in its projection field.
-Its external flag and its generated child points are solver-driven references.
-Child IDs derive from the curve ID (:a, :b, :c) and persist across regeneration.
-Each sketch resolves these edges from the preceding evaluation state, projects
-exact analytic geometry into its plane, then solves local constraints. Source
-changes invalidate the cached timeline suffix. Missing sources and curve-type
-changes fail the sketch explicitly instead of retaining stale coordinates.
-The preparation endpoint resolves before the sketch and rejects downstream
-references. Schema 1 migrates to schema 2 without changing existing features.
+## Tool targets
 
-Projected curves default to construction geometry. Users can toggle construction
-to include them in profiles. Tilted circles (ellipses), splines and degenerate
-line projections are rejected. Direct face snapping remains position-only; use
-Project first when a persistent geometric relationship is required. Deleting a
-projection releases surviving shared endpoints as ordinary editable points.
+Extrude, revolve, sweep, loft and emboss may store `targets`. Stored targets
+give the result the defaults gave. Add and update write them; hidden bodies
+are never default participants; evaluation never reads the view:
+`pinTargets` in `shared/src/topoRefs.ts`.
 
-Trim cuts at `curveHits` (`shared/src/profiles.ts`), the crossings, tangent
-contacts and T-junctions the region split uses, so construction curves never
-cut. Each hit names the curves through it: a new end gets `coincident` with a
-cutter's endpoint there, or `pointOnLine` or `pointOnCircle` on the cutter. A
-circle becomes an arc with the same id, the first kept piece of a line or arc
-keeps the id, and a second piece is tied back by `collinear` (line) or `equal`
-(arc, same centre). Hits are cached per entity array, so hovering does only a
-lookup. Extend calculates analytic intersections of lines, arcs and circles.
-Both retain unchanged endpoints, drop constraints on removed geometry with a
-user notice, and preserve unrelated geometry.
+An empty `targets` makes a join a new body. On a cut or intersect it fails
+the feature with `{operation} has no target body` and keeps every body. With
+no `targets` and no body, every tool operation makes a new body; only a join
+reports `[]`, so a cut or intersect never pins an empty list
+(`applyToolOperation` in `server/src/geometry/boolean.ts`).
 
-## Sketch offsets (schema 4)
+## Loft sections
 
-Schema version 4 adds an optional `offsets` list to a sketch. Each
-`SketchOffset` stores its signed `distance`, the `sourceIds` it offsets, the
-`entityIds` it generated and the `joinTolerance` for small gaps. The 3 to 4
-migration only bumps the version. Offset curves drawn before schema 4 have no
-record and stay plain geometry.
+Loft stores profile and planar-face references in picked order. Face sections
+use their existing boundary, with one outline and no holes. Join includes
+each selected source body before any explicit extra target, retaining the
+first source body's identity. Profile-only lofts keep their existing target
+behaviour.
 
-An offset takes one line, circle or arc, or a connected chain of lines and
-arcs. Auto-chaining from one curve stops at branches and is resolved once, when
-the offset is created. Adjacent offset curves meet at their intersection.
-Collapsed and self-crossing results are rejected. Generated curves are marked
-`external`, so the solver holds them and trim and extend refuse them.
+Schema 22 adds mixed sections without changing existing profile references.
+The fork migration chain remains authoritative. Upstream schema 12 documents
+that have no naming version receive version 1 while retaining the fork's
+view split. The project store backs up the complete previous project before
+the first migrated save.
 
-Editing a distance (`editSketchOffset` in `shared/src/sketchOffsets.ts`)
-rebuilds that offset and every later one from the stored sources. It keeps the
-generated entity IDs, so profiles and downstream features keep their
-references. The edit fails if generated geometry was deleted or trimmed, or if
-the rebuild yields a different number or kind of curves. Editing a source curve
-does not rebuild its offsets: they keep their positions until the next
-distance edit.
+## Named parameters
 
-## Line angles (schema 5)
+Schema 23 adds `parameters` and `parameterBindings`, empty for prior documents.
+Parameters retain name, unit, expression and comment; bindings retain a feature
+id, schema-relative numeric path and expression. Stored feature inputs remain
+numbers. `resolveDocumentParameters` in `shared/src/parameters.ts` owns derived
+values and a resolved feature copy, without changing the stored associations.
+Numeric schemas own binding eligibility, units and bounds. Names, references,
+cycles, dimensions and numeric results are validated before document acceptance.
+Model inputs retain associations; settings and export options calculate once.
+Geometry resolves inputs before feature-cache keys. Project mutations compare
+resolved sketch dimensions and use the existing write-time solver only for added
+or changed constraints, retaining other stored positions and bound literals.
+History restore keeps the snapshot's stored positions. Deleting a feature removes
+its bindings; undo restores them. Parameter edits use the same revision, preview
+and history owners as feature edits; rejected expressions and conflicting
+dimensions leave the saved document and history unchanged.
 
-Schema version 5 adds the `lineAngle` constraint `{ line, value }`: the
-direction of a line from its start to its end, in degrees counter-clockwise
-from the sketch +X axis, stored in (-180, 180]. The 4 to 5 migration only
-bumps the version. The API rejects a `lineAngle` outside that range.
+`ExpressionField` in `client/src/components/form/expressionField.tsx` owns
+every numeric field: it evaluates text with the shared parser and the
+document's parameters, keeps bounds and stepping, and shows errors on the
+field. A feature field names its binding path; text that uses a parameter
+links, a constant calculates once, and a handle that sets a new value unlinks.
+In a non-mm display unit a unitless linked result is stored with that unit.
+`client/src/features/bindings.ts` saves a feature and its changed bindings as
+one staged transaction, so one undo reverts both. Quick Edit fields link the
+same way.
 
-The solver adds one residual, the signed angle from the target direction to
-the line, wrapped to (-pi, pi] with `atan2`, so it stays continuous as the
-line turns through 180 degrees. It removes one degree of freedom and counts
-toward the badge and conflict report like `length` and `angle`.
+A sketch dimension links through the same field. A binding path names an array
+index, so `movedBindings` in `shared/src/parameters.ts` moves a binding with the
+item id it names and drops it when the item goes. `commitDraftSketch` sends the
+moved bindings with the sketch edit; a driven dimension keeps no link. A sketch
+opened for editing shows resolved dimension values.
 
-A typed ∠ while drawing a line stores a `lineAngle` next to a typed L.
-Double-clicking a line edits its L and ∠ together, first adding either one
-at its current value when missing. A `lineAngle` replaces any `horizontal`
-or `vertical` constraint on the same line, which it implies.
-
-## Revision (schema 7)
-
-Schema version 7 adds `revision` and `savedWith` to the document. The store
-sets `revision` to the stored value plus one on every write, whatever the
-caller sent, so a new project saves as 1 and a read never changes it.
-`savedWith` is the `version` and `commit` that `GET /health` reports for the
-build that wrote the file. The 6 to 7 migration adds `revision: 0` and
-`savedWith: null`.
-
-## Extensions (schema 10)
-
-`extensions` holds data that modules keep in the document, keyed by a dotted
-module id such as `acme.gears` that matches
-`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$`. Each value is `{ version, data }`.
-The server checks that envelope and never reads `data`, so it survives load,
-migration, feature edits and `PUT /document` as an equal JSON value. The 9 to
-10 migration adds `extensions: {}`. A server older than schema 10 refuses the
-file instead of saving it without the extension data.
-
-## Tangent edge chains
-
-Fillet/Chamfer store optional tangentChain metadata (absent preserves prior
-behaviour). New dialogs enable it. Exact OCCT endpoint derivatives find unique
-smooth continuations within 1 degree and `LINEAR_TOL`; branching matches stop traversal.
-The chain is resolved again at the feature position during regeneration. Native
-OCCT contours are added only once to prevent duplicate contour definitions when
-several selected edges already belong to the same contour. The selection toggle
-controls explicit chain expansion, not native kernel propagation.
+Core feature schemas live in `shared/src/schema/coreFeatures.ts`, below the
+parameter resolver and document validation. `schema/features.ts` retains their
+public exports alongside the document schemas. The cached parser lives in
+`schema/validation.ts` without document or feature imports.

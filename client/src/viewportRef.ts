@@ -1,22 +1,21 @@
+import { createContext } from "react";
 import type { CadViewport } from "./three/CadViewport";
 import { useStore } from "./store";
+import { TIMING_MS } from "./tunables";
 
-/** Shared handle so toolbar/dialogs can drive the viewport (views, raycasts). */
-export const viewportHandle: { current: CadViewport | null } = {
-  current: null,
-};
+export type ViewportRef = Readonly<{ current: CadViewport | null }>;
 
-/** Animate the camera to face the sketch plane currently being edited. */
-export function alignCameraToActiveSketch(): void {
+export const ViewportContext = createContext<ViewportRef>({ current: null });
+
+export function alignCameraToActiveSketch(viewport: ViewportRef): void {
   setTimeout(() => {
     const s = useStore.getState();
-    if (s.mode.name !== "sketch") return;
-    const sk = s.evaluation?.sketches.find(
-      (x) => x.featureId === (s.mode as any).sketchId,
-    );
-    const vp = viewportHandle.current;
+    if (s.active?.id !== "design.sketch") return;
+    const sketchId = s.active.state.sketchId;
+    const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
+    const vp = viewport.current;
     if (!sk || !vp) return;
     const n = sk.frame.normal;
     vp.setView([n[0], n[1], n[2]], sk.frame.yAxis);
-  }, 60);
+  }, TIMING_MS.sketchAlignDelay);
 }

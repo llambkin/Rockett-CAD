@@ -3,35 +3,43 @@ import crypto from "node:crypto";
 import {
   createEmptyDocument,
   emptyView,
-  parse,
-  projectView,
-  VIEW_VERSION,
+  MB,
   withShown,
   type CadDocument,
   type ProjectSummary,
   type ProjectView,
-  type Visibility,
+  type ProjectViewBody,
 } from "@rockett/shared";
+import { UserStore } from "../auth/userStore.js";
 import { build } from "../build.js";
 import { BlobStore, HASH_RE, PendingBlobs, Uploads } from "./blobStore.js";
-import { JsonStore, sha256, StoreError, type Inventory } from "./jsonStore.js";
-import { documentMigrations, TooNewError } from "./migrations.js";
+import { JsonStore, sameTag, sha256, StoreError } from "./jsonStore.js";
+import type { Inventory, Write } from "./jsonStore.js";
+import {
+  checkManifest,
+  ID_RE,
+  ManifestStore,
+  type ProjectAccess,
+} from "./manifestStore.js";
+import { documentMigrations } from "./migrations.js";
+import { SettingsStore } from "./settingsStore.js";
 import type { Storage } from "./storage.js";
+import { isPng, ThumbnailStore } from "./thumbnailStore.js";
+import { ViewStore } from "./viewStore.js";
+import { listProjects } from "./projectInventory.js";
+import { TIMING_MS } from "../tunables.js";
 
 export { StoreError };
 
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const PNG_HEAD = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
-
-const MINUTE = 60 * 1000;
-const DAY = 24 * 60 * MINUTE;
+const LEGACY = "document.json";
+const DOCUMENTS = "documents";
 
 export const IMAGE_LIMIT_MB = 25;
 
 const IMAGE_TYPES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
   {
     mime: "image/png",
-    test: (b) => b.length >= 33 && b.subarray(0, 16).equals(PNG_HEAD),
+    test: isPng,
   },
   {
     mime: "image/jpeg",
@@ -49,11 +57,8 @@ const IMAGE_TYPES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
 
 const newId = () => crypto.randomBytes(6).toString("hex");
 
-const text = (v: unknown, fallback: string) =>
-  typeof v === "string" ? v : fallback;
-
 function imageMime(data: Buffer, label: string): string {
-  if (data.length > IMAGE_LIMIT_MB * 1024 * 1024)
+  if (data.length > IMAGE_LIMIT_MB * MB)
     throw new StoreError(`${label}image is over ${IMAGE_LIMIT_MB} MB`);
   const type = IMAGE_TYPES.find((t) => t.test(data));
   if (!type)
@@ -63,8 +68,10 @@ function imageMime(data: Buffer, label: string): string {
   return type.mime;
 }
 
-function stepBlobs(doc: CadDocument): string[] {
-  return doc.features.flatMap((f) => (f.type === "importStep" ? [f.blob] : []));
+function importBlobs(doc: CadDocument): string[] {
+  return doc.features.flatMap((f) =>
+    f.type === "importStep" || f.type === "importMesh" ? [f.blob] : [],
+  );
 }
 
 function imageBlobs(doc: CadDocument): string[] {
@@ -74,9 +81,13 @@ function imageBlobs(doc: CadDocument): string[] {
 }
 
 export class ProjectStore {
-  private documents: JsonStore<CadDocument, PendingBlobs>;
-  private views: JsonStore<ProjectView>;
+  readonly documents: JsonStore<CadDocument, PendingBlobs>;
+  private views: ViewStore;
+  private users: UserStore;
+  private manifests: ManifestStore;
   readonly uploads: Uploads;
+  readonly settings: SettingsStore;
+  readonly thumbnails: ThumbnailStore;
 
   constructor(
     private readonly storage: Storage,
@@ -84,40 +95,48 @@ export class ProjectStore {
     private readonly now: () => number = Date.now,
   ) {
     this.uploads = new Uploads(storage);
-    this.views = new JsonStore({
+    this.settings = new SettingsStore(storage);
+    this.thumbnails = new ThumbnailStore(
       storage,
-      root: "projects",
-      name: "project",
-      key: ID_RE,
-      file: "view.json",
-      migrations: {
-        namespace: "view",
-        current: VIEW_VERSION,
-        field: "version",
-        steps: {},
-      },
-      unbacked: async () => true,
-      validate: (view) => parse(projectView, view),
-    });
+      (id) => this.documents.dir(id),
+      (id, operation) => this.documents.exclusive(id, operation),
+    );
+    this.views = new ViewStore(storage, (id) => this.documents.dir(id));
+    this.users = new UserStore(storage);
+    this.manifests = new ManifestStore(storage);
     this.documents = new JsonStore({
       storage,
       root: "projects",
       name: "project",
       key: ID_RE,
-      file: "document.json",
+      file: (id) => `${DOCUMENTS}/${id}.json`,
+      legacy: LEGACY,
       migrations: documentMigrations,
       unbacked: (id) => this.isTemporary(id),
       validate,
+      remember: (doc) => ({ revision: doc.revision }),
       effects: {
         context: async (id, stored) =>
           new PendingBlobs(await this.legacyAssets(id, stored)),
-        commit: async (id, pending) => {
-          for (const bytes of pending.blobs.values())
-            await this.blobs(id).put(bytes);
-          await this.views.write(
-            id,
-            withShown(await this.storedView(id), pending.shown),
-          );
+        created: async (id, pending) => {
+          const blobs = this.blobs(id);
+          const out = new Map<string, string | Uint8Array>();
+          for (const [hash, bytes] of pending.blobs)
+            if (!(await blobs.has(hash))) out.set(blobs.file(hash), bytes);
+          const shown = withShown(emptyView(), pending.shown);
+          const copier = await this.copier(id);
+          if (
+            copier &&
+            (shown.hidden.bodies.length || shown.hidden.features.length) &&
+            !(await this.views.legacy(id)) &&
+            !(await this.views.read(copier, id))
+          )
+            out.set(...this.views.encode(copier, id, shown));
+          if (Object.keys(pending.settings).length)
+            out.set(...(await this.settings.staged(id, pending.settings)));
+          if (await this.manifests.missing(id))
+            out.set(...this.manifests.created(id));
+          return out;
         },
         retire: (id) => storage.remove(this.assetDir(id)),
       },
@@ -128,128 +147,158 @@ export class ProjectStore {
     return this.documents.inventory();
   }
 
-  async list(): Promise<ProjectSummary[]> {
-    const out: ProjectSummary[] = [];
-    for (const id of await this.documents.keys()) {
-      if (await this.isTemporary(id)) continue;
-      try {
-        const doc = await this.load(id);
-        out.push({
-          id: doc.id,
-          name: doc.name,
-          createdAt: doc.createdAt,
-          modifiedAt: doc.modifiedAt,
-          featureCount: doc.features.length,
-          revision: doc.revision,
-          status: "ok",
-        });
-      } catch (err) {
-        if (err instanceof StoreError && err.code === "not_found") continue;
-        const raw = (await this.documents
-          .stored(id)
-          .catch(() => ({}))) as Partial<Record<keyof CadDocument, unknown>>;
-        out.push({
-          id,
-          name: text(raw.name, id),
-          createdAt: text(raw.createdAt, ""),
-          modifiedAt: text(raw.modifiedAt, ""),
-          featureCount: Array.isArray(raw.features) ? raw.features.length : 0,
-          status: err instanceof TooNewError ? "tooNew" : "invalid",
-          error: (err as Error).message,
-          ...(err instanceof TooNewError && { schemaVersion: err.version }),
-        });
-      }
-    }
-    out.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
-    return out;
+  list(): Promise<ProjectSummary[]> {
+    return listProjects(this);
   }
 
-  async create(name: string): Promise<CadDocument> {
+  manifestSource(id: string) {
+    return this.manifests.source(id);
+  }
+
+  async projectAccess(id: string): Promise<ProjectAccess> {
+    await this.exists(id);
+    return this.manifests.access(id);
+  }
+
+  private async exists(id: string): Promise<void> {
+    const files = await this.storage.list(this.documents.dir(id));
+    if (!files.includes(LEGACY) && !files.includes(DOCUMENTS))
+      throw new StoreError(`project ${id} not found`, "not_found");
+  }
+
+  private async copier(id: string): Promise<string | undefined> {
+    const { owner } = await this.manifests.read(id);
+    if (owner) return owner;
+    return (await this.users.list()).find((user) => user.role === "admin")?.id;
+  }
+
+  async setProjectAccess(id: string, access: ProjectAccess): Promise<void> {
+    await this.projectAccess(id);
+    await this.manifests.update(id, (manifest) => ({ ...manifest, ...access }));
+  }
+  revokeFriendShares(first: string, second: string): Promise<void> {
+    return this.documents
+      .keys()
+      .then((ids) => this.manifests.revokeFriendShares(ids, first, second));
+  }
+
+  migrateManifest(id: string): Promise<void> {
+    return this.manifests.migrate(id);
+  }
+
+  async create(
+    name: string,
+    actor: string | null = null,
+  ): Promise<CadDocument> {
     const id = newId();
     const doc = createEmptyDocument(id, name || "Untitled");
-    await this.save(doc);
+    await this.add(doc, actor);
     return doc;
   }
 
-  async load(id: string): Promise<CadDocument> {
-    return this.valid(id, await this.documents.read(id));
+  private async add(doc: CadDocument, actor: string | null): Promise<void> {
+    await this.save(doc, actor);
+    await this.storage.writeAtomic(...this.manifests.created(doc.id, actor));
   }
 
-  async open(id: string): Promise<{ doc: CadDocument; view: ProjectView }> {
-    const { value, context } = await this.documents.migrated(id);
-    return {
-      doc: this.valid(id, value),
-      view: withShown(await this.storedView(id), context.shown),
-    };
+  load(id: string): Promise<CadDocument> {
+    return this.loadDocument(id, id);
   }
 
-  private valid(id: string, doc: CadDocument): CadDocument {
+  async loadDocument(projectId: string, documentId: string) {
+    return (await this.part(projectId, documentId)).doc;
+  }
+
+  private async documentView(id: string): Promise<ProjectView> {
+    const { context } = await this.part(id, id);
+    return withShown(emptyView(), context.shown);
+  }
+
+  private async part(id: string, documentId: string) {
+    const manifest = await this.manifests.read(id);
+    this.valid(id, () => checkManifest(id, manifest));
+    if (!manifest.documents.some((d) => d.id === documentId))
+      throw new StoreError(`document ${documentId} not found`, "not_found");
+    const { value, context } = await this.documents.migrated(id, documentId);
+    this.valid(id, () => this.validate(value));
+    return { doc: value, context };
+  }
+
+  private valid(id: string, check: () => void): void {
     try {
-      this.validate(doc);
+      check();
     } catch (err) {
       throw new StoreError(
         `project ${id} is invalid: ${(err as Error).message}`,
         "unprocessable",
       );
     }
-    return doc;
   }
 
-  async save(doc: CadDocument): Promise<void> {
-    const snapshot = structuredClone(doc);
-    snapshot.modifiedAt = new Date().toISOString();
-    snapshot.savedWith = build();
-    await this.documents.update(doc.id, (previous) => {
+  async save(
+    doc: CadDocument,
+    actor: string | null,
+    write?: Write<CadDocument>,
+  ): Promise<void> {
+    const snapshot = {
+      ...doc,
+      modifiedAt: new Date().toISOString(),
+      modifiedBy: actor,
+      savedWith: build(),
+    };
+    const next = (previous?: Partial<CadDocument>) => {
       snapshot.revision = (previous?.revision ?? 0) + 1;
       return snapshot;
-    });
+    };
+    await this.documents.update(doc.id, next, write);
     doc.modifiedAt = snapshot.modifiedAt;
+    doc.modifiedBy = snapshot.modifiedBy;
     doc.revision = snapshot.revision;
     doc.savedWith = snapshot.savedWith;
   }
 
-  async view(id: string): Promise<ProjectView> {
-    return (await this.open(id)).view;
-  }
-
-  async setView(id: string, view: ProjectView): Promise<void> {
+  async view(id: string, userId: string): Promise<ProjectView> {
     await this.exists(id);
-    await this.documents.settle(id);
-    await this.views.write(id, view);
+    const own = await this.views.read(userId, id);
+    if (own) return own;
+    if (userId !== (await this.copier(id))) return emptyView();
+    const copy = (await this.views.legacy(id)) ?? (await this.documentView(id));
+    await this.views.write(userId, id, copy);
+    return copy;
   }
 
-  async setVisible(
+  async setView(
     id: string,
-    view: ProjectView,
-    shown: Visibility,
+    userId: string,
+    view: ProjectViewBody,
+    expected?: string,
   ): Promise<ProjectView> {
+    await this.exists(id);
     if (
-      !Object.keys(shown.bodies).length &&
-      !Object.keys(shown.features).length
+      expected !== undefined &&
+      !sameTag(expected, await this.view(id, userId))
     )
-      return view;
-    const next = withShown(view, shown);
-    await this.setView(id, next);
-    return next;
+      throw new StoreError("This view changed in another session.", "conflict");
+    return this.views.write(userId, id, view);
   }
 
-  private storedView(id: string): Promise<ProjectView> {
-    return this.views.read(id).catch((err) => {
-      if (!(err instanceof StoreError && err.code === "not_found")) throw err;
-      return emptyView();
-    });
+  exclusive<R>(id: string, operation: () => Promise<R>): Promise<R> {
+    return this.documents.exclusive(id, operation);
   }
 
-  private async exists(id: string): Promise<void> {
-    if (
-      !(await this.storage.list(this.documents.dir(id))).includes(
-        "document.json",
-      )
-    )
-      throw new StoreError(`project ${id} not found`, "not_found");
+  duplicate(
+    id: string,
+    newName?: string,
+    actor: string | null = null,
+  ): Promise<CadDocument> {
+    return this.exclusive(id, () => this.copy(id, newName, actor));
   }
 
-  async duplicate(id: string, newName?: string): Promise<CadDocument> {
+  private async copy(
+    id: string,
+    newName: string | undefined,
+    actor: string | null,
+  ): Promise<CadDocument> {
     const src = await this.load(id);
     const copy: CadDocument = JSON.parse(JSON.stringify(src));
     copy.id = newId();
@@ -261,11 +310,12 @@ export class ProjectStore {
         path.posix.join(this.documents.dir(copy.id), "blobs", f),
         await this.storage.read(path.posix.join(from, f)),
       );
-    for (const hash of [...stepBlobs(src), ...imageBlobs(src)]) {
+    for (const hash of [...importBlobs(src), ...imageBlobs(src)]) {
       const bytes = await this.blob(id, hash).catch(() => undefined);
       if (bytes) await this.blobs(copy.id).put(bytes);
     }
-    await this.save(copy);
+    await this.settings.duplicateProject(id, copy.id);
+    await this.add(copy, actor);
     return copy;
   }
 
@@ -275,7 +325,7 @@ export class ProjectStore {
 
   async touch(id: string): Promise<void> {
     const at = await this.touchedAt(id);
-    if (at !== undefined && this.now() - at >= MINUTE)
+    if (at !== undefined && this.now() - at >= TIMING_MS.temporaryProjectTouch)
       await this.writeMarker(id);
   }
 
@@ -288,7 +338,11 @@ export class ProjectStore {
 
   async expire(id: string): Promise<boolean> {
     const at = await this.touchedAt(id);
-    if (at === undefined || this.now() - at < DAY) return false;
+    if (
+      at === undefined ||
+      this.now() - at < TIMING_MS.temporaryProjectLifetime
+    )
+      return false;
     await this.remove(id);
     return true;
   }
@@ -321,8 +375,9 @@ export class ProjectStore {
     }
   }
 
-  remove(id: string): Promise<void> {
-    return this.documents.remove(id);
+  async remove(id: string): Promise<void> {
+    await this.documents.remove(id);
+    await this.views.remove(id);
   }
 
   async saveAsset(
@@ -336,7 +391,9 @@ export class ProjectStore {
   async importProject(
     doc: CadDocument,
     assets: ReadonlyMap<string, Buffer>,
+    view: ProjectView,
     temporary = false,
+    actor: string | null = null,
   ): Promise<CadDocument> {
     const id = newId();
     const images = new Set(imageBlobs(doc));
@@ -352,7 +409,9 @@ export class ProjectStore {
         await this.blobs(id).put(data);
       }
       const imported = { ...doc, id };
-      await this.save(imported);
+      await this.add(imported, actor);
+      const copier = await this.copier(id);
+      if (copier) await this.views.write(copier, id, view);
       return imported;
     } catch (error) {
       await this.remove(id);
@@ -379,11 +438,16 @@ export class ProjectStore {
     }
   }
 
-  async sources(doc: CadDocument): Promise<Map<string, Buffer>> {
-    const out = new Map<string, Buffer>();
-    for (const hash of stepBlobs(doc)) {
+  async sources(
+    doc: CadDocument,
+    held: ReadonlyMap<string, Uint8Array> = new Map(),
+  ): Promise<Map<string, Uint8Array>> {
+    const out = new Map<string, Uint8Array>();
+    for (const hash of importBlobs(doc)) {
       if (out.has(hash)) continue;
-      const bytes = await this.blob(doc.id, hash).catch(() => undefined);
+      const bytes =
+        held.get(hash) ??
+        (await this.blob(doc.id, hash).catch(() => undefined));
       if (bytes) out.set(hash, bytes);
     }
     return out;
@@ -410,12 +474,11 @@ export class ProjectStore {
     projectId: string,
     assetId: string,
   ): Promise<{ data: Buffer; mime: string }> {
-    const missing = new StoreError("asset not found", "not_found");
-    if (!HASH_RE.test(assetId)) throw missing;
+    if (!HASH_RE.test(assetId))
+      throw new StoreError("asset not found", "not_found");
     const data = await this.blob(projectId, assetId);
     const type = IMAGE_TYPES.find((t) => t.test(data));
-    if (!type) throw missing;
-    return { data, mime: type.mime };
+    return { data, mime: type?.mime ?? "application/octet-stream" };
   }
 
   async saveExport(

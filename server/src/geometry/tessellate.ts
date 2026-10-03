@@ -8,26 +8,33 @@
  */
 
 import { createHash } from "node:crypto";
-import type {
-  BodyPayload,
-  EdgeInfo,
-  FaceInfo,
-  VertexInfo,
-  Vec3,
+import {
+  compareNames,
+  type BodyPayload,
+  type EdgeInfo,
+  type FaceInfo,
+  type RefSignature,
+  type VertexInfo,
+  type Vec3,
 } from "@rockett/shared";
 import {
+  acquire,
   bboxOf,
   getKernel,
   lengthOf,
-  release,
   scoped,
   type Shape,
 } from "./kernel.js";
-import { meshShape } from "./mesh.js";
+import { meshShape, type FaceMesh } from "./mesh.js";
 import {
   computeEdgeNames,
   computeVertexNames,
+  edgeName,
+  instanceName,
+  nameVertices,
+  vertexFaces,
   type NamedBody,
+  type VertexFaces,
 } from "./naming.js";
 
 export interface TessellationOptions {
@@ -37,70 +44,77 @@ export interface TessellationOptions {
   angular?: number;
 }
 
-export function tessellateBody(
+function appendFaceMesh(
   body: NamedBody,
-  meta: { name: string; visible: boolean },
-  opts: TessellationOptions = {},
-): BodyPayload {
-  const k = getKernel();
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
-  const faceInfos: FaceInfo[] = [];
-  const bbox = bboxOf(body.shape);
-
-  const meshes = meshShape(body.shape, {
-    linear: opts.linear ?? viewportDeflection(bbox),
-    angular: opts.angular ?? 0.35,
-  });
-  try {
-    for (const m of meshes) {
-      const start = indices.length;
-      const vertexOffset = positions.length / 3;
-      for (let i = 0; i < m.positions.length; i++) {
-        positions.push(m.positions[i]!);
-        normals.push(m.normals[i]!);
-      }
-
-      const P = m.positions;
-      let area = 0;
-      for (let i = 0; i < m.indices.length; i += 3) {
-        const a = m.indices[i]! * 3,
-          b = m.indices[i + 1]! * 3,
-          c = m.indices[i + 2]! * 3;
-        indices.push(
-          vertexOffset + m.indices[i]!,
-          vertexOffset + m.indices[i + 1]!,
-          vertexOffset + m.indices[i + 2]!,
-        );
-        const ux = P[b]! - P[a]!,
-          uy = P[b + 1]! - P[a + 1]!,
-          uz = P[b + 2]! - P[a + 2]!;
-        const vx = P[c]! - P[a]!,
-          vy = P[c + 1]! - P[a + 1]!,
-          vz = P[c + 2]! - P[a + 2]!;
-        area +=
-          Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) /
-          2;
-      }
-
-      faceInfos.push({
-        name: body.names.get(m.face) ?? "?",
-        start,
-        count: indices.length - start,
-        surface: surfaceInfo(m.face),
-        area,
-      });
-    }
-  } finally {
-    release(meshes.map((m) => m.face));
+  m: FaceMesh,
+  positions: number[],
+  normals: number[],
+  indices: number[],
+  faceInfos: FaceInfo[],
+): void {
+  const start = indices.length;
+  const vertexOffset = positions.length / 3;
+  for (let i = 0; i < m.positions.length; i++) {
+    positions.push(m.positions[i]!);
+    normals.push(m.normals[i]!);
   }
 
-  const edgeNames = computeEdgeNames(body).byName;
-  const edgeInfos: EdgeInfo[] = [];
-  try {
+  const P = m.positions;
+  let area = 0;
+  for (let i = 0; i < m.indices.length; i += 3) {
+    const a = m.indices[i]! * 3,
+      b = m.indices[i + 1]! * 3,
+      c = m.indices[i + 2]! * 3;
+    indices.push(
+      vertexOffset + m.indices[i]!,
+      vertexOffset + m.indices[i + 1]!,
+      vertexOffset + m.indices[i + 2]!,
+    );
+    const ux = P[b]! - P[a]!,
+      uy = P[b + 1]! - P[a + 1]!,
+      uz = P[b + 2]! - P[a + 2]!;
+    const vx = P[c]! - P[a]!,
+      vy = P[c + 1]! - P[a + 1]!,
+      vz = P[c + 2]! - P[a + 2]!;
+    area +=
+      Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+  }
+
+  faceInfos.push({
+    name: body.names.get(m.face) ?? "?",
+    start,
+    count: indices.length - start,
+    surface: surfaceInfo(m.face),
+    area,
+  });
+}
+
+export function tessellateBody(
+  body: NamedBody,
+  meta: { name: string },
+  opts: TessellationOptions = {},
+): BodyPayload {
+  return scoped(() => {
+    const k = getKernel();
+    const positions: number[] = [];
+    const normals: number[] = [];
+    const indices: number[] = [];
+    const faceInfos: FaceInfo[] = [];
+    const bbox = bboxOf(body.shape);
+
+    const meshes = meshShape(body.shape, {
+      linear: opts.linear ?? viewportDeflection(bbox),
+      angular: opts.angular ?? 0.35,
+    });
+
+    for (const mesh of meshes)
+      appendFaceMesh(body, mesh, positions, normals, indices, faceInfos);
+
+    const edgeNames = computeEdgeNames(body).byName;
+    const edgeInfos: EdgeInfo[] = [];
+
     for (const [name, edge] of edgeNames) {
-      const polyline = sampleEdge(edge);
+      const polyline = Array.from<number>(k.sampleEdge(edge));
       if (polyline.length < 6) continue;
       edgeInfos.push({
         name,
@@ -109,45 +123,54 @@ export function tessellateBody(
         curve: curveInfo(edge),
       });
     }
-  } finally {
-    release(edgeNames.values());
-  }
 
-  const vertexNames = computeVertexNames(body).byName;
-  const vertexInfos: VertexInfo[] = [];
-  try {
+    const vertexNames = computeVertexNames(body).byName;
+    const vertexInfos: VertexInfo[] = [];
+
     for (const [name, vertex] of vertexNames) {
-      const p = k.BRep_Tool.Pnt(vertex);
+      const p = acquire(k.BRep_Tool.Pnt(vertex));
       vertexInfos.push({ name, position: [p.X(), p.Y(), p.Z()] });
-      p.delete();
     }
-  } finally {
-    release(vertexNames.values());
-  }
 
-  const mesh = {
-    positions,
-    normals,
-    indices,
-    faces: faceInfos,
-    edges: edgeInfos,
-    vertices: vertexInfos,
-    bbox,
-  };
-  return {
-    bodyId: body.bodyId,
-    name: meta.name,
-    visible: meta.visible,
-    meshKey: createHash("sha256").update(JSON.stringify(mesh)).digest("hex"),
-    ...mesh,
-  };
+    const mesh = {
+      positions,
+      normals,
+      indices,
+      faces: faceInfos,
+      edges: edgeInfos,
+      vertices: vertexInfos,
+      bbox,
+    };
+    return {
+      bodyId: body.bodyId,
+      name: meta.name,
+      meshKey: createHash("sha256").update(JSON.stringify(mesh)).digest("hex"),
+      ...mesh,
+    };
+  });
+}
+
+const sourceVertices = new WeakMap<NamedBody, VertexFaces[]>();
+
+function vertexFacesOf(body: NamedBody): VertexFaces[] {
+  const known = sourceVertices.get(body);
+  if (known) return known;
+  return scoped(() => {
+    const entries = vertexFaces(body);
+    const found = entries.map(({ faces, position }) => ({ faces, position }));
+    sourceVertices.set(body, found);
+    return found;
+  });
 }
 
 export function movePayload(
   source: BodyPayload,
   bodyId: string,
-  offset: Vec3,
-  prefix: string,
+  {
+    offset,
+    prefix,
+    source: from,
+  }: { offset: Vec3; prefix: string; source: NamedBody },
 ): BodyPayload | undefined {
   const faceNames = source.faces.map((f) => f.name);
   if (
@@ -161,15 +184,20 @@ export function movePayload(
     p[2] + offset[2],
   ];
   const along = (xs: number[]) => xs.map((x, i) => x + offset[i % 3]!);
-  const named = (n: string) => `${prefix}:${n}`;
+  const version = from.names.version;
+  const renamed = new Map(
+    faceNames.map((n) => [n, instanceName(prefix, n, version)]),
+  );
+  const named = (n: string) =>
+    renamed.get(n) ?? instanceName(prefix, n, version);
   const adjacent = (n: string) =>
-    n.replace(
-      /^([ev])\[(.*)\]/,
-      (_, kind: string, inner: string) =>
-        `${kind}[${inner
+    n.replace(/^e\[(.*)\]/, (_, inner: string) =>
+      edgeName(
+        inner
           .split("|")
-          .map((f) => (f === "seam" || f === "?" ? f : named(f)))
-          .join("|")}]`,
+          .filter((f) => f !== "seam")
+          .map(named),
+      ),
     );
   return {
     ...source,
@@ -186,16 +214,21 @@ export function movePayload(
           ? f.surface
           : { ...f.surface, origin: at(f.surface.origin) },
     })),
-    edges: source.edges.map((e) => ({
-      ...e,
-      name: adjacent(e.name),
-      polyline: along(e.polyline),
-      curve: movedCurve(e.curve, at),
-    })),
-    vertices: source.vertices.map((v) => ({
-      name: adjacent(v.name),
-      position: at(v.position),
-    })),
+    edges: source.edges
+      .map((e) => ({
+        ...e,
+        name: adjacent(e.name),
+        polyline: along(e.polyline),
+        curve: movedCurve(e.curve, at),
+      }))
+      .sort((a, b) => compareNames(a.name, b.name)),
+    vertices: nameVertices(
+      vertexFacesOf(from).map((v) => ({
+        faces: v.faces.map(named),
+        position: at(v.position),
+      })),
+      version,
+    ).map(([v, name]) => ({ name, position: v.position })),
     bbox: { min: at(source.bbox.min), max: at(source.bbox.max) },
   };
 }
@@ -224,13 +257,28 @@ function viewportDeflection({ min, max }: ReturnType<typeof bboxOf>): number {
   return Math.min(0.5, Math.max(0.005, 0.0005 * diagonal));
 }
 
+const SURFACE_TYPES = [
+  ["GeomAbs_Plane", "plane"],
+  ["GeomAbs_Cylinder", "cylinder"],
+  ["GeomAbs_Cone", "cone"],
+  ["GeomAbs_Sphere", "sphere"],
+  ["GeomAbs_Torus", "torus"],
+  ["GeomAbs_BSplineSurface", "bspline"],
+] as const;
+
+export function surfaceType(surf: any): RefSignature["type"] {
+  const types = getKernel().GeomAbs_SurfaceType;
+  const type = surf.GetType();
+  return SURFACE_TYPES.find(([name]) => types[name] === type)?.[1] ?? "other";
+}
+
 function surfaceInfo(face: Shape): FaceInfo["surface"] {
   const k = getKernel();
   try {
     return scoped((own): FaceInfo["surface"] => {
       const surf = own(new k.BRepAdaptor_Surface_2(face, false));
-      const type = surf.GetType();
-      if (type === k.GeomAbs_SurfaceType.GeomAbs_Plane) {
+      const type = surfaceType(surf);
+      if (type === "plane") {
         const pln = own(surf.Plane());
         const locP = own(pln.Location());
         const d = own(own(pln.Axis()).Direction());
@@ -243,7 +291,7 @@ function surfaceInfo(face: Shape): FaceInfo["surface"] {
           normal: [sgn * d.X(), sgn * d.Y(), sgn * d.Z()] as Vec3,
         };
       }
-      if (type === k.GeomAbs_SurfaceType.GeomAbs_Cylinder) {
+      if (type === "cylinder") {
         const cyl = own(surf.Cylinder());
         const locP = own(cyl.Location());
         const d = own(own(cyl.Axis()).Direction());
@@ -260,6 +308,12 @@ function surfaceInfo(face: Shape): FaceInfo["surface"] {
     return { type: "other" };
   }
 }
+
+const at = (p: { X(): number; Y(): number; Z(): number }): Vec3 => [
+  p.X(),
+  p.Y(),
+  p.Z(),
+];
 
 export function curveInfo(edge: Shape): EdgeInfo["curve"] {
   const k = getKernel();
@@ -292,36 +346,23 @@ export function curveInfo(edge: Shape): EdgeInfo["curve"] {
           sweep: curve.LastParameter() - curve.FirstParameter(),
         };
       }
+      if (type === k.GeomAbs_CurveType.GeomAbs_Ellipse) {
+        const el = own(curve.Ellipse());
+        return {
+          type: "ellipse",
+          center: at(own(el.Location())),
+          axis: at(own(own(el.Axis()).Direction())),
+          majorAxis: at(own(own(el.XAxis()).Direction())),
+          majorRadius: el.MajorRadius(),
+          minorRadius: el.MinorRadius(),
+          start: at(own(curve.Value(curve.FirstParameter()))),
+          end: at(own(curve.Value(curve.LastParameter()))),
+          sweep: curve.LastParameter() - curve.FirstParameter(),
+        };
+      }
       return { type: "other" };
     });
   } catch {
     return { type: "other" };
   }
-}
-
-function sampleEdge(edge: Shape): number[] {
-  const k = getKernel();
-  const out: number[] = [];
-  try {
-    const curve = new k.BRepAdaptor_Curve_2(edge);
-    const first = curve.FirstParameter();
-    const last = curve.LastParameter();
-    const type = curve.GetType();
-    let samples = 32;
-    if (type === k.GeomAbs_CurveType.GeomAbs_Line) samples = 1;
-    else if (type === k.GeomAbs_CurveType.GeomAbs_Circle) {
-      const span = Math.abs(last - first);
-      samples = Math.max(8, Math.ceil((span / (Math.PI * 2)) * 64));
-    }
-    for (let i = 0; i <= samples; i++) {
-      const t = first + ((last - first) * i) / samples;
-      const p = curve.Value(t);
-      out.push(p.X(), p.Y(), p.Z());
-      p.delete();
-    }
-    curve.delete();
-  } catch {
-    return [];
-  }
-  return out;
 }

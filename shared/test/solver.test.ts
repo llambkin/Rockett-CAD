@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { solveSketch } from "../src/solver.js";
+import { editedEntities, solveSketch } from "../src/solver.js";
+import { FEATURE_SCHEMAS } from "../src/schema/features.js";
+import { parse } from "../src/schema/index.js";
 import type { SketchConstraint, SketchEntity } from "../src/model.js";
 
 function pt(id: string, x: number, y: number): SketchEntity {
@@ -231,5 +233,106 @@ describe("line angle constraint", () => {
     });
     expect(clash.converged).toBe(false);
     expect(clash.status).toBe("over_constrained");
+  });
+});
+
+describe("damped steps", () => {
+  it("makes a circle tangent to an arc whose centres share an axis", () => {
+    const res = solveSketch({
+      entities: [
+        pt("c0", 0, 0),
+        { id: "o1", kind: "circle", center: "c0", radius: 10 },
+        pt("c1", 20, 0),
+        pt("s", 25, 0),
+        pt("t", 20, 5),
+        { id: "r1", kind: "arc", center: "c1", start: "s", end: "t" },
+      ],
+      constraints: [{ id: "tan", type: "tangent", a: "o1", b: "r1" }],
+    });
+    expect(res.converged).toBe(true);
+  });
+});
+
+const squares = (count: number, skew: number): SketchEntity[] =>
+  Array.from({ length: count }, (_, k): SketchEntity[] => [
+    pt(`${k}:0`, 20 * k, 0),
+    pt(`${k}:1`, 20 * k + 10, 0),
+    pt(`${k}:2`, 20 * k + 10 + skew, 10),
+    pt(`${k}:3`, 20 * k, 10),
+    ...[0, 1, 2, 3].map((i): SketchEntity => ({
+      id: `${k}:l${i}`,
+      kind: "line",
+      p1: `${k}:${i}`,
+      p2: `${k}:${(i + 1) % 4}`,
+    })),
+  ]).flat();
+const squareConstraints = (count: number): SketchConstraint[] =>
+  Array.from({ length: count }, (_, k): SketchConstraint[] => [
+    { id: `${k}:h0`, type: "horizontal", line: `${k}:l0` },
+    { id: `${k}:v1`, type: "vertical", line: `${k}:l1` },
+    { id: `${k}:h2`, type: "horizontal", line: `${k}:l2` },
+    { id: `${k}:v3`, type: "vertical", line: `${k}:l3` },
+  ]).flat();
+const outside = (entities: SketchEntity[], square: number) =>
+  entities.filter((e) => !e.id.startsWith(`${square}:`));
+const at = (entities: SketchEntity[], id: string) => {
+  const p = entities.find((e) => e.id === id);
+  if (p?.kind !== "point") throw new Error(`point ${id} missing`);
+  return p;
+};
+
+describe("connected components", () => {
+  it("drags one line in a 5,000-entity sketch and moves only its component", () => {
+    const entities = squares(625, 0.5);
+    expect(entities).toHaveLength(5000);
+    const res = solveSketch({
+      entities,
+      constraints: squareConstraints(625),
+      drag: { pointId: "7:1", x: 160, y: -4 },
+    });
+    expect(outside(res.entities, 7)).toEqual(outside(entities, 7));
+    const [p0, p1, p2] = ["7:0", "7:1", "7:2"].map((id) =>
+      at(res.entities, id),
+    );
+    expect(p1!.y).toBeLessThan(-1);
+    expect(p1!.y - p0!.y).toBeCloseTo(0, 6);
+    expect(p2!.x - p1!.x).toBeCloseTo(0, 6);
+  });
+
+  it("solves only the components an edit touches", () => {
+    const entities = squares(3, 0.5);
+    const before = squareConstraints(3);
+    const after = editedEntities(before, {
+      entities,
+      constraints: [
+        ...before,
+        { id: "0:len", type: "length", line: "0:l0", value: 12 },
+      ],
+    });
+    expect(outside(after, 0)).toEqual(outside(entities, 0));
+    expect(at(after, "0:1").x - at(after, "0:0").x).toBeCloseTo(12, 6);
+  });
+
+  it("validates a sketch past the old entity, constraint and offset counts", () => {
+    const entities = squares(1251, 0);
+    const ids = entities.map((e) => e.id);
+    const offsets = ids.slice(0, 1001).map((id, i) => ({
+      id: `o${i}`,
+      distance: 1,
+      sourceIds: [id],
+      entityIds: i === 0 ? ids : [id],
+      joinTolerance: 0,
+    }));
+    const sketch = {
+      id: "sk",
+      name: "Sketch",
+      suppressed: false,
+      type: "sketch",
+      plane: { kind: "origin", plane: "XY" },
+      entities,
+      constraints: squareConstraints(1251),
+      offsets,
+    };
+    expect(parse(FEATURE_SCHEMAS.sketch, sketch)).toBe(sketch);
   });
 });

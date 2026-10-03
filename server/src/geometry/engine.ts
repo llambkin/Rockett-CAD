@@ -1,23 +1,11 @@
-/**
- * Regeneration engine.
- *
- * Evaluates a document's feature timeline in order, up to the timeline
- * marker, maintaining per-feature snapshots so an edit to feature k only
- * re-evaluates features k..end (the brief's "retain valid cached state,
- * invalidate downstream" requirement).
- *
- * A failed feature is recorded in the result with an actionable error and
- * evaluation continues with the pre-failure state, so downstream features
- * that don't depend on it still build (they may fail themselves, which is
- * also recorded — never silently discarded).
- */
-
+import { bodyName, resolveDocumentParameters } from "@rockett/shared";
 import type {
   BodyPayload,
   CadDocument,
   ConstructionPlanePayload,
   EvaluateResult,
   FeatureStatus,
+  NamingVersion,
   SketchPayload,
 } from "@rockett/shared";
 import {
@@ -25,35 +13,103 @@ import {
   emptyState,
   evaluateFeature,
   type EvalState,
+  type FeatureOutcome,
   type StateBody,
 } from "./features.js";
+import {
+  recorded,
+  replayed,
+  retired,
+  reusable,
+  type Deps,
+} from "./featureDeps.js";
+import "./kinds.js";
 import type { Sources } from "./importers.js";
 import { movePayload, tessellateBody } from "./tessellate.js";
-import type { NamedBody } from "./naming.js";
-import { shapeHash, type Shape } from "./kernel.js";
-import { ShapeMap, trackShapeMaps } from "./shapeMap.js";
+import { withNamingVersion, type NamedBody } from "./naming.js";
+import { modifiedFaces } from "./modified.js";
+import { cancellable, release, shapeHash, type Shape } from "./kernel.js";
+import { heapBytes, lruEngines } from "./engineCache.js";
+import {
+  BlockedFeature,
+  CRASH_BLOCKED_MESSAGE,
+  blockedBodies,
+  crashStatus,
+  evaluateResolved,
+  unresolvedRefs,
+  type CrashFeature,
+} from "./resolve.js";
+
+function blockedFeatureIds(
+  doc: CadDocument,
+  statuses: FeatureStatus[],
+  quarantine: CrashFeature[],
+) {
+  const ids = new Set(
+    statuses
+      .filter((status) => status.error === CRASH_BLOCKED_MESSAGE)
+      .map((status) => status.featureId),
+  );
+  for (const entry of quarantine)
+    if (
+      doc.features.some(
+        (feature) =>
+          !feature.suppressed &&
+          feature.id === entry.featureId &&
+          featureKey(feature) === entry.featureKey,
+      )
+    )
+      ids.add(entry.featureId);
+  return ids;
+}
 
 interface Snapshot {
-  /** JSON of the feature this snapshot is the result of (cache key). */
-  featureKey: string;
+  featureKeys: string[];
   state: EvalState;
   statuses: FeatureStatus[];
+  deps?: Deps;
 }
+
+function okStatus(
+  feature: CadDocument["features"][number],
+  outcome: FeatureOutcome | void,
+  before: EvalState,
+  after: EvalState,
+): FeatureStatus {
+  const modified = modifiedFaces(before.bodies, after.bodies);
+  return {
+    featureId: feature.id,
+    status: outcome?.warning ? "warning" : "ok",
+    ...outcome,
+    ...(modified && { modified }),
+  };
+}
+
+const snapshotBodies = (snapshots: Pick<Snapshot, "state">[]) =>
+  snapshots.flatMap((snapshot) => [...snapshot.state.bodies.values()]);
 
 function releaseSnapshots(
   discarded: Pick<Snapshot, "state">[],
   retained: Pick<Snapshot, "state">[],
 ): void {
-  const bodies = (snapshots: Pick<Snapshot, "state">[]) =>
-    snapshots.flatMap((s) => [...s.state.bodies.values()]);
-  const kept = bodies(retained);
+  const kept = snapshotBodies(retained);
   const keptShapes = new Set(kept.map((b) => b.shape));
   const keptNames = new Set(kept.map((b) => b.names));
-  const dropped = bodies(discarded);
-  for (const shape of new Set(dropped.map((b) => b.shape)))
-    if (!keptShapes.has(shape)) shape.delete();
-  for (const names of new Set(dropped.map((b) => b.names)))
-    if (!keptNames.has(names)) names.release();
+  const dropped = snapshotBodies(discarded);
+  const freed = dropped.filter((b) => !keptShapes.has(b.shape));
+  for (const body of freed) {
+    const key = cacheKey(body);
+    if (tessCache.entries.get(key)?.shape === body.shape) evict(key);
+  }
+  const names = [...new Set(dropped.map((b) => b.names))].filter(
+    (bodyNames) => !keptNames.has(bodyNames),
+  );
+  release([
+    ...names
+      .toReversed()
+      .map((bodyNames) => ({ delete: () => bodyNames.release() })),
+    ...new Set(freed.map((b) => b.shape)),
+  ]);
 }
 
 function evaluateTracked(
@@ -61,237 +117,434 @@ function evaluateTracked(
   feature: CadDocument["features"][number],
   earlier: CadDocument["features"],
   sources: Sources,
-): string | void {
-  const made: ShapeMap<unknown>[] = [];
+  namingVersion: NamingVersion,
+  shouldStop?: () => boolean,
+): FeatureOutcome | void {
+  const run = () => evaluateFeature(next, feature, earlier, sources);
+  return cancellable(shouldStop, () =>
+    withNamingVersion(namingVersion, () =>
+      namingVersion === 1 ? run() : evaluateResolved(next, feature, run),
+    ),
+  );
+}
+
+export function trialBuild<T>(
+  state: EvalState,
+  feature: CadDocument["features"][number],
+  earlier: CadDocument["features"],
+  namingVersion: NamingVersion,
+  shouldStop: () => boolean,
+  inspect: (built: EvalState) => T,
+): T {
+  const next = { ...state };
   try {
-    return trackShapeMaps(made, () =>
-      evaluateFeature(next, feature, earlier, sources),
+    evaluateTracked(
+      next,
+      feature,
+      earlier,
+      new Map(),
+      namingVersion,
+      shouldStop,
     );
+    return inspect(next);
   } finally {
-    const held = new Set<ShapeMap<unknown>>(
-      [...next.bodies.values()].map((b) => b.names),
-    );
-    for (const map of made) if (!held.has(map)) map.release();
+    releaseSnapshots([{ state: next }], [{ state }]);
   }
 }
 
-/** Cache key for a feature: its JSON minus display-only fields, so hiding a
- * sketch in the viewport doesn't re-evaluate the timeline after it. */
-export function featureKey(feature: CadDocument["features"][number]): string {
-  const { visible: _visible, ...geometric } = feature as any;
-  return JSON.stringify(geometric);
+function failedStatus(
+  err: any,
+  state: EvalState,
+  feature: CadDocument["features"][number],
+): FeatureStatus {
+  const refs =
+    err instanceof BlockedFeature
+      ? err.refs
+      : unresolvedRefs(state.bodies, feature);
+  return {
+    featureId: feature.id,
+    status: "error",
+    error: err?.message ?? String(err),
+    ...(err?.bodyId && { bodyId: err.bodyId }),
+    ...(refs.length > 0 && { refs }),
+  };
 }
 
-const TESS_CACHE_BYTES = 256 * 1024 * 1024;
+function evaluateStep(
+  next: EvalState,
+  state: EvalState,
+  feature: CadDocument["features"][number],
+  earlier: CadDocument["features"],
+  sources: Sources,
+  namingVersion: NamingVersion,
+  snapshots: Snapshot[],
+  shouldStop?: () => boolean,
+): { status: FeatureStatus; deps?: Deps } | undefined {
+  try {
+    const { outcome, deps } = recorded(state, next, earlier, sources, (e, s) =>
+      evaluateTracked(next, feature, e, s, namingVersion, shouldStop),
+    );
+    return {
+      status: okStatus(feature, outcome, state, next),
+      ...(deps && { deps }),
+    };
+  } catch (err: any) {
+    releaseSnapshots([{ state: next }], snapshots);
+    if (shouldStop?.()) return;
+    next.bodies = new Map(state.bodies);
+    next.sketches = new Map(state.sketches);
+    next.planes = new Map(state.planes);
+    if (err instanceof BlockedFeature)
+      next.blocked = new Set([...state.blocked, ...err.bodies]);
+    return { status: failedStatus(err, state, feature) };
+  }
+}
 
-function payloadBytes(p: BodyPayload): number {
-  let numbers = p.positions.length + p.normals.length + p.indices.length;
-  for (const edge of p.edges) numbers += edge.polyline.length;
-  return numbers * 8;
+export function featureKey(feature: object): string {
+  return JSON.stringify(feature);
+}
+
+function featureKeys(
+  feature: CadDocument["features"][number],
+  key: string,
+  { targets }: FeatureStatus,
+): string[] {
+  return targets && !("targets" in feature)
+    ? [key, featureKey({ ...feature, targets })]
+    : [key];
+}
+
+interface Tessellation {
+  shape: Shape;
+  payload: BodyPayload;
+  bytes: number;
+}
+
+export const tessCache = {
+  limit: 256 * 1024 * 1024,
+  bytes: 0,
+  entries: new Map<string, Tessellation>(),
+};
+
+function payloadBytes(value: unknown): number {
+  if (typeof value === "number" || typeof value === "boolean") return 8;
+  if (typeof value === "string") return value.length * 2;
+  if (!value || typeof value !== "object") return 0;
+  if (Array.isArray(value) && typeof value[0] === "number")
+    return value.length * 8;
+  let bytes = 0;
+  for (const v of Object.values(value)) bytes += payloadBytes(v);
+  return bytes;
 }
 
 function cacheKey(body: NamedBody): string {
   return `${body.bodyId}:${shapeHash(body.shape)}`;
 }
 
-interface Tessellation {
-  shape: Shape;
-  payload: BodyPayload;
+function evict(key: string): void {
+  const entry = tessCache.entries.get(key);
+  if (!entry) return;
+  tessCache.entries.delete(key);
+  tessCache.bytes -= entry.bytes;
+}
+
+function store(body: NamedBody, payload: BodyPayload): Tessellation {
+  const key = cacheKey(body);
+  evict(key);
+  const entry = { shape: body.shape, payload, bytes: payloadBytes(payload) };
+  tessCache.entries.set(key, entry);
+  tessCache.bytes += entry.bytes;
+  for (const old of tessCache.entries.keys()) {
+    if (tessCache.bytes <= tessCache.limit) break;
+    evict(old);
+  }
+  return entry;
+}
+
+function cached(body: NamedBody): Tessellation | undefined {
+  const key = cacheKey(body);
+  const entry = tessCache.entries.get(key);
+  if (!entry) return undefined;
+  if (entry.shape.isDeleted()) {
+    evict(key);
+    return undefined;
+  }
+  if (body.shape.isDeleted() || !entry.shape.IsSame(body.shape))
+    return undefined;
+  tessCache.entries.delete(key);
+  tessCache.entries.set(key, entry);
+  return entry;
+}
+
+export interface EvaluateHooks {
+  onFeatureStart?(index: number, featureId: string, featureKey: string): void;
+  onProgress?(done: number, total: number, label: string): void;
+  shouldStop?(): boolean;
+}
+
+function unreached(
+  features: CadDocument["features"],
+  from: number,
+  upTo: number,
+): FeatureStatus[] {
+  return features.slice(from).map((feature, offset) => ({
+    featureId: feature.id,
+    status: from + offset < upTo ? "cancelled" : "rolledBack",
+  }));
 }
 
 class DocumentEngine {
+  bytes = 0;
+  private wasm = 0;
+  private js = 0;
   private snapshots: Snapshot[] = [];
-  private tessCache = new Map<string, Tessellation>();
-  private tessBytes = 0;
+  private stale = new Map<number, Snapshot>();
+  private namingVersion?: NamingVersion;
+  private held: Sources = new Map();
+  private quarantine: CrashFeature[] = [];
+
+  setQuarantine(features: CrashFeature[]) {
+    if (JSON.stringify(this.quarantine) === JSON.stringify(features)) return;
+    this.invalidate();
+    this.quarantine = features;
+  }
+
+  constructor(readonly docId: string) {}
+
+  get sources(): Sources {
+    return this.held;
+  }
+
+  private measured<T>(work: () => T): T {
+    const heap = heapBytes();
+    try {
+      return work();
+    } finally {
+      this.wasm += heapBytes() - heap;
+      this.bytes = this.wasm + this.js;
+      engineCache.adopt(this);
+    }
+  }
 
   evaluate(
     doc: CadDocument,
     position?: number,
-    sources: Sources = new Map(),
+    sources?: Sources,
+    hooks?: EvaluateHooks,
   ): EvaluateResult {
-    const t0 = performance.now();
+    return this.measured(() => {
+      const t0 = performance.now();
+      const { state, statuses } = this.regenerate(
+        doc,
+        position,
+        sources,
+        hooks,
+      );
+
+      const bodies: BodyPayload[] = [];
+      let js = 0;
+      for (const bytes of this.held.values()) js += bytes.byteLength;
+      for (const body of state.bodies.values()) {
+        const name = bodyName(doc, body.bodyId);
+        const { payload, bytes } = this.tessellated(body, name);
+        bodies.push({ ...payload, name });
+        js += bytes;
+      }
+
+      const sketches: SketchPayload[] = [...state.sketches.values()].map(
+        (sk) => ({ ...sk }),
+      );
+      this.js = js + payloadBytes(sketches);
+
+      const planes: ConstructionPlanePayload[] = [];
+      for (const [featureId, p] of state.planes) {
+        planes.push({ featureId, frame: p.frame, size: p.size });
+      }
+
+      return {
+        bodies,
+        featureStatuses: statuses,
+        sketches,
+        planes,
+        kernelMs: Math.round(performance.now() - t0),
+      };
+    });
+  }
+
+  private regenerate(
+    doc: CadDocument,
+    position: number | undefined,
+    sources: Sources | undefined,
+    hooks?: EvaluateHooks,
+  ) {
+    doc = { ...doc, features: resolveDocumentParameters(doc).features };
+    if (sources) this.held = sources;
     const upTo = Math.min(
       position ?? doc.timelinePosition,
       doc.features.length,
     );
 
-    // Drop snapshots from the first stale feature on. Valid snapshots past
-    // upTo stay, so a rewind or stateAt query doesn't discard later work.
+    const keys: string[] = [];
+    const keyAt = (i: number) => (keys[i] ??= featureKey(doc.features[i]!));
     let valid = 0;
     while (
+      this.namingVersion === doc.namingVersion &&
       valid < this.snapshots.length &&
       valid < doc.features.length &&
-      this.snapshots[valid]!.featureKey === featureKey(doc.features[valid]!)
-    ) {
+      this.snapshots[valid]!.featureKeys.includes(keyAt(valid))
+    )
       valid++;
+    const discarded = retired(
+      this.stale,
+      this.snapshots.splice(valid),
+      valid,
+      doc.features.length,
+      this.namingVersion === doc.namingVersion,
+    );
+    this.namingVersion = doc.namingVersion;
+    try {
+      return this.replay(doc, upTo, valid, keyAt, discarded, hooks);
+    } finally {
+      releaseSnapshots(discarded, [...this.snapshots, ...this.stale.values()]);
     }
-    releaseSnapshots(this.snapshots.splice(valid), this.snapshots);
+  }
+
+  private replay(
+    doc: CadDocument,
+    upTo: number,
+    valid: number,
+    keyAt: (i: number) => string,
+    discarded: Snapshot[],
+    hooks?: EvaluateHooks,
+  ) {
     const start = Math.min(valid, upTo);
 
     let state: EvalState =
-      start === 0 ? emptyState() : cloneState(this.snapshots[start - 1]!.state);
+      start === 0 ? emptyState() : this.snapshots[start - 1]!.state;
     let statuses: FeatureStatus[] =
       start === 0 ? [] : [...this.snapshots[start - 1]!.statuses];
+    const blockedFeatures = blockedFeatureIds(doc, statuses, this.quarantine);
 
-    for (let i = start; i < upTo; i++) {
+    let i = start;
+    for (; i < upTo && !hooks?.shouldStop?.(); i++) {
       const feature = doc.features[i]!;
-      const next = cloneState(state);
+      let next = { ...state };
       let status: FeatureStatus;
-      if (feature.suppressed) {
+      let deps: Deps | undefined;
+      const crash = crashStatus(
+        feature,
+        keyAt(i),
+        this.quarantine,
+        blockedFeatures,
+      );
+      const old = this.stale.get(i);
+      const kept =
+        feature.suppressed || crash
+          ? undefined
+          : reusable(old, keyAt(i), state, this.held);
+      if (!kept) hooks?.onFeatureStart?.(i, feature.id, keyAt(i));
+      if (kept) {
+        next = replayed(state, old!.state, kept.writes);
+        status = okStatus(feature, kept.outcome, state, next);
+        deps = kept;
+      } else if (feature.suppressed) {
+        Object.assign(next, cloneState(state));
         status = { featureId: feature.id, status: "suppressed" };
+      } else if (crash) {
+        Object.assign(next, cloneState(state));
+        status = crash;
+        next.blocked = blockedBodies(state, feature);
       } else {
-        try {
-          const warning = evaluateTracked(
-            next,
-            feature,
-            doc.features.slice(0, i),
-            sources,
-          );
-          status = warning
-            ? { featureId: feature.id, status: "warning", warning }
-            : { featureId: feature.id, status: "ok" };
-        } catch (err: any) {
-          status = {
-            featureId: feature.id,
-            status: "error",
-            error: err?.message ?? String(err),
-          };
-          // keep pre-failure state
-          releaseSnapshots([{ state: next }], this.snapshots);
-          next.bodies = new Map(state.bodies);
-          next.sketches = new Map(state.sketches);
-          next.planes = new Map(state.planes);
-        }
+        const evaluated = evaluateStep(
+          next,
+          state,
+          feature,
+          doc.features.slice(0, i),
+          this.held,
+          doc.namingVersion,
+          this.snapshots,
+          hooks?.shouldStop,
+        );
+        if (!evaluated) break;
+        ({ status, deps } = evaluated);
       }
-      statuses = [...statuses, status];
+      statuses = statuses.concat(status);
       this.snapshots.push({
-        featureKey: featureKey(feature),
+        featureKeys: featureKeys(feature, keyAt(i), status),
         state: next,
         statuses,
+        ...(deps && { deps }),
       });
+      if (old) {
+        discarded.push(old);
+        this.stale.delete(i);
+      }
       state = next;
+      hooks?.onProgress?.(i + 1 - start, upTo - start, feature.name);
     }
 
-    // Rolled-back features
-    for (let i = upTo; i < doc.features.length; i++) {
-      statuses = [
-        ...statuses,
-        { featureId: doc.features[i]!.id, status: "rolledBack" },
-      ];
-    }
-
-    // --- payloads ---
-    const bodies: BodyPayload[] = [];
-    for (const body of state.bodies.values()) {
-      const name = doc.bodyMeta[body.bodyId]?.name ?? body.bodyId;
-      bodies.push({ ...this.tessellated(body, name), name });
-    }
-
-    const sketches: SketchPayload[] = [];
-    for (const sk of state.sketches.values()) {
-      sketches.push({
-        featureId: sk.featureId,
-        frame: sk.frame,
-        entities: sk.entities,
-        solveStatus: sk.solveStatus,
-        dof: sk.dof,
-        profiles: sk.profiles,
-      });
-    }
-
-    const planes: ConstructionPlanePayload[] = [];
-    for (const [featureId, p] of state.planes) {
-      planes.push({ featureId, frame: p.frame, size: p.size });
-    }
-
-    return {
-      bodies,
-      featureStatuses: statuses,
-      sketches,
-      planes,
-      kernelMs: Math.round(performance.now() - t0),
-    };
+    statuses = [...statuses, ...unreached(doc.features, i, upTo)];
+    return { state, statuses, features: doc.features };
   }
 
-  private tessellated(body: StateBody, name: string): BodyPayload {
-    const hit = this.cached(body);
-    if (hit) return hit;
-    const payload =
-      this.moved(body) ?? tessellateBody(body, { name, visible: true });
-    const key = cacheKey(body);
-    const stale = this.tessCache.get(key);
-    this.tessCache.delete(key);
-    if (stale) this.tessBytes -= payloadBytes(stale.payload);
-    this.tessCache.set(key, { shape: body.shape, payload });
-    this.tessBytes += payloadBytes(payload);
-    for (const [old, entry] of this.tessCache) {
-      if (this.tessBytes <= TESS_CACHE_BYTES) break;
-      this.tessCache.delete(old);
-      this.tessBytes -= payloadBytes(entry.payload);
-    }
-    return payload;
-  }
-
-  private cached(body: NamedBody): BodyPayload | undefined {
-    const key = cacheKey(body);
-    const entry = this.tessCache.get(key);
-    if (
-      !entry ||
-      entry.shape.isDeleted() ||
-      body.shape.isDeleted() ||
-      !entry.shape.IsSame(body.shape)
-    )
-      return undefined;
-    this.tessCache.delete(key);
-    this.tessCache.set(key, entry);
-    return entry.payload;
+  private tessellated(body: StateBody, name: string): Tessellation {
+    return (
+      cached(body) ??
+      store(body, this.moved(body) ?? tessellateBody(body, { name }))
+    );
   }
 
   private moved({ bodyId, copyOf }: StateBody): BodyPayload | undefined {
-    const source = copyOf && this.cached(copyOf.source);
-    return source && movePayload(source, bodyId, copyOf.offset, copyOf.prefix);
+    const source = copyOf && cached(copyOf.source)?.payload;
+    return source && movePayload(source, bodyId, copyOf);
   }
 
-  /** Access the evaluated state at the current cache tip (for measure/export). */
-  stateAt(
+  visibleTargets(
     doc: CadDocument,
-    position?: number,
-    sources: Sources = new Map(),
-  ): EvalState {
-    this.evaluate(doc, position, sources);
-    const upTo = Math.min(
-      position ?? doc.timelinePosition,
-      doc.features.length,
-    );
-    if (upTo === 0) return emptyState();
-    return this.snapshots[upTo - 1]!.state;
+    index: number,
+    hidden: readonly string[],
+    sources?: Sources,
+  ): string[] | undefined {
+    return this.measured(() => {
+      const { statuses, features } = this.regenerate(doc, index + 1, sources);
+      const found = statuses[index]?.targets;
+      const excluded = new Set(hidden);
+      if (!found?.some((id) => excluded.has(id))) return found;
+      const before =
+        index === 0 ? emptyState() : this.snapshots[index - 1]!.state;
+      const trial: EvalState = { ...before, hidden: excluded };
+      try {
+        return evaluateTracked(
+          trial,
+          features[index]!,
+          features.slice(0, index),
+          this.held,
+          doc.namingVersion,
+        )?.targets;
+      } finally {
+        releaseSnapshots([{ state: trial }], this.snapshots);
+      }
+    });
+  }
+
+  stateAt(doc: CadDocument, position?: number, sources?: Sources): EvalState {
+    return this.measured(() => this.regenerate(doc, position, sources).state);
   }
 
   invalidate(): void {
-    releaseSnapshots(this.snapshots, []);
-    this.snapshots = [];
-    this.tessCache.clear();
-    this.tessBytes = 0;
+    try {
+      releaseSnapshots([...this.snapshots, ...this.stale.values()], []);
+    } finally {
+      this.snapshots = [];
+      this.stale.clear();
+      this.held = new Map();
+      this.bytes = this.wasm = this.js = 0;
+    }
   }
 }
 
-const MAX_ENGINES = 8;
-const engines = new Map<string, DocumentEngine>();
-
-export function engineFor(docId: string): DocumentEngine {
-  const e = engines.get(docId) ?? new DocumentEngine();
-  engines.delete(docId);
-  engines.set(docId, e);
-  for (const [id] of engines) {
-    if (engines.size <= MAX_ENGINES) break;
-    dropEngine(id);
-  }
-  return e;
-}
-
-export function dropEngine(docId: string): void {
-  engines.get(docId)?.invalidate();
-  engines.delete(docId);
-}
+export const engineCache = lruEngines((docId) => new DocumentEngine(docId));
+export const engineFor = (docId: string) => engineCache.get(docId);
+export const dropEngine = (docId: string) => engineCache.drop(docId);
 
 export type { DocumentEngine };

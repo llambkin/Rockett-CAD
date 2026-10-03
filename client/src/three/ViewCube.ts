@@ -6,17 +6,20 @@
 import * as THREE from "three";
 import type { CadViewport } from "./CadViewport";
 import { ISO_VIEW } from "./camera";
-import { themeColor } from "../theme/tokens";
+import { subscribeTheme, themeColor } from "../theme/tokens";
 
 /**
  * Face label texture. `rotation` counters BoxGeometry's per-face UV
  * orientation so every label reads upright in its face's standard view
  * (Z-up world: side-face UVs put texture-"up" along ±Y, not +Z).
  */
-function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = c.height = 128;
-  const ctx = c.getContext("2d")!;
+function paintFace(
+  canvas: HTMLCanvasElement,
+  label: string,
+  rotation: number,
+): void {
+  const ctx = canvas.getContext("2d")!;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = themeColor("viewcube-face");
   ctx.fillRect(0, 0, 128, 128);
   ctx.strokeStyle = themeColor("viewcube-border");
@@ -29,9 +32,48 @@ function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
   ctx.translate(64, 64);
   ctx.rotate(rotation);
   ctx.fillText(label, 0, 0);
+}
+
+function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  paintFace(c, label, rotation);
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
+}
+
+// Cube faces: three.js BoxGeometry material order is +x,-x,+y,-y,+z,-z.
+// Rotations make each label upright in that face's standard view.
+const FACES: [string, number][] = [
+  ["RIGHT", -Math.PI / 2],
+  ["LEFT", Math.PI / 2],
+  ["BACK", Math.PI],
+  ["FRONT", 0],
+  ["TOP", 0],
+  ["BOTTOM", Math.PI],
+];
+
+function cubeMesh(): { cube: THREE.Mesh; repaint: () => void } {
+  const materials = FACES.map(
+    ([label, rotation]) =>
+      new THREE.MeshBasicMaterial({ map: faceTexture(label, rotation) }),
+  );
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), materials);
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(cube.geometry),
+    new THREE.LineBasicMaterial({ color: themeColor("viewcube-edge") }),
+  );
+  cube.add(edges);
+  const repaint = () => {
+    FACES.forEach(([label, rotation], i) => {
+      const map = materials[i]!.map!;
+      paintFace(map.image as HTMLCanvasElement, label, rotation);
+      map.needsUpdate = true;
+    });
+    edges.material.color.set(themeColor("viewcube-edge"));
+  };
+  return { cube, repaint };
 }
 
 export class ViewCube {
@@ -41,6 +83,7 @@ export class ViewCube {
   private cube: THREE.Mesh;
   private raycaster = new THREE.Raycaster();
   private stopRendering: () => void;
+  private stopTheme: () => void;
   private dragging = false;
   private moved = false;
   private lastX = 0;
@@ -65,26 +108,13 @@ export class ViewCube {
     );
     this.camera.position.set(0, 0, 4);
 
-    // Cube faces: three.js BoxGeometry material order is +x,-x,+y,-y,+z,-z.
-    // Rotations make each label upright in that face's standard view.
-    const mats: [string, number][] = [
-      ["RIGHT", -Math.PI / 2],
-      ["LEFT", Math.PI / 2],
-      ["BACK", Math.PI],
-      ["FRONT", 0],
-      ["TOP", 0],
-      ["BOTTOM", Math.PI],
-    ];
-    const materials = mats.map(
-      ([l, rot]) => new THREE.MeshBasicMaterial({ map: faceTexture(l, rot) }),
-    );
-    this.cube = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), materials);
-    this.scene.add(this.cube);
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(this.cube.geometry as THREE.BoxGeometry),
-      new THREE.LineBasicMaterial({ color: themeColor("viewcube-edge") }),
-    );
-    this.cube.add(edges);
+    const { cube, repaint } = cubeMesh();
+    this.cube = cube;
+    this.scene.add(cube);
+    this.stopTheme = subscribeTheme(() => {
+      repaint();
+      viewport.requestRender();
+    });
 
     const el = this.renderer.domElement;
     el.style.cursor = "pointer";
@@ -137,6 +167,7 @@ export class ViewCube {
       if (!wasDrag) this.click(e);
     });
     el.addEventListener("pointercancel", endDrag);
+    el.addEventListener("webglcontextrestored", viewport.requestRender);
 
     this.stopRendering = viewport.onRender(() => this.render());
     viewport.requestRender();
@@ -149,6 +180,7 @@ export class ViewCube {
 
   dispose() {
     this.stopRendering();
+    this.stopTheme();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

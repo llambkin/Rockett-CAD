@@ -10,6 +10,7 @@ export class PendingBlobs {
   readonly blobs = new Map<string, Buffer>();
   readonly used = new Set<string>();
   shown: Visibility = { bodies: {}, features: {} };
+  readonly settings: Record<string, unknown> = {};
 
   constructor(readonly assets: ReadonlyMap<string, Buffer> = new Map()) {
     for (const bytes of assets.values()) this.put(bytes);
@@ -29,6 +30,10 @@ export class PendingBlobs {
 
   show(visibility: Visibility): void {
     this.shown = visibility;
+  }
+
+  setting(key: string, value: unknown): void {
+    this.settings[key] = value;
   }
 }
 
@@ -68,6 +73,11 @@ export class Uploads {
   discard(staged: Pick<Staged, "path">): Promise<void> {
     return this.storage.remove(staged.path);
   }
+
+  async empty(): Promise<void> {
+    for (const name of await this.storage.list(this.dir))
+      await this.storage.remove(path.posix.join(this.dir, name));
+  }
 }
 
 export class BlobStore {
@@ -76,21 +86,19 @@ export class BlobStore {
     private readonly dir: string,
   ) {}
 
-  private file(hash: string): string {
+  file(hash: string): string {
     if (!HASH_RE.test(hash)) throw new StoreError("invalid blob hash");
     return path.posix.join(this.dir, hash);
   }
 
   async put(bytes: Uint8Array): Promise<string> {
     const hash = sha256(bytes);
-    if (!(await this.has(hash)))
-      await this.storage.writeAtomic(this.file(hash), bytes);
+    await this.storage.writeAtomic(this.file(hash), bytes);
     return hash;
   }
 
   async adopt(staged: Staged): Promise<string> {
-    if (await this.has(staged.hash)) await this.storage.remove(staged.path);
-    else await this.storage.move(staged.path, this.file(staged.hash));
+    await this.storage.move(staged.path, this.file(staged.hash));
     return staged.hash;
   }
 
@@ -109,5 +117,19 @@ export class BlobStore {
 
   async has(hash: string): Promise<boolean> {
     return (await this.storage.list(this.dir)).includes(hash);
+  }
+
+  async list(): Promise<string[]> {
+    return (await this.storage.list(this.dir)).filter((name) =>
+      HASH_RE.test(name),
+    );
+  }
+
+  modified(hash: string): Promise<number> {
+    return this.storage.modified(this.file(hash));
+  }
+
+  remove(hash: string): Promise<void> {
+    return this.storage.remove(this.file(hash));
   }
 }

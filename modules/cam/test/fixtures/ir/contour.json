@@ -1,0 +1,117 @@
+{
+  "irVersion": 1,
+  "units": "mm",
+  "setupId": "setup-1",
+  "offsetIndex": 1,
+  "tools": [
+    {
+      "id": "t1",
+      "number": 1,
+      "name": "6 mm flat",
+      "kind": "flat",
+      "diameter": 6,
+      "fluteLength": 22,
+      "overallLength": 50,
+      "shankDiameter": 6,
+      "flutes": 2,
+      "centreCutting": true
+    }
+  ],
+  "sections": [
+    {
+      "operationId": "contour-1",
+      "toolId": "t1",
+      "pass": "finish",
+      "spindle": { "rpm": 18000, "dir": "cw" },
+      "coolant": "off",
+      "moves": [
+        { "kind": "comment", "text": "Outside contour 40 x 30 R5, 6 mm deep" },
+        { "kind": "rapid", "to": [-3, 5, 15] },
+        { "kind": "rapid", "to": [-3, 5, 2] },
+        { "kind": "feed", "to": [-3, 5, -3], "feed": 300, "role": "plunge" },
+        { "kind": "feed", "to": [-3, 25, -3], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [5, 33, -3],
+          "centre": [5, 25, -3],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [35, 33, -3], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [43, 25, -3],
+          "centre": [35, 25, -3],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [43, 5, -3], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [35, -3, -3],
+          "centre": [35, 5, -3],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [5, -3, -3], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [-3, 5, -3],
+          "centre": [5, 5, -3],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [-3, 5, -6], "feed": 300, "role": "plunge" },
+        { "kind": "feed", "to": [-3, 25, -6], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [5, 33, -6],
+          "centre": [5, 25, -6],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [35, 33, -6], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [43, 25, -6],
+          "centre": [35, 25, -6],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [43, 5, -6], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [35, -3, -6],
+          "centre": [35, 5, -6],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [5, -3, -6], "feed": 1000, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [-3, 5, -6],
+          "centre": [5, 5, -6],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "rapid", "to": [-3, 5, 15] }
+      ]
+    }
+  ]
+}

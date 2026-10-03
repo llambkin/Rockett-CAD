@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { NAME_LENGTH } from "@rockett/shared";
 
 export function RenameInput({
   value,
@@ -25,7 +26,7 @@ export function RenameInput({
       className={className}
       aria-label={label}
       value={text}
-      maxLength={200}
+      maxLength={NAME_LENGTH}
       onFocus={(e) => e.target.select()}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => {

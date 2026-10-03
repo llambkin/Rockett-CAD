@@ -6,7 +6,11 @@ export type Data = string | Uint8Array | AsyncIterable<Uint8Array>;
 
 export interface Storage {
   read(file: string): Promise<Buffer>;
+  readRange(file: string, start: number, end: number): Promise<Buffer>;
+  stamp(file: string): Promise<string | undefined>;
+  modified(file: string): Promise<number>;
   writeAtomic(file: string, data: Data): Promise<void>;
+  append(file: string, data: Uint8Array): Promise<void>;
   move(from: string, to: string): Promise<void>;
   list(dir: string): Promise<string[]>;
   files(dir: string): Promise<string[]>;
@@ -15,7 +19,7 @@ export interface Storage {
 
 export type Fs = Pick<
   typeof promises,
-  "mkdir" | "open" | "readFile" | "readdir" | "rename" | "rm"
+  "mkdir" | "open" | "readFile" | "readdir" | "rename" | "rm" | "stat"
 >;
 
 export function storagePath(target: string, allowRoot = false): string {
@@ -28,6 +32,23 @@ export function storagePath(target: string, allowRoot = false): string {
   )
     throw new Error(`invalid storage path: ${target}`);
   return parts.join("/");
+}
+
+export async function readFirst(storage: Storage, files: string[]) {
+  for (const file of files) {
+    try {
+      return { file, data: await storage.read(file) };
+    } catch (error) {
+      if (
+        typeof error !== "object" ||
+        error === null ||
+        !("code" in error) ||
+        error.code !== "ENOENT"
+      )
+        throw error;
+    }
+  }
+  return undefined;
 }
 
 export class LocalStorage implements Storage {
@@ -44,6 +65,31 @@ export class LocalStorage implements Storage {
     return this.fs.readFile(this.resolve(file));
   }
 
+  async readRange(file: string, start: number, end: number): Promise<Buffer> {
+    const handle = await this.fs.open(this.resolve(file), "r");
+    try {
+      const out = Buffer.alloc(end - start);
+      const { bytesRead } = await handle.read(out, 0, out.length, start);
+      return out.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
+    }
+  }
+
+  async stamp(file: string): Promise<string | undefined> {
+    try {
+      const s = await this.fs.stat(this.resolve(file), { bigint: true });
+      return `${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw err;
+    }
+  }
+
+  async modified(file: string): Promise<number> {
+    return (await this.fs.stat(this.resolve(file))).mtimeMs;
+  }
+
   async writeAtomic(file: string, data: Data): Promise<void> {
     const full = this.resolve(file);
     const dir = path.dirname(full);
@@ -56,6 +102,21 @@ export class LocalStorage implements Storage {
       await this.fs.rm(tmp, { force: true });
     }
     await this.sync(dir, "r");
+  }
+
+  async append(file: string, data: Uint8Array): Promise<void> {
+    const full = this.resolve(file);
+    await this.fs.mkdir(path.dirname(full), { recursive: true });
+    const handle = await this.fs.open(full, "a");
+    let created: boolean;
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+      created = (await handle.stat()).size === data.byteLength;
+    } finally {
+      await handle.close();
+    }
+    if (created) await this.sync(path.dirname(full), "r");
   }
 
   async move(from: string, to: string): Promise<void> {
@@ -110,6 +171,12 @@ export class LocalStorage implements Storage {
   }
 
   async remove(target: string): Promise<void> {
-    await this.fs.rm(this.resolve(target), { recursive: true, force: true });
+    const full = this.resolve(target);
+    await this.fs.rm(full, { recursive: true, force: true });
+    try {
+      await this.sync(path.dirname(full), "r");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
   }
 }

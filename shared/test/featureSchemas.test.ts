@@ -15,7 +15,6 @@ import type {
   LoftFeature,
   MirrorFeature,
   MoveFeature,
-  OffsetFaceFeature,
   ReferenceImageFeature,
   RevolveFeature,
   ShellFeature,
@@ -57,7 +56,6 @@ const typesMatch: {
   shell: Equal<Static<Schemas["shell"]>, ShellFeature>;
   combine: Equal<Static<Schemas["combine"]>, CombineFeature>;
   splitBody: Equal<Static<Schemas["splitBody"]>, SplitBodyFeature>;
-  offsetFace: Equal<Static<Schemas["offsetFace"]>, OffsetFaceFeature>;
   mirror: Equal<Static<Schemas["mirror"]>, MirrorFeature>;
   linearPattern: Equal<Static<Schemas["linearPattern"]>, LinearPatternFeature>;
   circularPattern: Equal<
@@ -85,7 +83,6 @@ const typesMatch: {
   shell: true,
   combine: true,
   splitBody: true,
-  offsetFace: true,
   mirror: true,
   linearPattern: true,
   circularPattern: true,
@@ -149,7 +146,6 @@ const fixtures: {
           joinTolerance: 0.01,
         },
       ],
-      visible: false,
     },
     invalid: {
       ...base,
@@ -175,7 +171,7 @@ const fixtures: {
       type: "constructionPlane",
       method: { kind: "offset", base: plane, distance: "1" },
     },
-    path: "/method",
+    path: "/method/distance",
   },
   referenceImage: {
     valid: {
@@ -186,7 +182,6 @@ const fixtures: {
       fileName: "a.png",
       transform: { u: 0, v: 0, rotation: 45, scale: 0.1 },
       opacity: 0.5,
-      visible: true,
       width: 640,
       height: 480,
     },
@@ -198,7 +193,6 @@ const fixtures: {
       fileName: "a.png",
       transform: { u: 0, v: 0, rotation: 0, scale: 0 },
       opacity: 0.5,
-      visible: true,
       width: 640,
       height: 480,
     },
@@ -225,16 +219,16 @@ const fixtures: {
       type: "importMesh",
       filename: "part.stl",
       format: "stl",
-      data: "c29saWQ=",
+      blob: "a".repeat(64),
     },
     invalid: {
       ...base,
       type: "importMesh",
       filename: "part.stl",
       format: "stl",
-      data: "solid part",
+      blob: "A".repeat(64),
     },
-    path: "/data",
+    path: "/blob",
   },
   emboss: {
     valid: {
@@ -343,8 +337,20 @@ const fixtures: {
     path: "/edges/0",
   },
   shell: {
-    valid: { ...base, type: "shell", openFaces: [], thickness: 1 },
-    invalid: { ...base, type: "shell", openFaces: [], thickness: -1 },
+    valid: {
+      ...base,
+      type: "shell",
+      openFaces: [],
+      direction: "inside",
+      thickness: 1,
+    },
+    invalid: {
+      ...base,
+      type: "shell",
+      openFaces: [],
+      direction: "inside",
+      thickness: -1,
+    },
     path: "/thickness",
   },
   combine: {
