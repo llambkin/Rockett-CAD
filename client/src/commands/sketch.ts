@@ -22,10 +22,29 @@ export interface SketchState {
   tool: SketchTool;
   constructionMode: boolean;
   polygonSides: number;
+  polygonType: "inscribed" | "circumscribed";
+  polygonAngle: number | null;
+  offsetEditId: string | null;
+  offsetManualSelection: boolean;
+  offsetDistance: number;
+  offsetChain: boolean;
+  offsetJoinTolerance: number;
 }
 
 export function sketchState(sketchId: string, tool: SketchTool): SketchState {
-  return { sketchId, tool, constructionMode: false, polygonSides: 6 };
+  return {
+    sketchId,
+    tool,
+    constructionMode: false,
+    polygonSides: 6,
+    polygonType: "inscribed",
+    polygonAngle: null,
+    offsetEditId: null,
+    offsetManualSelection: false,
+    offsetDistance: 2,
+    offsetChain: true,
+    offsetJoinTolerance: 0.01,
+  };
 }
 
 export const sketchHints: Record<SketchTool, string> = {

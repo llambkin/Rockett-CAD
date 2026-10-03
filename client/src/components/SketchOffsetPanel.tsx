@@ -13,6 +13,7 @@ import {
   editSketchOffset,
 } from "@rockett/shared";
 import { useStore } from "../store";
+import type { SketchState } from "../commands/sketch";
 import { useSetting } from "../settings";
 import { ViewportContext } from "../viewportRef";
 import { uv3, type CadViewport } from "../three/CadViewport";
@@ -22,16 +23,22 @@ import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { LengthField } from "./form/fields";
 
-export function SketchOffsetPanel() {
+export function SketchOffset() {
+  const sketch = useStore((s) =>
+    s.active?.id === "design.sketch" ? s.active.state : null,
+  );
+  return sketch && <SketchOffsetPanel sketch={sketch} />;
+}
+
+function SketchOffsetPanel({ sketch }: { sketch: SketchState }) {
   const viewport = useContext(ViewportContext);
   const units = useSetting("units.length");
   const draft = useStore((s) => s.draftSketch);
   const selection = useStore((s) => s.selection);
   const evaluation = useStore((s) => s.evaluation);
-  const params = useStore((s) => s.dialogParams);
   const busy = useStore((s) => s.busy);
-  const setParams = useStore((s) => s.setDialogParams);
-  const editing = draft?.offsets?.find((o) => o.id === params.editOffsetId);
+  const setParams = useStore((s) => s.setSketchState);
+  const editing = draft?.offsets?.find((o) => o.id === sketch.offsetEditId);
   const ids = useMemo(
     () =>
       selection.flatMap((s) =>
@@ -41,10 +48,10 @@ export function SketchOffsetPanel() {
       ),
     [selection, draft?.id],
   );
-  const manual = params.offsetManualSelection === true || ids.length > 1;
-  const amount = Number(params.sketchOffset ?? 2);
-  const chain = params.offsetChain !== false;
-  const joinTolerance = Number(params.offsetJoinTolerance ?? 0.01);
+  const manual = sketch.offsetManualSelection || ids.length > 1;
+  const amount = sketch.offsetDistance;
+  const chain = sketch.offsetChain;
+  const joinTolerance = sketch.offsetJoinTolerance;
   const preview = useMemo(() => {
     if (!draft || (!editing && !ids.length))
       return { result: null, error: null };
@@ -128,11 +135,11 @@ export function SketchOffsetPanel() {
           ariaLabel="Offset distance"
           autoFocus
           value={amount}
-          onChange={(v) => setParams({ sketchOffset: v })}
+          onChange={(v) => setParams({ offsetDistance: v })}
         />
         <button
           className="btn"
-          onClick={() => setParams({ sketchOffset: -amount })}
+          onClick={() => setParams({ offsetDistance: -amount })}
         >
           Reverse direction
         </button>
@@ -183,7 +190,7 @@ export function SketchOffsetPanel() {
             className="btn"
             onClick={() => {
               const s = useStore.getState();
-              s.setDialogParams({ offsetManualSelection: true });
+              s.setSketchState({ offsetManualSelection: true });
               s.toggleSelection(
                 {
                   kind: "sketchEntity",

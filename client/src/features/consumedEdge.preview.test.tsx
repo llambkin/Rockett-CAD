@@ -31,7 +31,6 @@ it("a consumed edge shows its number as soon as loadPreviewBase resolves, with n
     evaluation: consumed,
     view: emptyView(),
     selection: [],
-    mode: { name: "idle" },
   });
   await act(async () => openFeatureEditor(structuredClone(fillet)));
   await wait(0);

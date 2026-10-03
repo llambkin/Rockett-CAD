@@ -4,7 +4,6 @@ import type {
   CadDocument,
   EvaluateResult,
   Feature,
-  FeatureType,
   HistoryStatus,
   OpenedProject,
   PlaneRef,
@@ -52,10 +51,6 @@ import {
 } from "./commands/sketch";
 export type { SketchTool } from "./commands/sketch";
 
-export type DialogType = FeatureType | "export";
-
-export type Mode = { name: "idle" };
-
 interface State {
   projectId: string | null;
   access: OpenedProject["access"] | null;
@@ -72,8 +67,6 @@ interface State {
   recovery: Recovery | null;
   history: HistoryStatus | null;
 
-  mode: Mode;
-  dialogParams: Record<string, any>;
   pickInput: string | null;
   selection: Selection[];
   hover: Selection | null;
@@ -96,9 +89,8 @@ interface State {
   toggleSelection: (s: Selection, additive: boolean) => void;
   setHover: (s: Selection | null) => void;
 
-  setMode: (m: Mode) => void;
+  clearActive: () => void;
   cancelDialog: () => void;
-  setDialogParams: (p: Record<string, any>) => void;
   setPickInput: (key: string) => void;
 
   startSketchOnPlane: (ref: PlaneRef) => Promise<void>;
@@ -111,7 +103,7 @@ interface State {
   ) => Promise<void>;
   editOffset: (id: string, distance: number) => Promise<void>;
   setSketchState: (
-    state: Partial<Pick<SketchState, "constructionMode" | "polygonSides">>,
+    state: Partial<Omit<SketchState, "sketchId" | "tool">>,
   ) => void;
   setSketchTool: (tool: SketchTool) => void;
   updateDraftSketch: (
@@ -142,8 +134,7 @@ interface State {
   moveCamera: (camera: ViewCamera) => void;
 }
 
-export const isIdle = (s: Pick<State, "mode" | "active">) =>
-  s.mode.name === "idle" && !s.active;
+export const isIdle = (s: Pick<State, "active">) => !s.active;
 
 export function featurePatch(feature: Feature): Partial<Feature> {
   const { id: _id, suppressed: _suppressed, ...patch } = feature as any;
@@ -439,8 +430,6 @@ export const useStore = create<State>((set, get) => ({
   savedAt: null,
   recovery: null,
   history: null,
-  mode: { name: "idle" },
-  dialogParams: {},
   pickInput: null,
   selection: [],
   hover: null,
@@ -473,9 +462,7 @@ export const useStore = create<State>((set, get) => ({
         history: null,
         selection: [],
         active: null,
-        mode: { name: "idle" },
         draftSketch: null,
-        dialogParams: {},
         recovery: null,
         saveState: "saved",
         savedAt: null,
@@ -509,10 +496,8 @@ export const useStore = create<State>((set, get) => ({
       evaluation: null,
       view: emptyView(),
       selection: [],
-      mode: { name: "idle" },
       history: null,
       draftSketch: null,
-      dialogParams: {},
       busy: false,
       job: null,
       jobStartedAt: null,
@@ -657,16 +642,14 @@ export const useStore = create<State>((set, get) => ({
   },
   setHover: (s) => set({ hover: s }),
 
-  setMode(m) {
-    set({ mode: m, dialogParams: {}, pickInput: null, active: null });
+  clearActive() {
+    set({ pickInput: null, active: null });
   },
   cancelDialog() {
     const before = selectionBeforeCommand(get());
-    get().setMode({ name: "idle" });
+    get().clearActive();
     set({ selection: before });
   },
-  setDialogParams: (p) =>
-    set((s) => ({ dialogParams: { ...s.dialogParams, ...p } })),
   setPickInput: (key) => set({ pickInput: key }),
 
   async startSketchOnPlane(ref) {
@@ -726,7 +709,6 @@ export const useStore = create<State>((set, get) => ({
       set({
         evaluation,
         busy: false,
-        dialogParams: {},
         active: {
           id: "design.sketch",
           state: sketchState(sketchId, "select"),
@@ -807,17 +789,18 @@ export const useStore = create<State>((set, get) => ({
     const { active } = get();
     if (active?.id !== "design.sketch") return;
     set({
-      active: { ...active, state: { ...active.state, tool } },
+      active: {
+        ...active,
+        state: {
+          ...active.state,
+          tool,
+          ...(tool === "offset" && {
+            offsetManualSelection: false,
+            offsetEditId: null,
+          }),
+        },
+      },
       selection: [],
-      ...(tool === "offset"
-        ? {
-            dialogParams: {
-              ...get().dialogParams,
-              offsetManualSelection: false,
-              editOffsetId: undefined,
-            },
-          }
-        : {}),
     });
   },
 
@@ -914,10 +897,8 @@ export const useStore = create<State>((set, get) => ({
         evaluation,
         busy: false,
         active: null,
-        mode: { name: "idle" },
         draftSketch: null,
         selection: [],
-        dialogParams: {},
       });
     } catch (e: any) {
       set({ busy: false, error: e.message });

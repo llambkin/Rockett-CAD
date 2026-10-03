@@ -18,14 +18,13 @@ const edge: Selection = { kind: "edge", bodyId: "b1", edgeName: "e1" };
 const body: Selection = { kind: "body", bodyId: "b1" };
 
 afterEach(() => {
-  useStore.getState().setMode({ name: "idle" });
+  useStore.getState().clearActive();
   useStore.setState({ selection: [], busy: false });
 });
 
 it("activates Chamfer through the registered feature command and restores preselection", async () => {
   useStore.setState({ selection: [edge, body] });
   await runCommand("design.chamfer");
-  expect(useStore.getState().mode).toEqual({ name: "idle" });
   expect(useStore.getState().active).toEqual({
     id: "design.feature",
     state: {
@@ -165,13 +164,11 @@ it("preserves pre-open selection when a context action supplies different picks"
 it("exports through a plain body-picking panel command and restores selection on cancel", async () => {
   useStore.setState({ selection: [edge, body] });
   await runCommand("design.export");
-  expect(useStore.getState().mode).toEqual({ name: "idle" });
   expect(useStore.getState().active?.id).toBe("design.export");
   const command = activeCommand()!;
   expect(command.panel).toBe("design.export");
   expect(command.pickFilter()).toEqual(["design.body"]);
   expect(useStore.getState().selection).toEqual([body]);
-  expect(useStore.getState().dialogParams).toEqual({});
   await command.onClick(edge, modifiers);
   expect(useStore.getState().selection).toEqual([body]);
   const other: Selection = { kind: "body", bodyId: "b2" };

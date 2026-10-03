@@ -1790,7 +1790,7 @@ export function ViewportView({
       }
       if (tool === "offset") {
         const additive = e.ctrlKey || e.metaKey;
-        s.setDialogParams({ offsetManualSelection: additive });
+        s.setSketchState({ offsetManualSelection: additive });
         s.toggleSelection(
           { kind: "sketchEntity", sketchId: draft.id, entityId },
           additive,
@@ -1938,7 +1938,6 @@ export function ViewportView({
       }
       return;
     }
-    if (s.mode.name !== "idle") return;
     const r = vp.pick(e.clientX, e.clientY, IDLE_PICKS);
     if (r) {
       // keep an existing multi-selection when right-clicking inside it
@@ -2587,11 +2586,13 @@ function angleSnapped(
 }
 
 function polygonOptions(): tools.PolygonOptions {
-  const { active, dialogParams: p } = useStore.getState();
+  const { active } = useStore.getState();
+  const sketch = active?.id === "design.sketch" ? active.state : null;
+  const angle = sketch?.polygonAngle ?? null;
   return {
-    sides: active?.id === "design.sketch" ? active.state.polygonSides || 6 : 6,
-    type: p.polygonType === "circumscribed" ? "circumscribed" : "inscribed",
-    angle: Number.isFinite(p.polygonAngle) ? p.polygonAngle : null,
+    sides: sketch?.polygonSides || 6,
+    type: sketch?.polygonType ?? "inscribed",
+    angle: angle !== null && Number.isFinite(angle) ? angle : null,
   };
 }
 

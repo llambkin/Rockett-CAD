@@ -16,6 +16,7 @@ import {
   ViewportProbe,
 } from "../../test/helpers/boxScene";
 import { squareSketch } from "../../test/helpers/perfFixtures";
+import { sketchState } from "../commands/sketch";
 
 vi.mock("three", async (original) => ({
   ...(await original<typeof import("three")>()),
@@ -85,12 +86,7 @@ it.each(["line", "rect", "circle"] as const)(
       ),
       active: {
         id: "design.sketch",
-        state: {
-          sketchId: "sk",
-          tool,
-          constructionMode: false,
-          polygonSides: 6,
-        },
+        state: sketchState("sk", tool),
       },
       selection: [{ kind: "sketchPoint", sketchId: "sk", entityId: "keep" }],
       busy: false,

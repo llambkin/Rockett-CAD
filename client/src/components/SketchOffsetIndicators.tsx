@@ -62,9 +62,9 @@ export function SketchOffsetIndicators() {
           onClick={() => {
             const s = useStore.getState();
             s.setSketchTool("offset");
-            s.setDialogParams({
-              editOffsetId: offset.id,
-              sketchOffset: offset.distance,
+            s.setSketchState({
+              offsetEditId: offset.id,
+              offsetDistance: offset.distance,
             });
           }}
         >

@@ -28,7 +28,7 @@ export const sketchCreateCommand = {
   async enter(viewport?: ViewportRef) {
     const selection = useStore.getState().selection;
     exitActive();
-    useStore.getState().setMode({ name: "idle" });
+    useStore.getState().clearActive();
     useStore.setState({ active: { id: "design.sketch.create" }, hover: null });
     const selected =
       selection.find((s) => s.kind === "plane") ??

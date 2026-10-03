@@ -100,7 +100,7 @@ function DialogBody({
     s.active?.id === "design.feature" ? s.active.state.inputs : undefined,
   );
   const params = useStore(featureParams);
-  const setMode = useStore((s) => s.setMode);
+  const close = useStore((s) => s.clearActive);
   const cancel = useStore((s) => s.cancelDialog);
   const addFeature = useStore((s) => s.addFeature);
   const updateFeature = useStore((s) => s.updateFeature);
@@ -120,8 +120,6 @@ function DialogBody({
     if (axisDialog && originAxis)
       setFeatureParams({ axisSource: "origin", axis: originAxis });
   }, [originAxis, dialog]);
-
-  const close = () => setMode({ name: "idle" });
 
   useEffect(() => {
     const patch = inputs?.onParamsChange();

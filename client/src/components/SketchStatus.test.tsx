@@ -9,6 +9,7 @@ import {
 import { useStore } from "../store";
 import { api } from "../api";
 import { SketchStatus } from "./SketchStatus";
+import { sketchState } from "../commands/sketch";
 
 vi.mock("../api", () => ({ api: { updateFeature: vi.fn() } }));
 
@@ -55,12 +56,7 @@ it("warns after a conflict-clearing deletion, preserves points and clears on the
     draftSketch: sketch,
     active: {
       id: "design.sketch",
-      state: {
-        sketchId: "sk",
-        tool: "select",
-        constructionMode: false,
-        polygonSides: 6,
-      },
+      state: sketchState("sk", "select"),
     },
     evaluation: {
       bodies: [],

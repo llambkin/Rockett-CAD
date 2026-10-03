@@ -36,7 +36,7 @@ export function StepImportButton({
         await s.openProject(result.document.id);
       } else if (s.projectId) {
         await s.mutate(() => api.importStep(file, s.projectId!));
-        s.setMode({ name: "idle" });
+        s.clearActive();
         s.setSelection([]);
         requestAnimationFrame(() => viewport.current?.zoomToFit());
       }

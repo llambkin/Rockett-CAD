@@ -81,7 +81,6 @@ it("routes workspace toolbar, named view and keyboard actions through its viewpo
     projectId: document.id,
     document,
     view: emptyView(),
-    mode: { name: "idle" },
     active: null,
     busy: false,
   });

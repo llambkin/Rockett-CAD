@@ -4,6 +4,7 @@ import { alignCameraToActiveSketch, type ViewportRef } from "./viewportRef";
 import { useStore } from "./store";
 import { TIMING_MS } from "./tunables";
 import type { CadViewport } from "./three/CadViewport";
+import { sketchState } from "./commands/sketch";
 
 const initial = useStore.getState();
 
@@ -22,12 +23,7 @@ function sketch(viewport: ViewportRef) {
   useStore.setState({
     active: {
       id: "design.sketch",
-      state: {
-        sketchId: "sketch",
-        tool: "select",
-        constructionMode: false,
-        polygonSides: 6,
-      },
+      state: sketchState("sketch", "select"),
     },
     evaluation: {
       sketches: [{ featureId: "sketch", frame }],

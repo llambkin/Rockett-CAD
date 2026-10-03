@@ -15,7 +15,7 @@ import {
 import { api } from "../api";
 import { ModelTree } from "../components/ModelTree";
 
-import { useStore, type Mode, type Selection } from "../store";
+import { useStore, type Selection } from "../store";
 import { sceneViewport } from "../../test/helpers/boxScene";
 
 import {
@@ -156,7 +156,7 @@ afterEach(async () => {
 });
 
 export async function open(
-  mode: Mode | NonNullable<ReturnType<typeof useStore.getState>["active"]>,
+  active: ReturnType<typeof useStore.getState>["active"],
   selection: Selection[] = [],
 ) {
   const host = await mountScene({
@@ -166,8 +166,7 @@ export async function open(
     view: emptyView(),
     selection,
     pickInput: null,
-    mode: "id" in mode ? { name: "idle" } : mode,
-    active: "id" in mode ? mode : null,
+    active,
   });
   treeHost = document.body.appendChild(document.createElement("div"));
   treeRoot = createRoot(treeHost);

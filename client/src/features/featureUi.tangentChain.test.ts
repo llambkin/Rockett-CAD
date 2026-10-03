@@ -43,7 +43,6 @@ describe.each(["fillet", "chamfer"] as const)("%s tangent chain", (type) => {
   const pick = (selection: Selection[], params: SharedInputParams = {}) => {
     useStore.setState({
       projectId: "p1",
-      mode: { name: "idle" },
       active: {
         id: "design.feature",
         state: {

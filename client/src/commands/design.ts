@@ -6,8 +6,9 @@ import { measureCommand } from "./measure";
 import { exitActive } from "./active";
 import { featureCommand } from "./featureCommand";
 import { exportCommand } from "./export";
+import type { FeatureType } from "@rockett/shared";
 import type { IconId } from "../icons";
-import { useStore, type DialogType } from "../store";
+import { useStore } from "../store";
 import { NamedViewSelect } from "../components/NamedViewSelect";
 import { StepImportButton } from "../components/StepImportButton";
 import { SketchInsertButtons } from "../components/SketchInsertButtons";
@@ -18,7 +19,7 @@ import {
   type CommandContext,
 } from "./registry";
 
-export function openDialog(dialog: DialogType) {
+export function openDialog(dialog: FeatureType | "export") {
   if (dialog === "export") return exportCommand.enter();
   featureCommand.enter(dialog);
 }
@@ -133,14 +134,14 @@ registerCommand({
   run() {},
 });
 
-const DIALOG_KEYS: Partial<Record<DialogType, string>> = {
+const DIALOG_KEYS: Partial<Record<FeatureType, string>> = {
   extrude: "E",
   fillet: "F",
   move: "M",
 };
 
 const DIALOGS: Array<
-  [DialogType & IconId, string, string, (typeof GROUPS)[number][0]]
+  [FeatureType & IconId, string, string, (typeof GROUPS)[number][0]]
 > = [
   ["extrude", "Extrude", "Extrude profiles", "create"],
   ["revolve", "Revolve", "Revolve profiles around an axis", "create"],

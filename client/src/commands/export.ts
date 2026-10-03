@@ -46,7 +46,7 @@ export const exportCommand: ActiveCommand = {
     const selectionBefore = selectionBeforeCommand(s);
     const selection = s.selection.filter((s) => body(s));
     exitActive();
-    s.setMode({ name: "idle" });
+    s.clearActive();
     useStore.setState({
       active: { id: "design.export", state: { selectionBefore } },
       selection,

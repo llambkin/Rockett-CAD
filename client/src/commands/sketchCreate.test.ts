@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { activeCommand, exitActive } from "./active";
 import { runCommand } from "./registry";
 import { useStore, type Selection } from "../store";
+import { sketchState } from "./sketch";
 
 const initial = useStore.getState();
 const plane: Selection = {
@@ -24,7 +25,6 @@ beforeEach(() => {
       ...initial,
       selection: [],
       active: null,
-      mode: { name: "idle" },
       startSketchOnPlane: start,
       evaluation: {
         kernelMs: 0,
@@ -83,7 +83,6 @@ afterEach(() => {
 it("owns plane picking through the registered active command", async () => {
   await runCommand("design.sketch.create");
   expect(useStore.getState().active?.id).toBe("design.sketch.create");
-  expect(useStore.getState().mode).toEqual({ name: "idle" });
   expect(activeCommand()?.pickFilter()).toEqual([
     "design.originPlane",
     "design.constructionPlane",
@@ -144,7 +143,6 @@ it("Escape removes hover and command ownership while preserving selection", asyn
   useStore.setState({ selection: [curved], hover: plane });
   runCommand("design.cancel");
   expect(useStore.getState()).toMatchObject({
-    mode: { name: "idle" },
     active: null,
     hover: null,
     selection: [curved],
@@ -173,12 +171,7 @@ it("hands ownership to sketch editing after the existing starter changes mode", 
     useStore.setState({
       active: {
         id: "design.sketch",
-        state: {
-          sketchId: "sketch",
-          tool: "line",
-          constructionMode: false,
-          polygonSides: 6,
-        },
+        state: sketchState("sketch", "line"),
       },
     });
   });
@@ -200,7 +193,6 @@ it("keeps picking available when existing sketch creation rejects", async () => 
   );
   expect(useStore.getState()).toMatchObject({
     active: { id: "design.sketch.create" },
-    mode: { name: "idle" },
   });
   await activeCommand()!.onClick(plane, event);
   expect(useStore.getState().active).toBeNull();

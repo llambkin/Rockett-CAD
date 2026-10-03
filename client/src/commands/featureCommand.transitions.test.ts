@@ -10,6 +10,7 @@ import { openFeatureEditor } from "../components/Timeline";
 import { runCommand } from "./registry";
 import "../features/core";
 import "./design";
+import { sketchState } from "./sketch";
 
 vi.mock("../api", () => ({
   watchUnauthorized: vi.fn(),
@@ -87,12 +88,7 @@ it.each(["design.chamfer", "design.export", "inspect.measure"])(
     await openFeatureEditor(sketch);
     expect(useStore.getState().active).toEqual({
       id: "design.sketch",
-      state: {
-        sketchId: "sk",
-        tool: "select",
-        constructionMode: false,
-        polygonSides: 6,
-      },
+      state: sketchState("sk", "select"),
     });
     expect(useStore.getState().draftSketch).toEqual(sketch);
   },
@@ -120,7 +116,6 @@ it.each(["undo", "redo", "restore"] as const)(
     if (move === "restore") await useStore.getState().restore("snapshot");
     else await useStore.getState()[move]();
     expect(useStore.getState().active).toBeNull();
-    expect(useStore.getState().mode).toEqual({ name: "idle" });
     expect(useStore.getState().selection).toEqual([]);
   },
 );
@@ -139,6 +134,5 @@ it.each(["busy", "missing", "suppressed", "failure"] as const)(
       .getState()
       .editSketch(reason === "missing" ? "absent" : "sk");
     expect(useStore.getState().active).toBe(owner);
-    expect(useStore.getState().mode).toEqual({ name: "idle" });
   },
 );

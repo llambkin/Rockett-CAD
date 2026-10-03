@@ -12,17 +12,13 @@ import { api } from "../api";
 import { registerGroupRecipient } from "../treeSelection";
 import { runCommand } from "./registry";
 import { createEmptyDocument, type MutationResponse } from "@rockett/shared";
+import { sketchState } from "./sketch";
 
 const initial = useStore.getState();
 afterEach(() => useStore.setState(initial, true));
 
 it("routes overlay Escape once without changing the underlying sketch", async () => {
-  const state = {
-    sketchId: "sk",
-    tool: "line",
-    polygonSides: 6,
-    constructionMode: false,
-  } as const;
+  const state = sketchState("sk", "line");
   useStore.setState({ active: { id: "design.sketch", state }, busy: false });
   const close = vi.fn();
   const cancel = vi.fn();
@@ -63,12 +59,7 @@ it("routes overlay Escape once without changing the underlying sketch", async ()
 it("ignores composing dialog keys and consumes pending Escape before global cancellation", async () => {
   const onOk = vi.fn();
   const onCancel = vi.fn();
-  const state = {
-    sketchId: "sk",
-    tool: "line",
-    polygonSides: 6,
-    constructionMode: false,
-  } as const;
+  const state = sketchState("sk", "line");
   useStore.setState({ active: { id: "design.sketch", state }, busy: false });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -250,7 +241,6 @@ it("shares grouping across mounted trees and keeps the remaining recipient alive
     evaluation,
     projectId: doc.id,
     busy: false,
-    mode: { name: "idle" },
     active: null,
     selection: [
       { kind: "sketch", sketchId: "s1" },
@@ -324,7 +314,6 @@ it("does not deliver an asynchronous group result to a disposed recipient", asyn
     evaluation,
     projectId: doc.id,
     busy: false,
-    mode: { name: "idle" },
     active: null,
     selection: [{ kind: "sketch", sketchId: "s1" }],
   });

@@ -45,7 +45,7 @@ it.each(["OK", "Cancel"])(
     expect(server.previews.size).toBe(1);
     await act(async () => button(finish).click());
     await wait(0);
-    expect(useStore.getState().mode.name).toBe("idle");
+    expect(useStore.getState().active).toBeNull();
     expect(server.previews.size).toBe(0);
     expect(server.saved.features[0]).toEqual(
       finish === "OK" ? { ...repaired, radius: 3 } : repaired,
@@ -83,7 +83,6 @@ it("a late repair never changes another project's dialog with the same feature I
       projectId: other.id,
       document: other,
       evaluation: evaluate(other),
-      mode: { name: "idle" },
       active: {
         id: "design.feature",
         state: {

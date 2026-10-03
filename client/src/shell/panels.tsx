@@ -17,7 +17,7 @@ import { ControlsHelp } from "../components/ControlsHelp";
 import { DraggablePanel } from "../components/DraggablePanel";
 import { FeatureDialog } from "../components/FeatureDialog";
 import { MeasurePanel } from "../components/MeasurePanel";
-import { SketchOffsetPanel } from "../components/SketchOffsetPanel";
+import { SketchOffset } from "../components/SketchOffsetPanel";
 
 export interface PanelDef {
   id: string;
@@ -87,9 +87,7 @@ registerPanel({
   title: "Export for 3D printing",
   when: (s) => activeCommand(s)?.panel === "design.export",
   component: () => (
-    <ExportPanel
-      onClose={() => useStore.getState().setMode({ name: "idle" })}
-    />
+    <ExportPanel onClose={() => useStore.getState().clearActive()} />
   ),
 });
 registerPanel({
@@ -103,7 +101,7 @@ registerPanel({
   title: "Offset sketch",
   when: (s) =>
     s.active?.id === "design.sketch" && s.active.state.tool === "offset",
-  component: SketchOffsetPanel,
+  component: SketchOffset,
 });
 registerPanel({
   id: "inspect.measure",

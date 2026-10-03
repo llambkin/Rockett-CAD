@@ -378,7 +378,7 @@ export const featureCommand = {
     const s = useStore.getState();
     const selectionBefore = selectionBeforeCommand(s);
     const selection = initial?.selection ?? preselectionFor(type, s.selection);
-    s.setMode({ name: "idle" });
+    s.clearActive();
     useStore.setState({
       active: {
         id: "design.feature",

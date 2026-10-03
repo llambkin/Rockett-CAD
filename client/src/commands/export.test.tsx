@@ -78,7 +78,6 @@ it("clicks one visible body through the viewport and exports only that body", as
     projectId: doc.id,
     evaluation: result([box("first"), second]),
     view: emptyView(),
-    mode: { name: "idle" },
     active: null,
     selection: [],
   });
@@ -122,7 +121,6 @@ it.each(
       projectId: doc.id,
       evaluation: result([box("first")]),
       view: emptyView(),
-      mode: { name: "idle" },
       active: null,
       selection: [],
     });
@@ -162,7 +160,6 @@ it.each(
       else resolve({ blob: new Blob(["mesh"]), fileName: "part.stl" });
     });
     expect(useStore.getState().active).toBe(current.active);
-    expect(useStore.getState().mode).toBe(current.mode);
     expect(useStore.getState().error).toBe("current error");
     expect(saveDownload).toHaveBeenCalledTimes(saved + (failure ? 0 : 1));
     await unmountScene();
@@ -197,7 +194,6 @@ it.each(["tree", "timeline"] as const)(
       projectId: doc.id,
       evaluation,
       view: emptyView(),
-      mode: { name: "idle" },
       active: null,
       selection: before,
     });
@@ -239,7 +235,6 @@ it("refuses body picks and Escape while busy, then restores preselection on Canc
   const before = [{ kind: "edge" as const, bodyId: "b1", edgeName: "e1" }];
   useStore.setState({
     active: null,
-    mode: { name: "idle" },
     selection: before,
   });
   await runCommand("design.export");
@@ -277,7 +272,6 @@ it.each([
       projectId: document.id,
       evaluation: result([box("first"), second]),
       view,
-      mode: { name: "idle" },
       active: null,
       selection: selected ? [{ kind: "body", bodyId: "b2" }] : [],
     });

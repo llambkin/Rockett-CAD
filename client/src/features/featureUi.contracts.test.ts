@@ -142,7 +142,6 @@ describe("featureUI(type).open", () => {
   beforeEach(() => {
     useStore.setState({
       active: null,
-      mode: { name: "idle" },
       selection: [],
     });
   });
@@ -218,7 +217,7 @@ describe("featureUI(type).open", () => {
     };
     await openFeatureEditor(sketch);
     expect(editSketch).toHaveBeenCalledWith("sk1");
-    expect(useStore.getState().mode).toEqual({ name: "idle" });
+    expect(useStore.getState().active).toBeNull();
   });
 
   it("reopens a test.block through its registered UI and skips an unregistered one", async () => {
@@ -247,7 +246,7 @@ describe("featureUI(type).open", () => {
     }
     await expect(openFeatureEditor(block)).resolves.toBeUndefined();
     expect(open).toHaveBeenCalledTimes(1);
-    expect(useStore.getState().mode).toEqual({ name: "idle" });
+    expect(useStore.getState().active).toBeNull();
   });
 });
 
@@ -346,7 +345,6 @@ describe("extrude auto-cut", () => {
   beforeEach(() => {
     useStore.setState({
       document: lineDocument(),
-      mode: { name: "idle" },
       active: {
         id: "design.feature",
         state: {

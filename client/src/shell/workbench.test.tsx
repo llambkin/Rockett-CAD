@@ -15,6 +15,7 @@ import {
 import { useStore } from "../store";
 import { WorkbenchSwitcher } from "./WorkbenchSwitcher";
 import { registerWorkbench, switchWorkbench, useWorkbench } from "./workbench";
+import { sketchState } from "../commands/sketch";
 
 vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
@@ -150,12 +151,7 @@ function openSketch() {
     projectId: document.id,
     active: {
       id: "design.sketch",
-      state: {
-        sketchId: sketch.id,
-        tool: "line",
-        constructionMode: false,
-        polygonSides: 6,
-      },
+      state: sketchState(sketch.id, "line"),
     },
     draftSketch: sketch,
   });
@@ -190,7 +186,6 @@ it("finishes the open sketch through its evaluation owner before changing contex
   await switching;
   expect(api.evaluate).toHaveBeenCalledExactlyOnceWith(document.id);
   expect(useStore.getState()).toMatchObject({
-    mode: { name: "idle" },
     draftSketch: null,
     selection: [],
     evaluation,
@@ -259,7 +254,6 @@ it("commits edited sketch geometry before the final evaluation and context chang
   );
   expect(useStore.getState()).toMatchObject({
     document: saved,
-    mode: { name: "idle" },
     draftSketch: null,
     evaluation,
   });

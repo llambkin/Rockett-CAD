@@ -68,7 +68,7 @@ async function measure() {
 export const measureCommand: ActiveCommand = {
   enter() {
     const s = useStore.getState();
-    s.setMode({ name: "idle" });
+    s.clearActive();
     const picks = s.selection.filter(measurable).slice(0, 2);
     useStore.setState({
       selection: picks,
@@ -82,8 +82,7 @@ export const measureCommand: ActiveCommand = {
       if (
         next.active?.id !== "inspect.measure" ||
         next.projectId !== previous.projectId ||
-        next.document !== previous.document ||
-        next.mode.name !== "idle"
+        next.document !== previous.document
       ) {
         measureCommand.exit();
       } else if (next.selection !== next.active.state.picks) {

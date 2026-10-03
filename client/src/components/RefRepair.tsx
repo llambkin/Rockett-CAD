@@ -258,7 +258,7 @@ async function applyUpgrade(id: string, chosen: NamingDecision[]) {
   } catch {
     return;
   }
-  s.setMode({ name: "idle" });
+  s.clearActive();
 }
 
 function MappingRows({
