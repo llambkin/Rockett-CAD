@@ -3,6 +3,7 @@ import type { Static, TSchema } from "typebox";
 import {
   createRegistry,
   DOCUMENT_EDITS,
+  REGISTRY_ID,
   type CadDocument,
   type PathParams,
   type Route,
@@ -61,11 +62,9 @@ export const registerRouteModule = routeModules.register;
 
 export const BODY_ROUTE_MODULE = "bodies";
 
-const MODULE_ID = /^([a-z][a-z0-9-]*)[.][A-Za-z0-9.-]+$/;
-
 function prefix(id: string): string {
   if (!id.includes(".")) return "/projects/:id/";
-  const moduleId = MODULE_ID.exec(id)?.[1];
+  const moduleId = REGISTRY_ID.exec(id)?.[1];
   if (!moduleId) throw new Error(`route module ${id} has an invalid id`);
   return `/projects/:id/m/${moduleId}/`;
 }

@@ -8,6 +8,7 @@ import {
   type PlaneRef,
   type PointRef,
   type ProfileRef,
+  REGISTRY_ID,
   type VertexRef,
 } from "@rockett/shared";
 
@@ -102,7 +103,7 @@ export function registerSelectionKind<K extends Kind>(
 ): () => void {
   if (
     !coreKinds.has(entry.kind as CoreSelection["kind"]) &&
-    !/^[a-z][a-z0-9-]*[.][A-Za-z0-9.-]+$/.test(entry.kind)
+    !REGISTRY_ID.test(entry.kind)
   )
     throw new Error(`Invalid selection kind: ${entry.kind}`);
   return registry.register({

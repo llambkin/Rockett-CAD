@@ -1,3 +1,5 @@
+export const REGISTRY_ID = /^([a-z][a-z0-9-]*)[.][A-Za-z0-9.-]+$/;
+
 export interface Registry<T> {
   register(item: T): () => void;
   get(id: string): T | undefined;
