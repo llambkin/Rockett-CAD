@@ -414,12 +414,10 @@ function nest(loops: Loop[]): Profile[] {
   });
 }
 
+const sense = (c: OrientedCurve) => c.entityId + (c.reversed ? "-" : "+");
+
 function orientation(p: Profile): string {
-  const side = (curves: OrientedCurve[]) =>
-    curves
-      .map((c) => c.entityId + (c.reversed ? "-" : "+"))
-      .sort()
-      .join(",");
+  const side = (curves: OrientedCurve[]) => curves.map(sense).sort().join(",");
   return [side(p.outer), ...p.holes.map(side).sort()].join("|");
 }
 
@@ -475,12 +473,11 @@ function detected(
   return byKey.get(key)!;
 }
 
-const curveIds = (p: Profile) =>
-  [...p.outer, ...p.holes.flat()].map((c) => c.entityId);
+const sides = (p: Profile) => [...p.outer, ...p.holes.flat()].map(sense);
 
 const sameRegion = (spurred: Profile) => (p: Profile) =>
   Math.abs(spurred.area - p.area) <= 1e-9 * Math.max(1, spurred.area) &&
-  curveIds(p).every((id) => curveIds(spurred).includes(id));
+  sides(p).every((side) => sides(spurred).includes(side));
 
 const only = (found: Profile[]) => (found.length === 1 ? found[0] : undefined);
 
@@ -490,10 +487,12 @@ export function findProfile(
 ): Profile | undefined {
   const { entities, profiles } = sketch;
   const byId = (p: Profile) => p.id === profileId;
-  const found = profiles.find(byId) ?? detected(entities, "legacy").find(byId);
+  const found = profiles.find(byId);
   if (found) return found;
   const current = detected(entities, "current", keepSpurs).find(byId);
   if (current) return only(profiles.filter(sameRegion(current)));
   const old = detected(entities, "legacy", keepSpurs).find(byId);
-  return old && only(detected(entities, "legacy").filter(sameRegion(old)));
+  return only(
+    detected(entities, "legacy").filter(old ? sameRegion(old) : byId),
+  );
 }

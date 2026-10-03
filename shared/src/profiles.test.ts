@@ -129,10 +129,7 @@ describe("profile ids saved with a spur", () => {
     expect(findProfile(sketch, profileIdFor([...RECT, "sp"], []))).toBe(before);
   });
 
-  it.each([
-    ["up", 5],
-    ["down", -5],
-  ])("never resolve to the mirror half of a spur %s", (_, to) => {
+  const halves = (to: number) => {
     const entities: SketchEntity[] = [
       P("o", 0, 0),
       { id: "c", kind: "circle", center: "o", radius: 10 },
@@ -146,13 +143,31 @@ describe("profile ids saved with a spur", () => {
     ]);
     const sumY = (p: { polygon: number[] }) =>
       p.polygon.filter((_, i) => i % 2 === 1).reduce((s, y) => s + y, 0);
-    const mirror = profiles.find((p) => Math.sign(sumY(p)) !== Math.sign(to));
-    const found = findProfile(
-      { profiles, entities },
-      profileIdFor(["c", "d", "sp"], []),
-    );
-    expect(found).not.toBe(mirror);
-    expect(found).toBeUndefined();
+    const side = (sign: number) =>
+      profiles.find((p) => Math.sign(sumY(p)) === sign)!;
+    return {
+      sketch: { profiles, entities },
+      spurred: side(Math.sign(to)),
+      bare: side(-Math.sign(to)),
+    };
+  };
+
+  it.each([
+    ["up", 5],
+    ["down", -5],
+  ])("resolve the half holding a spur %s to that half", (_, to) => {
+    const { sketch, spurred } = halves(to);
+    const saved = profileIdFor(["c", "d", "sp"], []);
+    expect(findProfile(sketch, saved)).toBe(spurred);
+  });
+
+  it.each([
+    ["up", 5],
+    ["down", -5],
+  ])("resolve the half beside a spur %s to that half", (_, to) => {
+    const { sketch, bare } = halves(to);
+    const saved = profileIdFor(["c", "d"], []);
+    expect(findProfile(sketch, saved)).toBe(bare);
   });
 
   it("leave a sketch without spurs and its ids unchanged", () => {
