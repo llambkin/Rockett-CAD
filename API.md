@@ -32,6 +32,7 @@ nothing else is: `server/src/api/routes.ts`.
 | `GET`, `PATCH /projects/:id/settings`                                             | `server/src/api/settingsRoutes.ts` |
 | `GET /health`                                                                     | `server/src/api/routes.ts`         |
 | `GET /formats`                                                                    | `server/src/api/routes.ts`         |
+| `GET /modules`                                                                    | `server/src/api/routes.ts`         |
 | `GET`, `POST /projects`                                                           | `server/src/api/routes.ts`         |
 | `GET`, `DELETE /projects/:id`                                                     | `server/src/api/projectRoutes.ts`  |
 | `POST /projects/:id/duplicate`, `/rename`                                         | `server/src/api/projectRoutes.ts`  |
@@ -249,6 +250,37 @@ key grammar, so removed plugin values survive:
 - Document `extensions` (`shared/src/model.ts`) survive upload, edits and
   reload. Blob collection skips a project that holds them:
   `server/src/store/blobGc.ts`.
+
+## Modules
+
+`GET /modules` returns one `ModuleInfo` (`shared/src/api.ts`) per listed
+module, in load order:
+
+```json
+[
+  {
+    "id": "acme",
+    "name": "Acme",
+    "version": "1.2.3",
+    "licence": "MIT",
+    "author": "Acme Ltd",
+    "status": "loaded",
+    "error": null
+  }
+]
+```
+
+- `status` is `loaded`, `failed`, `incompatible` or `disabled`.
+- `error` is null for `loaded`. Otherwise it is the manifest error, the
+  thrown registration or activation message, or the plugin API range reason.
+- `server/src/modules/host.ts` loads every module before the router mounts
+  route modules. A module that throws during activation keeps none of its
+  registrations; the others still load.
+- A manifest that fails `parseManifest` reports `failed` with whichever of
+  its identity fields are strings; the rest are empty.
+- `activate` receives `register`: `routeModule`, `exporter`, `importer`,
+  `featureKind` and `extensionSpec`, the existing register calls, each tracked
+  under the module's one disposer.
 
 ## Project file
 

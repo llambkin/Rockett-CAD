@@ -24,6 +24,7 @@ import { UserStore } from "./auth/userStore.js";
 import { cookieConfig, type CookieConfig } from "./auth/cookie.js";
 import { resetPassword } from "./auth/resetPassword.js";
 import { TIMING_MS } from "./tunables.js";
+import { listModules, loadModules } from "./modules/host.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -89,6 +90,10 @@ async function main(allowedOrigins: string[], cookie: CookieConfig) {
     console.log(
       `[rockett] ${outdated.length} projects predate schema ${SCHEMA_VERSION} or the project manifest; each is backed up and migrated on its next save`,
     );
+
+  await loadModules([]);
+  for (const { id, status, error } of listModules())
+    if (error) console.error(`[rockett] module ${id} ${status}: ${error}`);
 
   // static client (production build)
   const candidates = [

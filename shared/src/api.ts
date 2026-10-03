@@ -324,6 +324,18 @@ export interface Formats {
   importers: ImportFormat[];
 }
 
+export type ModuleStatus = "loaded" | "failed" | "incompatible" | "disabled";
+
+export interface ModuleInfo {
+  id: string;
+  name: string;
+  version: string;
+  licence: string;
+  author: string;
+  status: ModuleStatus;
+  error: string | null;
+}
+
 export type SizedFeature = FilletFeature | ChamferFeature | ShellFeature;
 
 export interface SizeLimitRequest {

@@ -21,6 +21,7 @@ import type {
   HistoryStatus,
   MeasureRequest,
   MeasureResult,
+  ModuleInfo,
   NamingDecision,
   NamingMapping,
   NamingUpgradeProposal,
@@ -291,6 +292,7 @@ export const ROUTES = {
   health: route<never, HealthResponse>()("GET", "/health"),
   ...settingsRoutes(route),
   formats: route<never, Formats>()("GET", "/formats"),
+  modules: route<never, ModuleInfo[]>()("GET", "/modules"),
   listProjects: route<never, ProjectSummary[]>()("GET", "/projects"),
   createProject: route<{ name?: string; folderId?: string }, ProjectResponse>()(
     "POST",

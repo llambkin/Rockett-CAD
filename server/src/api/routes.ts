@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import { ROUTES } from "@rockett/shared";
 import type { NoticeStore } from "../auth/noticeStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
 import type { FolderStore } from "../store/folderStore.js";
@@ -27,6 +28,7 @@ import { previewRoutes } from "./previewRoutes.js";
 import { historyRoutes } from "./historyRoutes.js";
 import { documentRoutes } from "./documentRoutes.js";
 import { bodyRoutes } from "./bodyRoutes.js";
+import { listModules } from "../modules/host.js";
 
 export function createApiRouter(
   store: ProjectStore,
@@ -53,6 +55,9 @@ export function createApiRouter(
   jobRoutes(api);
   registerSettingsRoutes(on, wrap, store.settings);
   systemRoutes(api);
+  on(ROUTES.modules, (_req, res) => {
+    res.json(listModules());
+  });
   projectRoutes(api);
   evaluationRoutes(api);
   importRoutes(api);
