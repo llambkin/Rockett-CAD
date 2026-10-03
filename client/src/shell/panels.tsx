@@ -41,8 +41,8 @@ export function togglePanel(id: string): void {
 
 export const usePanelOpen = (id: string) => opened((s) => s.open.includes(id));
 
-class PanelBoundary extends Component<
-  { panel: PanelDef; children: ReactNode },
+export class PanelBoundary extends Component<
+  { panel: Pick<PanelDef, "id" | "title">; children: ReactNode },
   { error: Error | null }
 > {
   override state: { error: Error | null } = { error: null };

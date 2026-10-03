@@ -456,6 +456,7 @@ export const api = {
   ) => send(AUTH_ROUTES.userPatch, { id }, { body: patch }),
   health: () => send(ROUTES.health, {}),
   formats: () => send(ROUTES.formats, {}),
+  modules: () => send(ROUTES.modules, {}),
   importStep: (file: File, projectId?: string, signal?: AbortSignal) => {
     const options = { body: fileForm("file", file), signal };
     return projectId

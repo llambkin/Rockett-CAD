@@ -281,6 +281,11 @@ module, in load order:
 - `activate` receives `register`: `routeModule`, `exporter`, `importer`,
   `featureKind` and `extensionSpec`, the existing register calls, each tracked
   under the module's one disposer.
+- After sign-in, `client/src/modules/host.ts` activates the client part of
+  each listed module that this route reports `loaded`, with `register`:
+  `command`, `toolbarGroup`, `panel`, `workbench`, `selectionKind` and
+  `pickProvider`. Activation is atomic as on the server. A command `Control`
+  draws inside the panel error boundary.
 
 ## Project file
 
