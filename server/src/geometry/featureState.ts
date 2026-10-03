@@ -12,8 +12,10 @@ import {
   acquire,
   scoped,
   bboxOf,
+  edgeCentroid,
   getKernel,
   planarFacePlane,
+  shapeHash,
   solids,
   faces as facesOf,
   edges as edgesOf,
@@ -269,8 +271,45 @@ export function rejectInvalidBody(
   );
 }
 
+function slitFace(face: Shape): boolean {
+  return scoped((own) => {
+    const k = getKernel();
+    const location = own(new k.TopLoc_Location_1());
+    const surface = own(k.BRep_Tool.Surface_1(face, location));
+    const coincide = (a: Shape, b: Shape) =>
+      a.IsSame(b)
+        ? !k.BRep_Tool.IsClosed_3(a, surface, location)
+        : V.norm(V.sub(edgeCentroid(a), edgeCentroid(b))) <=
+          k.BRep_Tool.Tolerance_2(a) + k.BRep_Tool.Tolerance_2(b);
+    const byEnds = new Map<string, Shape[]>();
+    const ex = own(
+      new k.TopExp_Explorer_2(
+        face,
+        k.TopAbs_ShapeEnum.TopAbs_EDGE,
+        k.TopAbs_ShapeEnum.TopAbs_SHAPE,
+      ),
+    );
+    for (; ex.More(); ex.Next()) {
+      const edge = own(k.TopoDS.Edge_1(own(ex.Current())));
+      if (k.BRep_Tool.Degenerated(edge)) continue;
+      const ends = [
+        own(k.TopExp.FirstVertex(edge, false)),
+        own(k.TopExp.LastVertex(edge, false)),
+      ]
+        .map(shapeHash)
+        .toSorted((x, y) => x - y)
+        .join(":");
+      const twins = byEnds.get(ends) ?? [];
+      if (twins.some((twin) => coincide(twin, edge))) return true;
+      byEnds.set(ends, [...twins, edge]);
+    }
+    return false;
+  });
+}
+
 export function invalidPart(shape: Shape): string | null {
   return scoped(() => {
+    if (facesOf(shape).some(slitFace)) return "slit face";
     const check = acquire(
       new (getKernel().BRepCheck_Analyzer)(shape, true, false, false),
     );

@@ -209,8 +209,9 @@ body.
   vertex stays a separate body, and the status is `warning` saying so.
 - Extrude, revolve, sweep and loft bodies of every operation, and Combine
   results, pass `rejectInvalidBody` in `server/src/geometry/featureState.ts`
-  on the final shape, after `unifyTool`. The check runs before tessellation;
-  a slit body passes it until meshed.
+  on the final shape, after `unifyTool`. `invalidPart` first rejects a slit
+  face, whose boundary runs out along an edge and back, from topology alone;
+  seam edges of periodic faces are exempt.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
 - Shell stores an optional `body` (schema 24). With no open faces it hollows
