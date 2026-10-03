@@ -44,6 +44,15 @@ interface Pending {
   onCancel?: (() => void) | undefined;
 }
 
+function stopFlag(hooks: EvaluateHooks) {
+  const stop = new Int32Array(new SharedArrayBuffer(4));
+  const check = () => {
+    if (hooks.shouldStop?.()) Atomics.store(stop, 0, 1);
+  };
+  check();
+  return { stop, check };
+}
+
 const noPayload = () =>
   Promise.reject(new Error("this kernel call carries no payload"));
 
@@ -328,11 +337,7 @@ export class WorkerKernel implements KernelClient {
     extra?: Sources,
     hooks: EvaluateHooks = {},
   ) {
-    const stop = new Int32Array(new SharedArrayBuffer(4));
-    const check = () => {
-      if (hooks.shouldStop?.()) Atomics.store(stop, 0, 1);
-    };
-    check();
+    const { stop, check } = stopFlag(hooks);
     return this.call(
       "evaluate",
       [doc, position, extra, stop],
@@ -428,6 +433,24 @@ export class WorkerKernel implements KernelClient {
       undefined,
       jobContext.getStore(),
       doc.id,
+    );
+  }
+
+  moduleJob(
+    entry: string,
+    id: string,
+    input: unknown,
+    hooks: EvaluateHooks = {},
+  ) {
+    const { stop, check } = stopFlag(hooks);
+    return this.call(
+      "moduleJob",
+      [entry, id, input, stop],
+      noPayload,
+      (message) => {
+        if (message.type === "progress") hooks.onProgress?.(...message.args);
+        check();
+      },
     );
   }
 

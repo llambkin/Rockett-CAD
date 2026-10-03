@@ -51,6 +51,10 @@ export interface Calls {
     args: Parameters<KernelClient["planNamingUpgrade"]>;
     result: NamingPlan;
   };
+  moduleJob: {
+    args: [entry: string, id: string, input: unknown, stop: Int32Array];
+    result: unknown;
+  };
 }
 
 export type Method = keyof Calls;

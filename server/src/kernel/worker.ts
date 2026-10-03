@@ -4,7 +4,11 @@ import {
   type Transferable,
 } from "node:worker_threads";
 import { initKernel, kernelVersion } from "../geometry/kernel.js";
-import { dropEngine, engineFor } from "../geometry/engine.js";
+import {
+  dropEngine,
+  engineFor,
+  type EvaluateHooks,
+} from "../geometry/engine.js";
 import { InProcessKernel } from "./client.js";
 import {
   fromWire,
@@ -79,6 +83,11 @@ async function uploadBytes(id: number) {
   return Buffer.from(given);
 }
 
+const reporting = (id: number, stop: Int32Array): EvaluateHooks => ({
+  onProgress: (...args) => post({ type: "progress", id, args }),
+  shouldStop: () => Atomics.load(stop, 0) !== 0,
+});
+
 const RUN: {
   [M in Method]: (
     id: number,
@@ -88,8 +97,7 @@ const RUN: {
   evaluate: (id, doc, position, extra, stop) =>
     kernelFor(id).evaluate(doc, position, extra, {
       onFeatureStart: (...args) => post({ type: "featureStart", id, args }),
-      onProgress: (...args) => post({ type: "progress", id, args }),
-      shouldStop: () => Atomics.load(stop, 0) !== 0,
+      ...reporting(id, stop),
     }),
   stateQuery: (id, doc, query) => kernelFor(id).stateQuery(doc, query),
   visibleTargets: (id, ...args) => kernelFor(id).visibleTargets(...args),
@@ -104,6 +112,8 @@ const RUN: {
       name === undefined ? undefined : { name, bytes: () => uploadBytes(id) },
     ),
   planNamingUpgrade: (id, ...args) => kernelFor(id).planNamingUpgrade(...args),
+  moduleJob: (id, entry, job, input, stop) =>
+    kernelFor(id).moduleJob(entry, job, input, reporting(id, stop)),
 };
 
 const booted = initKernel().then(() =>
@@ -121,7 +131,7 @@ async function serve({ id, method, args }: Call) {
     const value = await run(id, ...args);
     post(
       { type: "reply", id, settled: { ok: true, value } },
-      value !== undefined &&
+      value instanceof Object &&
         "data" in value &&
         value.data instanceof ArrayBuffer
         ? [value.data]

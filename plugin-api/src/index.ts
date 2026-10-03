@@ -49,7 +49,42 @@ export interface ClientContext {
   readonly services: Services;
 }
 
+export interface KernelJobScope {
+  readonly oc: any;
+  own<H extends { delete(): void }>(handle: H): H;
+  progress(done: number, total: number, label: string): void;
+}
+
+export type KernelJobResult =
+  | void
+  | null
+  | boolean
+  | number
+  | bigint
+  | string
+  | (object & { then?: never });
+
+export type KernelJob = (
+  input: never,
+  scope: KernelJobScope,
+) => KernelJobResult;
+
+export const defineKernelJobs = (jobs: Readonly<Record<string, KernelJob>>) =>
+  jobs;
+
+export interface KernelJobRun {
+  onProgress?(done: number, total: number, label: string): void;
+  signal?: AbortSignal;
+}
+
+export type StartKernelJob = (
+  id: string,
+  input: unknown,
+  run?: KernelJobRun,
+) => Promise<unknown>;
+
 export interface ServerContext extends ClientContext {
+  readonly startKernelJob: StartKernelJob;
   readonly measure: MeasureService;
   readonly cam: CamService;
   readonly kicad: KicadService;

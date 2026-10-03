@@ -27,6 +27,7 @@ const contributions = Type.Object({
   sceneLayers: ids,
   pickProviders: ids,
   menuItems: ids,
+  kernelJobs: ids,
 });
 type ContributionPoint = keyof typeof contributions.properties;
 const CONTRIBUTION_POINTS = Object.keys(

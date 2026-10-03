@@ -281,6 +281,16 @@ module, in load order:
 - `activate` receives `register`: `routeModule`, `exporter`, `importer`,
   `featureKind` and `extensionSpec`, the existing register calls, each tracked
   under the module's one disposer.
+- `register.kernelJob(id, entry)` registers a kernel job: `id` starts with
+  the module id and a dot, and `entry` is the URL of a file whose default
+  export, from `defineKernelJobs`, holds the job under that id.
+- `startKernelJob(id, input, { onProgress, signal })` runs one of the
+  module's own jobs in the kernel worker and resolves to its result. A job is
+  synchronous; one that returns a promise is refused. The job
+  receives the OCCT instance, `own` for every handle it makes and
+  `progress(done, total, label)`. Its handles are freed when it returns,
+  throws or is cancelled; an aborted signal cancels it at its next
+  `progress` call.
 - After sign-in, `client/src/modules/host.ts` activates the client part of
   each listed module that this route reports `loaded`, with `register`:
   `command`, `toolbarGroup`, `panel`, `workbench`, `selectionKind` and

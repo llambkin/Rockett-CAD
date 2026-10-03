@@ -26,7 +26,14 @@ import {
   engineFor,
   type EvaluateHooks,
 } from "../geometry/engine.js";
-import { initKernel, kernelVersion, release } from "../geometry/kernel.js";
+import type { KernelJob } from "@rockett/plugin-api";
+import {
+  getKernel,
+  initKernel,
+  kernelVersion,
+  release,
+  scoped,
+} from "../geometry/kernel.js";
 import { measure } from "../geometry/measure.js";
 import { resolvePlaneFrame, type EvalState } from "../geometry/features.js";
 import { computeEdgeNames, withNamingVersion } from "../geometry/naming.js";
@@ -124,6 +131,12 @@ export interface KernelClient {
     doc: CadDocument,
     accept?: NamingDecision[],
   ): Promise<NamingPlan>;
+  moduleJob(
+    entry: string,
+    id: string,
+    input: unknown,
+    hooks?: EvaluateHooks,
+  ): Promise<unknown>;
   drop(docId: string): void;
   version(): Health["kernelVersion"];
   status(): Health["kernel"];
@@ -401,6 +414,47 @@ export class InProcessKernel implements KernelClient {
   async planNamingUpgrade(doc: CadDocument, accept?: NamingDecision[]) {
     const { sources } = await this.sourced(doc);
     return planNamingUpgrade(doc, sources, accept);
+  }
+
+  async moduleJob(
+    entry: string,
+    id: string,
+    input: unknown,
+    hooks: EvaluateHooks = {},
+  ) {
+    const { default: jobs = {} } = (await import(entry)) as {
+      default?: Readonly<Record<string, KernelJob>>;
+    };
+    const job = Object.hasOwn(jobs, id) ? jobs[id] : undefined;
+    if (typeof job !== "function")
+      throw new Error(`${entry} has no kernel job ${id}`);
+    const oc = getKernel();
+    return scoped((own) => {
+      const result: unknown = job(input as never, {
+        oc,
+        own,
+        progress(done, total, label) {
+          if (hooks.shouldStop?.())
+            throw new Error(`kernel job ${id} cancelled`);
+          hooks.onProgress?.(done, total, label);
+        },
+      });
+      if (
+        result instanceof Object &&
+        typeof Reflect.get(result, "then") === "function"
+      ) {
+        Promise.resolve(result).catch((error: unknown) =>
+          console.error(
+            `[rockett] kernel job ${id} failed after it was refused`,
+            error,
+          ),
+        );
+        throw new Error(
+          `kernel job ${id} must return synchronously, not a promise`,
+        );
+      }
+      return result;
+    });
   }
 
   drop(docId: string) {
