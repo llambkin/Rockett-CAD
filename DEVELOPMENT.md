@@ -80,8 +80,9 @@ rely on a picture.
 
 ## Browser test waits
 
-A browser test waits for a state the app shows before its next action: a
-status badge, a measure line, or the stored document. A click handler that
-finds the app busy drops the click, and `.busy-indicator` can still be absent
-right after a click, so its absence alone is not a wait. Fix a load failure
-with the right wait, never a longer timeout or a fixed delay.
+A new or repaired browser test waits for a state the app shows before its next
+action: a status badge, a measure line, the stored document, or `.dim-entry`
+before it types a size, since keys typed before it renders are lost. A click
+handler that finds the app busy drops the click, and `.busy-indicator` can
+still be absent right after a click, so its absence alone is not a wait. Fix a
+load failure with the right wait, never a longer timeout or a fixed delay.
