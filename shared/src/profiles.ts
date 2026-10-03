@@ -478,9 +478,11 @@ function detected(
 const curveIds = (p: Profile) =>
   [...p.outer, ...p.holes.flat()].map((c) => c.entityId);
 
-const sameRegion = (spurred: Profile, p: Profile) =>
+const sameRegion = (spurred: Profile) => (p: Profile) =>
   Math.abs(spurred.area - p.area) <= 1e-9 * Math.max(1, spurred.area) &&
   curveIds(p).every((id) => curveIds(spurred).includes(id));
+
+const only = (found: Profile[]) => (found.length === 1 ? found[0] : undefined);
 
 export function findProfile(
   sketch: { profiles: Profile[]; entities: SketchEntity[] },
@@ -491,7 +493,7 @@ export function findProfile(
   const found = profiles.find(byId) ?? detected(entities, "legacy").find(byId);
   if (found) return found;
   const current = detected(entities, "current", keepSpurs).find(byId);
-  if (current) return profiles.find((p) => sameRegion(current, p));
+  if (current) return only(profiles.filter(sameRegion(current)));
   const old = detected(entities, "legacy", keepSpurs).find(byId);
-  return old && detected(entities, "legacy").find((p) => sameRegion(old, p));
+  return old && only(detected(entities, "legacy").filter(sameRegion(old)));
 }
