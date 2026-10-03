@@ -11,16 +11,21 @@ COPY package.json package-lock.json ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
+COPY plugin-api/package.json plugin-api/package.json
+COPY modules/cam/package.json modules/cam/package.json
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
 FROM deps AS server
 COPY shared shared
+COPY plugin-api plugin-api
+COPY modules modules
 COPY server server
-COPY modules/kernel/blend/blend.wasm modules/kernel/blend/blend.wasm
 RUN npm run build --workspace server
 
 FROM deps AS client
 COPY shared shared
+COPY plugin-api plugin-api
+COPY modules modules
 COPY client client
 RUN npm run build --workspace client
 
@@ -48,6 +53,8 @@ COPY package.json package-lock.json ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
+COPY plugin-api/package.json plugin-api/package.json
+COPY modules/cam/package.json modules/cam/package.json
 RUN npm ci --omit=dev --workspace server --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 COPY THIRD-PARTY-NOTICES.md ./

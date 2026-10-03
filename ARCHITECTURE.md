@@ -19,13 +19,14 @@ B-Rep model (TopoDS solids, faces, edges, vertices)
 
 ## Repository layout
 
-| Path       | Role                                                                                           |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| `shared/`  | Document schema, sketch solver, profiles, routes, units. Browser and server run the same code. |
-| `server/`  | Express API, project store, kernel worker and geometry layer.                                  |
-| `client/`  | React and three.js UI.                                                                         |
-| `modules/` | Optional modules, such as CAM.                                                                 |
-| `docker/`  | Unraid template.                                                                               |
+| Path          | Role                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `shared/`     | Document schema, sketch solver, profiles, routes, units. Browser and server run the same code. |
+| `server/`     | Express API, project store, kernel worker and geometry layer.                                  |
+| `client/`     | React and three.js UI.                                                                         |
+| `modules/`    | Optional modules, such as CAM.                                                                 |
+| `plugin-api/` | `@rockett/plugin-api`, the only core package a module imports.                                 |
+| `docker/`     | Unraid template.                                                                               |
 
 ## Key decisions
 
