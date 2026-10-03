@@ -443,34 +443,34 @@ function withoutSpurs(pieces: Piece[]): Piece[] {
   return kept.length === pieces.length ? pieces : withoutSpurs(kept);
 }
 
+type Detected = { profiles: Profile[]; spurred: Profile[] | undefined };
+
 function detect(
   entities: SketchEntity[],
   mode: Detection,
-  prune = withoutSpurs,
-): Profile[] {
+  spurs = false,
+): Detected {
   const { pieces, whole } = piecesOf(arrange(entities, mode));
-  const loops = faceLoops(prune(pieces));
-  const profiles = nest([...loops, ...whole.map(closedLoop)]);
-  return mode === "current" ? distinctIds(profiles) : profiles;
+  const traced = (kept: Piece[]) => {
+    const profiles = nest([...faceLoops(kept), ...whole.map(closedLoop)]);
+    return mode === "current" ? distinctIds(profiles) : profiles;
+  };
+  const kept = withoutSpurs(pieces);
+  const spurred = spurs && kept !== pieces ? traced(pieces) : undefined;
+  return { profiles: traced(kept), spurred };
 }
 
 export function detectProfiles(entities: SketchEntity[]): Profile[] {
-  return detect(entities, "current");
+  return detect(entities, "current").profiles;
 }
 
-const keepSpurs = (pieces: Piece[]) => pieces;
-const detections = new WeakMap<SketchEntity[], Map<string, Profile[]>>();
+const detections = new WeakMap<SketchEntity[], Map<Detection, Detected>>();
 
-function detected(
-  entities: SketchEntity[],
-  mode: Detection,
-  prune = withoutSpurs,
-): Profile[] {
-  const byKey = detections.get(entities) ?? new Map<string, Profile[]>();
-  detections.set(entities, byKey);
-  const key = prune === keepSpurs ? `${mode} spurs` : mode;
-  if (!byKey.has(key)) byKey.set(key, detect(entities, mode, prune));
-  return byKey.get(key)!;
+function detected(entities: SketchEntity[], mode: Detection): Detected {
+  const byMode = detections.get(entities) ?? new Map<Detection, Detected>();
+  detections.set(entities, byMode);
+  if (!byMode.has(mode)) byMode.set(mode, detect(entities, mode, true));
+  return byMode.get(mode)!;
 }
 
 const sides = (p: Profile) => [...p.outer, ...p.holes.flat()].map(sense);
@@ -489,10 +489,10 @@ export function findProfile(
   const byId = (p: Profile) => p.id === profileId;
   const found = profiles.find(byId);
   if (found) return found;
-  const current = detected(entities, "current", keepSpurs).find(byId);
+  const current = detected(entities, "current").spurred?.find(byId);
   if (current) return only(profiles.filter(sameRegion(current)));
-  const old = detected(entities, "legacy", keepSpurs).find(byId);
-  return only(
-    detected(entities, "legacy").filter(old ? sameRegion(old) : byId),
-  );
+  const legacy = detected(entities, "legacy");
+  if (!legacy.spurred) return legacy.profiles.find(byId);
+  const old = legacy.spurred.find(byId);
+  return only(legacy.profiles.filter(old ? sameRegion(old) : byId));
 }

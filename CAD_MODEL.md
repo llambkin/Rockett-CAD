@@ -249,8 +249,10 @@ input bound, not a tolerance.
   (DEC-101): `shared/test/profiles.test.ts`.
 - Region detection drops every piece with a free end, repeatedly, before it
   traces loops, so a dangling line neither enters nor splits a profile. An id
-  saved while a loop still ran into such a spur resolves to the profile with
-  the same area bounded by a subset of its curves: `shared/src/profiles.test.ts`.
+  whose saved loop ran into a spur resolves only when exactly one pruned
+  profile has the same area and directed curves that all lie on that loop. A
+  sketch without spurs resolves every id as it did before pruning:
+  `shared/src/profiles.test.ts`.
 - A planar face supports a sketch independently of its boundary curves.
   Automatic boundary import retains exact straight edges, circles, ellipses
   and their arcs. If any curve is unsupported, the sketch starts empty and reports that
