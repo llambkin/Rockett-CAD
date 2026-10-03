@@ -77,3 +77,11 @@ rely on a picture.
   pre-failure state: `server/src/geometry/engine.ts`.
 - Before merging geometry changes, run a sketch, extrude, fillet loop in the
   UI.
+
+## Browser test waits
+
+A browser test waits for a state the app shows before its next action: a
+status badge, a measure line, or the stored document. A click handler that
+finds the app busy drops the click, and `.busy-indicator` can still be absent
+right after a click, so its absence alone is not a wait. Fix a load failure
+with the right wait, never a longer timeout or a fixed delay.
