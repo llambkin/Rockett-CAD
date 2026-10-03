@@ -106,8 +106,8 @@ export function evalLoft(state: EvalState, f: LoftFeature) {
   );
   acquire(tool.shape);
   return f.operation === "join" && sources.length > 0
-    ? joinEvery(state, f.id, tool, [
+    ? joinEvery(state, f, tool, [
         ...new Set([...sources, ...(f.targets ?? [])]),
       ])
-    : applyToolOperation(state, f.id, tool, f.operation, f.targets);
+    : applyToolOperation(state, f, tool);
 }

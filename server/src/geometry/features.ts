@@ -3,6 +3,7 @@ import {
   vertexPoint,
   registerBodySolids,
   registerPieces,
+  rejectInvalidBody,
   type EvaluatedSketch,
   type EvalState,
   type ToolResult,
@@ -12,7 +13,9 @@ import {
   unifyTool,
   fuseNamed,
   applyToolOperation,
+  operationKind,
   subtractSketchRegionsFromFace,
+  type ToolFeature,
 } from "./boolean.js";
 import { finishJoin, warned } from "./booleanNaming.js";
 /**
@@ -196,11 +199,13 @@ function resolveProfiles(
 
 function registerNewBodies(
   state: EvalState,
-  featureId: string,
+  f: ToolFeature,
   tools: ToolResult[],
   regions: ProfileFace[],
 ): void {
+  const featureId = f.id;
   const unified = tools.map((t) => unifyTool(t, featureId));
+  for (const u of unified) rejectInvalidBody(operationKind(f), u.shape);
 
   if (unified[0]?.names.version === 2) {
     registerPieces(
@@ -425,24 +430,21 @@ export function evalExtrude(state: EvalState, f: ExtrudeFeature) {
 
   return applyProfileTools(
     state,
-    f.id,
+    f,
     tools,
     sources.map((s) => s.pf),
-    f.operation,
-    f.targets,
   );
 }
 
 function applyProfileTools(
   state: EvalState,
-  featureId: string,
+  f: ToolFeature,
   tools: ToolResult[],
   regions: ProfileFace[],
-  operation: "newBody" | "join" | "cut" | "intersect",
-  targets?: string[],
 ): FeatureOutcome | void {
-  if (operation === "newBody") {
-    registerNewBodies(state, featureId, tools, regions);
+  const featureId = f.id;
+  if (f.operation === "newBody") {
+    registerNewBodies(state, f, tools, regions);
     return;
   }
 
@@ -458,7 +460,7 @@ function applyProfileTools(
   }, tools[0]!);
   const unified = unifyTool(tool, featureId);
 
-  return applyToolOperation(state, featureId, unified, operation, targets);
+  return applyToolOperation(state, f, unified);
 }
 
 function revolveSources(state: EvalState, f: RevolveFeature) {
@@ -553,14 +555,7 @@ export function evalRevolve(state: EvalState, f: RevolveFeature) {
     tools.push(tool);
   }
 
-  return applyProfileTools(
-    state,
-    f.id,
-    tools,
-    profileFaces,
-    f.operation,
-    f.targets,
-  );
+  return applyProfileTools(state, f, tools, profileFaces);
 }
 
 export function evalSweep(state: EvalState, f: SweepFeature) {
@@ -617,17 +612,9 @@ export function evalSweep(state: EvalState, f: SweepFeature) {
     }),
   );
 
-  if (tools.length > 1)
-    return applyProfileTools(
-      state,
-      f.id,
-      tools,
-      profileFaces,
-      f.operation,
-      f.targets,
-    );
+  if (tools.length > 1) return applyProfileTools(state, f, tools, profileFaces);
 
-  return applyToolOperation(state, f.id, tools[0]!, f.operation, f.targets);
+  return applyToolOperation(state, f, tools[0]!);
 }
 
 function orderOpenChain(

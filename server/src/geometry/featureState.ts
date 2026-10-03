@@ -239,18 +239,33 @@ export function registerPieces(
 
 export function rejectInvalid(
   result: Shape,
-  before: Shape,
+  before: Shape | undefined,
   kind: string,
-  size: string,
+  size: string | undefined,
   advice: string,
 ): void {
   const broken = invalidPart(result);
   if (!broken) return;
-  const earlier = invalidPart(before);
+  const what = size ? `${kind} of ${size}` : kind;
+  const earlier = before && invalidPart(before);
   throw new Error(
     earlier
-      ? `${kind} of ${size} cannot be published: the body was already invalid before this ${kind} (the kernel check rejects a ${earlier}), so the fault comes from an earlier feature; the previous body has been kept`
-      : `${kind} of ${size} left an invalid shape (the kernel check rejects a ${broken}): ${advice}; the previous body has been kept`,
+      ? `${what} cannot be published: the body was already invalid before this ${kind} (the kernel check rejects a ${earlier}), so the fault comes from an earlier feature; the previous body has been kept`
+      : `${what} left an invalid shape (the kernel check rejects a ${broken}): ${advice}; the previous body has been kept`,
+  );
+}
+
+export function rejectInvalidBody(
+  kind: string,
+  result: Shape,
+  before?: Shape,
+): void {
+  rejectInvalid(
+    result,
+    before,
+    kind,
+    undefined,
+    "try a different profile, size or target",
   );
 }
 

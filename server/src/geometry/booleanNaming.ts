@@ -4,6 +4,7 @@ import {
   bboxOf,
   faces as facesOf,
   getKernel,
+  kernelCall,
   listToArray,
   scoped,
   lengthOf,
@@ -60,8 +61,8 @@ export function reparametrisedCylinderEdges(shape: Shape): Shape[] {
 }
 
 export function unifyTool(tool: ToolResult, featureId: string): ToolResult {
-  try {
-    const result = scoped((own) => {
+  const result = kernelCall("unify faces", () =>
+    scoped((own) => {
       const k = getKernel();
       const uni = acquire(
         new k.ShapeUpgrade_UnifySameDomain_2(tool.shape, true, true, false),
@@ -84,12 +85,10 @@ export function unifyTool(tool: ToolResult, featureId: string): ToolResult {
       const history = acquire(uni.History_1());
       const names = historyNames(history.get(), tool, merged, featureId);
       return { shape: own.keep(merged), names };
-    });
-    if (result !== tool) acquire(result.shape);
-    return result;
-  } catch {
-    return tool;
-  }
+    }),
+  );
+  if (result !== tool) acquire(result.shape);
+  return result;
 }
 
 export function finishJoin(

@@ -2,7 +2,11 @@ import {
   LINEAR_TOL,
   compareNames,
   type CombineFeature,
+  type ExtrudeFeature,
+  type LoftFeature,
   type OffsetFaceFeature,
+  type RevolveFeature,
+  type SweepFeature,
   type SplitBodyFeature,
   type Vec3,
 } from "@rockett/shared";
@@ -25,6 +29,7 @@ import {
   registerBodySolids,
   registerSolids,
   registerSplitBodies,
+  rejectInvalidBody,
   resolvePlaneFrame,
   type EvalState,
   type FeatureOutcome,
@@ -54,6 +59,19 @@ import {
 import { ShapeMap } from "./shapeMap.js";
 import type { SketchOnPlane } from "./sketchGeom.js";
 export { unifyTool } from "./booleanNaming.js";
+
+export type ToolFeature =
+  ExtrudeFeature | RevolveFeature | SweepFeature | LoftFeature;
+
+const OPERATION_LABEL = {
+  newBody: "new body",
+  join: "join",
+  cut: "cut",
+  intersect: "intersect",
+} as const;
+
+export const operationKind = (f: ToolFeature) =>
+  `${f.type} ${OPERATION_LABEL[f.operation]}`;
 
 export function fuseOperation(a: Shape, b: Shape): any {
   return acquire(new (getKernel().BRepAlgoAPI_Fuse_3)(a, b, progress()));
@@ -155,10 +173,12 @@ export function contactGroups(bodies: StateBody[], tool: ToolResult) {
 
 export function joinEvery(
   state: EvalState,
-  featureId: string,
+  f: ToolFeature,
   tool: ToolResult,
   targets?: string[],
 ): FeatureOutcome {
+  const featureId = f.id;
+  const kind = operationKind(f);
   const bodies = targets
     ? targets.map((id) => targetBody(state, "join", id, tool.shape))
     : overlapping(state, tool.shape).sort((a, b) =>
@@ -172,6 +192,7 @@ export function joinEvery(
   if (missed) {
     throw missedTarget("join", missed);
   }
+  for (const shape of loose) rejectInvalidBody(kind, shape);
   if (loose.length > 0)
     registerSolids(state, `b:${featureId}`, loose, tool.names);
   const warnings: (string | undefined)[] = [warning];
@@ -191,6 +212,7 @@ export function joinEvery(
     const joined = finishJoin(fused, featureId, [first!, ...rest, ...pieces]);
     warnings.push(joined.warning);
     const { shape, names } = joined;
+    rejectInvalidBody(kind, shape, first!.shape);
     registerBodySolids(state, first!.bodyId, shape, names, featureId);
   }
   return { targets: used, ...warned(warnings) };
@@ -198,25 +220,26 @@ export function joinEvery(
 
 export function applyToolOperation(
   state: EvalState,
-  featureId: string,
+  f: ToolFeature,
   tool: ToolResult,
-  operation: "newBody" | "join" | "cut" | "intersect",
-  targets?: string[],
 ): FeatureOutcome | void {
-  if (operation === "newBody") {
+  const { id: featureId, operation, targets } = f;
+  const kind = operationKind(f);
+  const publishTool = () => {
+    rejectInvalidBody(kind, tool.shape);
     registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
-    return;
-  }
+  };
+  if (operation === "newBody") return publishTool();
   if (targets?.length === 0 && operation !== "join")
     throw new Error(`${operation} has no target body`);
   if (targets?.length === 0 || (!targets && state.bodies.size === 0)) {
-    registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
+    publishTool();
     if (operation !== "join") return;
     return { targets: [] };
   }
 
   if (operation === "join" && tool.names.version === 2)
-    return joinEvery(state, featureId, tool, targets);
+    return joinEvery(state, f, tool, targets);
 
   if (operation === "cut") {
     const bodies = targets
@@ -231,6 +254,7 @@ export function applyToolOperation(
       const names = propagateNames(op, [body, tool], result, featureId);
       const inputs = [body.shape, tool.shape];
       const warning = zeroThicknessWarning("cut", result, inputs);
+      rejectInvalidBody(kind, result, body.shape);
       registerBodySolids(state, body.bodyId, result, names, featureId);
       return warning;
     });
@@ -243,12 +267,13 @@ export function applyToolOperation(
 
   if (operation === "join") {
     if (!target) {
-      registerBodySolids(state, `b:${featureId}`, tool.shape, tool.names);
+      publishTool();
       return { targets: [] };
     }
     const fused = fuseNamed(target, tool, featureId, "boolean join failed");
     const joined = finishJoin(fused, featureId, [target, tool], true);
     const { shape, names } = joined;
+    rejectInvalidBody(kind, shape, target.shape);
     registerBodySolids(state, target.bodyId, shape, names, featureId);
     return { targets: [target.bodyId], ...warned([joined.warning]) };
   }
@@ -266,6 +291,7 @@ export function applyToolOperation(
     result,
     featureId,
   );
+  rejectInvalidBody(kind, result, target.shape);
   registerBodySolids(state, target.bodyId, result, names, featureId);
   return { targets: [target.bodyId] };
 }
@@ -303,6 +329,7 @@ export function evalCombine(state: EvalState, f: CombineFeature) {
       f.operation === "join"
         ? finishJoin(current, f.id, [target, ...tools])
         : current;
+    rejectInvalidBody(`combine ${f.operation}`, joined.shape, target.shape);
     registerBodySolids(state, target.bodyId, joined.shape, joined.names);
     if (!f.keepTools) {
       for (const tool of tools) state.bodies.delete(tool.bodyId);

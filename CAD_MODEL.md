@@ -207,6 +207,10 @@ body.
   edge its inputs lacked builds, and the feature status is `warning` naming
   the edge length. A join tool that touches a body only along an edge or at a
   vertex stays a separate body, and the status is `warning` saying so.
+- Extrude, revolve, sweep and loft bodies of every operation, and Combine
+  results, pass `rejectInvalidBody` in `server/src/geometry/featureState.ts`
+  on the final shape, after `unifyTool`. The check runs before tessellation;
+  a slit body passes it until meshed.
 - Fillet and Chamfer check validity, shell count, cut-through, run-past ends
   and loose tolerances (`cutsThrough`, `looseBlend`).
 - Shell stores an optional `body` (schema 24). With no open faces it hollows
