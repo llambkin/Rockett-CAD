@@ -243,6 +243,10 @@ input bound, not a tolerance.
 - A profile id hashes its bounding entity ids. `findProfile` in
   `shared/src/profiles.ts` still finds ids saved before tangent splitting
   (DEC-101): `shared/test/profiles.test.ts`.
+- Region detection drops every piece with a free end, repeatedly, before it
+  traces loops, so a dangling line neither enters nor splits a profile. An id
+  saved while a loop still ran into such a spur resolves to the profile with
+  the same area bounded by a subset of its curves: `shared/src/profiles.test.ts`.
 - A planar face supports a sketch independently of its boundary curves.
   Automatic boundary import retains exact straight edges, circles, ellipses
   and their arcs. If any curve is unsupported, the sketch starts empty and reports that

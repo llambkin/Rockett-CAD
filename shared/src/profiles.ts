@@ -361,7 +361,6 @@ function faceLoops(pieces: Piece[]): Loop[] {
           best = cand;
         }
       }
-      if (best < 0) break;
       cur = best;
       if (cur === start) {
         closed = true;
@@ -437,9 +436,23 @@ function distinctIds(profiles: Profile[]): Profile[] {
   });
 }
 
-function detect(entities: SketchEntity[], mode: Detection): Profile[] {
+function withoutSpurs(pieces: Piece[]): Piece[] {
+  const degree = new Map<number, number>();
+  for (const p of pieces)
+    for (const n of [p.from, p.to]) degree.set(n, (degree.get(n) ?? 0) + 1);
+  const free = (n: number) => degree.get(n) === 1;
+  const kept = pieces.filter((p) => !free(p.from) && !free(p.to));
+  return kept.length === pieces.length ? pieces : withoutSpurs(kept);
+}
+
+function detect(
+  entities: SketchEntity[],
+  mode: Detection,
+  prune = withoutSpurs,
+): Profile[] {
   const { pieces, whole } = piecesOf(arrange(entities, mode));
-  const profiles = nest([...faceLoops(pieces), ...whole.map(closedLoop)]);
+  const loops = faceLoops(prune(pieces));
+  const profiles = nest([...loops, ...whole.map(closedLoop)]);
   return mode === "current" ? distinctIds(profiles) : profiles;
 }
 
@@ -447,18 +460,38 @@ export function detectProfiles(entities: SketchEntity[]): Profile[] {
   return detect(entities, "current");
 }
 
-const legacyCache = new WeakMap<SketchEntity[], Profile[]>();
+const keepSpurs = (pieces: Piece[]) => pieces;
+const detections = new WeakMap<SketchEntity[], Map<string, Profile[]>>();
+
+function detected(
+  entities: SketchEntity[],
+  mode: Detection,
+  prune = withoutSpurs,
+): Profile[] {
+  const byKey = detections.get(entities) ?? new Map<string, Profile[]>();
+  detections.set(entities, byKey);
+  const key = prune === keepSpurs ? `${mode} spurs` : mode;
+  if (!byKey.has(key)) byKey.set(key, detect(entities, mode, prune));
+  return byKey.get(key)!;
+}
+
+const curveIds = (p: Profile) =>
+  [...p.outer, ...p.holes.flat()].map((c) => c.entityId);
+
+const sameRegion = (spurred: Profile, p: Profile) =>
+  Math.abs(spurred.area - p.area) <= 1e-9 * Math.max(1, spurred.area) &&
+  curveIds(p).every((id) => curveIds(spurred).includes(id));
 
 export function findProfile(
   sketch: { profiles: Profile[]; entities: SketchEntity[] },
   profileId: string,
 ): Profile | undefined {
-  const found = sketch.profiles.find((p) => p.id === profileId);
+  const { entities, profiles } = sketch;
+  const byId = (p: Profile) => p.id === profileId;
+  const found = profiles.find(byId) ?? detected(entities, "legacy").find(byId);
   if (found) return found;
-  let legacy = legacyCache.get(sketch.entities);
-  if (!legacy) {
-    legacy = detect(sketch.entities, "legacy");
-    legacyCache.set(sketch.entities, legacy);
-  }
-  return legacy.find((p) => p.id === profileId);
+  const current = detected(entities, "current", keepSpurs).find(byId);
+  if (current) return profiles.find((p) => sameRegion(current, p));
+  const old = detected(entities, "legacy", keepSpurs).find(byId);
+  return old && detected(entities, "legacy").find((p) => sameRegion(old, p));
 }
