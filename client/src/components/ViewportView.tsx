@@ -1,9 +1,4 @@
 import { refsOf } from "../selection/kinds";
-/**
- * The 3D viewport: wires the CadViewport engine to application state.
- * Handles CAD-style camera input, topology picking, plane picking,
- * sketch tool interaction (with live constraint solving), and dimensions.
- */
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
@@ -133,6 +128,7 @@ export function ViewportView({
   const viewportRef = useRef<CadViewport | null>(null);
   const viewCubeRef = useRef<ViewCube | null>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
+  const [unavailable, setUnavailable] = useState(false);
 
   const evaluation = useStore((s) => s.evaluation);
   const document_ = useStore((s) => s.document);
@@ -314,10 +310,15 @@ export function ViewportView({
     vp.requestRender();
   }
 
-  // ---- engine lifecycle ----
   useEffect(() => {
     const container = containerRef.current!;
-    const vp = new CadViewport(container);
+    let vp: CadViewport;
+    try {
+      vp = new CadViewport(container);
+    } catch {
+      setUnavailable(true);
+      return;
+    }
     viewportRef.current = vp;
     commandGizmo.current = new FeatureGizmos(vp, setGizmoLabel);
     if ((import.meta as any).env?.DEV) {
@@ -378,7 +379,6 @@ export function ViewportView({
     };
   }, []);
 
-  // ---- sync bodies ----
   useEffect(() => {
     if (!editFeatureId) return;
     void loadPreviewBase(editFeatureId, useStore.getState);
@@ -401,7 +401,6 @@ export function ViewportView({
     syncReferenceImages(vp, document_, evaluation, hidden);
   }, [evaluation, document_, hiddenFeatures]);
 
-  // ---- sync sketches / profiles / highlights ----
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp || !evaluation || !document_) return;
@@ -618,7 +617,6 @@ export function ViewportView({
     setSnapMarker(null);
   }, [sketchTool, active?.id]);
 
-  // ---- camera + pointer input ----
   useEffect(() => {
     const vp = viewportRef.current;
     const container = containerRef.current;
@@ -752,8 +750,6 @@ export function ViewportView({
     };
     // handlers read latest state via zustand getState
   }, []);
-
-  // ------ mode-aware handlers (read state fresh from the store) ------
 
   function activeSketchFrame(): PlaneFrame | null {
     const s = useStore.getState();
@@ -2295,7 +2291,11 @@ export function ViewportView({
     setDimEdit(null);
   }
 
-  const viewport = (
+  const viewport = unavailable ? (
+    <div className="viewport-container">
+      <div className="tree-empty">3D view unavailable</div>
+    </div>
+  ) : (
     <div
       className="viewport-container"
       ref={containerRef}
