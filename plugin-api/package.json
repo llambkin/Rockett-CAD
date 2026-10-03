@@ -10,5 +10,8 @@
   "types": "src/index.ts",
   "dependencies": {
     "@rockett/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
   }
 }

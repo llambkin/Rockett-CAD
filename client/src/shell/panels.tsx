@@ -2,9 +2,9 @@ import {
   Component,
   useEffect,
   useSyncExternalStore,
-  type ComponentType,
   type ReactNode,
 } from "react";
+import type { Panel } from "@rockett/plugin-api";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { createRegistry } from "@rockett/shared";
@@ -19,12 +19,7 @@ import { FeatureDialog } from "../components/FeatureDialog";
 import { MeasurePanel } from "../components/MeasurePanel";
 import { SketchOffset } from "../components/SketchOffsetPanel";
 
-export interface PanelDef {
-  id: string;
-  title: string;
-  when(state: CommandContext, open: readonly string[]): boolean;
-  component: ComponentType;
-}
+export type PanelDef = Panel<CommandContext>;
 
 const panels = createRegistry<PanelDef>("panel", (p) => p.id);
 const opened = create<{ open: readonly string[] }>(() => ({ open: [] }));

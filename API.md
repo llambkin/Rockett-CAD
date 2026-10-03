@@ -281,9 +281,15 @@ module, in load order:
   registrations; the others still load.
 - A manifest that fails `parseManifest` reports `failed` with whichever of
   its identity fields are strings; the rest are empty.
-- `activate` receives `register`: `routeModule`, `exporter`, `importer`,
-  `featureKind` and `extensionSpec`, the existing register calls, each tracked
-  under the module's one disposer.
+- `activate` receives `ServerContext` (`plugin-api/src/index.ts`):
+  `register` and `startKernelJob`. `register.routeModule` and
+  `register.kernelJob` take `plugin-api` types; `exporter`, `importer`,
+  `featureKind` and `extensionSpec` still take core types. Each call is
+  tracked under the module's one disposer.
+- A route module's `projectRoute` and `projectMutation` handlers get
+  `params` from the route path and `body` as the route's request type when
+  it has a body schema, `unknown` without one. Every route module receives
+  `kernel` at runtime, but only the core `ModuleApi` type declares it.
 - `register.kernelJob(id, entry)` registers a kernel job: `id` starts with
   the module id and a dot, and `entry` is the URL of a file whose default
   export, from `defineKernelJobs`, holds the job under that id.
@@ -295,10 +301,19 @@ module, in load order:
   throws or is cancelled; an aborted signal cancels it at its next
   `progress` call.
 - After sign-in, `client/src/modules/host.ts` activates the client part of
-  each listed module that this route reports `loaded`, with `register`:
-  `command`, `toolbarGroup`, `panel`, `workbench`, `selectionKind` and
-  `pickProvider`. Activation is atomic as on the server. A command `Control`
-  draws inside the panel error boundary.
+  each listed module that this route reports `loaded`, with `ClientContext`:
+  `register` and `project`. `register.command`, `toolbarGroup`, `panel` and
+  `workbench` take `plugin-api` types; `selectionKind` and `pickProvider`
+  still take core types. Activation is atomic as on the server. A command
+  `Control` and a workbench `tree` and `bar` draw inside the panel error
+  boundary.
+- A workbench's optional `tree` draws in the left dock and `bar` in the
+  timeline row, in place of the model tree and timeline. The view toolbar
+  group shows at the right end of every workbench.
+- `project.get()` returns `{projectId, document}` for the open project,
+  the same object until either changes; `project.subscribe(listener)` calls
+  the listener on each change and returns its disposer. Both fit
+  `useSyncExternalStore`.
 
 ## Project file
 

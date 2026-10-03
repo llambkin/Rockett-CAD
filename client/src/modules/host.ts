@@ -1,4 +1,11 @@
-import { createElement } from "react";
+import { createElement, type ComponentType } from "react";
+import type {
+  ClientContext,
+  Dispose,
+  OpenProject,
+  ProjectView,
+  Workbench,
+} from "@rockett/plugin-api";
 import type { ModuleInfo } from "@rockett/shared";
 import {
   registerCommand,
@@ -11,20 +18,48 @@ import { registerWorkbench } from "../shell/workbench";
 import { useStore } from "../store";
 import { registerPickProvider } from "../three/pickProviders";
 
-type Dispose = () => void;
+const bounded =
+  (id: string, title: string, Inner: ComponentType): ComponentType =>
+  () =>
+    createElement(PanelBoundary, {
+      panel: { id, title },
+      children: createElement(Inner),
+    });
 
-const guarded = (command: Command): Command => {
-  const { Control } = command;
-  if (!Control) return command;
-  const panel = { id: command.id, title: command.label };
-  return {
-    ...command,
-    Control: () =>
-      createElement(PanelBoundary, { panel, children: createElement(Control) }),
-  };
+const guarded = (command: Command): Command =>
+  command.Control
+    ? {
+        ...command,
+        Control: bounded(command.id, command.label, command.Control),
+      }
+    : command;
+
+const guardedWorkbench = ({ tree, bar, ...workbench }: Workbench) => ({
+  ...workbench,
+  ...(tree && { tree: bounded(workbench.id, workbench.label, tree) }),
+  ...(bar && { bar: bounded(workbench.id, workbench.label, bar) }),
+});
+
+let open: OpenProject = { projectId: null, document: null };
+
+const project: ProjectView = {
+  get() {
+    const { projectId, document } = useStore.getState();
+    if (projectId !== open.projectId || document !== open.document)
+      open = { projectId, document };
+    return open;
+  },
+  subscribe: (listener) =>
+    useStore.subscribe((now, before) => {
+      if (
+        now.projectId !== before.projectId ||
+        now.document !== before.document
+      )
+        listener();
+    }),
 };
 
-function registrars(own: Dispose[]) {
+function moduleContext(own: Dispose[]) {
   const track =
     <A extends unknown[]>(register: (...args: A) => Dispose) =>
     (...args: A) => {
@@ -32,18 +67,24 @@ function registrars(own: Dispose[]) {
       own.push(dispose);
       return dispose;
     };
-  return {
+  const register = {
     command: track((command: Command) => registerCommand(guarded(command))),
     toolbarGroup: track(registerToolbarGroup),
     panel: track(registerPanel),
-    workbench: track(registerWorkbench),
+    workbench: track((workbench: Workbench) =>
+      registerWorkbench(guardedWorkbench(workbench)),
+    ),
     selectionKind: track(registerSelectionKind),
     pickProvider: track(registerPickProvider),
   };
+  return {
+    register,
+    project: { ...project, subscribe: track(project.subscribe) },
+  };
 }
 
-export interface ModuleContext {
-  register: ReturnType<typeof registrars>;
+export interface ModuleContext extends ClientContext {
+  register: ReturnType<typeof moduleContext>["register"];
 }
 
 export interface HostModule {
@@ -71,7 +112,7 @@ export async function loadClientModules(
     if (!loaded.has(module.manifest.id)) continue;
     const own: Dispose[] = [];
     try {
-      await module.client.activate({ register: registrars(own) });
+      await module.client.activate(moduleContext(own));
       disposers.push(() => disposeAll(own));
     } catch (error) {
       disposeAll(own);

@@ -1,57 +1,29 @@
-import type { Request, RequestHandler } from "express";
-import type { Static, TSchema } from "typebox";
+import type { RequestHandler } from "express";
+import type {
+  ProjectMutation,
+  RouteModule as ModuleOf,
+  RouteModuleApi,
+} from "@rockett/plugin-api";
 import {
   createRegistry,
   DOCUMENT_EDITS,
   REGISTRY_ID,
   type CadDocument,
-  type PathParams,
   type Route,
   type User,
 } from "@rockett/shared";
 import type { KernelClient } from "../kernel/client.js";
 import type { ProjectStore } from "../store/projectStore.js";
 
-type Mutation = (
-  { label: string; cursor?: never } | { cursor: number; label?: never }
-) & {
-  document?: CadDocument;
-  position?: number | undefined;
-  [extra: string]: unknown;
-};
-
-export type Edit = (doc: CadDocument, req: any) => Promise<Mutation>;
+export type Edit = (doc: CadDocument, req: any) => Promise<ProjectMutation>;
 
 type Context = { user: User };
 
-type ProjectRead = (
-  doc: CadDocument,
-  req: Request,
-  ctx: Context,
-) => Promise<unknown>;
-
-export interface ModuleApi {
+export interface ModuleApi extends RouteModuleApi {
   kernel: KernelClient;
-  projectRoute(route: Route, read: ProjectRead): void;
-  projectMutation<R extends Route>(
-    route: R,
-    edit: (
-      doc: CadDocument,
-      req: Request<
-        PathParams<R["path"]>,
-        unknown,
-        R extends { readonly body: infer S extends TSchema }
-          ? Static<S>
-          : unknown
-      >,
-    ) => ReturnType<Edit>,
-  ): void;
 }
 
-export interface RouteModule {
-  id: string;
-  mount(api: ModuleApi): void;
-}
+export type RouteModule = ModuleOf<ModuleApi>;
 
 export const routeModules = createRegistry<RouteModule>(
   "route module",

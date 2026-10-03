@@ -13,6 +13,7 @@ import { NamedViewSelect } from "../components/NamedViewSelect";
 import { StepImportButton } from "../components/StepImportButton";
 import { SketchInsertButtons } from "../components/SketchInsertButtons";
 import { PolygonFields } from "../components/PolygonFields";
+import { EVERY_WORKBENCH } from "@rockett/plugin-api";
 import {
   registerCommand,
   registerToolbarGroup,
@@ -108,7 +109,7 @@ for (const [name, label] of GROUPS)
 registerToolbarGroup({
   id: "design.group.view",
   label: "",
-  context: "design",
+  context: EVERY_WORKBENCH,
   end: true,
 });
 

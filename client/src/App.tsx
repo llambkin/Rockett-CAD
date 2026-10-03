@@ -5,6 +5,7 @@ import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
 import { Toolbar } from "./components/Toolbar";
 import { WorkbenchSwitcher } from "./shell/WorkbenchSwitcher";
+import { useCurrentWorkbench } from "./shell/workbench";
 import { activeCommand } from "./commands/active";
 import { installKeymap } from "./commands/keymap";
 import { registerCommand } from "./commands/registry";
@@ -268,12 +269,18 @@ function SaveIndicator() {
 
 export function TreePane() {
   const tree = useSplitter("ui.treeWidth", "Model tree width");
+  const Tree = useCurrentWorkbench()?.tree ?? ModelTree;
   return (
     <div className="tree-pane" style={{ width: tree.width }}>
-      <ModelTree />
+      <Tree />
       {tree.splitter}
     </div>
   );
+}
+
+function TimelineRow() {
+  const Bar = useCurrentWorkbench()?.bar ?? Timeline;
+  return <Bar />;
 }
 
 function Workspace({
@@ -314,7 +321,7 @@ function Workspace({
         <VersionLabel />
         <Panels />
       </div>
-      <Timeline />
+      <TimelineRow />
       {error && (
         <div className="error-toast" role="alert">
           <span>⚠ {error}</span>

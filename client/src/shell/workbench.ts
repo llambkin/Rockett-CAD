@@ -1,15 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { create } from "zustand";
+import type { Workbench } from "@rockett/plugin-api";
 import { createRegistry } from "@rockett/shared";
 import { exitActive } from "../commands/active";
-import { useStore, type Selection } from "../store";
-
-export interface Workbench {
-  id: string;
-  label: string;
-  panels: readonly string[];
-  selectionKinds: readonly Selection["kind"][];
-}
+import { useStore } from "../store";
 
 const workbenches = createRegistry<Workbench>("workbench", (w) => w.id);
 export const registerWorkbench = workbenches.register;
@@ -23,6 +17,11 @@ export const useWorkbenches = () =>
     workbenches.snapshot,
     workbenches.snapshot,
   );
+
+export function useCurrentWorkbench(): Workbench | undefined {
+  const current = useWorkbench((s) => s.current);
+  return useWorkbenches().find((w) => w.id === current);
+}
 
 export async function switchWorkbench(id: string): Promise<void> {
   const { current, switching } = useWorkbench.getState();

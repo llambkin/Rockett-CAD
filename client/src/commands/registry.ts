@@ -1,4 +1,13 @@
-import { useSyncExternalStore, type ComponentType } from "react";
+import { useSyncExternalStore } from "react";
+import {
+  EVERY_WORKBENCH,
+  type Anchored,
+  type CommandAction,
+  type CommandBase as Base,
+  type CommandControl,
+  type Keyed,
+  type ToolbarGroup,
+} from "@rockett/plugin-api";
 import { createRegistry } from "@rockett/shared";
 import type { ActiveCommand } from "./active";
 import type { ViewportRef } from "../viewportRef";
@@ -9,22 +18,9 @@ export type CommandContext = ReturnType<typeof useStore.getState> & {
   viewport?: ViewportRef;
 };
 
-interface Anchored {
-  id: string;
-  after?: string;
-  before?: string;
-}
-
-interface CommandBase extends Anchored {
-  label: string;
+interface CommandBase extends Base<CommandContext> {
   interaction?: ActiveCommand;
-  when?(ctx: CommandContext): boolean;
-  enabled?(ctx: CommandContext): true | string;
 }
-
-type Keyed =
-  | { keys?: never; keyContext?: never }
-  | { keys: readonly string[]; keyContext: string };
 
 interface CommandButton {
   group: string;
@@ -38,32 +34,13 @@ interface CommandButton {
   Control?: never;
 }
 
-interface CommandControl {
-  group: string;
-  Control: ComponentType;
-  run?: never;
-  icon?: never;
-}
-
-interface CommandAction {
-  group?: never;
-  icon?: never;
-  Control?: never;
-  run(ctx: CommandContext): unknown;
-}
-
 export type Command = CommandBase &
   Keyed &
-  (CommandButton | CommandControl | CommandAction);
+  (CommandButton | CommandControl | CommandAction<CommandContext>);
 export type ToolbarCommand = CommandBase &
   Keyed &
   (CommandButton | CommandControl);
-
-export interface ToolbarGroup extends Anchored {
-  label: string;
-  context: string;
-  end?: true;
-}
+export type { ToolbarGroup };
 
 const commandRegistry = createRegistry<Command>("command", (c) => c.id);
 const groupRegistry = createRegistry<ToolbarGroup>(
@@ -122,12 +99,18 @@ export function toolbarFor(context: string, ctx: CommandContext) {
   const shown = commandRegistry
     .list()
     .filter((c): c is ToolbarCommand => !!c.group && c.when?.(ctx) !== false);
-  return placed(groupRegistry.list().filter((g) => g.context === context)).map(
-    (group) => ({
-      group,
-      commands: placed(shown.filter((c) => c.group === group.id)),
-    }),
-  );
+  const workbenchRow = context !== ctx.active?.id;
+  const groups = groupRegistry
+    .list()
+    .filter(
+      (g) =>
+        g.context === context ||
+        (workbenchRow && g.context === EVERY_WORKBENCH),
+    );
+  return placed(groups).map((group) => ({
+    group,
+    commands: placed(shown.filter((c) => c.group === group.id)),
+  }));
 }
 
 export function useRegistrations(): void {

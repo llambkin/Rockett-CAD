@@ -1,4 +1,9 @@
-import { PLUGIN_API_VERSION, type StartKernelJob } from "@rockett/plugin-api";
+import {
+  PLUGIN_API_VERSION,
+  type Dispose,
+  type ServerContext,
+  type StartKernelJob,
+} from "@rockett/plugin-api";
 import {
   createRegistry,
   parseManifest,
@@ -12,7 +17,6 @@ import { registerExporter } from "../geometry/exporters.js";
 import { registerFeatureKind } from "../geometry/featureKinds.js";
 import type { KernelClient } from "../kernel/client.js";
 
-type Dispose = () => void;
 type Kernel = Pick<KernelClient, "moduleJob">;
 
 const kernelJobs = createRegistry<{ id: string; entry: URL }>(
@@ -60,9 +64,8 @@ function registrars(own: Dispose[], moduleId: string) {
   };
 }
 
-export interface ModuleContext {
+export interface ModuleContext extends ServerContext {
   register: ReturnType<typeof registrars>;
-  startKernelJob: StartKernelJob;
 }
 
 export interface HostModule {
