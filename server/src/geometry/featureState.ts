@@ -59,11 +59,93 @@ export type FeatureOutcome = Pick<FeatureStatus, "warning" | "targets">;
 
 export class NoCorner extends Error {}
 
+export type StateMap = "bodies" | "sketches" | "planes";
+export type ReadMap = StateMap | "sources";
+
+export class Recorder {
+  on = true;
+  earlier = false;
+  readonly read = new Map<ReadMap, Set<string> | "all">();
+  readonly writes: [StateMap, "set" | "delete", string][] = [];
+
+  reads(map: ReadMap, key?: string): void {
+    if (!this.on) return;
+    const keys = this.read.get(map) ?? new Set<string>();
+    if (keys === "all" || key === undefined) this.read.set(map, "all");
+    else this.read.set(map, keys.add(key));
+  }
+
+  wrote(map: ReadMap, op: "set" | "delete", key: string): void {
+    if (this.on && map !== "sources") this.writes.push([map, op, key]);
+  }
+}
+
+export const unrecorded = <V>(map: Map<string, V>) =>
+  Map.prototype.values.call(map) as MapIterator<V>;
+
+export class RecordedMap<V> extends Map<string, V> {
+  constructor(
+    readonly recorder: Recorder,
+    readonly role: ReadMap,
+    from: ReadonlyMap<string, V>,
+  ) {
+    super();
+    for (const [k, v] of Map.prototype.entries.call(from) as MapIterator<
+      [string, V]
+    >)
+      super.set(k, v);
+  }
+  override get(key: string) {
+    this.recorder.reads(this.role, key);
+    return super.get(key);
+  }
+  override has(key: string) {
+    this.recorder.reads(this.role, key);
+    return super.has(key);
+  }
+  override set(key: string, value: V) {
+    this.recorder.wrote(this.role, "set", key);
+    return super.set(key, value);
+  }
+  override delete(key: string) {
+    this.recorder.wrote(this.role, "delete", key);
+    return super.delete(key);
+  }
+  override get size() {
+    this.recorder.reads(this.role);
+    return super.size;
+  }
+  override forEach(...args: Parameters<Map<string, V>["forEach"]>) {
+    this.recorder.reads(this.role);
+    super.forEach(...args);
+  }
+  override keys() {
+    this.recorder.reads(this.role);
+    return super.keys();
+  }
+  override values() {
+    this.recorder.reads(this.role);
+    return super.values();
+  }
+  override entries() {
+    this.recorder.reads(this.role);
+    return super.entries();
+  }
+  override [Symbol.iterator]() {
+    return this.entries();
+  }
+}
+
+const copy = <V>(map: Map<string, V>) =>
+  map instanceof RecordedMap
+    ? new RecordedMap<V>(map.recorder, map.role, map)
+    : new Map(map);
+
 export function cloneState(state: EvalState): EvalState {
   return {
-    bodies: new Map(state.bodies),
-    sketches: new Map(state.sketches),
-    planes: new Map(state.planes),
+    bodies: copy(state.bodies),
+    sketches: copy(state.sketches),
+    planes: copy(state.planes),
     blocked: state.blocked,
   };
 }

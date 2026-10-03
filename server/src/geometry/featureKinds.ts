@@ -1,6 +1,7 @@
 import { createRegistry, type Feature } from "@rockett/shared";
 import {
   cloneState,
+  unrecorded,
   type EvalState,
   type FeatureOutcome,
 } from "./featureState.js";
@@ -49,12 +50,12 @@ export function evaluateFeature(
             feature,
           ),
         );
-        for (const body of state.bodies.values()) own.keep(body.shape);
+        for (const body of unrecorded(state.bodies)) own.keep(body.shape);
         completed = true;
         return outcome;
       } finally {
         const held = new Set<ShapeMap<unknown>>(
-          [...state.bodies.values()].map((body) => body.names),
+          [...unrecorded(state.bodies)].map((body) => body.names),
         );
         for (const map of made) {
           const cleanup = own({ delete: () => map.release() });
