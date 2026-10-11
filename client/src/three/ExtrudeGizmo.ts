@@ -1,28 +1,22 @@
-/**
- * Extrude drag manipulator: a Fusion-style arrow at the profile/face that
- * drags the extrude distance along its normal, with zoom-dependent snapping
- * and a live translucent preview of the resulting solid.
- */
-
 import * as THREE from "three";
-import type { PlaneFrame, Profile } from "@rockett/shared";
+import { findProfile, type PlaneFrame, type Profile } from "@rockett/shared";
+import { useStore } from "../store";
+import { baseBodies } from "../previewBase";
+import { meshOf } from "./meshes";
+import { faceCentroid, frameAlong, profileCentroid } from "./featureHandles";
 import { disposeObject } from "./dispose";
 import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
 import { themeColor } from "../theme/tokens";
+import { GIZMO_APPEARANCE, PREVIEW_APPEARANCE } from "../tunables";
 
 export interface GizmoSource {
-  /** Base plane frame; the arrow points along frame.normal. */
   frame: PlaneFrame;
-  /** Anchor point (u,v) on the plane. */
   anchorUV: [number, number];
-  /** Profile outline for the drag preview (sketch-profile extrudes). */
   profile?: Profile | undefined;
-  /** Face triangles + boundary polylines for face-extrude previews. */
   faceGhost?:
     | {
         positions: number[];
         indices: number[];
-        /** world-space boundary polylines [x,y,z,...] */
         boundary: number[][];
       }
     | undefined;
@@ -36,13 +30,9 @@ export class ExtrudeGizmo extends Manipulator {
   origin = new THREE.Vector3();
   axis = new THREE.Vector3(0, 0, 1);
 
-  /** Signed distance along the axis (negative = reversed). */
   value = 0;
-  /** Whether the preview shows a cut (red) rather than added material (blue). */
   private cut: boolean;
-  /** Anchor on the profile plane itself (before any start offset). */
   private baseOrigin = new THREE.Vector3();
-  /** Start offset along the axis: the arrow and preview begin this far from the plane. */
   private startOffset = 0;
 
   constructor(
@@ -77,20 +67,24 @@ export class ExtrudeGizmo extends Manipulator {
       color: themeColor("gizmo"),
       depthTest: false,
       transparent: true,
-      opacity: 0.95,
+      opacity: GIZMO_APPEARANCE.shaftOpacity,
     });
     this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 12), mat);
     this.cone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 16), mat.clone());
     this.shaft.renderOrder = 20;
     this.cone.renderOrder = 20;
+    this.shaft.userData.themeToken = "gizmo";
+    this.cone.userData.themeToken = "gizmo";
     (this.shaft.userData as any).extrudeGizmo = true;
     (this.cone.userData as any).extrudeGizmo = true;
-    this.group.add(this.shaft);
-    this.group.add(this.cone);
+    for (const mesh of [this.shaft, this.cone]) {
+      mesh.frustumCulled = false;
+      mesh.onBeforeRender = () => this.layoutArrow();
+      this.group.add(mesh);
+    }
     this.update(initialValue);
   }
 
-  /** Move the start plane: arrow base and preview shift along the axis. */
   setStartOffset(offset: number) {
     if (this.startOffset === offset) return;
     this.startOffset = offset;
@@ -98,11 +92,11 @@ export class ExtrudeGizmo extends Manipulator {
     this.update(this.value);
   }
 
-  /** Switch the preview between add (blue) and cut (red) without rebuilding. */
   setCut(cut: boolean) {
     if (this.cut === cut) return;
     this.cut = cut;
     if (this.previewMesh) {
+      this.previewMesh.userData.themeToken = cut ? "gizmo-cut" : "gizmo";
       (this.previewMesh.material as THREE.MeshBasicMaterial).color.set(
         themeColor(cut ? "gizmo-cut" : "gizmo"),
       );
@@ -111,13 +105,17 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   private previewMaterial(): THREE.MeshBasicMaterial {
-    return new THREE.MeshBasicMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: themeColor(this.cut ? "gizmo-cut" : "gizmo"),
       transparent: true,
-      opacity: this.cut ? 0.3 : 0.22,
+      opacity: this.cut
+        ? PREVIEW_APPEARANCE.gizmoCutOpacity
+        : PREVIEW_APPEARANCE.gizmoAddOpacity,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
+    material.userData.themeToken = this.cut ? "gizmo-cut" : "gizmo";
+    return material;
   }
 
   private removePreview() {
@@ -128,15 +126,24 @@ export class ExtrudeGizmo extends Manipulator {
     }
   }
 
-  /** Re-position arrow + preview for a (signed) distance value. */
   update(value: number) {
     this.value = value;
+    this.layoutArrow();
+    this.updatePreview(value);
+    this.host.requestRender();
+  }
+
+  private length(): number {
+    return Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4);
+  }
+
+  private layoutArrow() {
     const wpp = this.host.worldPerPixel();
     const shaftRadius = wpp * 1.6;
     const coneH = wpp * 16;
     const coneR = wpp * 5;
-    const sign = value >= 0 ? 1 : -1;
-    const len = Math.max(Math.abs(value), wpp * 4);
+    const sign = this.value >= 0 ? 1 : -1;
+    const len = this.length();
 
     const tip = this.origin
       .clone()
@@ -155,9 +162,8 @@ export class ExtrudeGizmo extends Manipulator {
     this.cone.position.copy(tip);
     this.cone.quaternion.copy(quat);
     this.cone.scale.set(coneR, coneH, coneR);
-
-    this.updatePreview(value);
-    this.host.requestRender();
+    this.shaft.updateMatrixWorld();
+    this.cone.updateMatrixWorld();
   }
 
   private updatePreview(value: number) {
@@ -198,7 +204,6 @@ export class ExtrudeGizmo extends Manipulator {
       ),
     );
     if (value < 0) {
-      // extrude backwards along the normal
       basis.multiply(new THREE.Matrix4().makeTranslation(0, 0, value));
     }
     geom.applyMatrix4(basis);
@@ -207,17 +212,14 @@ export class ExtrudeGizmo extends Manipulator {
     this.group.add(this.previewMesh);
   }
 
-  /** Translucent prism ghost for a face extrude: offset cap + side walls. */
   private updateFaceGhost(value: number) {
     const ghost = this.source.faceGhost;
     if (!ghost) return;
-    // the prism runs from the start plane (face + startOffset) to start + value
     const start = this.axis.clone().multiplyScalar(this.startOffset);
     const off = this.axis.clone().multiplyScalar(this.startOffset + value);
     const positions: number[] = [];
     const indices: number[] = [];
 
-    // cap: the face's triangles offset along the extrude axis
     for (let i = 0; i + 2 < ghost.positions.length; i += 3) {
       positions.push(
         ghost.positions[i]! + off.x,
@@ -227,8 +229,6 @@ export class ExtrudeGizmo extends Manipulator {
     }
     indices.push(...ghost.indices);
 
-    // side walls: quad strips between each boundary polyline (at the start
-    // plane) and its offset
     for (const poly of ghost.boundary) {
       const base = positions.length / 3;
       const n = poly.length / 3;
@@ -263,9 +263,9 @@ export class ExtrudeGizmo extends Manipulator {
 
   private tip(extra = 0): THREE.Vector3 {
     const sign = this.value >= 0 ? 1 : -1;
-    const len =
-      Math.max(Math.abs(this.value), this.host.worldPerPixel() * 4) + extra;
-    return this.origin.clone().addScaledVector(this.axis, sign * len);
+    return this.origin
+      .clone()
+      .addScaledVector(this.axis, sign * (this.length() + extra));
   }
 
   hitTest(clientX: number, clientY: number): boolean {
@@ -277,11 +277,10 @@ export class ExtrudeGizmo extends Manipulator {
   }
 
   setHover(hover: boolean) {
-    this.paint(
-      themeColor(hover ? "gizmo-hover" : "gizmo"),
-      this.shaft,
-      this.cone,
-    );
+    const token = hover ? "gizmo-hover" : "gizmo";
+    this.shaft.userData.themeToken = token;
+    this.cone.userData.themeToken = token;
+    this.paint(themeColor(token), this.shaft, this.cone);
   }
 
   dragValue(clientX: number, clientY: number): number {
@@ -300,4 +299,48 @@ export class ExtrudeGizmo extends Manipulator {
   tipScreenPosition(): { x: number; y: number } {
     return this.labelPosition(this.tip());
   }
+}
+
+export function extrudeGizmoSource(): GizmoSource | null {
+  const s = useStore.getState();
+  if (s.active?.id !== "design.feature" || s.active.state.type !== "extrude")
+    return null;
+  const profSel = s.selection.find((x) => x.kind === "profile");
+  if (profSel) {
+    const sk = s.evaluation?.sketches.find(
+      (x) => x.featureId === profSel.sketchId,
+    );
+    const p = sk && findProfile(sk, profSel.profileId);
+    if (sk && p && p.polygon.length >= 6)
+      return { frame: sk.frame, anchorUV: profileCentroid(p), profile: p };
+  }
+  const faceSel = s.selection.find((x) => x.kind === "face");
+  if (!faceSel) return null;
+  const found = baseBodies(s).find((b) => b.bodyId === faceSel.bodyId);
+  const body = found && meshOf(found);
+  const face = body?.faces.find((f) => f.name === faceSel.faceName);
+  if (!body || !face || face.surface.type !== "plane") return null;
+  const centroid = faceCentroid(body, face);
+  if (!centroid) return null;
+  const remap = new Map<number, number>();
+  const positions: number[] = [];
+  const indices: number[] = [];
+  for (let i = face.start; i < face.start + face.count; i++) {
+    const vi = body.indices[i]!;
+    let ni = remap.get(vi);
+    if (ni === undefined) {
+      ni = positions.length / 3;
+      remap.set(vi, ni);
+      positions.push(...body.positions.slice(vi * 3, vi * 3 + 3));
+    }
+    indices.push(ni);
+  }
+  const boundary = body.edges
+    .filter((ed) => ed.name.includes(faceSel.faceName))
+    .map((ed) => ed.polyline);
+  return {
+    frame: frameAlong(centroid, new THREE.Vector3(...face.surface.normal)),
+    anchorUV: [0, 0],
+    faceGhost: { positions, indices, boundary },
+  };
 }

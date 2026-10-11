@@ -1,12 +1,19 @@
 import {
+  createEmptyDocument,
+  formatSize,
+  parse,
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_LIMIT_MB,
   PROJECT_FILE_VERSION,
+  projectView,
   referencedAssets,
   type CadDocument,
   type ProjectFile,
+  type ProjectView,
 } from "@rockett/shared";
 import { api } from "./api";
+
+export { formatSize };
 
 export interface BrowserProject {
   key: string;
@@ -17,9 +24,11 @@ export interface BrowserProject {
   revision: number;
   document: CadDocument;
   assets: Record<string, Blob>;
+  view: ProjectView | null;
 }
 
 const STORE = "projects";
+const BACKUPS = "backups";
 const FILE_LIMIT = PROJECT_FILE_LIMIT_MB * 1024 * 1024;
 const IMAGE_FEATURE_BYTES = 1024;
 
@@ -29,31 +38,129 @@ export class StaleRecord extends Error {
   }
 }
 
+const SHARED = "rockett";
+const HEIR = "rockett.browserHeir";
+let user: string | null = null;
 let database: Promise<IDBDatabase> | undefined;
+let handedOver = false;
+
+export function browserUser(id: string | null): void {
+  if (id === user) return;
+  user = id;
+  handedOver = false;
+  void database?.then(
+    (db) => db.close(),
+    () => undefined,
+  );
+  database = undefined;
+}
+
+export function takeHandover(): boolean {
+  const shown = handedOver;
+  handedOver = false;
+  return shown;
+}
 
 function open(): Promise<IDBDatabase> {
-  database ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open("rockett", 1);
-    req.onupgradeneeded = () =>
-      req.result.createObjectStore(STORE, { keyPath: "key" });
-    req.onsuccess = () => resolve(req.result);
-    req.addEventListener("error", () => reject(req.error));
-  }).catch((e) => {
-    database = undefined;
-    throw e;
-  });
+  if (user === null)
+    return Promise.reject(
+      new Error("Sign in to keep projects in this browser."),
+    );
+  const name = `${SHARED}-${user}`;
+  database ??= connect(name)
+    .then(async (db) => {
+      await adopt(db, name).catch((e) => {
+        db.close();
+        throw e;
+      });
+      return db;
+    })
+    .catch((e) => {
+      database = undefined;
+      throw e;
+    });
   return database;
 }
 
-async function transact<T>(
+function connect(name: string): Promise<IDBDatabase> {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(name, 2);
+    req.onupgradeneeded = (e) => upgrade(req, e.oldVersion);
+    req.onsuccess = () => resolve(req.result);
+    req.addEventListener("error", () => reject(req.error));
+  });
+}
+
+async function adopt(db: IDBDatabase, own: string): Promise<void> {
+  if (!(await indexedDB.databases()).some((d) => d.name === SHARED)) return;
+  localStorage.setItem(HEIR, localStorage.getItem(HEIR) ?? own);
+  if (localStorage.getItem(HEIR) !== own) return;
+  const shared = await connect(SHARED);
+  try {
+    for (const name of [STORE, BACKUPS]) {
+      const records = await run<BrowserProject[]>(
+        shared,
+        name,
+        "readonly",
+        (store, done) => {
+          const req = store.getAll();
+          req.onsuccess = () => done(req.result);
+        },
+      );
+      if (!records.length) continue;
+      await run<void>(
+        db,
+        name,
+        "readwrite",
+        (store) => {
+          for (const r of records) {
+            const req = store.get(r.key);
+            req.onsuccess = () => {
+              if (req.result === undefined) store.put(r);
+            };
+          }
+        },
+        "strict",
+      );
+      await run<void>(shared, name, "readwrite", (store) => {
+        for (const r of records) store.delete(r.key);
+      });
+      handedOver ||= name === STORE;
+    }
+  } finally {
+    shared.close();
+  }
+}
+
+function upgrade(req: IDBOpenDBRequest, oldVersion: number): void {
+  const db = req.result;
+  if (oldVersion < 1) db.createObjectStore(STORE, { keyPath: "key" });
+  const backups = db.createObjectStore(BACKUPS, { keyPath: "key" });
+  if (oldVersion < 1) return;
+  const projects = req.transaction!.objectStore(STORE);
+  const all = projects.getAll();
+  all.onsuccess = () => {
+    for (const r of all.result as BrowserProject[]) {
+      backups.put(r);
+      projects.put({ ...r, view: null });
+    }
+  };
+}
+
+type Work<T> = (
+  store: IDBObjectStore,
+  done: (value: T) => void,
+  abort: (reason?: unknown) => void,
+) => void;
+
+function run<T>(
+  db: IDBDatabase,
+  name: string,
   mode: IDBTransactionMode,
-  work: (
-    store: IDBObjectStore,
-    done: (value: T) => void,
-    abort: (reason?: unknown) => void,
-  ) => void,
+  work: Work<T>,
+  durability: IDBTransactionDurability = "default",
 ): Promise<T> {
-  const tx = (await open()).transaction(STORE, mode);
+  const tx = db.transaction(name, mode, { durability });
   return new Promise<T>((resolve, reject) => {
     let result: T;
     let failure: unknown;
@@ -62,7 +169,7 @@ async function transact<T>(
       reject(tx.error ?? failure ?? new StaleRecord()),
     );
     work(
-      tx.objectStore(STORE),
+      tx.objectStore(name),
       (value) => (result = value),
       (reason) => {
         failure = reason;
@@ -70,6 +177,14 @@ async function transact<T>(
       },
     );
   });
+}
+
+async function transact<T>(
+  mode: IDBTransactionMode,
+  work: Work<T>,
+  durability?: IDBTransactionDurability,
+): Promise<T> {
+  return run(await open(), STORE, mode, work, durability);
 }
 
 function newKey(): string {
@@ -82,6 +197,7 @@ function record(
   revision: number,
   document: CadDocument,
   assets: Record<string, Blob>,
+  view: ProjectView | null,
 ): BrowserProject {
   const size = Object.values(assets).reduce(
     (sum, blob) => sum + blob.size,
@@ -96,15 +212,8 @@ function record(
     revision,
     document,
     assets,
+    view,
   };
-}
-
-export function formatSize(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB"];
-  let n = bytes;
-  let unit = 0;
-  for (; n >= 1024 && unit < units.length - 1; unit++) n /= 1024;
-  return unit === 0 ? `${n} B` : `${n.toFixed(1)} ${units[unit]}`;
 }
 
 export interface StorageLine {
@@ -155,20 +264,25 @@ export const getBrowserProject = (key: string) =>
 function rewrite(
   key: string,
   change: (r: BrowserProject, now: string) => BrowserProject | null,
+  durability?: IDBTransactionDurability,
 ): Promise<BrowserProject> {
-  return transact<BrowserProject>("readwrite", (store, done, abort) => {
-    const req = store.get(key);
-    req.onsuccess = () => {
-      const next = req.result && change(req.result, new Date().toISOString());
-      if (!next) return abort();
-      try {
-        store.put(next);
-        done(next);
-      } catch (e) {
-        abort(e);
-      }
-    };
-  });
+  return transact<BrowserProject>(
+    "readwrite",
+    (store, done, abort) => {
+      const req = store.get(key);
+      req.onsuccess = () => {
+        const next = req.result && change(req.result, new Date().toISOString());
+        if (!next) return abort();
+        try {
+          store.put(next);
+          done(next);
+        } catch (e) {
+          abort(e);
+        }
+      };
+    },
+    durability,
+  );
 }
 
 export const saveBrowserDocument = (
@@ -189,9 +303,13 @@ export const saveBrowserDocument = (
               added[name] ?? r.assets[name]!,
             ]),
           ),
+          r.view,
         )
       : null,
   );
+
+export const saveBrowserView = (key: string, view: ProjectView) =>
+  rewrite(key, (r) => ({ ...r, view }));
 
 export const renameBrowserProject = (key: string, name: string) =>
   rewrite(key, (r, now) =>
@@ -200,29 +318,60 @@ export const renameBrowserProject = (key: string, name: string) =>
       r.revision + 1,
       { ...r.document, name, modifiedAt: now },
       r.assets,
+      r.view,
     ),
   );
 
-export const duplicateBrowserProject = (key: string) =>
-  rewrite(key, (r, now) =>
-    record(
-      newKey(),
-      1,
-      {
-        ...r.document,
-        name: `${r.name} (copy)`,
-        createdAt: now,
-        modifiedAt: now,
-      },
-      r.assets,
-    ),
+const copyBrowserProject = (
+  key: string,
+  document: (r: BrowserProject, now: string) => CadDocument,
+  durability?: IDBTransactionDurability,
+) =>
+  rewrite(
+    key,
+    (r, now) => record(newKey(), 1, document(r, now), r.assets, r.view),
+    durability,
   );
+
+export const duplicateBrowserProject = (key: string) =>
+  copyBrowserProject(key, (r, now) => ({
+    ...r.document,
+    name: `${r.name} (copy)`,
+    createdAt: now,
+    modifiedAt: now,
+  }));
+
+export async function upgradeBrowserNaming<T>(
+  key: string,
+  commit: () => Promise<T>,
+): Promise<T> {
+  await copyBrowserProject(
+    key,
+    (r) => ({ ...r.document, name: `${r.name} (before naming upgrade)` }),
+    "strict",
+  ).catch((e: Error) => {
+    throw new Error(
+      `Naming not upgraded: the version 1 copy could not be kept in this browser. ${e.message.replace(/\.$/, "")}.`,
+    );
+  });
+  return commit();
+}
 
 export const deleteBrowserProject = (key: string) =>
   transact<void>("readwrite", (store) => void store.delete(key));
 
-const keepBrowserProject = (r: BrowserProject) =>
-  transact<void>("readwrite", (store) => void store.add(r));
+async function keepBrowserProject(r: BrowserProject): Promise<BrowserProject> {
+  void navigator.storage?.persist().catch(() => false);
+  await transact<void>("readwrite", (store) => void store.add(r));
+  return r;
+}
+
+export function createBrowserProject(name: string): Promise<BrowserProject> {
+  const key = newKey();
+  return keepBrowserProject(
+    record(key, 1, createEmptyDocument(key, name), {}, null),
+  );
+}
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -234,13 +383,14 @@ function toBase64(bytes: Uint8Array): string {
 const base64Size = (bytes: number) => 4 * Math.ceil(bytes / 3);
 
 export function projectFileSize(
-  r: Pick<BrowserProject, "document" | "assets">,
+  r: Pick<BrowserProject, "document" | "assets" | "view">,
 ): number {
   const envelope: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     version: PROJECT_FILE_VERSION,
     document: r.document,
     assets: Object.fromEntries(Object.keys(r.assets).map((n) => [n, ""])),
+    ...(r.view && { view: r.view }),
   };
   return Object.values(r.assets).reduce(
     (sum, blob) => sum + base64Size(blob.size),
@@ -249,7 +399,7 @@ export function projectFileSize(
 }
 
 export const fitsWithImage = (
-  r: Pick<BrowserProject, "document" | "assets">,
+  r: Pick<BrowserProject, "document" | "assets" | "view">,
   imageBytes: number,
 ) =>
   projectFileSize(r) + base64Size(imageBytes) + IMAGE_FEATURE_BYTES <=
@@ -264,17 +414,26 @@ export async function toProjectFile(r: BrowserProject): Promise<ProjectFile> {
     version: PROJECT_FILE_VERSION,
     document: r.document,
     assets,
+    ...(r.view && { view: r.view }),
   };
 }
 
 export function fromProjectFile(file: ProjectFile): BrowserProject {
+  if (file.assemblies?.length)
+    throw new Error(
+      "This project has assemblies, which a browser project cannot hold yet.",
+    );
   const assets = Object.fromEntries(
     Object.entries(file.assets).map(([name, base64]) => [
       name,
       new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))]),
     ]),
   );
-  return record(newKey(), 1, file.document, assets);
+  const view =
+    file.view === undefined
+      ? null
+      : { camera: null, ...parse(projectView, file.view, "view") };
+  return record(newKey(), 1, file.document, assets, view);
 }
 
 export async function downloadBrowserProject(r: BrowserProject) {
@@ -290,15 +449,27 @@ export async function browserProjectFile(r: BrowserProject): Promise<File> {
   return new File([blob], fileName);
 }
 
-export async function moveToBrowser(id: string, name: string): Promise<void> {
-  void navigator.storage?.persist().catch(() => false);
-  const { blob } = await api.downloadProjectFile(id);
+export async function keepProjectFile(
+  blob: Blob,
+  name: string,
+): Promise<BrowserProject> {
   if (blob.size > FILE_LIMIT)
     throw new Error(
       `"${name}" is over the ${PROJECT_FILE_LIMIT_MB} MB project file limit, so it could not open from this browser.`,
     );
-  await keepBrowserProject(fromProjectFile(JSON.parse(await blob.text())));
-  await api.deleteProject(id).catch(() => {
+  let file: ProjectFile | undefined;
+  try {
+    file = JSON.parse(await blob.text());
+  } catch {}
+  if (file?.format !== PROJECT_FILE_FORMAT)
+    throw new Error("This is not a Rockett project file");
+  return keepBrowserProject(fromProjectFile(file));
+}
+
+export async function moveToBrowser(id: string, name: string): Promise<void> {
+  const { blob } = await api.downloadProjectFile(id);
+  const { document } = await keepProjectFile(blob, name);
+  await api.deleteProject(id, false, document.revision).catch(() => {
     throw new Error(
       `"${name}" is in this browser, but the server copy was not removed.`,
     );
@@ -308,14 +479,17 @@ export async function moveToBrowser(id: string, name: string): Promise<void> {
 export async function moveToServer(
   r: BrowserProject,
   folderId: string | null,
-): Promise<void> {
-  await api.uploadProjectFile(
+): Promise<string> {
+  const { document } = await api.uploadProjectFile(
     await browserProjectFile(r),
     folderId === null ? {} : { folderId },
   );
+  await Promise.all([api.getProject(document.id), api.getView(document.id)]);
+  await api.evaluate(document.id);
   await deleteBrowserProject(r.key).catch(() => {
     throw new Error(
       `"${r.name}" is on the server, but the copy in this browser was not removed.`,
     );
   });
+  return document.id;
 }

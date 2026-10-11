@@ -1,0 +1,45 @@
+{
+  "version": 3,
+  "data": {
+    "setups": [
+      {
+        "id": "s1",
+        "name": "Setup 1",
+        "bodies": ["b1"],
+        "stock": {
+          "kind": "boxAround",
+          "margins": {
+            "xMin": 2,
+            "xMax": 2,
+            "yMin": 2,
+            "yMax": 2,
+            "zMin": 2,
+            "zMax": 1
+          }
+        },
+        "wcs": {
+          "origin": {
+            "kind": "stockCorner",
+            "x": "min",
+            "y": "min",
+            "z": "max"
+          },
+          "axes": {
+            "x": "+x",
+            "z": "+z"
+          },
+          "offsetIndex": 1,
+          "machine": {
+            "kind": "unknown"
+          }
+        },
+        "safeHeight": 15,
+        "clearance": 3,
+        "material": "mdf",
+        "postId": "grbl",
+        "tolerance": 0.01
+      }
+    ],
+    "tools": []
+  }
+}

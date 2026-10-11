@@ -1,0 +1,43 @@
+{
+  "irVersion": 1,
+  "units": "mm",
+  "setupId": "setup-1",
+  "offsetIndex": 1,
+  "tools": [
+    {
+      "id": "t1",
+      "number": 1,
+      "name": "20 mm flat",
+      "kind": "flat",
+      "diameter": 20,
+      "fluteLength": 15,
+      "overallLength": 60,
+      "shankDiameter": 12,
+      "flutes": 3,
+      "centreCutting": true
+    }
+  ],
+  "sections": [
+    {
+      "operationId": "face-1",
+      "toolId": "t1",
+      "pass": "finish",
+      "spindle": { "rpm": 12000, "dir": "cw" },
+      "coolant": "off",
+      "moves": [
+        { "kind": "comment", "text": "Face 60 x 40 by 0.5 mm" },
+        { "kind": "rapid", "to": [-15, 0, 15] },
+        { "kind": "rapid", "to": [-15, 0, 5] },
+        { "kind": "feed", "to": [-15, 0, -0.5], "feed": 300, "role": "plunge" },
+        { "kind": "feed", "to": [75, 0, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "feed", "to": [75, 14, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "feed", "to": [-15, 14, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "feed", "to": [-15, 28, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "feed", "to": [75, 28, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "feed", "to": [75, 40, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "feed", "to": [-15, 40, -0.5], "feed": 1200, "role": "cut" },
+        { "kind": "rapid", "to": [-15, 40, 15] }
+      ]
+    }
+  ]
+}

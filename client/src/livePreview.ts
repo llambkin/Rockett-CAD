@@ -1,18 +1,18 @@
-import type { BodyPayload, FaceInfo, Feature } from "@rockett/shared";
+import type { FaceInfo, Feature, MeshPayload } from "@rockett/shared";
+import { meshOf, type LayerBody } from "./three/meshes";
 import type { ThemeColor } from "./theme/tokens";
+import { TIMING_MS } from "./tunables";
 
-type Send = (featureId: string, patch: Partial<Feature>) => Promise<void>;
+type Send<P> = (featureId: string, patch: P) => Promise<void>;
 
-export const PREVIEW_DWELL_MS = 300;
-
-export function createLivePreview({
+export function createLivePreview<
+  P extends Partial<Feature> = Partial<Feature>,
+>({
   send,
-  intervalMs = 250,
-  dwellMs = PREVIEW_DWELL_MS,
+  dwellMs = TIMING_MS.previewDebounce,
   now = () => performance.now(),
 }: {
-  send: Send;
-  intervalMs?: number;
+  send: Send<P>;
   dwellMs?: number;
   now?: () => number;
 }) {
@@ -24,23 +24,23 @@ export function createLivePreview({
     timer = undefined;
   };
   return {
-    during(featureId: string, patch: Partial<Feature>) {
+    during(featureId: string, patch: P) {
       const t = now();
-      if (inFlight || t - last <= intervalMs) return;
+      if (inFlight || t - last <= TIMING_MS.dragThrottle) return;
       last = t;
       inFlight = true;
       void send(featureId, patch).finally(() => {
         inFlight = false;
       });
     },
-    dwell(featureId: string, patch: Partial<Feature>) {
+    dwell(featureId: string, patch: P) {
       cancel();
       timer = setTimeout(() => {
         timer = undefined;
         void send(featureId, patch);
       }, dwellMs);
     },
-    commit(featureId: string, patch: Partial<Feature>) {
+    commit(featureId: string, patch: P) {
       cancel();
       void send(featureId, patch);
     },
@@ -75,13 +75,13 @@ export interface PreviewTint {
 }
 
 export interface PreviewGhost extends PreviewTint {
-  body: BodyPayload;
+  body: LayerBody;
 }
 
 function sameTriangles(
-  a: BodyPayload,
+  a: MeshPayload,
   fa: FaceInfo,
-  b: BodyPayload,
+  b: MeshPayload,
   fb: FaceInfo,
 ): boolean {
   if (fa.count !== fb.count) return false;
@@ -94,7 +94,7 @@ function sameTriangles(
   return true;
 }
 
-function changedFaces(old: BodyPayload | undefined, body: BodyPayload) {
+function changedFaces(old: MeshPayload | undefined, body: MeshPayload) {
   if (!old) return [{ start: 0, count: body.indices.length }];
   const before = new Map(old.faces.map((f) => [f.name, f]));
   const added = body.faces.filter((f) => !before.has(f.name));
@@ -109,8 +109,8 @@ function changedFaces(old: BodyPayload | undefined, body: BodyPayload) {
 
 export function previewTints(
   feature: Feature,
-  before: BodyPayload[],
-  after: BodyPayload[],
+  before: readonly LayerBody[],
+  after: readonly LayerBody[],
 ): Map<string, PreviewTint> {
   const tint = removesMaterial(feature) ? "preview-cut" : "preview-add";
   const old = new Map(before.map((b) => [b.bodyId, b]));
@@ -118,7 +118,10 @@ export function previewTints(
   for (const body of after) {
     const base = old.get(body.bodyId);
     if (base?.meshKey === body.meshKey) continue;
-    const ranges = changedFaces(base, body);
+    const shape = meshOf(body);
+    const baseShape = base && meshOf(base);
+    if (!shape || (base && !baseShape)) continue;
+    const ranges = changedFaces(baseShape, shape);
     if (ranges.length > 0) tints.set(body.bodyId, { tint, ranges });
   }
   return tints;

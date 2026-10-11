@@ -9,7 +9,9 @@ import {
   fitsWithImage,
   getBrowserProject,
   saveBrowserDocument,
+  saveBrowserView,
   StaleRecord,
+  upgradeBrowserNaming,
 } from "./browserProjects";
 import { BROWSER_PATH, browserKeyFromPath, browserProjectPath } from "./paths";
 import { followPath as followProjectPath, useStore } from "./store";
@@ -26,11 +28,25 @@ interface Session {
 }
 
 let open: Session | null = null;
+let viewing: Session | null = null;
 let pending: string | null = null;
 let ticket = 0;
 
 const changedElsewhere = (name: string) =>
   `"${name}" changed in another tab. Reload to continue.`;
+
+const notSaved = (e: Error) =>
+  `Not saved in this browser: ${String(e.message).replace(/\.$/, "")}.`;
+
+useStore.subscribe((state, prev) => {
+  const session = viewing;
+  if (!session || state.projectId !== session.id || state.view === prev.view)
+    return;
+  saveBrowserView(session.key, state.view).catch((e: Error) => {
+    if (!(e instanceof StaleRecord) && open === session)
+      useStore.setState({ notSaved: notSaved(e) });
+  });
+});
 
 async function save(session: Session): Promise<void> {
   for (
@@ -57,10 +73,7 @@ async function save(session: Session): Promise<void> {
       session.stopped = e instanceof StaleRecord;
       if (session.stopped)
         useStore.setState({ error: changedElsewhere(document.name) });
-      else if (open === session)
-        useStore.setState({
-          notSaved: `Not saved in this browser: ${String(e.message).replace(/\.$/, "")}.`,
-        });
+      else if (open === session) useStore.setState({ notSaved: notSaved(e) });
     }
   }
   session.saving = null;
@@ -90,6 +103,16 @@ export function dropBrowserCopy(): void {
   if (open) void api.deleteProject(open.id, true).catch(() => {});
 }
 
+export async function upgradingNaming<T>(
+  id: string,
+  commit: () => Promise<T>,
+): Promise<T> {
+  const session = open?.id === id ? open : null;
+  if (!session) return commit();
+  await session.saving;
+  return upgradeBrowserNaming(session.key, commit);
+}
+
 async function refuseOversizeImage(key: string, image: File): Promise<void> {
   if (!fitsWithImage(await getBrowserProject(key), image.size))
     throw new Error(
@@ -111,15 +134,20 @@ export async function openBrowserProject(
   const mine = ++ticket;
   pending = key;
   let session: Session;
+  let copy: string | undefined;
   try {
     const record = await getBrowserProject(key);
     const { document } = await api.uploadProjectFile(
       await browserProjectFile(record),
       { temporary: "true" },
     );
+    const { id } = document;
+    copy = id;
+    const view = record.view;
+    if (view) await api.putView(id, view).catch(() => api.putView(id, view));
     session = {
       key,
-      id: document.id,
+      id,
       revision: record.revision,
       assets: new Set(Object.keys(record.assets)),
       opened: false,
@@ -128,6 +156,7 @@ export async function openBrowserProject(
       saving: null,
     };
   } catch (e: any) {
+    if (copy) void api.deleteProject(copy).catch(() => {});
     if (mine === ticket) fail(e.message);
     return;
   }
@@ -136,7 +165,7 @@ export async function openBrowserProject(
     return;
   }
   pending = null;
-  open = session;
+  open = viewing = session;
   watchProject({
     id: session.id,
     onDocument: (document) => keep(session, document),

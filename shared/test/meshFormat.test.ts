@@ -141,3 +141,36 @@ it("encodes a 2,000-triangle body to less than half its JSON size", () => {
   expect(encoded.byteLength).toBeLessThan(JSON.stringify(body).length / 2);
   expect(decodeMesh(encoded).indices).toEqual(Uint32Array.from(body.indices));
 });
+
+const triangles: MeshSource = {
+  positions: [0, 0, 0, 4, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 5, 2, 0, 0],
+  normals: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, -1, 0, 0, -1, 0, 0, -1, 0],
+  indices: [0, 1, 2, 3, 5, 4],
+  triangles: ["x:mesh1", "x:mesh2"],
+  edges: [],
+  vertices: [],
+};
+
+it("rebuilds one plane face per named triangle", () => {
+  expect(decodeMesh(encodeMesh(triangles)).faces).toEqual([
+    {
+      name: "x:mesh1",
+      start: 0,
+      count: 3,
+      surface: { type: "plane", origin: [0, 0, 0], normal: [0, 0, 1] },
+      area: 6,
+    },
+    {
+      name: "x:mesh2",
+      start: 3,
+      count: 3,
+      surface: { type: "plane", origin: [0, 0, 0], normal: [0, -1, 0] },
+      area: 5,
+    },
+  ]);
+});
+
+it("rejects triangle names that do not match the arrays", () => {
+  const bytes = encodeMesh({ ...triangles, triangles: ["x:mesh1"] });
+  expect(() => decodeMesh(bytes)).toThrow(/triangles/);
+});

@@ -1,6 +1,6 @@
 import {
   createEmptyDocument,
-  type BodyPayload,
+  type MeshedBody,
   type CadDocument,
   type EdgeInfo,
   type EvaluateResult,
@@ -49,7 +49,7 @@ const box = (at: Vec3, unit: Vec3): Vec3 => [
   at[2] + unit[2] * BOX[2],
 ];
 
-function boxBody(bodyId: string, at: Vec3): BodyPayload {
+function boxBody(bodyId: string, at: Vec3): MeshedBody {
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
@@ -115,7 +115,6 @@ function boxBody(bodyId: string, at: Vec3): BodyPayload {
   return {
     bodyId,
     name: bodyId,
-    visible: true,
     meshKey: `box:${at.join(",")}`,
     positions,
     normals,
@@ -130,8 +129,8 @@ function boxBody(bodyId: string, at: Vec3): BodyPayload {
   };
 }
 
-export function manyBodyPayloads(columns = 25, rows = 40): BodyPayload[] {
-  const bodies: BodyPayload[] = [];
+export function manyBodyPayloads(columns = 25, rows = 40): MeshedBody[] {
+  const bodies: MeshedBody[] = [];
   for (let y = 0; y < rows; y++)
     for (let x = 0; x < columns; x++)
       bodies.push(
@@ -188,7 +187,6 @@ export function imageScene(
       fileName: `asset${k}.png`,
       transform: { u: k * IMAGE_PITCH, v: 0, rotation: 0, scale: 0.01 },
       opacity: 0.5,
-      visible: true,
       width: IMAGE_PIXELS,
       height: IMAGE_PIXELS,
     }),

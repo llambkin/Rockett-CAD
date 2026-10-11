@@ -1,61 +1,144 @@
 import * as THREE from "three";
 import type { CadDocument, EvaluateResult } from "@rockett/shared";
 import { type CadViewport, uv3 } from "./CadViewport";
-import { clearGroup } from "./dispose";
+import type { LayerHandle } from "./sceneLayers";
+
+const IDLE_BUDGET_BYTES = 256 * 1024 * 1024;
+const MAX_DECODES = 4;
+const MAX_IMAGE_SIDE = 4096;
 
 interface CachedTexture {
+  url: string;
   texture: THREE.Texture;
+  refs: number;
+  bytes: number;
   loading: boolean;
 }
 
 interface ImageLayer {
-  vp: CadViewport;
-  root: THREE.Group;
-  textures: Map<string, CachedTexture>;
-  used: Set<string>;
+  root: LayerHandle;
+  held: CachedTexture[];
 }
 
-const layers = new WeakMap<CadViewport, ImageLayer>();
+const cache = new Map<string, CachedTexture>();
+const waiting: CachedTexture[] = [];
+const loader = new THREE.ImageLoader();
+let decoding = 0;
+const layers = new Map<CadViewport, ImageLayer>();
 
 function layerFor(vp: CadViewport): ImageLayer {
-  let layer = layers.get(vp);
-  if (!layer) {
-    layer = {
-      vp,
-      root: new THREE.Group(),
-      textures: new Map(),
-      used: new Set(),
-    };
-    vp.scene.add(layer.root);
-    layers.set(vp, layer);
-  }
+  const existing = layers.get(vp);
+  if (existing) return existing;
+  const layer: ImageLayer = { root: vp.addLayer("referenceImages"), held: [] };
+  layer.root.group.addEventListener("removed", () => {
+    layers.delete(vp);
+    for (const entry of layer.held.splice(0)) release(entry);
+    evictIdle();
+  });
+  layers.set(vp, layer);
   return layer;
 }
 
-function evictUnused(layer: ImageLayer) {
-  for (const [url, cached] of layer.textures) {
-    if (cached.loading || layer.used.has(url)) continue;
-    layer.textures.delete(url);
-    cached.texture.dispose();
+function acquire(url: string): CachedTexture {
+  const hit = cache.get(url);
+  if (hit) {
+    hit.refs++;
+    return hit;
+  }
+  const entry: CachedTexture = {
+    url,
+    texture: new THREE.Texture(),
+    refs: 1,
+    bytes: 0,
+    loading: true,
+  };
+  entry.texture.colorSpace = THREE.SRGBColorSpace;
+  cache.set(url, entry);
+  waiting.push(entry);
+  pump();
+  return entry;
+}
+
+function release(entry: CachedTexture) {
+  if (--entry.refs > 0) return;
+  if (cache.get(entry.url) !== entry) {
+    entry.texture.dispose();
+    return;
+  }
+  cache.delete(entry.url);
+  cache.set(entry.url, entry);
+}
+
+function hold(layer: ImageLayer, url: string): THREE.Texture {
+  const entry = acquire(url);
+  layer.held.push(entry);
+  return entry.texture;
+}
+
+function pump() {
+  while (decoding < MAX_DECODES) {
+    const entry = waiting.shift();
+    if (!entry) return;
+    if (entry.refs > 0) decode(entry);
+    else drop(entry);
   }
 }
 
-function acquireTexture(layer: ImageLayer, url: string): THREE.Texture {
-  layer.used.add(url);
-  const hit = layer.textures.get(url);
-  if (hit) return hit.texture;
+function decode(entry: CachedTexture) {
+  decoding++;
   const settle = () => {
-    cached.loading = false;
-    evictUnused(layer);
-    layer.vp.requestRender();
+    entry.loading = false;
+    decoding--;
+    pump();
+    evictIdle();
+    for (const vp of layers.keys()) vp.requestRender();
   };
-  const cached: CachedTexture = {
-    texture: new THREE.TextureLoader().load(url, settle, undefined, settle),
-    loading: true,
-  };
-  cached.texture.colorSpace = THREE.SRGBColorSpace;
-  layer.textures.set(url, cached);
-  return cached.texture;
+  loader.load(
+    entry.url,
+    (image) => {
+      const bounded = boundedImage(image);
+      entry.texture.image = bounded;
+      entry.texture.needsUpdate = true;
+      entry.bytes = bounded.width * bounded.height * 4;
+      if (entry.texture.generateMipmaps) entry.bytes = (entry.bytes / 3) * 4;
+      settle();
+    },
+    undefined,
+    () => {
+      cache.delete(entry.url);
+      if (entry.refs === 0) entry.texture.dispose();
+      settle();
+    },
+  );
+}
+
+function boundedImage(image: HTMLImageElement) {
+  const side = Math.max(image.width, image.height);
+  if (side <= MAX_IMAGE_SIDE) return image;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round((image.width * MAX_IMAGE_SIDE) / side));
+  canvas.height = Math.max(
+    1,
+    Math.round((image.height * MAX_IMAGE_SIDE) / side),
+  );
+  canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function drop(entry: CachedTexture) {
+  cache.delete(entry.url);
+  entry.texture.dispose();
+}
+
+function evictIdle() {
+  let idle = 0;
+  for (const entry of cache.values()) if (entry.refs === 0) idle += entry.bytes;
+  for (const entry of cache.values()) {
+    if (idle <= IDLE_BUDGET_BYTES) return;
+    if (entry.refs > 0 || entry.loading) continue;
+    idle -= entry.bytes;
+    drop(entry);
+  }
 }
 
 export function syncReferenceImages(
@@ -65,10 +148,11 @@ export function syncReferenceImages(
   hidden: ReadonlySet<string>,
 ) {
   const layer = layerFor(vp);
-  clearGroup(layer.root);
-  layer.used.clear();
+  const previous = layer.held.splice(0);
+  layer.root.clear();
   if (doc) addImages(layer, doc, evaluation, hidden);
-  evictUnused(layer);
+  for (const entry of previous) release(entry);
+  evictIdle();
   vp.requestRender();
 }
 
@@ -89,7 +173,7 @@ function addImages(
     const h = f.height * f.transform.scale;
     const geom = new THREE.PlaneGeometry(w, h);
     const mat = new THREE.MeshBasicMaterial({
-      map: acquireTexture(layer, url),
+      map: hold(layer, url),
       transparent: true,
       opacity: f.opacity,
       side: THREE.DoubleSide,
@@ -108,6 +192,6 @@ function addImages(
     );
     mesh.applyMatrix4(new THREE.Matrix4().multiplyMatrices(m, rot));
     mesh.renderOrder = -2;
-    layer.root.add(mesh);
+    layer.root.group.add(mesh);
   }
 }

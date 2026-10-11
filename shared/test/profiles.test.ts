@@ -278,7 +278,7 @@ describe("crossing curves (X-junctions)", () => {
     ];
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(4);
-    const areas = profiles.map((p) => p.area).sort((a, b) => a - b);
+    const areas = profiles.map((p) => p.area).toSorted((a, b) => a - b);
     const half = (Math.PI * 25) / 2;
     expect(Math.abs(areas[0]! - half)).toBeLessThan(0.3);
     expect(Math.abs(areas[1]! - half)).toBeLessThan(0.3);
@@ -329,7 +329,9 @@ describe("crossing curves (X-junctions)", () => {
     const entities = ninjaStar().filter((e) => !e.id.startsWith("rad"));
     const profiles = detectProfiles(entities);
     expect(profiles).toHaveLength(5);
-    const areas = profiles.map((p) => Math.round(p.area)).sort((a, b) => a - b);
+    const areas = profiles
+      .map((p) => Math.round(p.area))
+      .toSorted((a, b) => a - b);
     expect(areas).toEqual([1250, 1250, 1250, 1250, 2500]);
   });
 });

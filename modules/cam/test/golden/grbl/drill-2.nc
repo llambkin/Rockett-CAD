@@ -1,0 +1,37 @@
+G90 G94 G91.1 G17 G21
+G54
+M3 S4000
+M8
+(Peck drill 3 holes 5 mm x 12 deep)
+G0 X10 Y10 Z15
+Z2
+G1 Z-4 F200
+G0 Z2
+Z-4
+G1 Z-8
+G0 Z2
+Z-8
+G1 Z-12
+G0 Z2
+X30
+G1 Z-4
+G0 Z2
+Z-4
+G1 Z-8
+G0 Z2
+Z-8
+G1 Z-12
+G0 Z2
+Y25
+G1 Z-4
+G0 Z2
+Z-4
+G1 Z-8
+G0 Z2
+Z-8
+G1 Z-12
+G0 Z2
+Z15
+M5
+M9
+M30

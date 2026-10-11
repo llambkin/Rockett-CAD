@@ -1,0 +1,17 @@
+G90 G94 G91.1 G17 G21
+G59
+M4 S10000
+M7
+(Words the fixtures do not reach)
+G0 X0 Y0 Z15
+Z2
+G1 Z-1 F100
+G18 G2 X2 Z1 I0 K2 F200
+G19 G3 Y2 Z-1 J0 K-2
+G4 P0.5
+M1
+M0
+G0 Z15
+M5
+M9
+M30

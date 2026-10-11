@@ -1,0 +1,216 @@
+{
+  "version": 2,
+  "data": {
+    "setups": [
+      {
+        "id": "s1",
+        "name": "Setup 1",
+        "bodies": ["b1"],
+        "stock": {
+          "kind": "boxAround",
+          "margins": {
+            "xMin": 2,
+            "xMax": 2,
+            "yMin": 2,
+            "yMax": 2,
+            "zMin": 2,
+            "zMax": 1
+          }
+        },
+        "wcs": {
+          "origin": {
+            "kind": "stockCorner",
+            "x": "min",
+            "y": "min",
+            "z": "max"
+          },
+          "axes": {
+            "x": "+x",
+            "z": "+z"
+          },
+          "offsetIndex": 1,
+          "machine": {
+            "kind": "unknown"
+          }
+        },
+        "safeHeight": 15,
+        "clearance": 3,
+        "material": "mdf",
+        "post": {
+          "id": "user.my-grbl",
+          "label": "My GRBL",
+          "extension": "nc",
+          "capabilities": {
+            "arcs": true,
+            "cycles": false,
+            "toolChange": false
+          },
+          "words": [
+            "G0",
+            "G1",
+            "G2",
+            "G3",
+            "G4",
+            "G17",
+            "G18",
+            "G19",
+            "G20",
+            "G21",
+            "G54",
+            "G55",
+            "G56",
+            "G57",
+            "G58",
+            "G59",
+            "G90",
+            "G91.1",
+            "G94",
+            "M0",
+            "M1",
+            "M3",
+            "M4",
+            "M5",
+            "M7",
+            "M8",
+            "M9",
+            "M30"
+          ],
+          "formats": {
+            "X": {
+              "decimals": 4,
+              "trim": true
+            },
+            "Y": {
+              "decimals": 4,
+              "trim": true
+            },
+            "Z": {
+              "decimals": 4,
+              "trim": true
+            },
+            "I": {
+              "decimals": 4,
+              "trim": true
+            },
+            "J": {
+              "decimals": 4,
+              "trim": true
+            },
+            "K": {
+              "decimals": 4,
+              "trim": true
+            },
+            "F": {
+              "decimals": 1,
+              "trim": true
+            },
+            "S": {
+              "decimals": 0,
+              "trim": true
+            },
+            "P": {
+              "decimals": 3,
+              "trim": true
+            }
+          },
+          "modal": [
+            ["G0", "G1", "G2", "G3"],
+            ["G17", "G18", "G19"],
+            ["M3", "M4", "M5"],
+            ["M7", "M8", "M9"],
+            "X",
+            "Y",
+            "Z",
+            "F",
+            "S"
+          ],
+          "workOffsets": ["G54", "G55", "G56", "G57", "G58", "G59"],
+          "laser": {
+            "note": "Laser mode: GRBL needs $32=1",
+            "on": ["M4"]
+          },
+          "templates": {
+            "header": ["G90 G94 G91.1 G17 {units}", "{offset}"],
+            "footer": ["M5", "M9", "M30"],
+            "toolChange": [],
+            "toolLength": [],
+            "spindleCw": ["M3 S{rpm}"],
+            "spindleCcw": ["M4 S{rpm}"],
+            "spindleOff": ["M5"],
+            "coolantFlood": ["M8"],
+            "coolantMist": ["M7"],
+            "coolantOff": ["M9"],
+            "rapid": ["G0 X{x} Y{y} Z{z}"],
+            "linear": ["G1 X{x} Y{y} Z{z} F{feed} S{power}"],
+            "arcCw": [
+              "{plane} G2 X{x} Y{y} Z{z} I{i} J{j} K{k} F{feed} S{power}"
+            ],
+            "arcCcw": [
+              "{plane} G3 X{x} Y{y} Z{z} I{i} J{j} K{k} F{feed} S{power}"
+            ],
+            "drill": [],
+            "drillDwell": [],
+            "peck": [],
+            "cycleEnd": [],
+            "dwell": ["G4 P{seconds}"],
+            "stop": ["M0"],
+            "optionalStop": ["M1"],
+            "comment": "({text})"
+          },
+          "libraryRef": {
+            "id": "user.my-grbl"
+          }
+        },
+        "operations": [
+          {
+            "id": "o1",
+            "type": "rockett.cam.pocket",
+            "name": "Pocket 1",
+            "toolId": "t1",
+            "presetId": "p1",
+            "suppressed": true,
+            "params": {
+              "rampAngle": 3
+            },
+            "lastGenerated": {
+              "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "programSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "at": "2026-10-05T00:00:00.000Z"
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "id": "t1",
+        "name": "6 mm flat",
+        "kind": "flat",
+        "diameter": 6,
+        "fluteLength": 20,
+        "overallLength": 50,
+        "shankDiameter": 6,
+        "flutes": 2,
+        "centreCutting": true,
+        "libraryRef": {
+          "id": "lib-flat"
+        },
+        "number": 1,
+        "presets": [
+          {
+            "id": "p1",
+            "name": "MDF",
+            "rpm": 18000,
+            "cutFeed": 1000,
+            "plungeFeed": 300,
+            "rampFeed": 500,
+            "stepdown": 1,
+            "stepoverFraction": 0.4,
+            "coolant": "off",
+            "profile": 2
+          }
+        ]
+      }
+    ]
+  }
+}

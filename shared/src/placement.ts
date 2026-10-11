@@ -1,5 +1,7 @@
+import { Type } from "typebox";
 import type { PlaneFrame, Vec3 } from "./api.js";
-import { LINEAR_TOL } from "./tolerance.js";
+import { vec3 } from "./schema/refs.js";
+import { LINEAR_TOL, UNIT_DOT_TOL } from "./tolerance.js";
 
 export type Quat = [number, number, number, number];
 
@@ -7,6 +9,15 @@ export interface Placement {
   rotation: Quat;
   translation: Vec3;
 }
+
+export const placementSchema = Type.Object({
+  rotation: Type.Refine(
+    Type.Tuple([Type.Number(), Type.Number(), Type.Number(), Type.Number()]),
+    (q) => Math.abs(Math.hypot(...q) - 1) <= UNIT_DOT_TOL,
+    () => "must be a unit quaternion",
+  ),
+  translation: vec3,
+});
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 

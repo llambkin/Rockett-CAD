@@ -1,0 +1,17 @@
+(Laser mode: GRBL needs $32=1)
+G90 G94 G91.1 G17 G21
+G54
+M4
+M9
+(Laser cut 20 x 20 square, R5 corner)
+G0 X0 Y0 Z15
+Z5
+G1 Z0 F600 S0
+X15 F1200 S750
+G17 G3 X20 Y5 I0 J5
+G1 Y20
+X0 S600
+Y0
+G0 Z15
+M5
+M30

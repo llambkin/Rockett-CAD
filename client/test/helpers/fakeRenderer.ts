@@ -1,4 +1,4 @@
-import type { Camera, Object3D } from "three";
+import type { Camera, Object3D, Vector2 } from "three";
 
 export class FakeWebGLRenderer {
   domElement = document.createElement("canvas");
@@ -10,6 +10,9 @@ export class FakeWebGLRenderer {
 
   setPixelRatio() {}
   setClearColor() {}
+  getSize(target: Vector2) {
+    return target.set(this.rect.width, this.rect.height);
+  }
   setSize(width: number, height: number) {
     this.rect = new DOMRect(0, 0, width, height);
   }

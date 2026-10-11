@@ -1,0 +1,112 @@
+{
+  "irVersion": 1,
+  "units": "mm",
+  "setupId": "s1",
+  "offsetIndex": 1,
+  "tools": [
+    {
+      "id": "t1",
+      "name": "4 mm flat",
+      "kind": "flat",
+      "diameter": 4,
+      "fluteLength": 20,
+      "overallLength": 50,
+      "shankDiameter": 4,
+      "flutes": 2,
+      "centreCutting": true,
+      "number": 1
+    }
+  ],
+  "sections": [
+    {
+      "operationId": "contour",
+      "toolId": "t1",
+      "pass": "finish",
+      "spindle": {
+        "rpm": 18000,
+        "dir": "cw"
+      },
+      "coolant": "off",
+      "moves": [
+        {
+          "kind": "rapid",
+          "to": [3, 5, 15]
+        },
+        {
+          "kind": "rapid",
+          "to": [3, 5, 3]
+        },
+        {
+          "kind": "feed",
+          "to": [3, 5, -0.5],
+          "feed": 300,
+          "role": "plunge"
+        },
+        {
+          "kind": "feed",
+          "to": [3, 35, -0.5],
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "arc",
+          "to": [5, 37, -0.5],
+          "centre": [5, 35, -0.5],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "feed",
+          "to": [45, 37, -0.5],
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "arc",
+          "to": [47, 35, -0.5],
+          "centre": [45, 35, -0.5],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "feed",
+          "to": [47, 5, -0.5],
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "arc",
+          "to": [45, 3, -0.5],
+          "centre": [45, 5, -0.5],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "feed",
+          "to": [5, 3, -0.5],
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "arc",
+          "to": [3, 5, -0.5],
+          "centre": [5, 5, -0.5],
+          "dir": "cw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        {
+          "kind": "rapid",
+          "to": [3, 5, 15]
+        }
+      ]
+    }
+  ]
+}

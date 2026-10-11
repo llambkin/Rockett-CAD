@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@rockett/plugin-api": "0.1.0",
     "@rockett/shared": "0.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",

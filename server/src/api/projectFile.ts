@@ -1,4 +1,5 @@
 import {
+  emptyView,
   folderId as folderIdSchema,
   parse,
   PROJECT_FILE_FORMAT,
@@ -7,14 +8,24 @@ import {
   referencedAssets,
   SCHEMA_VERSION,
   ValidationError,
+  withShown,
   type ProjectFile,
+  type User,
 } from "@rockett/shared";
 import type { Request, Response } from "express";
 import type { FolderStore } from "../store/folderStore.js";
 import type { ProjectStore } from "../store/projectStore.js";
-import { documentMigrations, migrate } from "../store/migrations.js";
+import {
+  fileAssemblies,
+  rehome,
+  type AssemblyStore,
+} from "../assembly/store.js";
+import { documentMigrations, migrate, splitView } from "../store/migrations.js";
 import { HASH_RE, PendingBlobs } from "../store/blobStore.js";
 import { validateDocument } from "./validate.js";
+import { requireFolderDestination } from "./folderRoutes.js";
+import { withinImportBudget } from "./importers.js";
+import { discarding } from "./uploads.js";
 
 const ATTR_CHAR = /[A-Za-z0-9!#$&+.^_`|~-]/;
 
@@ -52,7 +63,8 @@ function decodeAsset(name: string, base64: string | undefined): Buffer {
 }
 
 export const downloadProjectFile =
-  (store: ProjectStore) => async (req: Request, res: Response) => {
+  (store: ProjectStore, assemblies: AssemblyStore) =>
+  async (req: Request, res: Response, ctx: { user: User }) => {
     const document = await store.load(String(req.params.id));
     const assets: Record<string, string> = {};
     for (const name of referencedAssets(document))
@@ -61,7 +73,9 @@ export const downloadProjectFile =
       format: PROJECT_FILE_FORMAT,
       version: PROJECT_FILE_VERSION,
       document,
+      assemblies: await assemblies.all(document.id),
       assets,
+      view: await store.view(document.id, ctx.user.id),
     };
     res.setHeader("Content-Disposition", attachment(document.name, "rockett"));
     res.json(file);
@@ -80,12 +94,22 @@ function placement(fields: Record<string, unknown> = {}) {
   return { folderId: parse(folderIdSchema, folderId) };
 }
 
-export const uploadProjectFile =
-  (store: ProjectStore, folders: FolderStore) =>
-  async (req: Request, res: Response) => {
+export const uploadProjectFile = (
+  store: ProjectStore,
+  assemblies: AssemblyStore,
+  folders: FolderStore,
+  importBytes: number,
+) =>
+  discarding<{ user: User }>(store.uploads, async (req, res, ctx) => {
     const { folderId, temporary = false } = placement(req.body);
+    if (folderId !== undefined)
+      await requireFolderDestination(folders, ctx.user, folderId);
     if (!req.file) throw new ValidationError("Choose a .rockett project file");
-    const file = parse(projectFileEnvelope, readJson(req.file.buffer));
+    withinImportBudget(req.file, importBytes);
+    const file = parse(
+      projectFileEnvelope,
+      readJson(await store.uploads.read(req.file)),
+    );
     if (file.version > PROJECT_FILE_VERSION)
       throw new ValidationError(
         `project file version ${file.version} is newer than this server reads (${PROJECT_FILE_VERSION})`,
@@ -101,8 +125,11 @@ export const uploadProjectFile =
           .map(([name, base64]) => [name, decodeAsset(name, base64)]),
       ),
     );
-    const document = migrate(documentMigrations, file.document, pending);
+    const { doc, shown } = splitView(file.document);
+    const document = migrate(documentMigrations, doc, pending);
     validateDocument(document);
+    const carried = fileAssemblies(file.assemblies ?? [], document.id);
+    const view = withShown({ ...emptyView(), ...file.view }, shown);
     const referenced = referencedAssets(document);
     for (const name of Object.keys(file.assets))
       if (!referenced.has(name) && !pending.used.has(name))
@@ -115,11 +142,26 @@ export const uploadProjectFile =
         pending.blobs.get(name) ?? decodeAsset(name, file.assets[name]),
       ]),
     );
-    const imported = () => store.importProject(document, assets, temporary);
+    const imported = async () => {
+      const project = await store.importProject(
+        document,
+        assets,
+        view,
+        temporary,
+        ctx.user.id,
+      );
+      await assemblies
+        .adopt(project.id, rehome(carried, document, project))
+        .catch(async (err: unknown) => {
+          await store.remove(project.id);
+          throw err;
+        });
+      return project;
+    };
     res.json({
       document:
         folderId === undefined
           ? await imported()
           : await folders.createIn(folderId, imported),
     });
-  };
+  });

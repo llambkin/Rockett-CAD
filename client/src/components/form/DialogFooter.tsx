@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { pushKeyContext, type KeyEvent } from "../../commands/keymap";
 
 export function DialogFooter({
   onOk,
@@ -22,25 +23,30 @@ export function DialogFooter({
   const latest = useRef({ onOk, onCancel, pending, canOk, escapeAnywhere });
   latest.current = { onOk, onCancel, pending, canOk, escapeAnywhere };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const { onOk, onCancel, pending, canOk, escapeAnywhere } = latest.current;
-      const target = e.target;
-      const inside =
-        target instanceof Node &&
-        ref.current?.parentElement?.contains(target) === true;
-      if (e.key === "Escape" && !pending && (inside || escapeAnywhere))
-        onCancel();
-      else if (
-        e.key === "Enter" &&
-        inside &&
-        canOk &&
-        target instanceof HTMLInputElement &&
-        target.type !== "file"
-      )
-        onOk?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return pushKeyContext({
+      kind: "overlay",
+      handle: (e: KeyEvent) => {
+        const now = latest.current;
+        const target = e.target;
+        const inside =
+          target instanceof Node &&
+          ref.current?.parentElement?.contains(target) === true;
+        if (e.key === "Escape" && (inside || now.escapeAnywhere)) {
+          if (!now.pending && !e.repeat) now.onCancel();
+          return true;
+        }
+        if (
+          e.key === "Enter" &&
+          inside &&
+          target instanceof HTMLInputElement &&
+          target.type !== "file"
+        ) {
+          if (now.canOk && !e.repeat) now.onOk?.();
+          return true;
+        }
+        return false;
+      },
+    });
   }, []);
   return (
     <div className="dialog-actions" ref={ref}>

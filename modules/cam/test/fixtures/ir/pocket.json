@@ -1,0 +1,126 @@
+{
+  "irVersion": 1,
+  "units": "mm",
+  "setupId": "setup-1",
+  "offsetIndex": 1,
+  "tools": [
+    {
+      "id": "t1",
+      "number": 1,
+      "name": "6 mm flat",
+      "kind": "flat",
+      "diameter": 6,
+      "fluteLength": 22,
+      "overallLength": 50,
+      "shankDiameter": 6,
+      "flutes": 2,
+      "centreCutting": true
+    }
+  ],
+  "sections": [
+    {
+      "operationId": "pocket-1",
+      "toolId": "t1",
+      "pass": "rough",
+      "spindle": { "rpm": 18000, "dir": "cw" },
+      "coolant": "flood",
+      "moves": [
+        {
+          "kind": "comment",
+          "text": "Pocket 30 x 20 x 4 rough, helical entry"
+        },
+        { "kind": "rapid", "to": [27, 20, 15] },
+        { "kind": "rapid", "to": [27, 20, 1] },
+        {
+          "kind": "arc",
+          "to": [27, 20, -1],
+          "centre": [25, 20, -1],
+          "dir": "ccw",
+          "plane": "xy",
+          "feed": 400,
+          "role": "plunge"
+        },
+        {
+          "kind": "arc",
+          "to": [27, 20, -3],
+          "centre": [25, 20, -3],
+          "dir": "ccw",
+          "plane": "xy",
+          "feed": 400,
+          "role": "plunge"
+        },
+        {
+          "kind": "arc",
+          "to": [27, 20, -4],
+          "centre": [25, 20, -4],
+          "dir": "ccw",
+          "plane": "xy",
+          "feed": 400,
+          "role": "plunge"
+        },
+        {
+          "kind": "arc",
+          "to": [27, 20, -4],
+          "centre": [25, 20, -4],
+          "dir": "ccw",
+          "plane": "xy",
+          "feed": 1000,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [19.5, 16.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [30.5, 16.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [30.5, 23.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [19.5, 23.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [19.5, 16.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [16.5, 15, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [33.5, 15, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [33.5, 25, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [16.5, 25, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [16.5, 15, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [13.5, 13.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [36.5, 13.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [36.5, 26.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [13.5, 26.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "feed", "to": [13.5, 13.5, -4], "feed": 1000, "role": "cut" },
+        { "kind": "rapid", "to": [13.5, 13.5, 15] }
+      ]
+    },
+    {
+      "operationId": "pocket-1",
+      "toolId": "t1",
+      "pass": "finish",
+      "spindle": { "rpm": 18000, "dir": "cw" },
+      "coolant": "flood",
+      "moves": [
+        { "kind": "comment", "text": "Pocket finish" },
+        { "kind": "rapid", "to": [22, 16, 15] },
+        { "kind": "rapid", "to": [22, 16, 2] },
+        { "kind": "feed", "to": [22, 16, -4], "feed": 300, "role": "plunge" },
+        {
+          "kind": "arc",
+          "to": [25, 13, -4],
+          "centre": [25, 16, -4],
+          "dir": "ccw",
+          "plane": "xy",
+          "feed": 800,
+          "role": "cut"
+        },
+        { "kind": "feed", "to": [37, 13, -4], "feed": 800, "role": "cut" },
+        { "kind": "feed", "to": [37, 27, -4], "feed": 800, "role": "cut" },
+        { "kind": "feed", "to": [13, 27, -4], "feed": 800, "role": "cut" },
+        { "kind": "feed", "to": [13, 13, -4], "feed": 800, "role": "cut" },
+        { "kind": "feed", "to": [25, 13, -4], "feed": 800, "role": "cut" },
+        {
+          "kind": "arc",
+          "to": [28, 16, -4],
+          "centre": [25, 16, -4],
+          "dir": "ccw",
+          "plane": "xy",
+          "feed": 800,
+          "role": "cut"
+        },
+        { "kind": "rapid", "to": [28, 16, 15] }
+      ]
+    }
+  ]
+}

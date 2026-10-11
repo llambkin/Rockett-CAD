@@ -1,58 +1,97 @@
-/**
- * Tool panel shell that can be dragged by its title bar, so dialogs can be
- * moved out of the way of the geometry. The position is remembered for the
- * whole session (shared across all tool panels); double-click the title bar
- * to snap back to the default docked position.
- */
-
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { PanelLayouts } from "@rockett/shared";
 import { panelPlacement } from "../panelPlacement";
+import type { PanelLayout, PanelState } from "../panels/layout";
+import { getSetting, setSetting } from "../settings";
+import { useWorkbench } from "../shell/workbench";
+import { useStore } from "../store";
+import { TIMING_MS } from "../tunables";
 
-/** Last dragged position, shared by every tool panel for the session. */
-let lastPos: { x: number; y: number } | null = null;
+type Point = { x: number; y: number };
 
-const clamp = (v: number, lo: number, hi: number) =>
-  Math.max(lo, Math.min(hi, v));
+const room = () => ({
+  viewport: { width: window.innerWidth, height: window.innerHeight },
+  cube: document.querySelector(".viewcube")?.getBoundingClientRect(),
+});
+
+const panelsOf = (layouts: PanelLayouts, workbench: string): PanelLayout =>
+  Object.hasOwn(layouts, workbench) ? layouts[workbench]! : {};
+
+function savedSpot(id: string): Point | null {
+  const layout = panelsOf(
+    getSetting("layout.panels"),
+    useWorkbench.getState().current,
+  );
+  const saved = Object.hasOwn(layout, id) ? layout[id] : undefined;
+  return saved?.kind === "floating" ? { x: saved.x, y: saved.y } : null;
+}
+
+function savePanel(workbench: string, id: string, state: PanelState | null) {
+  const layouts = getSetting("layout.panels");
+  const current = panelsOf(layouts, workbench);
+  if (!state && !Object.hasOwn(current, id)) return;
+  const kept = Object.entries(current).filter(([key]) => key !== id);
+  const layout = Object.fromEntries(state ? [...kept, [id, state]] : kept);
+  void setSetting("layout.panels", { ...layouts, [workbench]: layout }).catch(
+    (error: Error) => useStore.getState().setError(error.message),
+  );
+}
+
+function usePanelSave(id: string | undefined) {
+  const pending = useRef<{ timer: number; write: () => void } | null>(null);
+  const flush = () => {
+    const due = pending.current;
+    pending.current = null;
+    if (!due) return;
+    window.clearTimeout(due.timer);
+    due.write();
+  };
+  useEffect(() => flush, []);
+  return (state: PanelState | null) => {
+    if (!id) return;
+    const workbench = useWorkbench.getState().current;
+    if (pending.current) window.clearTimeout(pending.current.timer);
+    pending.current = {
+      timer: window.setTimeout(flush, TIMING_MS.panelSaveDelay),
+      write: () => savePanel(workbench, id, state),
+    };
+  };
+}
 
 export function DraggablePanel({
+  id,
   title,
   className,
   at,
   children,
 }: {
+  id?: string;
   title: string;
   className?: string;
-  at?: { x: number; y: number };
+  at?: Point;
   children: React.ReactNode;
 }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
-    if (at) return at;
-    // discard a remembered position that no longer fits the window
-    if (
-      lastPos &&
-      (lastPos.x > window.innerWidth - 80 ||
-        lastPos.y > window.innerHeight - 60)
-    ) {
-      lastPos = null;
-    }
-    return lastPos;
-  });
-  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const [pos, setPos] = useState<Point | null>(
+    () => at ?? (id ? savedSpot(id) : null),
+  );
+  const dragRef = useRef<{ dx: number; dy: number; to?: Point } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const save = usePanelSave(id);
   const reset = () => {
-    lastPos = null;
     setPos(at ?? null);
+    save(null);
   };
   useLayoutEffect(() => {
     const fit = () =>
       setPos((current) => {
         if (!panelRef.current) return current;
         const rect = panelRef.current.getBoundingClientRect();
+        const { viewport, cube } = room();
         const next = panelPlacement(
           current ?? { x: rect.left, y: rect.top },
           rect,
-          { width: window.innerWidth, height: window.innerHeight },
-          document.querySelector(".viewcube")?.getBoundingClientRect(),
+          viewport,
+          cube,
         );
         if (!current && next.x === rect.left && next.y === rect.top)
           return current;
@@ -78,25 +117,25 @@ export function DraggablePanel({
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
-    const w = panelRef.current?.offsetWidth ?? 265;
-    const p = panelPlacement(
+    const { viewport, cube } = room();
+    const to = panelPlacement(
+      { x: e.clientX - dragRef.current.dx, y: e.clientY - dragRef.current.dy },
       {
-        x: clamp(e.clientX - dragRef.current.dx, 4, window.innerWidth - w - 4),
-        y: clamp(
-          e.clientY - dragRef.current.dy,
-          4,
-          window.innerHeight - (panelRef.current?.offsetHeight ?? 120) - 4,
-        ),
+        width: panelRef.current?.offsetWidth ?? 265,
+        height: panelRef.current?.offsetHeight ?? 120,
       },
-      { width: w, height: panelRef.current?.offsetHeight ?? 120 },
-      { width: window.innerWidth, height: window.innerHeight },
-      document.querySelector(".viewcube")?.getBoundingClientRect(),
+      viewport,
+      cube,
     );
-    lastPos = p;
-    setPos(p);
+    dragRef.current.to = to;
+    setPos(to);
   };
   const onPointerUp = () => {
+    const to = dragRef.current?.to;
     dragRef.current = null;
+    if (!to || !panelRef.current) return;
+    const { width, height } = panelRef.current.getBoundingClientRect();
+    save({ kind: "floating", ...to, width, height });
   };
 
   return (

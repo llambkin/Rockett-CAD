@@ -6,6 +6,25 @@
     "perf": "warn"
   },
   "rules": {
-    "no-await-in-loop": "off"
-  }
+    "no-await-in-loop": "off",
+    "oxc/no-map-spread": "off",
+    "eslint/no-underscore-dangle": [
+      "warn",
+      { "allow": ["document_", "__rockett"] }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["server/src/auth/*.ts"],
+      "rules": { "oxc/no-async-endpoint-handlers": "off" }
+    },
+    {
+      "files": ["shared/src/routeContract.ts"],
+      "rules": { "unicorn/consistent-function-scoping": "off" }
+    },
+    {
+      "files": ["server/src/kernel/worker.ts"],
+      "rules": { "eslint/no-unmodified-loop-condition": "off" }
+    }
+  ]
 }

@@ -1,12 +1,11 @@
-import { test } from "vitest";
+import { expect, test } from "vitest";
 import { solveSketch } from "../src/solver.js";
 import {
-  arcAngles,
   detectProfiles,
   pointInPolygon,
   profileIdFor,
-  sampleArc,
 } from "../src/profiles.js";
+import { arcAngles, sampleArc } from "../src/sketchCurves.js";
 import {
   findOffsetConnector,
   offsetSketch,
@@ -17,6 +16,14 @@ import { trimSketch } from "../src/sketchTrim.js";
 import type { SketchConstraint, SketchEntity } from "../src/model.js";
 
 const SAMPLES = { time: 200, warmupTime: 50 };
+const SLOW_SAMPLES = {
+  iterations: 10,
+  warmupIterations: 2,
+  time: 0,
+  warmupTime: 0,
+  retainSamples: true,
+};
+const LINES_BUDGET_MS = 480;
 
 const pt = (id: string, x: number, y: number): SketchEntity => ({
   id,
@@ -139,4 +146,34 @@ const cases: [string, () => unknown][] = [
 
 test.for(cases)("%s", async ([name, fn], { bench }) => {
   await bench(name, fn).run(SAMPLES);
+});
+
+const tag = <T extends object>(k: number, value: T): T =>
+  Object.fromEntries(
+    Object.entries(value).map(([key, v]) => [
+      key,
+      typeof v === "string" && key !== "kind" && key !== "type"
+        ? `${k}${v}`
+        : v,
+    ]),
+  ) as T;
+const rectangles = Array.from({ length: 200 }, (_, k) => k);
+const lines800 = {
+  entities: rectangles.flatMap((k) => rectangle.map((e) => tag(k, e))),
+  constraints: rectangles.flatMap((k) => dimensions.map((c) => tag(k, c))),
+};
+
+test("solveSketch 800 lines, 200 dimensioned rectangles", async ({ bench }) => {
+  const result = await bench(
+    "solveSketch 800 lines",
+    { async: false },
+    call(solveSketch, lines800),
+  ).run(SLOW_SAMPLES);
+  const samples = result.latency.samples ?? [];
+  const p95 = samples[Math.ceil(samples.length * 0.95) - 1] ?? NaN;
+  console.log(
+    `solveSketch 800 lines: ${samples.length} samples, median ${result.latency.p50.toFixed(3)} ms, p95 ${p95.toFixed(3)} ms`,
+  );
+  expect(samples).toHaveLength(SLOW_SAMPLES.iterations);
+  expect(result.latency.p50).toBeLessThan(LINES_BUDGET_MS);
 });

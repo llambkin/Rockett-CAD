@@ -1,0 +1,15 @@
+{
+  "manifestVersion": 1,
+  "id": "rockett.kicad",
+  "name": "KiCad",
+  "version": "0.1.0",
+  "apiRange": "^0.23",
+  "licence": "UNLICENSED",
+  "author": "Rockett CAD",
+  "contributes": {
+    "features": ["rockett.kicad.board"],
+    "commands": ["rockett.kicad.exportOutline"],
+    "routes": ["rockett.kicad.upload", "rockett.kicad.outline"],
+    "menuItems": ["rockett.kicad.exportOutline"]
+  }
+}
