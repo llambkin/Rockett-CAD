@@ -44,9 +44,5 @@ scripts/test-work-order.sh
 scripts/test-focused.test.ts
 server/test/*
 !server/test/helpers/
-server/test/helpers/*
-!server/test/helpers/memoryStorage.ts
-!server/test/helpers/testApp.ts
-client/test/
 server/src/api/routeModuleOrder.test.ts
 client/src/features/defaults.test.tsx
