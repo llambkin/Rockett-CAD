@@ -1,8 +1,7 @@
-import { useContext, useEffect, useRef, useState } from "react";
-import { importLabels, type ImportFormat } from "@rockett/shared";
+import { useRef, useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
-import { ViewportContext } from "../viewportRef";
+import { viewportHandle } from "../viewportRef";
 import { ToolButton } from "./ToolButton";
 
 export function StepImportButton({
@@ -12,36 +11,34 @@ export function StepImportButton({
   newProject?: boolean;
   onError?: (message: string) => void;
 }) {
-  const viewport = useContext(ViewportContext);
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(false);
-  const [formats, setFormats] = useState<ImportFormat[]>([]);
-  const report = (message: string) =>
-    onError ? onError(message) : useStore.getState().setError(message);
-  useEffect(() => {
-    api.formats().then(
-      (all) => setFormats(all.importers),
-      (error: Error) => report(error.message),
-    );
-  }, []);
-  const labels = importLabels(formats);
   const busy = useStore((s) => s.busy);
   const load = async (file?: File) => {
     if (!file || pending || busy) return;
     setPending(true);
     try {
+      if (file.size > 10 * 1024 * 1024)
+        throw new Error(
+          "Choose a STEP, IGES, BREP, STL, OBJ or 3MF file up to 10 MB.",
+        );
       const s = useStore.getState();
       if (newProject) {
         const result = await api.importStep(file);
         await s.openProject(result.document.id);
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => viewportHandle.current?.zoomToFit()),
+        );
       } else if (s.projectId) {
         await s.mutate(() => api.importStep(file, s.projectId!));
-        s.clearActive();
+        s.setMode({ name: "idle" });
         s.setSelection([]);
-        requestAnimationFrame(() => viewport.current?.zoomToFit());
+        requestAnimationFrame(() => viewportHandle.current?.zoomToFit());
       }
     } catch (error) {
-      report((error as Error).message);
+      const message = (error as Error).message;
+      if (onError) onError(message);
+      else useStore.getState().setError(message);
     } finally {
       setPending(false);
       if (input.current) input.current.value = "";
@@ -49,7 +46,7 @@ export function StepImportButton({
   };
   const button = {
     disabled: pending || busy,
-    title: `Import ${labels || "STEP"} bodies`,
+    title: "Import STEP, IGES, BREP, STL, OBJ or 3MF bodies, up to 10 MB",
     onClick: () => input.current?.click(),
   };
   return (
@@ -57,9 +54,9 @@ export function StepImportButton({
       <input
         ref={input}
         type="file"
-        accept={formats.flatMap((f) => f.extensions).join(",")}
+        accept=".step,.stp,.igs,.iges,.brep,.stl,.obj,.3mf"
         hidden
-        aria-label="File to import"
+        aria-label="STEP, IGES, BREP, STL, OBJ or 3MF file"
         onChange={(e) => void load(e.target.files?.[0])}
       />
       {newProject ? (

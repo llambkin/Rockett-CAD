@@ -1,13 +1,7 @@
-import type { Command, CommandContext } from "./commands/registry";
-import {
-  bodyMadeBy,
-  newId,
-  type EvaluateResult,
-  type TreeGroup,
-} from "@rockett/shared";
+import { newId, type TreeGroup } from "@rockett/shared";
 import { api, type MutationResponse } from "./api";
 import { freeProfileIds, sketchUsage } from "./sketchUsage";
-import { selectionKey, useStore, isIdle, type Selection } from "./store";
+import { selectionKey, useStore, type Selection } from "./store";
 
 type TreeKind = "body" | "sketch" | "plane";
 
@@ -52,19 +46,6 @@ export function groupParts<T>(
   return { parts, order };
 }
 
-export function treeRange(
-  order: Selection[],
-  anchor: Selection,
-  item: Selection,
-): Selection[] {
-  const keys = order.map(selectionKey);
-  const [from, to] = [
-    keys.indexOf(selectionKey(anchor)),
-    keys.indexOf(selectionKey(item)),
-  ].toSorted((a, b) => a - b) as [number, number];
-  return order.slice(from, to + 1);
-}
-
 export function treeClick(
   selection: Selection[],
   item: Selection,
@@ -72,7 +53,14 @@ export function treeClick(
   anchor: Selection,
   range: boolean,
 ): Selection[] {
-  if (range) return treeRange(order, anchor, item);
+  const keys = order.map(selectionKey);
+  if (range) {
+    const [from, to] = [
+      keys.indexOf(selectionKey(anchor)),
+      keys.indexOf(selectionKey(item)),
+    ].toSorted((a, b) => a - b) as [number, number];
+    return order.slice(from, to + 1);
+  }
   const key = selectionKey(item);
   const base = treeItems(selection, item.kind as TreeKind);
   return base.some((s) => selectionKey(s) === key)
@@ -81,14 +69,14 @@ export function treeClick(
 }
 
 function inOneStep(
-  steps: ((projectId: string, tx: string) => Promise<MutationResponse>)[],
+  steps: ((projectId: string) => Promise<MutationResponse>)[],
 ): Promise<void> {
   const s = useStore.getState();
   const id = s.document?.id;
   if (!id || steps.length === 0) return Promise.resolve();
-  return s.mutate(async (tx) => {
+  return s.mutate(async () => {
     let last: MutationResponse | undefined;
-    for (const step of steps) last = await step(id, tx);
+    for (const step of steps) last = await step(id);
     return last!;
   });
 }
@@ -102,39 +90,13 @@ export const setFeaturesVisible = (ids: string[], visible: boolean) =>
     features: Object.fromEntries(ids.map((id) => [id, visible])),
   });
 
-type State = Pick<CommandContext, "document" | "evaluation" | "view">;
-
-export function anyShown(
-  s: State,
-  kind: TreeGroup["kind"],
-  ids: string[],
-): boolean {
-  if (kind === "body") {
-    const hidden = new Set(s.view.hidden.bodies);
-    return (s.evaluation?.bodies ?? []).some(
-      (b) => ids.includes(b.bodyId) && !hidden.has(b.bodyId),
-    );
-  }
-  const hidden = new Set(s.view.hidden.features);
-  return (s.document?.features ?? []).some(
-    (f) => f.type === "sketch" && ids.includes(f.id) && !hidden.has(f.id),
-  );
-}
-
-export function showHide(kind: TreeGroup["kind"], ids: string[]): void {
-  const visible = !anyShown(useStore.getState(), kind, ids);
-  void (kind === "body"
-    ? setBodiesVisible(Object.fromEntries(ids.map((id) => [id, visible])))
-    : setFeaturesVisible(ids, visible));
-}
-
 export async function deleteFeatures(ids: string[]) {
-  await inOneStep(ids.map((fid) => (id, tx) => api.deleteFeature(id, fid, tx)));
+  await inOneStep(ids.map((fid) => (id) => api.deleteFeature(id, fid)));
   useStore.getState().setSelection([]);
 }
 
 const saveGroups = (groups: TreeGroup[]) =>
-  inOneStep([(id, tx) => api.updateGroups(id, groups, tx)]);
+  inOneStep([(id) => api.updateGroups(id, groups)]);
 
 export async function groupItems(
   kind: TreeGroup["kind"],
@@ -156,44 +118,6 @@ export async function groupItems(
   return group;
 }
 
-const groupRecipients: { created(id: string): void }[] = [];
-
-export function registerGroupRecipient(
-  created: (id: string) => void,
-): () => void {
-  const recipient = { created };
-  groupRecipients.push(recipient);
-  return () => {
-    const index = groupRecipients.indexOf(recipient);
-    if (index >= 0) groupRecipients.splice(index, 1);
-  };
-}
-
-export const groupSelectionCommand = {
-  id: "design.tree.group",
-  label: "Group selected rows",
-  description:
-    "In the model tree, Ctrl or ⌘ + click adds or removes a body or sketch and Shift + click selects a range; right-click a selected row to act on all of them.",
-  keys: ["Ctrl+G"],
-  keyContext: "design",
-  enabled: (s) =>
-    (groupRecipients.length > 0 &&
-      !s.busy &&
-      isIdle(s) &&
-      s.selection.some(
-        (item) => item.kind === "body" || item.kind === "sketch",
-      )) ||
-    "Select rows while idle",
-  run: async (s) => {
-    const recipient = groupRecipients.at(-1);
-    if (!recipient) return;
-    const kind = treeIds(s.selection, "body").length > 0 ? "body" : "sketch";
-    const group = await groupItems(kind, treeIds(s.selection, kind));
-    if (group && groupRecipients.includes(recipient))
-      recipient.created(group.id);
-  },
-} satisfies Command;
-
 const editGroups = (edit: (groups: TreeGroup[]) => TreeGroup[]) =>
   saveGroups(edit(useStore.getState().document?.groups ?? []));
 
@@ -213,20 +137,7 @@ export const bodySel = (b: { bodyId: string }): Selection => ({
   bodyId: b.bodyId,
 });
 
-export function featureBodies(
-  evaluation: EvaluateResult | null,
-  featureId: string,
-): Selection[] {
-  const st = evaluation?.featureStatuses.find((x) => x.featureId === featureId);
-  if (st?.status !== "ok" && st?.status !== "warning") return [];
-  return (evaluation?.bodies ?? [])
-    .filter(
-      (b) => bodyMadeBy(featureId, b.bodyId) || st.targets?.includes(b.bodyId),
-    )
-    .map(bodySel);
-}
-
-export function sketchRegions(sketchId: string): Selection[] {
+export const selectSketchRegions = (sketchId: string) => {
   const s = useStore.getState();
   const sk = s.evaluation?.sketches.find((x) => x.featureId === sketchId);
   const profiles = sk?.profiles ?? [];
@@ -234,8 +145,10 @@ export function sketchRegions(sketchId: string): Selection[] {
     ? freeProfileIds(sketchUsage(s.document), sketchId, profiles)
     : [];
   const ids = free.length > 0 ? free : profiles.map((p) => p.id);
-  return ids.map((id) => ({ kind: "profile", sketchId, profileId: id }));
-}
-
-export const selectSketchRegions = (sketchId: string) =>
-  useStore.getState().setSelection(sketchRegions(sketchId));
+  const sels: Selection[] = ids.map((id) => ({
+    kind: "profile" as const,
+    sketchId,
+    profileId: id,
+  }));
+  s.setSelection(sels);
+};

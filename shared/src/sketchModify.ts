@@ -4,13 +4,11 @@ import {
   type SketchEntity,
   type SketchPoint,
 } from "./model.js";
-import { refuseUnsupported } from "./curveLimits.js";
-import { entityPointIds, TAU } from "./sketchCurves.js";
-import { constraintEntityRefs } from "./sketchTransform.js";
 
 type XY = { x: number; y: number };
 type Curve = Exclude<SketchEntity, SketchPoint>;
-const EPS = 1e-7;
+const TAU = Math.PI * 2,
+  EPS = 1e-7;
 const sub = (a: XY, b: XY): XY => ({ x: a.x - b.x, y: a.y - b.y });
 const cross = (a: XY, b: XY) => a.x * b.y - a.y * b.x;
 const dot = (a: XY, b: XY) => a.x * b.x + a.y * b.y;
@@ -20,7 +18,6 @@ const constructionOf = (e: Curve) =>
   e.construction === undefined ? {} : { construction: e.construction };
 
 function geometry(e: Curve, entities: SketchEntity[]) {
-  refuseUnsupported(e);
   const p = (id: string) => {
     const point = entities.find((x) => x.id === id);
     if (!point || point.kind !== "point")
@@ -56,6 +53,7 @@ function geometry(e: Curve, entities: SketchEntity[]) {
 }
 type Geometry = ReturnType<typeof geometry>;
 
+/** Analytic intersections; caller decides which curves are bounded. */
 function intersections(a: Geometry, b: Geometry): XY[] {
   if (a.e.kind === "line" && b.e.kind === "line") {
     const d = sub(a.b, a.a),
@@ -97,6 +95,10 @@ export interface SketchModification {
   joinedGaps?: { count: number; maxDistance: number };
   offsetChain?: { closed: boolean; endGap: number; ends: [XY, XY] };
 }
+export const constraintEntityRefs = (c: SketchConstraint): string[] =>
+  ["a", "b", "point", "line", "circle", "entity"]
+    .map((k) => (c as unknown as Record<string, unknown>)[k])
+    .filter((x): x is string => typeof x === "string");
 
 export function extendSketch(
   entities: SketchEntity[],
@@ -113,7 +115,6 @@ export function extendSketch(
     );
   if (entity.kind === "circle")
     throw new Error("A full circle has no endpoint to extend.");
-  refuseUnsupported(entity);
   const g = geometry(entity, entities);
   const hits: XY[] = [];
   for (const other of entities) {
@@ -149,7 +150,10 @@ export function extendSketch(
     added.push({ id, kind: "point", x: q.x, y: q.y });
     return id;
   };
-  const [first = "", last = ""] = entityPointIds(entity).slice(-2);
+  const [first, last] =
+    entity.kind === "line"
+      ? [entity.p1, entity.p2]
+      : [entity.start, entity.end];
   const pa = Math.abs(a) < EPS ? first : point(g.at(a));
   const pb = Math.abs(b - 1) < EPS ? last : point(g.at(b));
   added.push(
@@ -268,6 +272,7 @@ export function offsetSourceIds(
     seed.kind === "circle"
   )
     return [...ids];
+  // Keep the selected seed first: it defines the sign of the distance.
   return [
     seed.id,
     ...connectedChain(seed, entities)
@@ -276,6 +281,7 @@ export function offsetSourceIds(
   ];
 }
 
+/** Suggest only a unique existing connector; never invent a missing side. */
 export function findOffsetConnector(
   entities: SketchEntity[],
   selectedIds: string[],

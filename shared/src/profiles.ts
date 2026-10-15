@@ -1,21 +1,4 @@
-import { crossingCurves, endsOf } from "./curveLimits.js";
-import { ARC_SEGMENTS } from "./curveSampling.js";
 import type { SketchEntity, SketchPoint } from "./model.js";
-import {
-  curveDistance,
-  curveSamples,
-  meet,
-  sampleArc,
-  sampleEllipse,
-  sketchCurves,
-  spanParam,
-  SPLIT_TOL,
-  TAU,
-  type Curve,
-  type Detection,
-  type XY,
-} from "./sketchCurves.js";
-import { LINEAR_TOL } from "./tolerance.js";
 
 export interface OrientedCurve {
   entityId: string;
@@ -37,6 +20,44 @@ export interface CurveHit {
   y: number;
   t: number;
   by: string[];
+}
+
+const MERGE_TOL = 1e-6;
+const SPLIT_TOL = 1e-4;
+const ARC_SEGMENTS = 24;
+const TAU = Math.PI * 2;
+
+export function arcAngles(
+  a: { cx: number; cy: number; sx: number; sy: number; ex: number; ey: number },
+  _ccw = true,
+): { a0: number; a1: number; r: number } {
+  const a0 = Math.atan2(a.sy - a.cy, a.sx - a.cx);
+  let a1 = Math.atan2(a.ey - a.cy, a.ex - a.cx);
+  if (a1 <= a0 + 1e-12) a1 += TAU;
+  const r = Math.hypot(a.sx - a.cx, a.sy - a.cy);
+  return { a0, a1, r };
+}
+
+export function sampleArc(
+  cx: number,
+  cy: number,
+  sx: number,
+  sy: number,
+  ex: number,
+  ey: number,
+  segments = ARC_SEGMENTS,
+): number[] {
+  const { a0, a1, r } = arcAngles({ cx, cy, sx, sy, ex, ey });
+  const out: number[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = a0 + ((a1 - a0) * i) / segments;
+    out.push(cx + r * Math.cos(t), cy + r * Math.sin(t));
+  }
+  out[0] = sx;
+  out[1] = sy;
+  out[out.length - 2] = ex;
+  out[out.length - 1] = ey;
+  return out;
 }
 
 function polygonArea(poly: number[]): number {
@@ -73,20 +94,183 @@ function fnv(text: string): string {
   return (h >>> 0).toString(36);
 }
 
-const uniq = (ids: string[]) => [...new Set(ids)].toSorted().join(",");
-
 export function profileIdFor(outerIds: string[], holeIds: string[][]): string {
+  const uniq = (ids: string[]) => [...new Set(ids)].sort().join(",");
   const canon =
     uniq(outerIds) +
     "|" +
     holeIds
       .map((h) => uniq(h))
-      .toSorted()
+      .sort()
       .join(";");
   return "p" + fnv(canon);
 }
 
-const endless = (c: Curve) => endsOf(c).length === 0;
+type XY = [number, number];
+type Line = {
+  id: string;
+  kind: "line";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+type Arc = {
+  id: string;
+  kind: "arc";
+  cx: number;
+  cy: number;
+  r: number;
+  a0: number;
+  a1: number;
+  s: XY;
+  e: XY;
+};
+type Circle = { id: string; kind: "circle"; cx: number; cy: number; r: number };
+type Curve = Line | Arc | Circle;
+type Round = Arc | Circle;
+type Detection = "current" | "legacy";
+
+const interior = (t: number) => t > 0 && t < 1;
+
+function onRound(c: Round, x: number, y: number): boolean {
+  if (c.kind === "circle") return true;
+  let ang = Math.atan2(y - c.cy, x - c.cx);
+  while (ang <= c.a0) ang += TAU;
+  return ang < c.a1;
+}
+
+function lineLine(a: Line, b: Line): XY[] {
+  const d1x = a.x2 - a.x1;
+  const d1y = a.y2 - a.y1;
+  const d2x = b.x2 - b.x1;
+  const d2y = b.y2 - b.y1;
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-12) return [];
+  const t = ((b.x1 - a.x1) * d2y - (b.y1 - a.y1) * d2x) / den;
+  const u = ((b.x1 - a.x1) * d1y - (b.y1 - a.y1) * d1x) / den;
+  if (!interior(t) || !interior(u)) return [];
+  return [[a.x1 + t * d1x, a.y1 + t * d1y]];
+}
+
+function lineRound(l: Line, c: Round, mode: Detection): XY[] {
+  const dx = l.x2 - l.x1;
+  const dy = l.y2 - l.y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-24) return [];
+  const t0 = ((c.cx - l.x1) * dx + (c.cy - l.y1) * dy) / len2;
+  const fx = l.x1 + t0 * dx;
+  const fy = l.y1 + t0 * dy;
+  const h = Math.hypot(c.cx - fx, c.cy - fy);
+  const out: XY[] = [];
+  if (mode === "current" && Math.abs(h - c.r) <= MERGE_TOL) {
+    if (interior(t0)) out.push([fx, fy]);
+  } else if (h < c.r) {
+    const half = Math.sqrt(c.r * c.r - h * h) / Math.sqrt(len2);
+    for (const t of [t0 - half, t0 + half])
+      if (interior(t)) out.push([l.x1 + t * dx, l.y1 + t * dy]);
+  }
+  return out.filter(([x, y]) => onRound(c, x, y));
+}
+
+function roundRound(a: Round, b: Round, mode: Detection): XY[] {
+  const dx = b.cx - a.cx;
+  const dy = b.cy - a.cy;
+  const d = Math.hypot(dx, dy);
+  if (d < 1e-12) return [];
+  const ux = dx / d;
+  const uy = dy / d;
+  const touch = mode === "current";
+  let out: XY[] = [];
+  if (touch && Math.abs(d - (a.r + b.r)) <= MERGE_TOL) {
+    out = [[a.cx + ux * a.r, a.cy + uy * a.r]];
+  } else if (touch && Math.abs(d - Math.abs(a.r - b.r)) <= MERGE_TOL) {
+    const sign = a.r > b.r ? 1 : -1;
+    out = [[a.cx + sign * ux * a.r, a.cy + sign * uy * a.r]];
+  } else if (d < a.r + b.r && d > Math.abs(a.r - b.r)) {
+    const m = (a.r * a.r - b.r * b.r + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, a.r * a.r - m * m));
+    const mx = a.cx + m * ux;
+    const my = a.cy + m * uy;
+    out = [
+      [mx - uy * h, my + ux * h],
+      [mx + uy * h, my - ux * h],
+    ];
+  }
+  return out.filter(([x, y]) => onRound(a, x, y) && onRound(b, x, y));
+}
+
+function meet(a: Curve, b: Curve, mode: Detection): XY[] {
+  if (a.kind === "line" && b.kind === "line") return lineLine(a, b);
+  if (a.kind === "line") return lineRound(a, b as Round, mode);
+  if (b.kind === "line") return lineRound(b, a, mode);
+  return roundRound(a, b, mode);
+}
+
+function sketchCurves(entities: SketchEntity[]): Curve[] {
+  const points = new Map<string, SketchPoint>();
+  for (const e of entities) if (e.kind === "point") points.set(e.id, e);
+  const curves: Curve[] = [];
+  for (const e of entities) {
+    if (e.construction) continue;
+    if (e.kind === "line") {
+      const p1 = points.get(e.p1);
+      const p2 = points.get(e.p2);
+      if (p1 && p2)
+        curves.push({
+          id: e.id,
+          kind: "line",
+          x1: p1.x,
+          y1: p1.y,
+          x2: p2.x,
+          y2: p2.y,
+        });
+    } else if (e.kind === "arc") {
+      const c = points.get(e.center);
+      const s = points.get(e.start);
+      const en = points.get(e.end);
+      if (!c || !s || !en) continue;
+      const { a0, a1, r } = arcAngles({
+        cx: c.x,
+        cy: c.y,
+        sx: s.x,
+        sy: s.y,
+        ex: en.x,
+        ey: en.y,
+      });
+      curves.push({
+        id: e.id,
+        kind: "arc",
+        cx: c.x,
+        cy: c.y,
+        r,
+        a0,
+        a1,
+        s: [s.x, s.y],
+        e: [en.x, en.y],
+      });
+    } else if (e.kind === "circle") {
+      const c = points.get(e.center);
+      if (c && e.radius > 0)
+        curves.push({
+          id: e.id,
+          kind: "circle",
+          cx: c.x,
+          cy: c.y,
+          r: e.radius,
+        });
+    }
+  }
+  return curves;
+}
+
+const endsOf = (c: Line | Arc): [XY, XY] =>
+  c.kind === "line"
+    ? [
+        [c.x1, c.y1],
+        [c.x2, c.y2],
+      ]
+    : [c.s, c.e];
 
 interface Cut {
   n: number;
@@ -98,12 +282,10 @@ interface Arrangement {
   curves: Curve[];
   ends: [number, number][];
   cuts: Cut[][];
-  crossing: Set<string>;
 }
 
 function cutsOn(c: Curve, nodes: XY[], [from, to]: [number, number]): Cut[] {
   const cuts: Cut[] = [];
-  if (c.kind === "spline") return cuts;
   nodes.forEach(([x, y], n) => {
     if (n === from || n === to) return;
     if (c.kind === "line") {
@@ -116,12 +298,6 @@ function cutsOn(c: Curve, nodes: XY[], [from, to]: [number, number]): Cut[] {
         cuts.push({ n, t });
       return;
     }
-    if (c.kind === "ellipse") {
-      if (curveDistance(c, x, y) >= SPLIT_TOL) return;
-      const t = spanParam(c, [x, y]);
-      if (!c.span || t < c.span.t1 - 1e-9) cuts.push({ n, t });
-      return;
-    }
     if (Math.abs(Math.hypot(x - c.cx, y - c.cy) - c.r) >= SPLIT_TOL) return;
     let t = Math.atan2(y - c.cy, x - c.cx);
     if (c.kind === "circle") {
@@ -131,14 +307,10 @@ function cutsOn(c: Curve, nodes: XY[], [from, to]: [number, number]): Cut[] {
     while (t <= c.a0 + 1e-9) t += TAU;
     if (t < c.a1 - 1e-9) cuts.push({ n, t });
   });
-  return cuts.toSorted((a, b) => a.t - b.t);
+  return cuts.sort((a, b) => a.t - b.t);
 }
 
-function arrange(
-  entities: SketchEntity[],
-  mode: Detection,
-  points: SketchPoint[] = [],
-): Arrangement {
+function arrange(entities: SketchEntity[], mode: Detection): Arrangement {
   const nodes: XY[] = [];
   const nodeFor = (x: number, y: number, tol: number): number => {
     const i = nodes.findIndex(([nx, ny]) => Math.hypot(nx - x, ny - y) < tol);
@@ -148,19 +320,15 @@ function arrange(
   };
   const curves: Curve[] = [];
   const ends: [number, number][] = [];
-  const all = sketchCurves(entities);
-  const crossing = crossingCurves(all, mode === "legacy");
-  for (const c of all) {
-    if (crossing.has(c.id) && (c.kind === "ellipse" || c.kind === "spline"))
-      continue;
-    if (endless(c)) {
+  for (const c of sketchCurves(entities)) {
+    if (c.kind === "circle") {
       curves.push(c);
       ends.push([-1, -1]);
       continue;
     }
-    const [s, e] = endsOf(c) as [XY, XY];
-    const from = nodeFor(s[0], s[1], LINEAR_TOL);
-    const to = nodeFor(e[0], e[1], LINEAR_TOL);
+    const [s, e] = endsOf(c);
+    const from = nodeFor(s[0], s[1], MERGE_TOL);
+    const to = nodeFor(e[0], e[1], MERGE_TOL);
     if (from === to) continue;
     curves.push(c);
     ends.push([from, to]);
@@ -169,27 +337,13 @@ function arrange(
     for (let j = i + 1; j < curves.length; j++)
       for (const [x, y] of meet(curves[i]!, curves[j]!, mode))
         nodeFor(x, y, SPLIT_TOL);
-  for (const p of points) nodeFor(p.x, p.y, SPLIT_TOL);
   const cuts = curves.map((c, i) => cutsOn(c, nodes, ends[i]!));
-  return { nodes, curves, ends, cuts, crossing };
+  return { nodes, curves, ends, cuts };
 }
 
-export function curveHits(
-  entities: SketchEntity[],
-  points: SketchPoint[] = [],
-): Map<string, CurveHit[]> {
-  const { nodes, curves, ends, cuts, crossing } = arrange(
-    entities,
-    "trim",
-    points,
-  );
+export function curveHits(entities: SketchEntity[]): Map<string, CurveHit[]> {
+  const { nodes, curves, ends, cuts } = arrange(entities, "current");
   const through = new Map<number, string[]>();
-  for (const p of points) {
-    const n = nodes.findIndex(
-      ([x, y]) => Math.hypot(x - p.x, y - p.y) < SPLIT_TOL,
-    );
-    through.set(n, [...(through.get(n) ?? []), p.id]);
-  }
   curves.forEach((c, i) => {
     for (const n of [...ends[i]!, ...cuts[i]!.map((cut) => cut.n)]) {
       if (n < 0) continue;
@@ -199,21 +353,15 @@ export function curveHits(
     }
   });
   return new Map(
-    curves.flatMap((c, i) =>
-      crossing.has(c.id)
-        ? []
-        : [
-            [
-              c.id,
-              cuts[i]!.map(({ n, t }) => ({
-                x: nodes[n]![0],
-                y: nodes[n]![1],
-                t,
-                by: through.get(n)!.filter((id) => id !== c.id),
-              })),
-            ] as const,
-          ],
-    ),
+    curves.map((c, i) => [
+      c.id,
+      cuts[i]!.map(({ n, t }) => ({
+        x: nodes[n]![0],
+        y: nodes[n]![1],
+        t,
+        by: through.get(n)!.filter((id) => id !== c.id),
+      })),
+    ]),
   );
 }
 
@@ -231,17 +379,14 @@ interface Loop {
   area: number;
 }
 
-function piecesOf(arr: Arrangement): {
-  pieces: Piece[];
-  whole: Curve[];
-} {
+function piecesOf(arr: Arrangement): { pieces: Piece[]; whole: Circle[] } {
   const pieces: Piece[] = [];
-  const whole: Curve[] = [];
+  const whole: Circle[] = [];
   const at = (n: number) => arr.nodes[n]!;
   arr.curves.forEach((c, i) => {
     const cuts = arr.cuts[i]!;
     let chain: number[];
-    if (endless(c)) {
+    if (c.kind === "circle") {
       if (cuts.length < 2) {
         whole.push(c);
         return;
@@ -250,7 +395,7 @@ function piecesOf(arr: Arrangement): {
     } else {
       chain = [arr.ends[i]![0], ...cuts.map((x) => x.n), arr.ends[i]![1]];
     }
-    const split = chain.length > 2 || endless(c);
+    const split = chain.length > 2 || c.kind === "circle";
     for (let k = 0; k < chain.length - 1; k++) {
       const [na, nb] = [chain[k]!, chain[k + 1]!];
       if (na === nb) continue;
@@ -262,11 +407,7 @@ function piecesOf(arr: Arrangement): {
         samples:
           c.kind === "line"
             ? [a[0], a[1], b[0], b[1]]
-            : c.kind === "ellipse"
-              ? sampleEllipse(c, a, b)
-              : c.kind === "spline"
-                ? curveSamples(c)
-                : sampleArc(c.cx, c.cy, a[0], a[1], b[0], b[1]),
+            : sampleArc(c.cx, c.cy, a[0], a[1], b[0], b[1]),
         ...(split && { trim: [a[0], a[1], b[0], b[1]] }),
       });
     }
@@ -285,9 +426,8 @@ interface HalfEdge {
   visited: boolean;
 }
 
-const angle = (s: number[]) => Math.atan2(s[3]! - s[1]!, s[2]! - s[0]!);
-
 function faceLoops(pieces: Piece[]): Loop[] {
+  const angle = (s: number[]) => Math.atan2(s[3]! - s[1]!, s[2]! - s[0]!);
   const halfEdges: HalfEdge[] = [];
   for (const p of pieces) {
     const rev: number[] = [];
@@ -342,6 +482,7 @@ function faceLoops(pieces: Piece[]): Loop[] {
           best = cand;
         }
       }
+      if (best < 0) break;
       cur = best;
       if (cur === start) {
         closed = true;
@@ -355,20 +496,21 @@ function faceLoops(pieces: Piece[]): Loop[] {
   return loops;
 }
 
-function closedLoop(c: Curve): Loop {
-  const polygon = curveSamples(c, ARC_SEGMENTS * 2).slice(0, -2);
-  const signed = polygonArea(polygon);
+function circleLoop(c: Circle): Loop {
+  const polygon: number[] = [];
+  for (let i = 0; i < ARC_SEGMENTS * 2; i++) {
+    const t = (i / (ARC_SEGMENTS * 2)) * TAU;
+    polygon.push(c.cx + c.r * Math.cos(t), c.cy + c.r * Math.sin(t));
+  }
   return {
-    curves: [{ entityId: c.id, reversed: signed < 0 }],
+    curves: [{ entityId: c.id, reversed: false }],
     polygon,
-    area: Math.abs(signed),
+    area: Math.abs(polygonArea(polygon)),
   };
 }
 
-type Ring = Pick<Loop, "polygon" | "area">;
-
-function contains(a: Ring, b: Ring): boolean {
-  if (a.area <= b.area) return false;
+function contains(a: Loop, b: Loop): boolean {
+  if (a === b || a.area <= b.area) return false;
   const n = b.polygon.length / 2;
   const step = Math.max(1, Math.floor(n / 5));
   for (let i = 0; i < n; i += step)
@@ -398,20 +540,13 @@ function nest(loops: Loop[]): Profile[] {
   });
 }
 
-export function uncovered(rings: number[][]): number[][] {
-  const all = rings.map((polygon) => ({
-    polygon,
-    area: Math.abs(polygonArea(polygon)),
-  }));
-  return rings.filter((_, i) => !all.some((o) => contains(o, all[i]!)));
-}
-
-const sense = (c: OrientedCurve) => c.entityId + (c.reversed ? "-" : "+");
-
 function orientation(p: Profile): string {
   const side = (curves: OrientedCurve[]) =>
-    curves.map(sense).toSorted().join(",");
-  return [side(p.outer), ...p.holes.map(side).toSorted()].join("|");
+    curves
+      .map((c) => c.entityId + (c.reversed ? "-" : "+"))
+      .sort()
+      .join(",");
+  return [side(p.outer), ...p.holes.map(side).sort()].join("|");
 }
 
 function distinctIds(profiles: Profile[]): Profile[] {
@@ -427,65 +562,28 @@ function distinctIds(profiles: Profile[]): Profile[] {
   });
 }
 
-function withoutSpurs(pieces: Piece[]): Piece[] {
-  const degree = new Map<number, number>();
-  for (const p of pieces)
-    for (const n of [p.from, p.to]) degree.set(n, (degree.get(n) ?? 0) + 1);
-  const free = (n: number) => degree.get(n) === 1;
-  const kept = pieces.filter((p) => !free(p.from) && !free(p.to));
-  return kept.length === pieces.length ? pieces : withoutSpurs(kept);
-}
-
-type Detected = { profiles: Profile[]; spurred: Profile[] | undefined };
-
-function detect(
-  entities: SketchEntity[],
-  mode: Detection,
-  spurs = false,
-): Detected {
+function detect(entities: SketchEntity[], mode: Detection): Profile[] {
   const { pieces, whole } = piecesOf(arrange(entities, mode));
-  const traced = (kept: Piece[]) => {
-    const profiles = nest([...faceLoops(kept), ...whole.map(closedLoop)]);
-    return mode === "current" ? distinctIds(profiles) : profiles;
-  };
-  const kept = withoutSpurs(pieces);
-  const spurred = spurs && kept !== pieces ? traced(pieces) : undefined;
-  return { profiles: traced(kept), spurred };
+  const profiles = nest([...faceLoops(pieces), ...whole.map(circleLoop)]);
+  return mode === "current" ? distinctIds(profiles) : profiles;
 }
 
 export function detectProfiles(entities: SketchEntity[]): Profile[] {
-  return detect(entities, "current").profiles;
+  return detect(entities, "current");
 }
 
-const detections = new WeakMap<SketchEntity[], Map<Detection, Detected>>();
-
-function detected(entities: SketchEntity[], mode: Detection): Detected {
-  const byMode = detections.get(entities) ?? new Map<Detection, Detected>();
-  detections.set(entities, byMode);
-  if (!byMode.has(mode)) byMode.set(mode, detect(entities, mode, true));
-  return byMode.get(mode)!;
-}
-
-const sides = (p: Profile) => [...p.outer, ...p.holes.flat()].map(sense);
-
-const sameRegion = (spurred: Profile) => (p: Profile) =>
-  Math.abs(spurred.area - p.area) <= 1e-9 * Math.max(1, spurred.area) &&
-  sides(p).every((side) => sides(spurred).includes(side));
-
-const only = (found: Profile[]) => (found.length === 1 ? found[0] : undefined);
+const legacyCache = new WeakMap<SketchEntity[], Profile[]>();
 
 export function findProfile(
   sketch: { profiles: Profile[]; entities: SketchEntity[] },
   profileId: string,
 ): Profile | undefined {
-  const { entities, profiles } = sketch;
-  const byId = (p: Profile) => p.id === profileId;
-  const found = profiles.find(byId);
+  const found = sketch.profiles.find((p) => p.id === profileId);
   if (found) return found;
-  const current = detected(entities, "current").spurred?.find(byId);
-  if (current) return only(profiles.filter(sameRegion(current)));
-  const legacy = detected(entities, "legacy");
-  if (!legacy.spurred) return legacy.profiles.find(byId);
-  const old = legacy.spurred.find(byId);
-  return only(legacy.profiles.filter(old ? sameRegion(old) : byId));
+  let legacy = legacyCache.get(sketch.entities);
+  if (!legacy) {
+    legacy = detect(sketch.entities, "legacy");
+    legacyCache.set(sketch.entities, legacy);
+  }
+  return legacy.find((p) => p.id === profileId);
 }

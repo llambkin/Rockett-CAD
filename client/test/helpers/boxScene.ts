@@ -1,26 +1,17 @@
 import * as THREE from "three";
 import type {
-  MeshedBody,
+  BodyPayload,
   EdgeInfo,
   EvaluateResult,
   SketchPayload,
 } from "@rockett/shared";
-import { act, createElement, Fragment, useContext } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { vi } from "vitest";
-import { ViewportContext, type ViewportRef } from "../../src/viewportRef";
-import { ViewportView } from "../../src/components/ViewportView";
-import { Panels } from "../../src/shell/panels";
-import { useStore, type State } from "../../src/store";
-import { dropBase } from "../../src/previewBase";
-import "../../src/features/core";
-import "../../src/commands/design";
+import { viewportHandle } from "../../src/viewportRef";
 import { worldToClient } from "../../src/three/screen";
 
 export type P = [number, number, number];
 export const S = 10;
 
-export function quad(corners: P[], name: string, into: MeshedBody) {
+export function quad(corners: P[], name: string, into: BodyPayload) {
   const at = into.positions.length / 3;
   const start = into.indices.length;
   const [a, b, c] = corners.map((p) => new THREE.Vector3(...p));
@@ -48,10 +39,11 @@ export function edge(name: string, a: P, b: P): EdgeInfo {
   };
 }
 
-export function box(meshKey: string, h = S, top = "top"): MeshedBody {
-  const body: MeshedBody = {
+export function box(meshKey: string, h = S, top = "top"): BodyPayload {
+  const body: BodyPayload = {
     bodyId: "b1",
     name: "Body1",
+    visible: true,
     meshKey,
     positions: [],
     normals: [],
@@ -116,9 +108,9 @@ export function box(meshKey: string, h = S, top = "top"): MeshedBody {
 }
 
 export const result = (
-  bodies: MeshedBody[],
+  bodies: BodyPayload[],
   sketches: SketchPayload[] = [],
-): EvaluateResult & { bodies: MeshedBody[] } => ({
+): EvaluateResult => ({
   bodies,
   planes: [],
   sketches,
@@ -139,12 +131,8 @@ export function sizeViewport(): () => void {
     });
 }
 
-export function pointer(
-  type: string,
-  world: THREE.Vector3,
-  init: PointerEventInit = {},
-) {
-  const vp = sceneViewport();
+export function pointer(type: string, world: THREE.Vector3) {
+  const vp = viewportHandle.current!;
   const at = worldToClient(vp.canvasRect(), vp.camera, world);
   const canvas = vp.renderer.domElement;
   canvas.setPointerCapture = () => {};
@@ -156,57 +144,6 @@ export function pointer(
       pointerId: 1,
       clientX: at.x,
       clientY: at.y,
-      ...init,
     }),
   );
-}
-
-let viewport: ViewportRef = { current: null };
-let root: Root | null = null;
-let host: HTMLElement | null = null;
-const initial = useStore.getState();
-export function ViewportProbe() {
-  viewport = useContext(ViewportContext);
-  return null;
-}
-export function sceneViewport() {
-  if (!viewport.current) throw new Error("Test viewport is not mounted");
-  return viewport.current;
-}
-export async function wait(ms: number) {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-  viewport.current?.render();
-}
-export async function mountScene(state: Partial<State>) {
-  dropBase();
-  useStore.setState({ ...initial, ...state }, true);
-  host = document.body.appendChild(document.createElement("div"));
-  root = createRoot(host);
-  await act(async () =>
-    root!.render(
-      createElement(ViewportView, {
-        children: (view) =>
-          createElement(
-            Fragment,
-            null,
-            view,
-            createElement(ViewportProbe),
-            createElement(Panels),
-          ),
-      }),
-    ),
-  );
-  sceneViewport().zoomToFit(false);
-  sceneViewport().render();
-  return host;
-}
-export async function unmountScene() {
-  await act(async () => root?.unmount());
-  root = null;
-  host?.remove();
-  host = null;
-  viewport = { current: null };
-  dropBase();
 }

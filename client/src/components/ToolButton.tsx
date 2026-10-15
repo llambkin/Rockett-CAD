@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes } from "react";
-import { iconOf, type IconId, type ModuleIconId } from "../icons";
+import { ICONS, type IconId } from "../icons";
 
 export function ToolButton({
   icon,
@@ -9,11 +9,11 @@ export function ToolButton({
   title = label,
   ...button
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  icon: IconId | ModuleIconId;
+  icon: IconId;
   label: string;
   iconOnly?: boolean;
 }) {
-  const Icon = iconOf(icon);
+  const Icon = ICONS[icon];
   return (
     <button
       {...button}
@@ -21,7 +21,7 @@ export function ToolButton({
       aria-label={label}
       className={`tb-btn ${iconOnly ? "icon" : ""} ${className}`}
     >
-      {Icon && <Icon />}
+      <Icon />
       {!iconOnly && <span className="tb-label">{label}</span>}
     </button>
   );

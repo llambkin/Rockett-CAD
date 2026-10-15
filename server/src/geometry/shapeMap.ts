@@ -1,4 +1,4 @@
-import { release, shapeHash, type Shape } from "./kernel.js";
+import { shapeHash, type Shape } from "./kernel.js";
 
 let tracked: ShapeMap<unknown>[] | undefined;
 
@@ -52,12 +52,9 @@ export class ShapeMap<V> {
   }
 
   release(): void {
-    try {
-      release(this.order.map(([key]) => key));
-    } finally {
-      this.order.length = 0;
-      this.buckets.clear();
-    }
+    for (const [key] of this.order) key.delete();
+    this.order.length = 0;
+    this.buckets.clear();
   }
 
   private entry(shape: Shape): [Shape, V] | undefined {

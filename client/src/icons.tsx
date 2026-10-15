@@ -1,19 +1,20 @@
-import type { ComponentType, ReactNode } from "react";
-import { createRegistry } from "@rockett/shared";
-
-const ROOT = {
-  xmlns: "http://www.w3.org/2000/svg",
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "1.5",
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-  "aria-hidden": "true",
-} as const;
+import type { ReactNode } from "react";
 
 function svg(children: ReactNode) {
-  return () => <svg {...ROOT}>{children}</svg>;
+  return () => (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
 }
 
 export const ICONS = {
@@ -166,6 +167,14 @@ export const ICONS = {
       <circle cx="12" cy="12" r="0.75" fill="currentColor" />
     </>,
   ),
+  measure: svg(
+    <>
+      <g transform="rotate(-45 12 12)">
+        <rect x="2" y="8.5" width="20" height="7" rx="1" />
+        <path d="M5 8.5v3M8.5 8.5v2M12 8.5v4M15.5 8.5v2M19 8.5v3" />
+      </g>
+    </>,
+  ),
   importStep: svg(
     <>
       <path d="M3 15v4.5A1.5 1.5 0 0 0 4.5 21h15a1.5 1.5 0 0 0 1.5-1.5V15" />
@@ -244,15 +253,6 @@ export const ICONS = {
       <circle cx="4" cy="18" r="1" fill="currentColor" />
       <circle cx="12" cy="8" r="1" fill="currentColor" />
       <circle cx="20" cy="18" r="1" fill="currentColor" />
-    </>,
-  ),
-  ellipse: svg(
-    <>
-      <ellipse cx="12" cy="12" rx="9" ry="5.5" />
-      <g opacity=".45">
-        <path d="M12 12h9M12 12V6.5" />
-      </g>
-      <circle cx="12" cy="12" r="1" fill="currentColor" />
     </>,
   ),
   polygon: svg(
@@ -424,22 +424,3 @@ export const ICONS = {
 };
 
 export type IconId = keyof typeof ICONS;
-export type ModuleIconId = `${string}/${string}.svg`;
-
-const moduleIcons = createRegistry<{ id: string; Icon: ComponentType }>(
-  "icon",
-  (icon) => icon.id,
-);
-const coreIcons: Readonly<Record<string, ComponentType>> = ICONS;
-
-export function registerModuleIcon(id: ModuleIconId, file: string) {
-  const inner = /^<svg\b[^>]*>([\s\S]*)<\/svg>$/.exec(file.trim())?.[1];
-  if (inner === undefined) throw new Error(`icon ${id} is not one svg`);
-  return moduleIcons.register({
-    id,
-    Icon: () => <svg {...ROOT} dangerouslySetInnerHTML={{ __html: inner }} />,
-  });
-}
-
-export const iconOf = (id: IconId | ModuleIconId) =>
-  coreIcons[id] ?? moduleIcons.get(id)?.Icon;

@@ -1,9 +1,16 @@
+import { fileURLToPath } from "node:url";
 import {
+  createEmptyDocument,
   detectProfiles,
-  type SketchFeature,
-  type Feature,
+  type EvaluateResult,
   type ExtrudeFeature,
+  type Feature,
+  type SketchFeature,
 } from "@rockett/shared";
+import { initKernel } from "../../src/geometry/kernel.js";
+import { dropEngine, engineFor } from "../../src/geometry/engine.js";
+import { stepBlob, stepFixture, stepSources } from "./stepFixture.js";
+
 export const meta = (id: string) => ({ id, name: id, suppressed: false });
 
 export function rect(
@@ -67,4 +74,105 @@ export function box(
       operation,
     },
   ];
+}
+
+export const TIMELINES: Record<string, () => Feature[]> = {
+  join: () => [
+    ...box("box", 0, 0, 20, 30, 10),
+    ...box("tool", 10, 10, 20, 30, 10, "join"),
+  ],
+  splitCut: () => [
+    ...box("box", 0, 0, 20, 30, 10),
+    ...box("slot", 5, -5, 3, 40, 10, "cut"),
+  ],
+  circularPattern: () => [
+    ...box("ring", 10, -5, 10, 10, 10),
+    {
+      ...meta("cpat"),
+      type: "circularPattern",
+      bodies: ["b:ring"],
+      axis: { kind: "originAxis", axis: "Z" },
+      count: 4,
+      totalAngle: 360,
+      combine: true,
+    },
+  ],
+  fillet: () => [
+    ...box("box", 0, 0, 20, 30, 10),
+    {
+      ...meta("fil"),
+      type: "fillet",
+      edges: [
+        {
+          kind: "edge",
+          bodyId: "b:box",
+          edgeName: "e[f:box:s:boxSk-l1|f:box:s:boxSk-l2]",
+        },
+      ],
+      radius: 2,
+    },
+  ],
+  stepImport: () => [
+    {
+      ...meta("step"),
+      type: "importStep",
+      filename: "two.step",
+      blob: stepBlob(stepFixture(true)),
+    },
+  ],
+};
+
+export function evaluateTimeline(id: string, features: Feature[]) {
+  const doc = createEmptyDocument(id, id);
+  doc.features = features;
+  doc.timelinePosition = features.length;
+  const result = engineFor(id).evaluate(doc, undefined, stepSources);
+  dropEngine(id);
+  return result;
+}
+
+export const xSpans = (result: EvaluateResult) =>
+  Object.fromEntries(
+    result.bodies.map((b) => [
+      b.bodyId,
+      [Math.round(b.bbox.min[0]) + 0, Math.round(b.bbox.max[0]) + 0],
+    ]),
+  );
+
+export type NameDump = Record<
+  string,
+  {
+    statuses: string[];
+    bodies: {
+      bodyId: string;
+      faces: string[];
+      edges: string[];
+      vertices: string[];
+    }[];
+  }
+>;
+
+export function dumpNames(order = Object.keys(TIMELINES)): NameDump {
+  const dump: NameDump = {};
+  for (const key of order) {
+    const result = evaluateTimeline(`names-${key}`, TIMELINES[key]!());
+    dump[key] = {
+      statuses: result.featureStatuses.map((s) => s.status),
+      bodies: result.bodies.map((b) => ({
+        bodyId: b.bodyId,
+        faces: b.faces.map((f) => f.name),
+        edges: b.edges.map((e) => e.name),
+        vertices: b.vertices.map((v) => v.name),
+      })),
+    };
+  }
+  return dump;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await initKernel();
+  process.stdout.write(
+    JSON.stringify(dumpNames(Object.keys(TIMELINES).reverse())),
+    () => process.exit(0),
+  );
 }

@@ -33,7 +33,7 @@ describe("sketch modifications", () => {
     ];
     const result = extendSketch(es, [], "base", { x: 9, y: 0 });
     const p = points(result.entities),
-      e = result.entities.find((x) => x.id === "base")!;
+      e = result.entities.find((e) => e.id === "base")!;
     expect(e.kind === "line" && p.get(e.p2)!.x).toBe(15);
     expect(() => extendSketch(es, [], "base", { x: 1, y: 0 })).toThrow(
       /No boundary/,
@@ -119,7 +119,7 @@ describe("projected geometry", () => {
     expect(points(solved.entities).get("mid")!.x).toBeCloseTo(60, 4);
     expect(detectProfiles(next)).toHaveLength(0);
   });
-  it("rejects edge-on lines and circles instead of approximating them", () => {
+  it("rejects edge-on lines and tilted circles instead of approximating them", () => {
     expect(() =>
       projectEdge({ type: "line", a: [0, 0, 0], b: [0, 0, 20] }, f, "p", ref),
     ).toThrow(/point/);
@@ -130,6 +130,6 @@ describe("projected geometry", () => {
         "p",
         ref,
       ),
-    ).toThrow(/edge-on/);
+    ).toThrow(/ellipses/);
   });
 });

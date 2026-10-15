@@ -1,11 +1,4 @@
-import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { FolderTree } from "@rockett/shared";
 import {
   canMoveTo,
@@ -17,40 +10,16 @@ import {
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 
-function moveFocus(e: KeyboardEvent<HTMLDivElement>) {
-  const rows = [
-    ...e.currentTarget.querySelectorAll<HTMLButtonElement>(
-      "button:not(:disabled)",
-    ),
-  ];
-  const index = rows.findIndex(
-    (destination) => destination === document.activeElement,
-  );
-  if (index < 0) return;
-  const positions: Record<string, number> = {
-    ArrowUp: Math.max(0, index - 1),
-    ArrowDown: Math.min(rows.length - 1, index + 1),
-    Home: 0,
-    End: rows.length - 1,
-  };
-  const next = positions[e.key];
-  if (next === undefined) return;
-  e.preventDefault();
-  rows[next]?.focus();
-}
-
 export function MoveDialog({
   tree,
   item,
   at,
-  browser = true,
   onMove,
   onClose,
 }: {
   tree: FolderTree;
   item: Item;
   at: { x: number; y: number };
-  browser?: boolean;
   onMove: (target: string | null) => void;
   onClose: () => void;
 }) {
@@ -71,11 +40,6 @@ export function MoveDialog({
         className={`tree-item${allowed ? "" : " dimmed"}${target === id ? " selected" : ""}`}
         disabled={!allowed}
         onClick={() => setTarget(id)}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          onMove(id);
-        }}
       >
         {name}
         {note}
@@ -90,12 +54,12 @@ export function MoveDialog({
       </Fragment>
     ));
   return (
-    <DraggablePanel id="dialog.move" title={`Move "${item.name}"`} at={at}>
-      <div className="dialog-body" ref={body} onKeyDown={moveFocus}>
+    <DraggablePanel title={`Move "${item.name}"`} at={at}>
+      <div className="dialog-body" ref={body}>
         <div className="move-tree">
           {row(null, "Projects")}
           <div className="tree-children">{branch(null)}</div>
-          {browser && row(THIS_BROWSER, "This browser")}
+          {row(THIS_BROWSER, "This browser")}
         </div>
       </div>
       <DialogFooter

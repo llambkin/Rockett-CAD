@@ -9,48 +9,42 @@
  */
 
 import { zipSync, strToU8 } from "fflate";
-import {
-  bodyName,
-  createRegistry,
-  LINEAR_TOL,
-  ValidationError,
-  type CadDocument,
-  type ExportFormat,
-} from "@rockett/shared";
-import { writeDxf, type Drawing } from "./dxf.js";
-import { meshCopy } from "./mesh.js";
+import { LINEAR_TOL } from "@rockett/shared";
+import { getKernel } from "./kernel.js";
+import { meshShape } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
-import { writeXdeGlb, writeXdeStep } from "./xde.js";
-
-export const EXPORT_QUALITY = 0.05;
 
 interface Mesh {
   positions: number[];
   indices: number[];
 }
 
-const tolerance = (quality: number) => ({
-  linear: quality,
-  angular: 0.3 * Math.sqrt(quality / EXPORT_QUALITY),
-});
-
 /** Tessellate a body at export quality. */
-export function exportMesh(body: NamedBody, quality = EXPORT_QUALITY): Mesh {
+export function exportMesh(body: NamedBody, quality = 0.05): Mesh {
   const positions: number[] = [];
   const indices: number[] = [];
-  for (const m of meshCopy(body.shape, tolerance(quality))) {
-    const offset = positions.length / 3;
-    for (const p of m.positions) positions.push(p);
-    for (const i of m.indices) indices.push(offset + i);
+  const copy = new (getKernel().BRepBuilderAPI_Copy_2)(
+    body.shape,
+    false,
+    false,
+  );
+  try {
+    for (const m of meshShape(copy.Shape(), {
+      linear: quality,
+      angular: 0.3,
+    })) {
+      const offset = positions.length / 3;
+      for (const p of m.positions) positions.push(p);
+      for (const i of m.indices) indices.push(offset + i);
+    }
+  } finally {
+    copy.delete();
   }
   return { positions, indices };
 }
 
 /** Binary STL of one or more bodies merged into a single mesh. */
-export function writeStl(
-  bodies: NamedBody[],
-  quality = EXPORT_QUALITY,
-): Buffer {
+export function writeStl(bodies: NamedBody[], quality = 0.05): Buffer {
   const meshes = bodies.map((b) => exportMesh(b, quality));
   const triCount = meshes.reduce((s, m) => s + m.indices.length / 3, 0);
   const buffer = Buffer.alloc(84 + triCount * 50);
@@ -129,19 +123,12 @@ function weld({ positions: P, indices }: Mesh): Mesh {
 
 /** 3MF: one <object> per body, names preserved, units = millimeter. */
 export function write3mf(
-  bodies: { body: NamedBody; name: string; color?: string | undefined }[],
-  quality = EXPORT_QUALITY,
+  bodies: { body: NamedBody; name: string }[],
+  quality = 0.05,
 ): Buffer {
-  const colors = [
-    ...new Set(bodies.flatMap(({ color }) => color?.toUpperCase() ?? [])),
-  ];
-  const materials = bodies.length + 1;
-  const bases = colors.map((c) => `<base name="${c}" displaycolor="${c}"/>`);
-  const objectsXml = colors.length
-    ? [`<basematerials id="${materials}">${bases.join("")}</basematerials>`]
-    : [];
+  const objectsXml: string[] = [];
   const itemsXml: string[] = [];
-  bodies.forEach(({ body, name, color }, i) => {
+  bodies.forEach(({ body, name }, i) => {
     const mesh = weld(exportMesh(body, quality));
     const id = i + 1;
     const verts: string[] = [];
@@ -156,10 +143,8 @@ export function write3mf(
         `<triangle v1="${mesh.indices[t]}" v2="${mesh.indices[t + 1]}" v3="${mesh.indices[t + 2]}"/>`,
       );
     }
-    const pindex = colors.indexOf(color?.toUpperCase() ?? "");
-    const paint = color ? ` pid="${materials}" pindex="${pindex}"` : "";
     objectsXml.push(
-      `<object id="${id}" name="${xmlEscape(name)}"${paint} type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`,
+      `<object id="${id}" name="${xmlEscape(name)}" type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`,
     );
     itemsXml.push(`<item objectid="${id}"/>`);
   });
@@ -185,101 +170,10 @@ export function write3mf(
     `<Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>` +
     `</Relationships>`;
 
-  const zipped = zipSync(
-    {
-      "[Content_Types].xml": strToU8(contentTypes),
-      "_rels/.rels": strToU8(rels),
-      "3D/3dmodel.model": strToU8(model),
-    },
-    { mtime: new Date(1980, 0, 1) },
-  );
+  const zipped = zipSync({
+    "[Content_Types].xml": strToU8(contentTypes),
+    "_rels/.rels": strToU8(rels),
+    "3D/3dmodel.model": strToU8(model),
+  });
   return Buffer.from(zipped);
 }
-
-export interface ExportContext extends Drawing {
-  doc: CadDocument;
-  bodies: NamedBody[];
-  colorOf(bodyId: string): string | undefined;
-  options: { quality: number; layer?: string };
-}
-
-export interface Exporter extends ExportFormat {
-  write(ctx: ExportContext): Buffer;
-}
-
-export const exporters = createRegistry<Exporter>(
-  "exporter",
-  (exporter) => exporter.format,
-);
-
-export const registerExporter = exporters.register;
-
-const labelled = ({ doc, bodies, colorOf }: ExportContext) =>
-  bodies.map((body) => ({
-    body,
-    shape: body.shape,
-    name: bodyName(doc, body.bodyId),
-    color: colorOf(body.bodyId),
-  }));
-
-export function exporterFor(format: string): Exporter {
-  const exporter = exporters.get(format);
-  if (exporter) return exporter;
-  const supported = exporters.list().map((e) => e.format);
-  throw new ValidationError(
-    `export format ${format} is not one of ${supported.join(", ")}`,
-    "/format",
-  );
-}
-
-registerExporter({
-  format: "stl",
-  label: "STL (binary)",
-  ext: "stl",
-  mime: "model/stl",
-  source: "bodies",
-  write: ({ bodies, options }) => writeStl(bodies, options.quality),
-});
-
-registerExporter({
-  format: "3mf",
-  label: "3MF (multi-body, named)",
-  ext: "3mf",
-  mime: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
-  source: "bodies",
-  write: (ctx) => write3mf(labelled(ctx), ctx.options.quality),
-});
-
-registerExporter({
-  format: "step",
-  label: "STEP AP214 (named solids)",
-  ext: "step",
-  mime: "model/step",
-  source: "bodies",
-  write: ({ doc, bodies }) =>
-    writeXdeStep(
-      bodies.map((body) => ({
-        shape: body.shape,
-        name: bodyName(doc, body.bodyId),
-      })),
-    ),
-});
-
-registerExporter({
-  format: "glb",
-  label: "glTF binary (named, coloured)",
-  ext: "glb",
-  mime: "model/gltf-binary",
-  source: "bodies",
-  write: (ctx) => writeXdeGlb(labelled(ctx), tolerance(ctx.options.quality)),
-});
-
-registerExporter({
-  format: "dxf",
-  label: "DXF R12 (sketch or face)",
-  ext: "dxf",
-  mime: "image/vnd.dxf",
-  source: ["sketch", "face"],
-  write: ({ sketch, polylines, options }) =>
-    writeDxf(sketch, polylines, options.layer),
-});

@@ -1,115 +1,33 @@
-import { useContext, useEffect, useRef, useState } from "react";
-import { ViewportContext } from "./viewportRef";
+import { useEffect, useState } from "react";
 import { useStore } from "./store";
 import { api, saveDownload } from "./api";
 import { dropBrowserCopy, followPath } from "./browserSession";
-import { Toolbar } from "./components/Toolbar";
-import { WorkbenchSwitcher } from "./shell/WorkbenchSwitcher";
-import { useCurrentWorkbench } from "./shell/workbench";
-import { activeCommand } from "./commands/active";
-import { installKeymap, tooltipOf, useKeymap } from "./commands/keymap";
-import { registerCommand } from "./commands/registry";
+import { Toolbar, openDialog } from "./components/Toolbar";
 import { ModelTree } from "./components/ModelTree";
 import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
-import {
-  HELP_PANEL,
-  HISTORY_PANEL,
-  Panels,
-  togglePanel,
-  usePanelOpen,
-} from "./shell/panels";
-import { useSplitter } from "./components/Splitter";
+import { FeatureDialog } from "./components/FeatureDialog";
+import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
+import { MeasurePanel } from "./components/MeasurePanel";
+import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
-import { AccountTotp, LoginScreen } from "./components/LoginScreen";
-import { UserMenu } from "./components/UserMenu";
-import { UsersPage } from "./components/UsersPage";
-import { bootSession, useSession } from "./session";
 import { RenameInput } from "./components/RenameInput";
-import { MenuButton } from "./components/ContextMenu";
-import { downloadBrowserProject, getBrowserProject } from "./browserProjects";
 import { VersionLabel } from "./components/VersionLabel";
-import { confirm } from "./components/ConfirmPanel";
-import { PARAMETERS_PANEL } from "./components/ParametersPanel";
-import { browserKeyFromPath } from "./paths";
-import {
-  closeProjectSettings,
-  loadAppSettings,
-  loadUserSettings,
-  openProjectSettings,
-} from "./settings";
+import { viewportHandle } from "./viewportRef";
+import { idleActionFor, sketchToolFor } from "./shortcuts";
 
 export function App() {
   const projectId = useStore((s) => s.projectId);
-  const session = useSession();
-  const [bootError, setBootError] = useState<string | null>(null);
-  const [usersOpen, setUsersOpen] = useState(false);
-  const booted = useRef(false);
-  const retryBoot = () => {
-    setBootError(null);
-    void bootSession().catch(() => setBootError("Could not check session."));
-  };
   useEffect(() => {
-    if (booted.current) return;
-    booted.current = true;
-    retryBoot();
-  }, []);
-  useEffect(() => {
-    if (session.kind !== "signed-in") return;
-    let active = true;
-    void Promise.all([loadAppSettings(), loadUserSettings()])
-      .catch((error: Error) => {
-        if (active) useStore.getState().setError(error.message);
-      })
-      .then(() => {
-        if (active) return followPath();
-      });
+    void followPath();
     window.addEventListener("popstate", followPath);
     window.addEventListener("pagehide", dropBrowserCopy);
     return () => {
-      active = false;
       window.removeEventListener("popstate", followPath);
       window.removeEventListener("pagehide", dropBrowserCopy);
     };
-  }, [session.kind]);
-  useEffect(() => {
-    if (
-      session.kind !== "signed-in" ||
-      projectId === null ||
-      browserKeyFromPath(window.location.pathname) !== null
-    ) {
-      closeProjectSettings();
-      return;
-    }
-    let active = true;
-    void openProjectSettings(projectId).catch((error: Error) => {
-      if (active) useStore.getState().setError(error.message);
-    });
-    return () => {
-      active = false;
-      closeProjectSettings();
-    };
-  }, [session.kind, projectId]);
-  if (session.kind !== "signed-in")
-    return (
-      <LoginScreen
-        session={session}
-        bootError={bootError}
-        retryBoot={retryBoot}
-      />
-    );
-  if (session.screen) return <AccountTotp screen={session.screen} />;
-  if (usersOpen && session.user.role === "admin")
-    return <UsersPage onClose={() => setUsersOpen(false)} />;
-  return projectId ? (
-    <ViewportView>
-      {(viewport) => (
-        <Workspace onUsers={() => setUsersOpen(true)} viewport={viewport} />
-      )}
-    </ViewportView>
-  ) : (
-    <ProjectList onUsers={() => setUsersOpen(true)} />
-  );
+  }, []);
+  return projectId ? <Workspace /> : <ProjectList />;
 }
 
 /** The open project's name in the top bar — click to rename. */
@@ -142,25 +60,16 @@ function ProjectName({ name }: { name: string }) {
   );
 }
 
-const withLabel = (verb: string, label: string | null | undefined) =>
-  label ? `${verb} ${label}` : verb;
-
-export function UndoRedoButtons() {
-  const canUndo = useStore((s) => s.history?.canUndo ?? false);
-  const canRedo = useStore((s) => s.history?.canRedo ?? false);
-  const undoLabel = useStore((s) => s.history?.undoLabel);
-  const redoLabel = useStore((s) => s.history?.redoLabel);
-  useKeymap();
+function UndoRedoButtons() {
+  const canUndo = useStore((s) => s.undoStack.length > 0);
+  const canRedo = useStore((s) => s.redoStack.length > 0);
   const busy = useStore((s) => s.busy);
   return (
     <span className="undo-redo">
       <button
         className="icon-btn"
         disabled={!canUndo || busy}
-        title={tooltipOf({
-          id: "design.undo",
-          label: withLabel("Undo", undoLabel),
-        })}
+        title="Undo (Ctrl+Z)"
         aria-label="Undo"
         onClick={() => void useStore.getState().undo()}
       >
@@ -169,10 +78,7 @@ export function UndoRedoButtons() {
       <button
         className="icon-btn"
         disabled={!canRedo || busy}
-        title={tooltipOf({
-          id: "design.redo",
-          label: withLabel("Redo", redoLabel),
-        })}
+        title="Redo (Ctrl+Y)"
         aria-label="Redo"
         onClick={() => void useStore.getState().redo()}
       >
@@ -204,8 +110,8 @@ export function RecoveryBanner() {
       </button>{" "}
       <button
         className="btn"
-        onClick={async () => {
-          if (await confirm("Discard your unsaved change and reload?"))
+        onClick={() => {
+          if (window.confirm("Discard your unsaved change and reload?"))
             void recover("discard");
         }}
       >
@@ -238,26 +144,6 @@ function NotSavedBanner() {
   );
 }
 
-export function FileMenu() {
-  const projectId = useStore((s) => s.projectId);
-  const setError = useStore((s) => s.setError);
-  const download = () => {
-    const key = browserKeyFromPath(window.location.pathname);
-    const file =
-      key === null
-        ? api.downloadProjectFile(projectId!)
-        : getBrowserProject(key).then(downloadBrowserProject);
-    void file.then(saveDownload, (e) => setError(e.message));
-  };
-  return (
-    <MenuButton
-      label="File"
-      title="Project file"
-      items={[{ label: "Download", action: download }]}
-    />
-  );
-}
-
 function SaveIndicator() {
   const saveState = useStore((s) => s.saveState);
   const busy = useStore((s) => s.busy);
@@ -274,62 +160,123 @@ function SaveIndicator() {
   );
 }
 
-export function TreePane() {
-  const tree = useSplitter("ui.treeWidth", "Model tree width");
-  const Tree = useCurrentWorkbench()?.tree ?? ModelTree;
-  return (
-    <div className="tree-pane" style={{ width: tree.width }}>
-      <Tree />
-      {tree.splitter}
-    </div>
-  );
-}
-
-function TimelineRow() {
-  const Bar = useCurrentWorkbench()?.bar ?? Timeline;
-  return <Bar />;
-}
-
-function Workspace({
-  onUsers,
-  viewport,
-}: {
-  onUsers: () => void;
-  viewport: React.ReactNode;
-}) {
-  const viewportRef = useContext(ViewportContext);
+function Workspace() {
+  const [showHelp, setShowHelp] = useState(false);
   const error = useStore((s) => s.error);
   const setError = useStore((s) => s.setError);
-  const active = useStore((s) => s.active);
-  useKeymap();
-  const banner = active && activeCommand()?.banner;
+  const busy = useStore((s) => s.busy);
+  const projectName = useStore((s) => s.document?.name ?? "");
+  const undo = useStore((s) => s.undo);
+  const redo = useStore((s) => s.redo);
+  const mode = useStore((s) => s.mode);
 
-  useEffect(() => installKeymap(viewportRef), [viewportRef]);
-  useEffect(
-    () =>
-      registerCommand({
-        id: "design.help",
-        label: "Controls",
-        keys: ["?"],
-        keyContext: "global",
-        run: () => togglePanel(HELP_PANEL),
-      }),
-    [],
-  );
+  // global shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable
+      )
+        return;
+      const s = useStore.getState();
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowHelp((v) => !v);
+        return;
+      }
+      if (s.busy || e.repeat) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) void redo();
+        else void undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        void redo();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        viewportHandle.current?.zoomToFit();
+        return;
+      }
+      if (e.shiftKey) return;
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        s.mode.name === "sketch"
+      ) {
+        const ids = s.selection
+          .filter((x) => x.kind === "sketchEntity" || x.kind === "sketchPoint")
+          .map((x: any) => x.entityId);
+        if (ids.length > 0) {
+          e.preventDefault();
+          void s.deleteSketchEntities(ids);
+        }
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (s.mode.name === "sketch") {
+        const tool = sketchToolFor(k);
+        if (tool) s.setSketchTool(tool);
+        if (k === "x") {
+          s.setMode({
+            ...(s.mode as any),
+            constructionMode: !(s.mode as any).constructionMode,
+          });
+        }
+        return;
+      }
+      if (s.mode.name === "idle") {
+        const action = idleActionFor(k);
+        if (action?.kind === "sketch")
+          s.setMode({ name: "pickPlane", purpose: "sketch" });
+        if (action?.kind === "measure") s.setMode({ name: "measure" });
+        if (action?.kind === "dialog") openDialog(action.dialog);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   return (
     <div className="workspace">
-      <WorkspaceTopbar onUsers={onUsers} />
+      <div className="top-bar">
+        <button
+          className="app-title"
+          onClick={() => void backToProjects()}
+          title="Back to projects"
+        >
+          ⬢ Rockett CAD
+        </button>
+        <ProjectName name={projectName} />
+        <UndoRedoButtons />
+        {busy && <span className="busy-indicator">⟳ working…</span>}
+        <SaveIndicator />
+        <button
+          className="icon-btn"
+          title="Keyboard and mouse controls (?)"
+          aria-expanded={showHelp}
+          onClick={() => setShowHelp((v) => !v)}
+        >
+          Controls
+        </button>
+      </div>
       <Toolbar />
       <RecoveryBanner />
       <NotSavedBanner />
       <div className="main-row">
-        <TreePane />
-        {viewport}
+        <ModelTree />
+        <ViewportView />
+        <FeatureDialog />
+        <SketchOffsetPanel />
+        <MeasurePanel />
         <VersionLabel />
-        <Panels />
+        {showHelp && <ControlsHelp onClose={() => setShowHelp(false)} />}
       </div>
-      <TimelineRow />
+      <Timeline />
       {error && (
         <div className="error-toast" role="alert">
           <span>⚠ {error}</span>
@@ -342,61 +289,11 @@ function Workspace({
           </button>
         </div>
       )}
-      {banner && <div className="mode-banner">{banner}</div>}
-    </div>
-  );
-}
-
-export function WorkspaceTopbar({ onUsers }: { onUsers: () => void }) {
-  const showHelp = usePanelOpen(HELP_PANEL);
-  const showHistory = usePanelOpen(HISTORY_PANEL);
-  const showParameters = usePanelOpen(PARAMETERS_PANEL);
-  const busy = useStore((s) => s.busy);
-  const projectName = useStore((s) => s.document?.name ?? "");
-  useKeymap();
-  return (
-    <div className="top-bar">
-      <button
-        className="app-title"
-        onClick={() => void backToProjects()}
-        title="Back to projects"
-      >
-        ⬢ Rockett CAD
-      </button>
-      <FileMenu />
-      <ProjectName name={projectName} />
-      <UndoRedoButtons />
-      <WorkbenchSwitcher />
-      {busy && <span className="busy-indicator">⟳ working…</span>}
-      <SaveIndicator />
-      <UserMenu onUsers={onUsers} />
-      <button
-        className="icon-btn"
-        title="Named parameters for numeric fields"
-        aria-expanded={showParameters}
-        onClick={() => togglePanel(PARAMETERS_PANEL)}
-      >
-        Parameters
-      </button>
-      <button
-        className="icon-btn"
-        title="Undo history and checkpoints"
-        aria-expanded={showHistory}
-        onClick={() => togglePanel(HISTORY_PANEL)}
-      >
-        History
-      </button>
-      <button
-        className="icon-btn"
-        title={tooltipOf({
-          id: "design.help",
-          label: "Keyboard and mouse controls",
-        })}
-        aria-expanded={showHelp}
-        onClick={() => togglePanel(HELP_PANEL)}
-      >
-        Controls
-      </button>
+      {mode.name === "pickPlane" && (
+        <div className="mode-banner">
+          Select a plane or planar face for the sketch (Esc to cancel)
+        </div>
+      )}
     </div>
   );
 }

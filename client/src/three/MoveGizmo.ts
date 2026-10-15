@@ -9,8 +9,6 @@
 import * as THREE from "three";
 import { Manipulator, snapStep, type ManipulatorHost } from "./Manipulator";
 import { themeColor } from "../theme/tokens";
-import { GIZMO_APPEARANCE, PREVIEW_APPEARANCE } from "../tunables";
-import { meshOf, type LayerBody } from "./meshes";
 
 const AXIS_COLORS = ["move-axis-x", "move-axis-y", "move-axis-z"] as const;
 const AXES: THREE.Vector3[] = [
@@ -19,12 +17,17 @@ const AXES: THREE.Vector3[] = [
   new THREE.Vector3(0, 0, 1),
 ];
 
+export interface MoveGhostSource {
+  positions: number[];
+  indices: number[];
+}
+
 export class MoveGizmo extends Manipulator {
   private arrows: {
     shaft: THREE.Mesh;
     cone: THREE.Mesh;
     dir: THREE.Vector3;
-    token: (typeof AXIS_COLORS)[number];
+    color: string;
   }[] = [];
   private ghosts: THREE.Mesh[] = [];
 
@@ -39,20 +42,19 @@ export class MoveGizmo extends Manipulator {
     host: ManipulatorHost,
     origin: THREE.Vector3,
     initial: [number, number, number],
-    ghostBodies: LayerBody[],
+    ghostSources: MoveGhostSource[],
   ) {
     super(host);
     this.origin.copy(origin);
     this.offset.set(...initial);
 
     for (let i = 0; i < 3; i++) {
-      const token = AXIS_COLORS[i]!;
-      const color = themeColor(token);
+      const color = themeColor(AXIS_COLORS[i]!);
       const mat = new THREE.MeshBasicMaterial({
         color,
         depthTest: false,
         transparent: true,
-        opacity: GIZMO_APPEARANCE.shaftOpacity,
+        opacity: 0.95,
       });
       const shaft = new THREE.Mesh(
         new THREE.CylinderGeometry(1, 1, 1, 12),
@@ -64,14 +66,11 @@ export class MoveGizmo extends Manipulator {
       );
       shaft.renderOrder = 20;
       cone.renderOrder = 20;
-      shaft.userData.themeToken = token;
-      cone.userData.themeToken = token;
       this.group.add(shaft, cone);
-      this.arrows.push({ shaft, cone, dir: AXES[i]!, token });
+      this.arrows.push({ shaft, cone, dir: AXES[i]!, color });
     }
 
-    for (const src of ghostBodies.map(meshOf)) {
-      if (!src) continue;
+    for (const src of ghostSources) {
       const geom = new THREE.BufferGeometry();
       geom.setAttribute(
         "position",
@@ -83,13 +82,12 @@ export class MoveGizmo extends Manipulator {
         new THREE.MeshBasicMaterial({
           color: themeColor("gizmo"),
           transparent: true,
-          opacity: PREVIEW_APPEARANCE.gizmoAddOpacity,
+          opacity: 0.22,
           depthWrite: false,
           side: THREE.DoubleSide,
         }),
       );
       mesh.renderOrder = 4;
-      mesh.userData.themeToken = "gizmo";
       this.ghosts.push(mesh);
       this.group.add(mesh);
     }
@@ -150,12 +148,13 @@ export class MoveGizmo extends Manipulator {
   }
 
   setHover(axis: number) {
-    this.arrows.forEach(({ shaft, cone, token }, i) => {
-      const active = i === axis ? "move-axis-hover" : token;
-      shaft.userData.themeToken = active;
-      cone.userData.themeToken = active;
-      this.paint(themeColor(active), shaft, cone);
-    });
+    this.arrows.forEach(({ shaft, cone, color }, i) =>
+      this.paint(
+        i === axis ? themeColor("move-axis-hover") : color,
+        shaft,
+        cone,
+      ),
+    );
   }
 
   /** Begin a drag on the given axis at the pointer position. */

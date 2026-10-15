@@ -1,24 +1,18 @@
-import type {
-  EdgeInfo,
-  FaceInfo,
-  MeshedBody,
-  MeshPayload,
-  Vec3,
-  VertexInfo,
-} from "./api.js";
+import type { EdgeInfo, FaceInfo, VertexInfo } from "./api.js";
 
 const MAGIC = "RKM1";
 const PREFIX_BYTES = 8;
 
 type MeshEdge<P> = Omit<EdgeInfo, "polyline"> & { polyline: P };
 
-export type MeshSource = {
+export interface MeshSource {
   positions: ArrayLike<number>;
   normals: ArrayLike<number>;
   indices: ArrayLike<number>;
+  faces: FaceInfo[];
   edges: MeshEdge<ArrayLike<number>>[];
   vertices: VertexInfo[];
-} & ({ faces: FaceInfo[] } | { triangles: string[] });
+}
 
 export interface BodyMesh {
   positions: Float32Array;
@@ -34,47 +28,11 @@ interface MeshHeader {
   normals: number;
   indices: number;
   faces: FaceInfo[];
-  triangles?: string[];
   edges: (Omit<EdgeInfo, "polyline"> & { offset: number; count: number })[];
   vertices: VertexInfo[];
 }
 
-function triangleFaces(
-  names: string[],
-  at: Float32Array,
-  normals: Float32Array,
-): FaceInfo[] {
-  return names.map((name, t) => {
-    const corner = (c: number): Vec3 => [
-      at[9 * t + 3 * c]!,
-      at[9 * t + 3 * c + 1]!,
-      at[9 * t + 3 * c + 2]!,
-    ];
-    const [p, q, r] = [corner(0), corner(1), corner(2)];
-    const u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]] as const;
-    const v = [r[0] - p[0], r[1] - p[1], r[2] - p[2]] as const;
-    const area =
-      Math.hypot(
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-      ) / 2;
-    const normal: Vec3 = [
-      normals[9 * t]!,
-      normals[9 * t + 1]!,
-      normals[9 * t + 2]!,
-    ];
-    return {
-      name,
-      start: 3 * t,
-      count: 3,
-      surface: { type: "plane", origin: p, normal },
-      area,
-    };
-  });
-}
-
-export function encodeMesh(mesh: MeshSource): Uint8Array<ArrayBuffer> {
+export function encodeMesh(mesh: MeshSource): Uint8Array {
   let polylineCount = 0;
   const edges = mesh.edges.map(({ polyline, ...edge }) => {
     const entry = { ...edge, offset: polylineCount, count: polyline.length };
@@ -85,9 +43,7 @@ export function encodeMesh(mesh: MeshSource): Uint8Array<ArrayBuffer> {
     positions: mesh.positions.length,
     normals: mesh.normals.length,
     indices: mesh.indices.length,
-    ...("faces" in mesh
-      ? { faces: mesh.faces }
-      : { faces: [], triangles: mesh.triangles }),
+    faces: mesh.faces,
     edges,
     vertices: mesh.vertices,
   };
@@ -151,15 +107,6 @@ export function decodeMesh(bytes: Uint8Array): BodyMesh {
   const positions = read(new Float32Array(header.positions), true);
   const normals = read(new Float32Array(header.normals), true);
   const indices = read(new Uint32Array(header.indices), false);
-  const triangles = header.triangles;
-  if (
-    triangles &&
-    (9 * triangles.length !== positions.length ||
-      9 * triangles.length !== normals.length ||
-      3 * triangles.length !== indices.length)
-  ) {
-    throw new Error("mesh triangles do not match its arrays");
-  }
   const polylines = read(new Float32Array(polylineCount), true);
   const edges = header.edges.map(({ offset, count, ...edge }) => {
     if (
@@ -175,87 +122,8 @@ export function decodeMesh(bytes: Uint8Array): BodyMesh {
     positions,
     normals,
     indices,
-    faces: triangles
-      ? triangleFaces(triangles, positions, normals)
-      : header.faces,
+    faces: header.faces,
     edges,
     vertices: header.vertices,
   };
-}
-
-const MESH_FIELDS = [
-  "positions",
-  "normals",
-  "indices",
-  "faces",
-  "edges",
-  "vertices",
-] as const satisfies (keyof MeshPayload)[];
-
-const binaries = new WeakMap<object, Uint8Array>();
-const coarseLevels = new WeakMap<Uint8Array, Uint8Array>();
-
-function numbers(view: ArrayLike<number>): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < view.length; i++) out.push(view[i]!);
-  return out;
-}
-
-export function meshPayloadOf(bytes: Uint8Array): MeshPayload {
-  const mesh = decodeMesh(bytes);
-  return {
-    positions: numbers(mesh.positions),
-    normals: numbers(mesh.normals),
-    indices: numbers(mesh.indices),
-    faces: mesh.faces,
-    edges: mesh.edges.map((edge) => ({
-      ...edge,
-      polyline: numbers(edge.polyline),
-    })),
-    vertices: mesh.vertices,
-  };
-}
-
-export function lazyMesh<T extends object>(
-  head: T,
-  binary: Uint8Array,
-): T & MeshPayload {
-  let mesh: MeshPayload | undefined;
-  const read = () => (mesh ??= meshPayloadOf(binary));
-  const body = Object.defineProperties(
-    head,
-    Object.fromEntries(
-      MESH_FIELDS.map((key) => [
-        key,
-        { enumerable: true, get: () => read()[key] },
-      ]),
-    ),
-  ) as T & MeshPayload;
-  binaries.set(body, binary);
-  return body;
-}
-
-export function withCoarse(binary: Uint8Array, coarse?: Uint8Array) {
-  if (coarse) coarseLevels.set(binary, coarse);
-  return binary;
-}
-
-export function coarseOf(body: object): Uint8Array | undefined {
-  const binary = binaries.get(body);
-  return binary && coarseLevels.get(binary);
-}
-
-export function meshBinary(body: MeshSource): Uint8Array {
-  return binaries.get(body) ?? encodeMesh(body);
-}
-
-export function meshHead<T extends MeshedBody>(
-  body: T,
-): Omit<T, keyof MeshPayload> {
-  const fields: readonly string[] = MESH_FIELDS;
-  return Object.fromEntries(
-    Object.keys(body)
-      .filter((key) => !fields.includes(key))
-      .map((key) => [key, body[key as keyof T]]),
-  ) as Omit<T, keyof MeshPayload>;
 }

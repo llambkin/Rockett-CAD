@@ -1,15 +1,22 @@
+/**
+ * ViewCube: draggable navigation cube in the viewport corner.
+ * Clicking faces/edges/corners animates the camera; dragging orbits freely.
+ */
+
 import * as THREE from "three";
 import type { CadViewport } from "./CadViewport";
 import { ISO_VIEW } from "./camera";
-import { subscribeTheme, themeColor } from "../theme/tokens";
+import { themeColor } from "../theme/tokens";
 
-function paintFace(
-  canvas: HTMLCanvasElement,
-  label: string,
-  rotation: number,
-): void {
-  const ctx = canvas.getContext("2d")!;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+/**
+ * Face label texture. `rotation` counters BoxGeometry's per-face UV
+ * orientation so every label reads upright in its face's standard view
+ * (Z-up world: side-face UVs put texture-"up" along ±Y, not +Z).
+ */
+function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const ctx = c.getContext("2d")!;
   ctx.fillStyle = themeColor("viewcube-face");
   ctx.fillRect(0, 0, 128, 128);
   ctx.strokeStyle = themeColor("viewcube-border");
@@ -22,46 +29,9 @@ function paintFace(
   ctx.translate(64, 64);
   ctx.rotate(rotation);
   ctx.fillText(label, 0, 0);
-}
-
-function faceTexture(label: string, rotation: number): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = c.height = 128;
-  paintFace(c, label, rotation);
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
-}
-
-const FACES: [string, number][] = [
-  ["RIGHT", -Math.PI / 2],
-  ["LEFT", Math.PI / 2],
-  ["BACK", Math.PI],
-  ["FRONT", 0],
-  ["TOP", 0],
-  ["BOTTOM", Math.PI],
-];
-
-function cubeMesh(): { cube: THREE.Mesh; repaint: () => void } {
-  const materials = FACES.map(
-    ([label, rotation]) =>
-      new THREE.MeshBasicMaterial({ map: faceTexture(label, rotation) }),
-  );
-  const cube = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), materials);
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(cube.geometry),
-    new THREE.LineBasicMaterial({ color: themeColor("viewcube-edge") }),
-  );
-  cube.add(edges);
-  const repaint = () => {
-    FACES.forEach(([label, rotation], i) => {
-      const map = materials[i]!.map!;
-      paintFace(map.image as HTMLCanvasElement, label, rotation);
-      map.needsUpdate = true;
-    });
-    edges.material.color.set(themeColor("viewcube-edge"));
-  };
-  return { cube, repaint };
 }
 
 export class ViewCube {
@@ -71,7 +41,6 @@ export class ViewCube {
   private cube: THREE.Mesh;
   private raycaster = new THREE.Raycaster();
   private stopRendering: () => void;
-  private stopTheme: () => void;
   private dragging = false;
   private moved = false;
   private lastX = 0;
@@ -96,22 +65,42 @@ export class ViewCube {
     );
     this.camera.position.set(0, 0, 4);
 
-    const { cube, repaint } = cubeMesh();
-    this.cube = cube;
-    this.scene.add(cube);
-    this.stopTheme = subscribeTheme(() => {
-      repaint();
-      viewport.requestRender();
-    });
+    // Cube faces: three.js BoxGeometry material order is +x,-x,+y,-y,+z,-z.
+    // Rotations make each label upright in that face's standard view.
+    const mats: [string, number][] = [
+      ["RIGHT", -Math.PI / 2],
+      ["LEFT", Math.PI / 2],
+      ["BACK", Math.PI],
+      ["FRONT", 0],
+      ["TOP", 0],
+      ["BOTTOM", Math.PI],
+    ];
+    const materials = mats.map(
+      ([l, rot]) => new THREE.MeshBasicMaterial({ map: faceTexture(l, rot) }),
+    );
+    this.cube = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), materials);
+    this.scene.add(this.cube);
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(this.cube.geometry as THREE.BoxGeometry),
+      new THREE.LineBasicMaterial({ color: themeColor("viewcube-edge") }),
+    );
+    this.cube.add(edges);
 
     const el = this.renderer.domElement;
     el.style.cursor = "pointer";
+    // Drag = orbit, click = snap view. The cursor is hidden for the whole
+    // press via CSS on the captured element (pointer capture keeps delivering
+    // moves — and the hidden cursor — wherever the mouse goes). No pointer
+    // lock: engaging it stalls and drops mouse events for a moment, which
+    // made the cube feel like it needed a big shove before it followed.
     const endDrag = (e: PointerEvent) => {
       if (!this.dragging) return;
       this.dragging = false;
       try {
         el.releasePointerCapture(e.pointerId);
-      } catch {}
+      } catch {
+        // capture already gone
+      }
       el.style.cursor = "pointer";
     };
     el.addEventListener("pointerdown", (e) => {
@@ -123,7 +112,9 @@ export class ViewCube {
       el.style.cursor = "none";
       try {
         el.setPointerCapture(e.pointerId);
-      } catch {}
+      } catch {
+        // no active pointer to capture (synthetic events) — drag still works
+      }
     });
     el.addEventListener("pointermove", (e) => {
       if (!this.dragging) return;
@@ -131,10 +122,13 @@ export class ViewCube {
       const dy = e.clientY - this.lastY;
       this.lastX = e.clientX;
       this.lastY = e.clientY;
+      // the first pixel of travel already orbits; only a perfectly still
+      // press-release counts as a click
       if (!this.moved) {
         if (Math.abs(dx) + Math.abs(dy) < 1) return;
         this.moved = true;
       }
+      // trackball grab: the cube (and model) follows the cursor from any view
       this.viewport.orbitTrackball(dx, dy);
     });
     el.addEventListener("pointerup", (e) => {
@@ -156,7 +150,6 @@ export class ViewCube {
 
   dispose() {
     this.stopRendering();
-    this.stopTheme();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -171,6 +164,7 @@ export class ViewCube {
     const hits = this.raycaster.intersectObject(this.cube, false);
     const hit = hits[0];
     if (!hit) return;
+    // local hit point → snap direction (face / edge / corner)
     const local = this.cube.worldToLocal(hit.point.clone());
     const half = 0.7;
     const t = 0.42; // threshold for edge/corner detection
