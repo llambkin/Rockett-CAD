@@ -14,6 +14,21 @@ Geometry exists only inside the evaluation state and its caches, and is
 rebuilt from the recipe on demand. Saved projects are JSON, and the modelling
 history survives close/reopen; embedded imports increase document size.
 
+### Sketch region boundaries
+
+Native face construction removes retraced divider overhangs from each boundary.
+An overhang contributes no area, but retaining its forward and return edges can
+leave a zero-width seam when extruded regions are joined.
+
+When contained regions share edges, their hole wires cannot be added separately
+to the surrounding face. The builder validates the face and, if necessary, fuses
+the contained regions and subtracts their combined area from the outer face.
+The repaired face must pass native validation before extrusion. Face extrusion
+uses the same planar subtraction when removing regions drawn on a body face.
+
+These corrections operate on regenerated geometry. Saved sketch entities,
+profile IDs, feature selections and the document schema stay unchanged.
+
 ### Loft sections
 
 Schema 12 lets a loft's ordered `sections` mix sketch `ProfileRef` entries

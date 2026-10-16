@@ -11,14 +11,17 @@ import type { PlaneFrame, Profile, SketchEntity, Vec3 } from "@rockett/shared";
 import { arcAngles, LINEAR_TOL, UNIT_DOT_TOL } from "@rockett/shared";
 import {
   getKernel,
+  isValidShape,
+  scoped,
   kernelCall,
   pnt,
   dir,
-  progress,
   shapeHash,
   type Shape,
 } from "./kernel.js";
 import { uvTo3d } from "./frames.js";
+import { cutPlanarRegions } from "./planarRegions.js";
+import { profileBoundary } from "./profileBoundary.js";
 
 export interface ProfileFace {
   face: Shape; // TopoDS_Face
@@ -123,7 +126,7 @@ function buildWire(
 
   const to3d = (uv: [number, number]): Vec3 => uvTo3d(frame, uv[0], uv[1]);
 
-  for (const oc of chain) {
+  for (const oc of profileBoundary(chain)) {
     let edge: Shape | null = null;
     const line = maps.lines.get(oc.entityId);
     const arc = maps.arcs.get(oc.entityId);
@@ -357,39 +360,14 @@ export function subtractSketchRegionsFromFace(
     if (regions.length === 0) return noop;
 
     return kernelCall("face region subtraction", () => {
-      // One boolean cut with all region faces as a compound tool (regions
-      // may nest — e.g. a rect region containing a circle region — and the
-      // union of all of them is what gets removed).
-      const builder = new k.BRep_Builder();
-      const comp = new k.TopoDS_Compound();
-      builder.MakeCompound(comp);
-      for (const { sk, profile } of regions) {
-        const pf = buildProfileFace(profile, sk.entities, sk.frame);
-        builder.Add(comp, pf.face);
-      }
-      const op = new k.BRepAlgoAPI_Cut_3(faceT, comp, progress());
-      op.Build(progress());
-      if (!op.IsDone()) {
-        op.delete();
-        return noop;
-      }
-      const result = op.Shape();
-      op.delete();
-
-      // Expect exactly one face back (regions are strictly interior).
-      const ex = new k.TopExp_Explorer_2(
-        result,
-        k.TopAbs_ShapeEnum.TopAbs_FACE,
-        k.TopAbs_ShapeEnum.TopAbs_SHAPE,
+      const cutFace = scoped((own) =>
+        cutPlanarRegions(
+          faceT,
+          regions.map(({ sk, profile }) =>
+            own(buildProfileFace(profile, sk.entities, sk.frame).face),
+          ),
+        ),
       );
-      const cutFaces: Shape[] = [];
-      while (ex.More()) {
-        cutFaces.push(k.TopoDS.Face_1(ex.Current()));
-        ex.Next();
-      }
-      ex.delete();
-      if (cutFaces.length !== 1) return noop;
-      const cutFace = cutFaces[0];
 
       // Name the new hole edges after the sketch entities they came from,
       // so hole side-walls get stable persistent names.
@@ -455,6 +433,27 @@ export function buildProfileFace(
       }
       face = withHole.Face();
       withHole.delete();
+    }
+
+    if (profile.holes.length > 0 && !isValidShape(face)) {
+      const repaired = scoped((own) =>
+        cutPlanarRegions(
+          own(
+            buildProfileFace({ ...profile, holes: [] }, entities, frame).face,
+          ),
+          profile.holes.map((outer) =>
+            own(
+              buildProfileFace(
+                { ...profile, outer, holes: [] },
+                entities,
+                frame,
+              ).face,
+            ),
+          ),
+        ),
+      );
+      face.delete();
+      face = repaired;
     }
 
     // Re-derive edge → entity mapping from the final face geometry.

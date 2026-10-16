@@ -48,6 +48,7 @@ import {
   faceCentroid,
   faces as facesOf,
   getKernel,
+  isValidShape,
   kernelCall,
   listToArray,
   placementToTrsf,
@@ -861,19 +862,14 @@ function evalLoft(state: EvalState, f: LoftFeature): void {
       }
       const shape = thru.Shape();
       if (f.sections.some((ref) => "kind" in ref)) {
-        const check = new k.BRepCheck_Analyzer(shape, true, false);
-        try {
-          if (
-            !check.IsValid_2() ||
-            solids(shape).length !== 1 ||
-            volumeOf(shape) <= LINEAR_TOL ** 3
-          )
-            throw new Error(
-              "loft did not produce a valid solid; choose distinct, compatible sections in order",
-            );
-        } finally {
-          check.delete();
-        }
+        if (
+          !isValidShape(shape) ||
+          solids(shape).length !== 1 ||
+          volumeOf(shape) <= LINEAR_TOL ** 3
+        )
+          throw new Error(
+            "loft did not produce a valid solid; choose distinct, compatible sections in order",
+          );
       }
       const names = finalizeNames(shape, new ShapeMap(), f.id);
       return { shape, names };
@@ -1079,14 +1075,7 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
       result = op.Shape();
       // IsDone only confirms that the algorithm completed. Some edge junctions
       // produce an invalid solid even when it reports success; never publish it.
-      const check = new k.BRepCheck_Analyzer(result, true, false);
-      let valid: boolean;
-      try {
-        valid = check.IsValid_2();
-      } finally {
-        check.delete();
-      }
-      if (!valid) {
+      if (!isValidShape(result)) {
         throw new Error(
           `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`,
         );

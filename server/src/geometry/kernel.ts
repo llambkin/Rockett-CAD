@@ -36,6 +36,13 @@ export function getKernel(): OC {
   return oc;
 }
 
+export function isValidShape(shape: Shape): boolean {
+  return scoped((own) => {
+    const check = own(new (getKernel().BRepCheck_Analyzer)(shape, true, false));
+    return check.IsValid_2();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Iteration / conversion helpers
 // ---------------------------------------------------------------------------

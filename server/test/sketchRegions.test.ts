@@ -11,7 +11,7 @@ import {
   detectProfiles,
   profileIdFor,
 } from "@rockett/shared";
-import { initKernel, volumeOf } from "../src/geometry/kernel.js";
+import { getKernel, initKernel, volumeOf } from "../src/geometry/kernel.js";
 import { dropEngine, engineFor } from "../src/geometry/engine.js";
 
 const S = 40;
@@ -241,5 +241,138 @@ describe("extruding sketch regions", () => {
     const volumes = extrude(inscribed(), [legacy]);
     expect(volumes).toHaveLength(1);
     expect(volumes[0]!).toBeCloseTo(S * S * DEPTH, 3);
+  });
+});
+
+function bordered(
+  inside: "divider" | "circle" | "crossing circle",
+): SketchEntity[] {
+  return [
+    ...inscribed(inside === "crossing circle" ? 0.006 : 0).filter(
+      (e) => inside !== "divider" || e.kind !== "circle",
+    ),
+    P("oa", -3, -3),
+    P("ob", 43, -3),
+    P("oc", 43, 43),
+    P("od", -3, 43),
+    L("ol1", "oa", "ob"),
+    L("ol2", "ob", "oc"),
+    L("ol3", "oc", "od"),
+    L("ol4", "od", "oa"),
+    ...(inside === "divider" ? [L("divider", "ml", "mr")] : []),
+  ];
+}
+
+function checkedVolumes(doc: CadDocument) {
+  dropEngine(doc.id);
+  const engine = engineFor(doc.id);
+  try {
+    const result = engine.evaluate(doc);
+    expect(
+      result.featureStatuses.map((s) => s.status),
+      JSON.stringify(result.featureStatuses),
+    ).toEqual(doc.features.map(() => "ok"));
+    return [...engine.stateAt(doc).bodies.values()].map((body) => {
+      const analyzer = new (getKernel().BRepCheck_Analyzer)(
+        body.shape,
+        true,
+        false,
+      );
+      try {
+        expect(analyzer.IsValid_2()).toBe(true);
+      } finally {
+        analyzer.delete();
+      }
+      return volumeOf(body.shape);
+    });
+  } finally {
+    dropEngine(doc.id);
+  }
+}
+
+describe("border profiles around adjoining regions", () => {
+  beforeAll(async () => {
+    await initKernel();
+  }, 120_000);
+
+  it.each(["divider", "circle", "crossing circle"] as const)(
+    "extrudes a valid border around a %s",
+    (inside) => {
+      const entities = bordered(inside);
+      const border = detectProfiles(entities).find((p) =>
+        p.outer.every((c) => c.entityId.startsWith("ol")),
+      )!;
+      const doc = docWith(entities, [border.id]);
+      (doc.features[1] as ExtrudeFeature).operation = "newBody";
+      const volumes = checkedVolumes(doc);
+      const r = 20.006;
+      const overflow =
+        inside === "crossing circle"
+          ? 4 * (r * r * Math.acos(20 / r) - 20 * Math.sqrt(r * r - 400))
+          : 0;
+      expect(volumes).toHaveLength(1);
+      expect(volumes[0]).toBeCloseTo((46 * 46 - 40 * 40 - overflow) * DEPTH, 4);
+    },
+  );
+
+  it("keeps a valid base when tiny unselected regions meet the border", () => {
+    const entities = bordered("crossing circle");
+    const profiles = detectProfiles(entities).filter((p) => p.area > 0.01);
+    const doc = docWith(
+      entities,
+      profiles.map((p) => p.id),
+    );
+    const r = 20.006;
+    const missing =
+      4 * (r * r * Math.acos(20 / r) - 20 * Math.sqrt(r * r - 400));
+    expect(checkedVolumes(doc)).toEqual([
+      expect.closeTo((46 * 46 - missing) * DEPTH, 4),
+    ]);
+  });
+
+  it.each([0.006, 3])(
+    "ignores a %s mm divider overhang inside a region",
+    (overhang) => {
+      const entities = [
+        ...inscribed().filter((e) => e.kind !== "circle"),
+        P("overhang", 20 + overhang, 20),
+        L("vertical", "mb", "mt"),
+        L("horizontal", "ml", "overhang"),
+      ];
+      const profiles = detectProfiles(entities);
+      const doc = docWith(
+        entities,
+        profiles.map((p) => p.id),
+      );
+      expect(checkedVolumes(doc)).toEqual([expect.closeTo(S * S * DEPTH, 4)]);
+    },
+  );
+
+  it("joins the complete border and selected interior region to an existing base", () => {
+    const entities = bordered("divider");
+    const profiles = detectProfiles(entities);
+    const border = profiles.find((p) =>
+      p.outer.every((c) => c.entityId.startsWith("ol")),
+    )!;
+    const interior = profiles.find((p) => p.holes.length === 0)!;
+    const doc = docWith(
+      entities,
+      profiles.map((p) => p.id),
+    );
+    const base = doc.features[1] as ExtrudeFeature;
+    base.distance = 2;
+    doc.features.push({
+      ...base,
+      id: "walls",
+      distance: DEPTH,
+      profiles: [border, interior].map((p) => ({
+        sketchId: "sk",
+        profileId: p.id,
+      })),
+    });
+    doc.timelinePosition = 3;
+    expect(checkedVolumes(doc)).toEqual([
+      expect.closeTo(46 * 46 * 2 + (46 * 46 - 40 * 40 + 800) * 8, 4),
+    ]);
   });
 });
