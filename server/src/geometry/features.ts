@@ -379,11 +379,11 @@ function blendKeepingHoles(
   make: (shape: Shape, edges: Shape[]) => any,
 ): { op: any; source: NamedBody; edges: SourceEdge[] } {
   const holes = handles(body.shape);
-  const sound = (op: any) => {
+  const keepsHoles = (op: any, strict: boolean) => {
     if (!op.IsDone()) return false;
     const shape = op.Shape();
     try {
-      return isValidShape(shape) && handles(shape) === holes;
+      return (!strict || isValidShape(shape)) && handles(shape) >= holes;
     } finally {
       shape.delete();
     }
@@ -392,7 +392,8 @@ function blendKeepingHoles(
     body.shape,
     sourceEdges.map((e) => e.edge),
   );
-  if (sound(first)) return { op: first, source: body, edges: sourceEdges };
+  if (keepsHoles(first, false))
+    return { op: first, source: body, edges: sourceEdges };
   const merged = unifyTool(
     body,
     featureId,
@@ -410,7 +411,7 @@ function blendKeepingHoles(
   )
     return { op: first, source: body, edges: sourceEdges };
   const second = make(merged.shape, merged.carried as Shape[]);
-  if (!sound(second)) {
+  if (!keepsHoles(second, true)) {
     second.delete();
     return { op: first, source: body, edges: sourceEdges };
   }
@@ -1153,10 +1154,6 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
           `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`,
         );
       }
-      if (handles(result) !== handles(body.shape))
-        throw new Error(
-          `fillet of radius ${f.radius} would fill or open a hole in the body; the previous body has been kept`,
-        );
       const names = blendNames(op, blend.source, blend.edges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     } finally {
@@ -1499,10 +1496,6 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
         return;
       }
       result = op.Shape();
-      if (handles(result) !== handles(body.shape))
-        throw new Error(
-          `chamfer of ${f.distance} mm would fill or open a hole in the body; the previous body has been kept`,
-        );
       const names = blendNames(op, blend.source, blend.edges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     } finally {
