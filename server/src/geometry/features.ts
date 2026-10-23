@@ -48,6 +48,7 @@ import {
   faceCentroid,
   faces as facesOf,
   getKernel,
+  handles,
   isValidShape,
   kernelCall,
   listToArray,
@@ -326,8 +327,13 @@ function reparametrisedCylinderEdges(shape: Shape): Shape[] {
  * the sketch's internal boundaries as edges. Purely cosmetic: on any kernel
  * failure the unmerged tool is kept.
  */
-function unifyTool(tool: ToolResult, featureId: string): ToolResult {
+function unifyTool(
+  tool: ToolResult,
+  featureId: string,
+  carry: Shape[] = [],
+): ToolResult & { carried: (Shape | undefined)[] } {
   const k = getKernel();
+  const unchanged = { ...tool, carried: [...carry] };
   try {
     const uni = new k.ShapeUpgrade_UnifySameDomain_2(
       tool.shape,
@@ -342,16 +348,81 @@ function unifyTool(tool: ToolResult, featureId: string): ToolResult {
     const merged = uni.Shape();
     if (facesOf(merged).length === 0) {
       uni.delete();
-      return tool;
+      return unchanged;
     }
     const history = uni.History_1();
     const names = historyNames(history.get(), tool, merged, featureId);
+    const carried = carry.map((s) => {
+      if (history.get().IsRemoved(s)) return undefined;
+      const modified = listToArray(history.get().Modified(s));
+      const [first, ...rest] = modified;
+      release(rest);
+      if (!first) return s;
+      const edge = k.TopoDS.Edge_1(first);
+      first.delete();
+      return edge;
+    });
     history.delete?.();
     uni.delete();
-    return { shape: merged, names };
+    return { shape: merged, names, carried };
   } catch {
-    return tool;
+    return unchanged;
   }
+}
+
+type SourceEdge = { edge: Shape; name: string };
+
+function blendKeepingHoles(
+  body: NamedBody,
+  sourceEdges: SourceEdge[],
+  featureId: string,
+  make: (shape: Shape, edges: Shape[]) => any,
+): { op: any; source: NamedBody; edges: SourceEdge[] } {
+  const holes = handles(body.shape);
+  const sound = (op: any) => {
+    if (!op.IsDone()) return false;
+    const shape = op.Shape();
+    try {
+      return isValidShape(shape) && handles(shape) === holes;
+    } finally {
+      shape.delete();
+    }
+  };
+  const first = make(
+    body.shape,
+    sourceEdges.map((e) => e.edge),
+  );
+  if (sound(first)) return { op: first, source: body, edges: sourceEdges };
+  const merged = unifyTool(
+    body,
+    featureId,
+    sourceEdges.map((e) => e.edge),
+  );
+  const count = (shape: Shape) => {
+    const list = facesOf(shape);
+    release(list);
+    return list.length;
+  };
+  if (
+    merged.shape === body.shape ||
+    count(merged.shape) >= count(body.shape) ||
+    merged.carried.some((e) => !e)
+  )
+    return { op: first, source: body, edges: sourceEdges };
+  const second = make(merged.shape, merged.carried as Shape[]);
+  if (!sound(second)) {
+    second.delete();
+    return { op: first, source: body, edges: sourceEdges };
+  }
+  first.delete();
+  return {
+    op: second,
+    source: { bodyId: body.bodyId, shape: merged.shape, names: merged.names },
+    edges: sourceEdges.map((e, i) => ({
+      edge: merged.carried[i]!,
+      name: e.name,
+    })),
+  };
 }
 
 function applyToolOperation(
@@ -1050,23 +1121,25 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
   const k = getKernel();
   kernelCall("fillet", () => {
     const byName = computeEdgeNames(body).byName;
-    const op = new k.BRepFilletAPI_MakeFillet(
-      body.shape,
-      k.ChFi3d_FilletShape.ChFi3d_Rational,
-    );
+    let op: any;
     let result: Shape | undefined;
     try {
-      const sourceEdges = collectEdges(
+      const blend = blendKeepingHoles(
         body,
-        byName,
-        f.edges,
-        f.tangentChain,
-        "fillet",
+        collectEdges(body, byName, f.edges, f.tangentChain, "fillet"),
+        f.id,
+        (shape, edges) => {
+          const made = new k.BRepFilletAPI_MakeFillet(
+            shape,
+            k.ChFi3d_FilletShape.ChFi3d_Rational,
+          );
+          for (const edge of edges)
+            if (!made.Contour(edge)) made.Add_2(f.radius, edge);
+          made.Build(progress());
+          return made;
+        },
       );
-      for (const { edge } of sourceEdges) {
-        if (!op.Contour(edge)) op.Add_2(f.radius, edge);
-      }
-      op.Build(progress());
+      op = blend.op;
       if (!op.IsDone()) {
         throw new Error(
           `fillet of radius ${f.radius} failed — radius may be too large for the geometry`,
@@ -1080,11 +1153,15 @@ function evalFillet(state: EvalState, f: FilletFeature): void {
           `fillet of radius ${f.radius} produced invalid geometry — try fewer edges or a different radius; the previous body has been kept`,
         );
       }
-      const names = blendNames(op, body, sourceEdges, result, f.id);
+      if (handles(result) !== handles(body.shape))
+        throw new Error(
+          `fillet of radius ${f.radius} would fill or open a hole in the body; the previous body has been kept`,
+        );
+      const names = blendNames(op, blend.source, blend.edges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     } finally {
       result?.delete();
-      op.delete();
+      op?.delete();
       release(byName.values());
     }
   });
@@ -1381,7 +1458,7 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
   const k = getKernel();
   kernelCall("chamfer", () => {
     const byName = computeEdgeNames(body).byName;
-    const op = new k.BRepFilletAPI_MakeChamfer(body.shape);
+    let op: any;
     let result: Shape | undefined;
     try {
       const sourceEdges = collectEdges(
@@ -1391,10 +1468,19 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
         f.tangentChain,
         "chamfer",
       );
-      for (const { edge } of sourceEdges) {
-        if (!op.Contour(edge)) op.Add_2(f.distance, edge);
-      }
-      op.Build(progress());
+      const blend = blendKeepingHoles(
+        body,
+        sourceEdges,
+        f.id,
+        (shape, edges) => {
+          const made = new k.BRepFilletAPI_MakeChamfer(shape);
+          for (const edge of edges)
+            if (!made.Contour(edge)) made.Add_2(f.distance, edge);
+          made.Build(progress());
+          return made;
+        },
+      );
+      op = blend.op;
       if (!op.IsDone()) {
         // ChFi3d can't consume a face (e.g. chamfers from both caps meeting
         // mid-wall); a boolean envelope can, for complete planar outlines
@@ -1413,11 +1499,15 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
         return;
       }
       result = op.Shape();
-      const names = blendNames(op, body, sourceEdges, result, f.id);
+      if (handles(result) !== handles(body.shape))
+        throw new Error(
+          `chamfer of ${f.distance} mm would fill or open a hole in the body; the previous body has been kept`,
+        );
+      const names = blendNames(op, blend.source, blend.edges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     } finally {
       result?.delete();
-      op.delete();
+      op?.delete();
       release(byName.values());
     }
   });

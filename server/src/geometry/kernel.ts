@@ -79,6 +79,21 @@ export function* explore(
 
 type Owned = { delete(): void };
 
+export function handles(shape: Shape): number {
+  const count = (type: "vertex" | "edge" | "face" | "wire" | "shell") => {
+    let n = 0;
+    for (const s of explore(shape, type)) {
+      n++;
+      s.delete();
+    }
+    return n;
+  };
+  const [v, e, f, w, s] = (
+    ["vertex", "edge", "face", "wire", "shell"] as const
+  ).map(count) as [number, number, number, number, number];
+  return s - (v - e + 2 * f - w) / 2;
+}
+
 export function release(handles: Iterable<Owned>): void {
   for (const handle of handles) handle.delete();
 }

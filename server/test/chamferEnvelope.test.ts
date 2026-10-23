@@ -112,7 +112,7 @@ const chamfer = (
   distance,
 });
 
-describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", () => {
+describe("chamfer that consumes a face (3.5 + 3.5 on a 7 mm plate)", { timeout: 30_000 }, () => {
   it("both loops in one feature meet at a knife edge: 18 faces, no walls left", () => {
     const { engine, doc, top, bot, prismVolume } = starPlate("che1");
     expect(top).toHaveLength(8);

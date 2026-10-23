@@ -28,6 +28,10 @@ change gets a `Schema N` line in the section that ships it.
   conflicting dimension elsewhere in the sketch. A distance is read as left of
   the first source line as it now runs, and a saved sign that a reversed line
   made stale is corrected, so the edit panel shows the side the offset is on.
+- A fillet or chamfer on a body joined from pieces no longer fills nearby holes
+  or fails: when the first attempt loses a hole or fails, it is retried on the
+  body with its split faces merged, and a blend that would still change the
+  hole count reports an error instead.
 - A sketch dimension value that would over-constrain a sketch that solved is
   refused instead of saved, since the distorted result could change the sketch
   regions and break the features built on them.

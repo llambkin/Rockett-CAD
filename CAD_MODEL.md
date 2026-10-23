@@ -190,6 +190,15 @@ share the same X and Y axes. OCCT 7.6 never returns from merging a fillet's
 cylinder with a coaxial prism cylinder whose angle starts a quarter turn away,
 so cylinders whose axes differ keep the edge between them (BUG-041).
 
+Fillets and chamfers keep a body's through-holes. When the kernel's blend
+fails, gives an invalid solid, or changes the hole count (the Euler-Poincare
+`handles` of the solid), it is retried once on a copy whose coplanar faces and
+collinear edges are merged with `ShapeUpgrade_UnifySameDomain`, carrying the
+selected edges through the merge history. A body joined from pieces keeps the
+pieces' boundaries as split faces, and the kernel's blend can drop a hole
+beside them. If the retry still changes the hole count the feature reports an
+error and keeps the previous body.
+
 Chamfers go through the kernel's `BRepFilletAPI_MakeChamfer` first. That
 algorithm cannot remove a face the chamfer consumes entirely (two 3.5 mm
 chamfers meeting mid-wall on a 7 mm plate), so when it fails and the selected
