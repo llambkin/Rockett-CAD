@@ -14,6 +14,14 @@ change gets a `Schema N` line in the section that ships it.
 
 - Export to STEP: the export panel writes the chosen bodies as exact,
   named solids in millimetres, for opening in other CAD tools.
+- Sketch offsets follow their source curves: resizing or moving the source
+  rebuilds the offset at its distance while the sketch is edited.
+
+### Fixed
+
+- Editing an offset distance no longer fails because of an unrelated
+  conflicting dimension elsewhere in the sketch, and the offset keeps its side
+  when its first source line has been reversed.
 
 ## 0.2.0 (2026-09-23)
 

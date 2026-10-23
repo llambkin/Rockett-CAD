@@ -28,6 +28,7 @@ import {
   solveSketch,
   createSketchOffset,
   editSketchOffset,
+  solveWithOffsets,
   constraintEntityRefs,
   trimSketch,
   withShown,
@@ -430,6 +431,31 @@ export function followPath(): Promise<void> | void {
   if (id !== s.projectId) return s.openProject(id);
 }
 
+function followed(
+  draft: SketchFeature,
+  result: ReturnType<typeof solveWithOffsets>,
+  solvedOnly = result.solved.converged,
+) {
+  const notes = [
+    ...(result.removedConstraints
+      ? [
+          `${result.removedConstraints} dimension(s) on offset geometry no longer fit the offset and were removed. Undo restores them.`,
+        ]
+      : []),
+    ...result.failures.map(
+      (f) => `An offset could not follow its source: ${f}`,
+    ),
+  ];
+  return {
+    draftSketch: {
+      ...draft,
+      entities: solvedOnly ? result.solved.entities : result.entities,
+      constraints: result.constraints,
+    },
+    ...(notes.length ? { error: notes.join(" ") } : {}),
+  };
+}
+
 export const useStore = create<State>((set, get) => ({
   projectId: null,
   document: null,
@@ -809,30 +835,25 @@ export const useStore = create<State>((set, get) => ({
     const { draftSketch, busy } = get();
     if (!draftSketch || busy) return;
     const next = editSketchOffset(draftSketch, id, distance);
-    const solved = solveSketch({
-      entities: next.entities,
-      constraints: next.constraints,
-    });
-    const owned = new Set((next.offsets ?? []).flatMap((o) => o.entityIds));
+    const result = solveWithOffsets(
+      {
+        entities: next.entities,
+        constraints: next.constraints,
+        offsets: next.offsets,
+      },
+      next.entities,
+    );
     if (
-      !solved.converged ||
-      solved.entities.some((e, i) => {
-        const before = next.entities[i];
-        return (
-          owned.has(e.id) &&
-          ((e.kind === "point" &&
-            before?.kind === "point" &&
-            Math.hypot(e.x - before.x, e.y - before.y) > 1e-5) ||
-            (e.kind === "circle" &&
-              before?.kind === "circle" &&
-              Math.abs(e.radius - before.radius) > 1e-5))
-        );
-      })
+      !result.solved.converged &&
+      solveSketch({
+        entities: draftSketch.entities,
+        constraints: draftSketch.constraints,
+      }).converged
     )
       throw new Error(
         "Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.",
       );
-    set({ draftSketch: { ...next, entities: solved.entities } });
+    set(followed(next, result));
     try {
       await get().commitDraftSketch();
     } catch (e) {
@@ -862,23 +883,26 @@ export const useStore = create<State>((set, get) => ({
   updateDraftSketch(entities, constraints) {
     const { draftSketch } = get();
     if (!draftSketch) return;
-    const updated = { ...draftSketch, entities, constraints };
-    const solved = solveSketch({ entities, constraints });
-    if (solved.converged) {
-      updated.entities = solved.entities;
-    }
-    set({ draftSketch: updated });
+    const result = solveWithOffsets(
+      { entities, constraints, offsets: draftSketch.offsets },
+      draftSketch.entities,
+    );
+    set(followed(draftSketch, result));
   },
 
   solveDraft(drag) {
     const { draftSketch } = get();
     if (!draftSketch) return;
-    const solved = solveSketch({
-      entities: draftSketch.entities,
-      constraints: draftSketch.constraints,
-      ...(drag === undefined ? {} : { drag }),
-    });
-    set({ draftSketch: { ...draftSketch, entities: solved.entities } });
+    const result = solveWithOffsets(
+      {
+        entities: draftSketch.entities,
+        constraints: draftSketch.constraints,
+        offsets: draftSketch.offsets,
+        ...(drag === undefined ? {} : { drag }),
+      },
+      draftSketch.entities,
+    );
+    set(followed(draftSketch, result, true));
   },
 
   async commitDraftSketch() {

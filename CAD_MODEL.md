@@ -419,9 +419,19 @@ Editing a distance (`editSketchOffset` in `shared/src/sketchOffsets.ts`)
 rebuilds that offset and every later one from the stored sources. It keeps the
 generated entity IDs, so profiles and downstream features keep their
 references. The edit fails if generated geometry was deleted or trimmed, or if
-the rebuild yields a different number or kind of curves. Editing a source curve
-does not rebuild its offsets: they keep their positions until the next
-distance edit.
+the rebuild yields a different number or kind of curves.
+
+Offsets follow their sources while a sketch is edited (`solveWithOffsets`).
+Each client solve first solves the sketch without the constraints that touch
+offset curves, rebuilds every offset from the solved sources at its distance,
+then solves again with those constraints, so geometry attached to an offset
+moves with it. An offset keeps the side it lies on: the side is measured from
+its current curves rather than from the direction of its first source line, and
+an edit flips it only when the new distance's sign differs from the saved one.
+A constraint that refers only to offset curves and no longer holds after the
+rebuild is removed, with an undoable notice. An offset whose curves were
+deleted is skipped. The server never rebuilds offsets, so a saved sketch
+evaluates unchanged until it is next edited.
 
 ## Line angles (schema 5)
 

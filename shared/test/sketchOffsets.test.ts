@@ -4,6 +4,9 @@ import {
   editSketchOffset,
   detectProfiles,
   solveSketch,
+  solveWithOffsets,
+  type SketchConstraint,
+  type SketchEntity,
   type SketchFeature,
 } from "../src/index.js";
 
@@ -104,4 +107,103 @@ it("retains the selected direction when editing a chained rectangle", () => {
   expect(changed.entities.map((e) => e.id)).toEqual(
     created.entities.map((e) => e.id),
   );
+});
+
+const square = (): SketchFeature => ({
+  ...sketch,
+  entities: [
+    { id: "a", kind: "point", x: 0, y: 0 },
+    { id: "b", kind: "point", x: 20, y: 0 },
+    { id: "c", kind: "point", x: 20, y: 20 },
+    { id: "d", kind: "point", x: 0, y: 20 },
+    { id: "ab", kind: "line", p1: "a", p2: "b" },
+    { id: "bc", kind: "line", p1: "b", p2: "c" },
+    { id: "cd", kind: "line", p1: "c", p2: "d" },
+    { id: "da", kind: "line", p1: "d", p2: "a" },
+  ],
+  constraints: [
+    { id: "fa", type: "fix", point: "a" },
+    { id: "h1", type: "horizontal", line: "ab" },
+    { id: "v1", type: "vertical", line: "bc" },
+    { id: "h2", type: "horizontal", line: "cd" },
+    { id: "v2", type: "vertical", line: "da" },
+    { id: "w", type: "length", line: "ab", value: 20 },
+    { id: "h", type: "length", line: "bc", value: 20 },
+  ],
+});
+
+const offsetSpan = (entities: SketchEntity[], ids: string[]) => {
+  const points = entities.filter(
+    (e): e is Extract<SketchEntity, { kind: "point" }> =>
+      e.kind === "point" && ids.includes(e.id),
+  );
+  const xs = points.map((p) => p.x),
+    ys = points.map((p) => p.y);
+  return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+};
+
+const resize = (constraints: SketchConstraint[], value: number) =>
+  constraints.map((c) => (c.id === "w" ? { ...c, value } : c));
+
+it("follows its source when the source rectangle is resized", () => {
+  const created = createSketchOffset(square(), ["cd"], 2);
+  const offset = created.offsets![0]!;
+  const result = solveWithOffsets(
+    {
+      entities: created.entities,
+      constraints: resize(created.constraints, 30),
+      offsets: created.offsets,
+    },
+    created.entities,
+  );
+  expect(result.solved.converged).toBe(true);
+  offsetSpan(result.solved.entities, offset.entityIds).forEach((v, i) =>
+    expect(v).toBeCloseTo([2, 28, 2, 18][i]!, 6),
+  );
+  expect(result.removedConstraints).toBe(0);
+});
+
+it("keeps an offset on its side when its first source line has reversed", () => {
+  const created = createSketchOffset(square(), ["cd"], 2);
+  const id = created.offsets![0]!.id;
+  const reversed = {
+    ...created,
+    entities: created.entities.map((e) =>
+      e.id === "cd" ? { ...e, p1: "d", p2: "c" } : e,
+    ),
+  };
+  const ids = created.offsets![0]!.entityIds;
+  offsetSpan(editSketchOffset(reversed, id, 3).entities, ids).forEach((v, i) =>
+    expect(v).toBeCloseTo([3, 17, 3, 17][i]!, 6),
+  );
+  offsetSpan(editSketchOffset(reversed, id, -3).entities, ids).forEach((v, i) =>
+    expect(v).toBeCloseTo([-3, 23, -3, 23][i]!, 6),
+  );
+});
+
+it("removes only offset-curve dimensions that following breaks", () => {
+  const created = createSketchOffset(square(), ["cd"], 2);
+  const ids = new Set(created.offsets![0]!.entityIds);
+  const at = new Map(created.entities.map((e) => [e.id, e]));
+  const top = created.entities.find(
+    (e) =>
+      e.kind === "line" &&
+      ids.has(e.id) &&
+      [e.p1, e.p2].every((p) => Math.abs((at.get(p) as any).y - 18) < 1e-6),
+  )!;
+  const constraints: SketchConstraint[] = [
+    ...created.constraints,
+    { id: "inner", type: "length", line: top.id, value: 16 },
+  ];
+  const input = { entities: created.entities, offsets: created.offsets };
+  const still = solveWithOffsets({ ...input, constraints }, created.entities);
+  expect(still.removedConstraints).toBe(0);
+  expect(still.constraints.map((c) => c.id)).toContain("inner");
+  const moved = solveWithOffsets(
+    { ...input, constraints: resize(constraints, 30) },
+    created.entities,
+  );
+  expect(moved.removedConstraints).toBe(1);
+  expect(moved.constraints.map((c) => c.id)).not.toContain("inner");
+  expect(moved.solved.converged).toBe(true);
 });

@@ -147,6 +147,51 @@ it("saves offset metadata and distance edits as undoable changes while rolled ba
   );
 });
 
+it("edits an offset while an unrelated dimension conflict exists", async () => {
+  await useStore.getState().editSketch("sk");
+  await useStore.getState().createOffset(["circle"], 2, true, 0.01);
+  const draft = useStore.getState().draftSketch!;
+  useStore.setState({
+    draftSketch: {
+      ...draft,
+      entities: [
+        ...draft.entities,
+        { id: "q", kind: "point", x: 30, y: 0 },
+        { id: "r", kind: "point", x: 35, y: 0 },
+      ],
+      constraints: [
+        { id: "fq", type: "fix", point: "q" },
+        { id: "fr", type: "fix", point: "r" },
+        { id: "qr", type: "distance", a: "q", b: "r", axis: null, value: 9 },
+      ],
+    },
+  });
+  const offset = draft.offsets![0]!;
+  await useStore.getState().editOffset(offset.id, 4);
+  const after = useStore.getState().draftSketch!;
+  expect(after.offsets![0]!.distance).toBe(4);
+  expect(
+    after.entities.find((e) => e.id === offset.entityIds.at(-1)),
+  ).toMatchObject({ radius: 14 });
+});
+
+it("resizes an offset when its source is resized", async () => {
+  await useStore.getState().editSketch("sk");
+  await useStore.getState().createOffset(["circle"], 2, true, 0.01);
+  const draft = useStore.getState().draftSketch!;
+  const offset = draft.offsets![0]!;
+  useStore
+    .getState()
+    .updateDraftSketch(draft.entities, [
+      ...draft.constraints,
+      { id: "rad", type: "radius", entity: "circle", value: 15 },
+    ]);
+  const follower = useStore
+    .getState()
+    .draftSketch!.entities.find((e) => e.id === offset.entityIds.at(-1));
+  expect(follower?.kind === "circle" && follower.radius).toBeCloseTo(17, 6);
+});
+
 it("undo during editing retains the temporary evaluation position", async () => {
   await useStore.getState().editSketch("sk");
   useStore.setState({ undoStack: [doc] });

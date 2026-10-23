@@ -40,7 +40,7 @@ everything downstream against persistent topology references.
 - **Line angles**: a typed angle is kept; double-click a line to edit its length and angle.
 - **Regions**: crossing and touching curves split a sketch into regions, such as the four corners around an inscribed circle.
 - **Angle snap**: hold Shift to snap a line to 15 degree steps; press A to lock its angle.
-- **Offsets**: offset a curve or chain, then change its distance later from the badge in the sketch.
+- **Offsets**: offset a curve or chain; it follows its source as the sketch changes, and its distance stays editable.
 - **Project, trim and extend**: link earlier model edges into a sketch, trim the highlighted piece of a curve (T), extend curves to boundaries.
 - **Insert DXF and SVG**: bring DXF lines, arcs, circles and points, or SVG paths and shapes, into the open sketch as editable geometry.
 - **Edit in place**: editing a sketch rolls the model back to it; Finish Sketch returns to the saved position.
