@@ -42,7 +42,7 @@ everything downstream against persistent topology references.
 - **Angle snap**: hold Shift to snap a line to 15 degree steps; press A to lock its angle.
 - **Offsets**: offset a curve or chain; it follows its source as the sketch changes, and its distance stays editable.
 - **Project, trim and extend**: link earlier model edges into a sketch, trim the highlighted piece of a curve (T), extend curves to boundaries.
-- **Insert DXF and SVG**: bring DXF lines, arcs, circles and points, or SVG paths and shapes, into the open sketch as editable geometry.
+- **Insert DXF and SVG**: place DXF or SVG drawings in a sketch, or SVG on a selected face, then size, rotate and position them.
 - **Edit in place**: editing a sketch rolls the model back to it; Finish Sketch returns to the saved position.
 
 ### Model

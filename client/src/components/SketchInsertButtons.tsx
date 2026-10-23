@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { importDxf, importSvg } from "@rockett/shared";
 import { useStore } from "../store";
+import { INSERT_SVG_NEEDS_PLANE, insertPlaneFor } from "../sketchImport";
+import { alignCameraToActiveSketch } from "../viewportRef";
 
 const SKETCH_INSERTS = [
   {
@@ -19,21 +21,27 @@ const SKETCH_INSERTS = [
   },
 ];
 
-function InsertButton({
+function FileButton({
   format,
   accept,
-  read,
   title,
-}: (typeof SKETCH_INSERTS)[number]) {
+  onText,
+  canOpen = () => true,
+}: {
+  format: string;
+  accept: string;
+  title: string;
+  onText: (text: string) => Promise<void> | void;
+  canOpen?: () => boolean;
+}) {
   const input = useRef<HTMLInputElement>(null);
   const busy = useStore((s) => s.busy);
   const load = async (file?: File) => {
     if (!file) return;
-    const s = useStore.getState();
     try {
-      await s.insertSketchImport(format, read(await file.text()));
+      await onText(await file.text());
     } catch (error) {
-      s.setError((error as Error).message);
+      useStore.getState().setError((error as Error).message);
     } finally {
       if (input.current) input.current.value = "";
     }
@@ -52,7 +60,7 @@ function InsertButton({
         className="tb-btn"
         disabled={busy}
         title={title}
-        onClick={() => input.current?.click()}
+        onClick={() => canOpen() && input.current?.click()}
       >
         Insert {format}
       </button>
@@ -61,7 +69,35 @@ function InsertButton({
 }
 
 export function SketchInsertButtons() {
-  return SKETCH_INSERTS.map((insert) => (
-    <InsertButton key={insert.format} {...insert} />
+  return SKETCH_INSERTS.map(({ format, accept, read, title }) => (
+    <FileButton
+      key={format}
+      format={format}
+      accept={accept}
+      title={title}
+      onText={(text) =>
+        useStore.getState().beginSketchImport(format, read(text), false)
+      }
+    />
   ));
+}
+
+export function InsertSvgOnFaceButton() {
+  return (
+    <FileButton
+      format="SVG"
+      accept=".svg"
+      title="Insert SVG: select a planar face or plane, then place an SVG drawing on it as a sketch"
+      canOpen={() => {
+        const s = useStore.getState();
+        if (insertPlaneFor(s.selection, s.evaluation)) return true;
+        s.setError(INSERT_SVG_NEEDS_PLANE);
+        return false;
+      }}
+      onText={async (text) => {
+        await useStore.getState().insertSvgOnSelection(importSvg(text));
+        alignCameraToActiveSketch();
+      }}
+    />
+  );
 }

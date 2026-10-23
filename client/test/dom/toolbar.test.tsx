@@ -34,10 +34,10 @@ it.each([
     entity: { kind: "circle" },
   },
 ])(
-  "sends a chosen $format file from the sketch toolbar to the draft insert",
+  "sends a chosen $format file from the sketch toolbar to placement",
   async ({ format, text, entity }) => {
-    const original = useStore.getState().insertSketchImport;
-    const insert = vi.fn(async () => {});
+    const original = useStore.getState().beginSketchImport;
+    const insert = vi.fn();
     useStore.setState({
       mode: {
         name: "sketch",
@@ -45,7 +45,7 @@ it.each([
         tool: "select",
         constructionMode: false,
       },
-      insertSketchImport: insert,
+      beginSketchImport: insert,
     });
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
@@ -65,12 +65,16 @@ it.each([
       input.dispatchEvent(new Event("change", { bubbles: true })),
     );
 
-    expect(insert).toHaveBeenCalledWith(format, {
-      entities: expect.arrayContaining([expect.objectContaining(entity)]),
-      skipped: 0,
-    });
+    expect(insert).toHaveBeenCalledWith(
+      format,
+      {
+        entities: expect.arrayContaining([expect.objectContaining(entity)]),
+        skipped: 0,
+      },
+      false,
+    );
     await act(async () => root.unmount());
-    useStore.setState({ mode: { name: "idle" }, insertSketchImport: original });
+    useStore.setState({ mode: { name: "idle" }, beginSketchImport: original });
   },
 );
 

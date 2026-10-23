@@ -9,7 +9,10 @@ import { viewportHandle, alignCameraToActiveSketch } from "../viewportRef";
 import { NAMED_VIEWS } from "../three/camera";
 import { filterSelectionFor } from "../dialogPicks";
 import { StepImportButton } from "./StepImportButton";
-import { SketchInsertButtons } from "./SketchInsertButtons";
+import {
+  InsertSvgOnFaceButton,
+  SketchInsertButtons,
+} from "./SketchInsertButtons";
 import { withKey } from "../shortcuts";
 import { ToolButton } from "./ToolButton";
 import { NumField } from "./form/fields";
@@ -165,6 +168,7 @@ export function Toolbar() {
       </ToolGroup>
       <ToolGroup title="INSERT">
         <StepImportButton />
+        <InsertSvgOnFaceButton />
         <ToolButton
           icon="referenceImage"
           label="Canvas"

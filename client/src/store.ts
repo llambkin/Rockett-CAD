@@ -20,6 +20,7 @@ import type {
   SketchEntity,
   SketchFeature,
   SketchImport,
+  ImportPlacement,
   Visibility,
 } from "@rockett/shared";
 import {
@@ -29,6 +30,7 @@ import {
   createSketchOffset,
   editSketchOffset,
   normalizeSketchOffsets,
+  placeImport,
   solveWithOffsets,
   constraintEntityRefs,
   trimSketch,
@@ -42,6 +44,7 @@ import {
   type PreviewTint,
 } from "./livePreview";
 import { recoveryFor, writeQueue, type Recovery } from "./saving";
+import { INSERT_SVG_NEEDS_PLANE, insertPlaneFor } from "./sketchImport";
 
 // ---------------------------------------------------------------------------
 
@@ -183,6 +186,11 @@ interface State {
 
   /** Local working copy of the sketch being edited (solved client-side). */
   draftSketch: SketchFeature | null;
+  sketchImport: {
+    format: string;
+    imported: SketchImport;
+    created: boolean;
+  } | null;
 
   measureResult: MeasureResult | null;
 
@@ -240,6 +248,14 @@ interface State {
     at: { x: number; y: number },
   ) => Promise<void>;
   insertSketchImport: (format: string, imported: SketchImport) => Promise<void>;
+  beginSketchImport: (
+    format: string,
+    imported: SketchImport,
+    created: boolean,
+  ) => void;
+  placeSketchImport: (placement: ImportPlacement) => Promise<void>;
+  cancelSketchImport: () => Promise<void>;
+  insertSvgOnSelection: (imported: SketchImport) => Promise<void>;
 
   addFeature: (feature: Feature) => Promise<void>;
   updateFeature: (fid: string, patch: Partial<Feature>) => Promise<void>;
@@ -483,6 +499,7 @@ export const useStore = create<State>((set, get) => ({
   selection: [],
   hover: null,
   draftSketch: null,
+  sketchImport: null,
   measureResult: null,
   undoStack: [],
   redoStack: [],
@@ -1146,6 +1163,44 @@ export const useStore = create<State>((set, get) => ({
       return;
     }
     if (skipped) set({ error: skipped });
+  },
+
+  beginSketchImport(format, imported, created) {
+    if (imported.entities.length === 0) {
+      void get().insertSketchImport(format, imported);
+      return;
+    }
+    set({ sketchImport: { format, imported, created } });
+  },
+
+  async placeSketchImport(placement) {
+    const pending = get().sketchImport;
+    if (!pending) return;
+    set({ sketchImport: null });
+    await get().insertSketchImport(pending.format, {
+      ...pending.imported,
+      entities: placeImport(pending.imported.entities, placement),
+    });
+  },
+
+  async cancelSketchImport() {
+    const pending = get().sketchImport;
+    set({ sketchImport: null });
+    if (pending?.created && !get().draftSketch?.entities.length)
+      await get().undo();
+  },
+
+  async insertSvgOnSelection(imported) {
+    const { selection, evaluation } = get();
+    const plane = insertPlaneFor(selection, evaluation);
+    if (!plane) {
+      set({ error: INSERT_SVG_NEEDS_PLANE });
+      return;
+    }
+    await get().startSketchOnPlane(plane);
+    if (get().mode.name !== "sketch") return;
+    get().setSketchTool("select");
+    get().beginSketchImport("SVG", imported, true);
   },
 
   async addFeature(feature) {

@@ -16,6 +16,11 @@ change gets a `Schema N` line in the section that ships it.
   named solids in millimetres, for opening in other CAD tools.
 - Sketch offsets follow their source curves: resizing or moving the source
   rebuilds the offset at its distance while the sketch is edited.
+- Insert SVG onto a face: select a planar face or plane and choose Insert
+  SVG to start a sketch there. A placement panel sets the drawing's width or
+  height, rotation and centre with a live preview, centred on the face and
+  shrunk to fit by default. DXF and SVG inserts inside a sketch use the same
+  panel.
 
 ### Fixed
 

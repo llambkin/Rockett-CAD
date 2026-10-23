@@ -8,6 +8,7 @@ import { Timeline } from "./components/Timeline";
 import { ViewportView } from "./components/ViewportView";
 import { FeatureDialog } from "./components/FeatureDialog";
 import { SketchOffsetPanel } from "./components/SketchOffsetPanel";
+import { SketchImportPanel } from "./components/SketchImportPanel";
 import { MeasurePanel } from "./components/MeasurePanel";
 import { ControlsHelp } from "./components/ControlsHelp";
 import { ProjectList, backToProjects } from "./components/ProjectList";
@@ -272,6 +273,7 @@ function Workspace() {
         <ViewportView />
         <FeatureDialog />
         <SketchOffsetPanel />
+        <SketchImportPanel />
         <MeasurePanel />
         <VersionLabel />
         {showHelp && <ControlsHelp onClose={() => setShowHelp(false)} />}

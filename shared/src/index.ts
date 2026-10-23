@@ -11,6 +11,7 @@ export * from "./projection.js";
 export * from "./sketchModify.js";
 export * from "./sketchTrim.js";
 export * from "./sketchOffsets.js";
+export * from "./sketchPlacement.js";
 export * from "./importDxf.js";
 export * from "./importSvg.js";
 export type { SketchImport } from "./sketchBuilder.js";

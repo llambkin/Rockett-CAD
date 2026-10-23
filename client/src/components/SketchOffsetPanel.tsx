@@ -3,13 +3,13 @@ import * as THREE from "three";
 import {
   findOffsetConnector,
   offsetSketchSelection,
-  sampleArc,
   editSketchOffset,
 } from "@rockett/shared";
 import { useStore } from "../store";
 import { viewportHandle } from "../viewportRef";
 import { uv3 } from "../three/CadViewport";
 import { disposeGroup } from "../three/dispose";
+import { previewCurves } from "../three/sketchPreview";
 import { DraggablePanel } from "./DraggablePanel";
 import { DialogFooter } from "./form/DialogFooter";
 import { LengthField } from "./form/fields";
@@ -80,49 +80,9 @@ function OffsetBody() {
       (s) => s.featureId === draft?.id,
     )?.frame;
     if (!vp || !frame || !preview.result || !draft) return;
-    const group = new THREE.Group();
     const original = new Set(draft.entities.map((e) => e.id));
     if (editing) for (const id of editing.entityIds) original.delete(id);
-    const points = new Map(
-      preview.result.entities
-        .filter((e) => e.kind === "point")
-        .map((e) => [e.id, e]),
-    );
-    for (const e of preview.result.entities) {
-      if (original.has(e.id) || e.kind === "point") continue;
-      let coords: number[] = [];
-      if (e.kind === "line") {
-        const a = points.get(e.p1)!,
-          b = points.get(e.p2)!;
-        coords = [a.x, a.y, b.x, b.y];
-      } else if (e.kind === "circle") {
-        const c = points.get(e.center)!;
-        for (let i = 0; i <= 96; i++)
-          coords.push(
-            c.x + e.radius * Math.cos((i * Math.PI) / 48),
-            c.y + e.radius * Math.sin((i * Math.PI) / 48),
-          );
-      } else {
-        const c = points.get(e.center)!,
-          a = points.get(e.start)!,
-          b = points.get(e.end)!;
-        coords = sampleArc(c.x, c.y, a.x, a.y, b.x, b.y, 64);
-      }
-      const positions: THREE.Vector3[] = [];
-      for (let i = 0; i + 1 < coords.length; i += 2)
-        positions.push(uv3(frame, coords[i]!, coords[i + 1]!));
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(positions),
-        new THREE.LineBasicMaterial({
-          color: 0xffcc66,
-          depthTest: false,
-          transparent: true,
-          opacity: 0.9,
-        }),
-      );
-      line.renderOrder = 9;
-      group.add(line);
-    }
+    const group = previewCurves(preview.result.entities, frame, original);
     if (preview.result.offsetChain && !preview.result.offsetChain.closed) {
       const positions: THREE.Vector3[] = [],
         size = vp.worldPerPixel() * 6;
