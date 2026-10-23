@@ -20,8 +20,12 @@ change gets a `Schema N` line in the section that ships it.
 ### Fixed
 
 - Editing an offset distance no longer fails because of an unrelated
-  conflicting dimension elsewhere in the sketch, and the offset keeps its side
-  when its first source line has been reversed.
+  conflicting dimension elsewhere in the sketch. A distance is read as left of
+  the first source line as it now runs, and a saved sign that a reversed line
+  made stale is corrected, so the edit panel shows the side the offset is on.
+- A sketch dimension value that would over-constrain a sketch that solved is
+  refused instead of saved, since the distorted result could change the sketch
+  regions and break the features built on them.
 
 ## 0.2.0 (2026-09-23)
 

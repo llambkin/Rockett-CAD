@@ -28,6 +28,7 @@ import {
   solveSketch,
   createSketchOffset,
   editSketchOffset,
+  normalizeSketchOffsets,
   solveWithOffsets,
   constraintEntityRefs,
   trimSketch,
@@ -220,6 +221,7 @@ interface State {
     joinTolerance: number,
   ) => Promise<void>;
   editOffset: (id: string, distance: number) => Promise<void>;
+  editDimensions: (constraints: SketchConstraint[]) => boolean;
   setSketchTool: (tool: SketchTool) => void;
   updateDraftSketch: (
     entities: SketchEntity[],
@@ -451,9 +453,19 @@ function followed(
       ...draft,
       entities: solvedOnly ? result.solved.entities : result.entities,
       constraints: result.constraints,
+      ...(result.offsets && { offsets: result.offsets }),
     },
     ...(notes.length ? { error: notes.join(" ") } : {}),
   };
+}
+
+function edited(draft: SketchFeature, next: SketchFeature) {
+  const result = solveWithOffsets(next, next.entities);
+  return !result.solved.converged &&
+    solveSketch({ entities: draft.entities, constraints: draft.constraints })
+      .converged
+    ? null
+    : followed(next, result);
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -800,10 +812,10 @@ export const useStore = create<State>((set, get) => ({
           tool: "select",
           constructionMode: false,
         },
-        draftSketch: {
+        draftSketch: normalizeSketchOffsets({
           ...JSON.parse(JSON.stringify(feature)),
           entities: JSON.parse(JSON.stringify(solved.entities)),
-        },
+        }),
         selection: [],
       });
     } catch (e: any) {
@@ -834,32 +846,34 @@ export const useStore = create<State>((set, get) => ({
   async editOffset(id, distance) {
     const { draftSketch, busy } = get();
     if (!draftSketch || busy) return;
-    const next = editSketchOffset(draftSketch, id, distance);
-    const result = solveWithOffsets(
-      {
-        entities: next.entities,
-        constraints: next.constraints,
-        offsets: next.offsets,
-      },
-      next.entities,
+    const next = edited(
+      draftSketch,
+      editSketchOffset(draftSketch, id, distance),
     );
-    if (
-      !result.solved.converged &&
-      solveSketch({
-        entities: draftSketch.entities,
-        constraints: draftSketch.constraints,
-      }).converged
-    )
+    if (!next)
       throw new Error(
         "Sketch constraints conflict with this offset distance. Remove conflicting dimensions first.",
       );
-    set(followed(next, result));
+    set(next);
     try {
       await get().commitDraftSketch();
     } catch (e) {
       set({ draftSketch });
       throw e;
     }
+  },
+
+  editDimensions(constraints) {
+    const { draftSketch } = get();
+    if (!draftSketch) return false;
+    const next = edited(draftSketch, { ...draftSketch, constraints });
+    set(
+      next ?? {
+        error:
+          "That value conflicts with other dimensions or constraints in this sketch, so it was not applied. Change or delete a dependent dimension first.",
+      },
+    );
+    return !!next;
   },
 
   setSketchTool(tool) {

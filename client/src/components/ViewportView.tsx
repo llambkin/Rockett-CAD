@@ -2801,7 +2801,7 @@ export function ViewportView() {
       );
     }
     if (constraints !== draft.constraints) {
-      s.updateDraftSketch(draft.entities, constraints);
+      if (!s.editDimensions(constraints)) return;
       await s.commitDraftSketch();
     }
     setDimEdit(null);

@@ -192,6 +192,40 @@ it("resizes an offset when its source is resized", async () => {
   expect(follower?.kind === "circle" && follower.radius).toBeCloseTo(17, 6);
 });
 
+it("refuses a dimension value that over-constrains a sketch that solved", async () => {
+  await useStore.getState().editSketch("sk");
+  const draft = useStore.getState().draftSketch!;
+  const constraints = [
+    ...draft.constraints,
+    { id: "r1", type: "radius" as const, entity: "circle", value: 10 },
+    { id: "fixc", type: "fix" as const, point: "p" },
+  ];
+  useStore.getState().updateDraftSketch(draft.entities, constraints);
+  const solved = useStore.getState().draftSketch!;
+  const applied = useStore
+    .getState()
+    .editDimensions([
+      ...solved.constraints,
+      { id: "r2", type: "diameter", entity: "circle", value: 30 },
+    ]);
+  expect(applied).toBe(false);
+  expect(useStore.getState().draftSketch).toBe(solved);
+  expect(useStore.getState().error).toMatch(/conflicts with other dimensions/);
+  expect(
+    useStore
+      .getState()
+      .editDimensions(
+        solved.constraints.map((c) =>
+          c.id === "r1" ? { ...c, value: 12 } : c,
+        ),
+      ),
+  ).toBe(true);
+  const circle = useStore
+    .getState()
+    .draftSketch!.entities.find((e) => e.id === "circle");
+  expect(circle?.kind === "circle" && circle.radius).toBeCloseTo(12, 6);
+});
+
 it("undo during editing retains the temporary evaluation position", async () => {
   await useStore.getState().editSketch("sk");
   useStore.setState({ undoStack: [doc] });

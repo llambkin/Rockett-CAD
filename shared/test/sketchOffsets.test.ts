@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   createSketchOffset,
   editSketchOffset,
+  normalizeSketchOffsets,
   detectProfiles,
   solveSketch,
   solveWithOffsets,
@@ -165,7 +166,6 @@ it("follows its source when the source rectangle is resized", () => {
 
 it("keeps an offset on its side when its first source line has reversed", () => {
   const created = createSketchOffset(square(), ["cd"], 2);
-  const id = created.offsets![0]!.id;
   const reversed = {
     ...created,
     entities: created.entities.map((e) =>
@@ -173,12 +173,69 @@ it("keeps an offset on its side when its first source line has reversed", () => 
     ),
   };
   const ids = created.offsets![0]!.entityIds;
-  offsetSpan(editSketchOffset(reversed, id, 3).entities, ids).forEach((v, i) =>
+  const followed = solveWithOffsets(
+    {
+      entities: reversed.entities,
+      constraints: reversed.constraints,
+      offsets: reversed.offsets,
+    },
+    reversed.entities,
+  );
+  offsetSpan(followed.solved.entities, ids).forEach((v, i) =>
+    expect(v).toBeCloseTo([2, 18, 2, 18][i]!, 6),
+  );
+  expect(followed.offsets![0]!.distance).toBe(-2);
+});
+
+it("reads a distance as left of the first source line, correcting a stale sign", () => {
+  const created = createSketchOffset(square(), ["cd"], 2);
+  const stale = {
+    ...created,
+    offsets: created.offsets!.map((o) => ({ ...o, distance: -2 })),
+  };
+  const id = created.offsets![0]!.id;
+  const ids = created.offsets![0]!.entityIds;
+  expect(normalizeSketchOffsets(stale).offsets![0]!.distance).toBe(2);
+  offsetSpan(editSketchOffset(stale, id, 3).entities, ids).forEach((v, i) =>
     expect(v).toBeCloseTo([3, 17, 3, 17][i]!, 6),
   );
-  offsetSpan(editSketchOffset(reversed, id, -3).entities, ids).forEach((v, i) =>
+  offsetSpan(editSketchOffset(stale, id, -3).entities, ids).forEach((v, i) =>
     expect(v).toBeCloseTo([-3, 23, -3, 23][i]!, 6),
   );
+});
+
+it("keeps every region id when a walled box with an offset is resized", () => {
+  const box = square();
+  box.entities.push(
+    { id: "m1", kind: "point", x: 10, y: 0 },
+    { id: "m2", kind: "point", x: 10, y: 20 },
+    { id: "wall", kind: "line", p1: "m1", p2: "m2" },
+  );
+  box.constraints.push(
+    { id: "on1", type: "pointOnLine", point: "m1", line: "ab" },
+    { id: "on2", type: "pointOnLine", point: "m2", line: "cd" },
+    { id: "vw", type: "vertical", line: "wall" },
+    { id: "mid", type: "midpoint", point: "m1", line: "ab" },
+  );
+  const created = createSketchOffset(box, ["cd"], 2);
+  const before = detectProfiles(created.entities)
+    .map((p) => p.id)
+    .sort();
+  const resized = solveWithOffsets(
+    {
+      entities: created.entities,
+      constraints: resize(created.constraints, 30),
+      offsets: created.offsets,
+    },
+    created.entities,
+  );
+  expect(resized.solved.converged).toBe(true);
+  expect(
+    detectProfiles(resized.solved.entities)
+      .map((p) => p.id)
+      .sort(),
+  ).toEqual(before);
+  expect(before.length).toBeGreaterThan(2);
 });
 
 it("removes only offset-curve dimensions that following breaks", () => {

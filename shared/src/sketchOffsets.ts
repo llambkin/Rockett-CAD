@@ -144,6 +144,27 @@ function sideOf(entities: SketchEntity[], offset: SketchOffset): 1 | -1 {
   return best.side;
 }
 
+const present = (entities: SketchEntity[], offset: SketchOffset) =>
+  offset.entityIds.every((id) => entities.some((e) => e.id === id));
+
+export function normalizeSketchOffsets(sketch: SketchFeature): SketchFeature {
+  if (!sketch.offsets?.length) return sketch;
+  return {
+    ...sketch,
+    offsets: sketch.offsets.map((o) => {
+      if (!present(sketch.entities, o)) return o;
+      try {
+        return {
+          ...o,
+          distance: sideOf(sketch.entities, o) * Math.abs(o.distance),
+        };
+      } catch {
+        return o;
+      }
+    }),
+  };
+}
+
 /** Rebuild an offset while retaining entity IDs used by profiles and features. */
 export function editSketchOffset(
   sketch: SketchFeature,
@@ -153,20 +174,17 @@ export function editSketchOffset(
   const offsets = sketch.offsets ?? [];
   const start = offsets.findIndex((o) => o.id === id);
   if (start < 0) throw new Error("This offset is no longer available.");
-  const sides = offsets.map((o, i) =>
-    i < start ? 1 : sideOf(sketch.entities, o),
+  const updated = offsets.map((o, i) =>
+    i === start
+      ? { ...o, distance }
+      : i > start
+        ? { ...o, distance: sideOf(sketch.entities, o) * Math.abs(o.distance) }
+        : o,
   );
-  const sameSign = Math.sign(distance) === Math.sign(offsets[start]!.distance);
+  existingOf(sketch.entities, updated[start]!);
   let entities = sketch.entities;
-  const updated = offsets.map((o) => (o.id === id ? { ...o, distance } : o));
-  for (let i = start; i < updated.length; i++) {
-    const side = i === start && !sameSign ? -sides[i]! : sides[i]!;
-    entities = rebuildOffset(
-      entities,
-      updated[i]!,
-      side * Math.abs(updated[i]!.distance),
-    );
-  }
+  for (let i = start; i < updated.length; i++)
+    entities = rebuildOffset(entities, updated[i]!, updated[i]!.distance);
   return { ...sketch, entities, offsets: updated };
 }
 
@@ -174,24 +192,24 @@ export function followSketchOffsets(
   before: SketchEntity[],
   after: SketchEntity[],
   offsets: SketchOffset[],
-): { entities: SketchEntity[]; failures: string[] } {
+): { entities: SketchEntity[]; offsets: SketchOffset[]; failures: string[] } {
   const failures: string[] = [];
   let entities = after;
-  for (const offset of offsets) {
-    const present = (list: SketchEntity[]) =>
-      offset.entityIds.every((id) => list.some((e) => e.id === id));
-    if (!present(before) || !present(entities)) continue;
+  const followed = offsets.map((offset) => {
+    if (!present(before, offset) || !present(entities, offset)) return offset;
     try {
-      entities = rebuildOffset(
-        entities,
-        offset,
-        sideOf(before, offset) * Math.abs(offset.distance),
-      );
+      const next = {
+        ...offset,
+        distance: sideOf(before, offset) * Math.abs(offset.distance),
+      };
+      entities = rebuildOffset(entities, next, next.distance);
+      return next;
     } catch (e) {
       failures.push((e as Error).message);
+      return offset;
     }
-  }
-  return { entities, failures };
+  });
+  return { entities, offsets: followed, failures };
 }
 
 export function solveWithOffsets(
@@ -201,6 +219,7 @@ export function solveWithOffsets(
   solved: SolveResult;
   entities: SketchEntity[];
   constraints: SketchConstraint[];
+  offsets: SketchOffset[] | undefined;
   removedConstraints: number;
   failures: string[];
 } {
@@ -211,6 +230,7 @@ export function solveWithOffsets(
       solved,
       entities: input.entities,
       constraints: input.constraints,
+      offsets: input.offsets,
       removedConstraints: 0,
       failures: [],
     };
@@ -244,6 +264,7 @@ export function solveWithOffsets(
     solved: solveSketch({ ...rest, entities: followed.entities, constraints }),
     entities: followed.entities,
     constraints,
+    offsets: followed.offsets,
     removedConstraints: broken.size,
     failures: followed.failures,
   };

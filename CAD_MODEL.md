@@ -243,6 +243,13 @@ variables (point coordinates, circle radii); degrees of freedom are computed
 from the Jacobian rank at the solution, driving the
 unconstrained / partially / fully / over-constrained badge.
 
+Region ids depend only on the entities bounding a region, so features keep
+their regions through any resize that keeps the same curves touching. A sketch
+that cannot solve is still evaluated from the solver's closest attempt, whose
+small errors can open gaps where curves should meet and so change the regions.
+The dimension editor therefore refuses a value that makes a solvable sketch
+unsolvable (`editDimensions`), leaving the sketch unchanged with a notice.
+
 **Drawing inference** (client, `client/src/sketchTools.ts`): while a line is
 being drawn, the cursor snaps first to existing points, the origin and line
 midpoints. Otherwise a _direction lock_ may engage from the start point: axis
@@ -425,9 +432,10 @@ Offsets follow their sources while a sketch is edited (`solveWithOffsets`).
 Each client solve first solves the sketch without the constraints that touch
 offset curves, rebuilds every offset from the solved sources at its distance,
 then solves again with those constraints, so geometry attached to an offset
-moves with it. An offset keeps the side it lies on: the side is measured from
-its current curves rather than from the direction of its first source line, and
-an edit flips it only when the new distance's sign differs from the saved one.
+moves with it. A distance is positive to the left of the first source line as
+that line now runs. Following keeps an offset on the side its curves lie on and
+rewrites the saved sign when the line has reversed since the offset was made;
+opening a sketch does the same, so the edit panel always shows the true sign.
 A constraint that refers only to offset curves and no longer holds after the
 rebuild is removed, with an undoable notice. An offset whose curves were
 deleted is skipped. The server never rebuilds offsets, so a saved sketch
