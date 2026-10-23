@@ -86,7 +86,7 @@ const twoRects = () => [
   L("mid", "b", "e"),
 ];
 
-describe("multi-region extrude: New body keeps regions apart, Join merges them", () => {
+describe("multi-region extrude: New body merges touching regions, Join merges all", () => {
   it("removes the shared seam when adjacent regions are extruded in separate features", () => {
     const { engine, doc } = extrudeAllRegions("uni-sequential", twoRects(), 5);
     const first = doc.features[1] as ExtrudeFeature;
@@ -115,10 +115,34 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     check.delete();
   });
 
-  it("New body makes one body per region, ids b:<feature> and b:<feature>:2", () => {
+  it("New body merges regions that share an edge into one body b:<feature>", () => {
     const { result, engine, doc } = extrudeAllRegions(
       "uni0",
       twoRects(),
+      5,
+      "newBody",
+    );
+    expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok"]);
+    expect(result.bodies.map((b) => b.bodyId)).toEqual(["b:ext1"]);
+    expect(result.bodies[0]!.faces).toHaveLength(6);
+    const shape = engine.stateAt(doc).bodies.get("b:ext1")!.shape;
+    expect(solids(shape)).toHaveLength(1);
+    expect(volumeOf(shape)).toBeCloseTo(20 * 10 * 5, 2);
+  });
+
+  it("New body keeps separate regions as bodies b:<feature> and b:<feature>:2", () => {
+    const apart = [
+      ...twoRects().filter((e) => e.id !== "mid"),
+      P("g", 40, 0),
+      P("h", 50, 0),
+      P("i", 50, 10),
+      L("m1", "g", "h"),
+      L("m2", "h", "i"),
+      L("m3", "i", "g"),
+    ];
+    const { result, engine, doc } = extrudeAllRegions(
+      "uni0b",
+      apart,
       5,
       "newBody",
     );
@@ -127,16 +151,11 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
       "b:ext1",
       "b:ext1:2",
     ]);
-    for (const b of result.bodies) expect(b.faces).toHaveLength(6);
-    const state = engine.stateAt(doc);
-    expect(volumeOf(state.bodies.get("b:ext1")!.shape)).toBeCloseTo(
-      10 * 10 * 5,
-      2,
-    );
-    expect(volumeOf(state.bodies.get("b:ext1:2")!.shape)).toBeCloseTo(
-      10 * 10 * 5,
-      2,
-    );
+    const volumes = ["b:ext1", "b:ext1:2"]
+      .map((id) => volumeOf(engine.stateAt(doc).bodies.get(id)!.shape))
+      .sort((a, b) => a - b);
+    expect(volumes[0]).toBeCloseTo(50 * 5, 2);
+    expect(volumes[1]).toBeCloseTo(200 * 5, 2);
   });
 
   it("Join of two rectangles sharing an edge gives a plain box: 6 faces, one cap name", () => {
@@ -202,7 +221,7 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     ).toBeCloseTo(7500 * 4, 1);
   });
 
-  it("a circle split by a crossing line extrudes as two half-disc bodies", () => {
+  it("a circle split by a crossing line extrudes as one disc body", () => {
     dropEngine("uni4");
     const entities: SketchEntity[] = [
       P("a", 0, 0),
@@ -251,14 +270,10 @@ describe("multi-region extrude: New body keeps regions apart, Join merges them",
     }));
     const result = engine.evaluate(doc);
     expect(result.featureStatuses.map((s) => s.status)).toEqual(["ok", "ok"]);
-    expect(result.bodies).toHaveLength(2);
-    const state = engine.stateAt(doc);
-    for (const id of ["b:ext1", "b:ext1:2"]) {
-      expect(volumeOf(state.bodies.get(id)!.shape)).toBeCloseTo(
-        (Math.PI * 25 * 10) / 2,
-        1,
-      );
-    }
+    expect(result.bodies.map((b) => b.bodyId)).toEqual(["b:ext1"]);
+    const shape = engine.stateAt(doc).bodies.get("b:ext1")!.shape;
+    expect(solids(shape)).toHaveLength(1);
+    expect(volumeOf(shape)).toBeCloseTo(Math.PI * 25 * 10, 1);
   });
 
   it("a single region is untouched by the merge", () => {

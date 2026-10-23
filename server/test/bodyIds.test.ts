@@ -112,3 +112,44 @@ it.each([
     });
   },
 );
+
+const touching: SketchFeature = {
+  ...pair,
+  entities: [
+    ...rect("pair", 5, 0, 5, 5).entities,
+    ...rect("next", 10, 0, 10, 5).entities,
+  ],
+};
+const touchingRefs = detectProfiles(touching.entities).map(
+  (p): ProfileRef => ({ sketchId: touching.id, profileId: p.id }),
+);
+
+it.each([
+  [
+    "extrude",
+    {
+      ...meta("tool"),
+      type: "extrude",
+      profiles: touchingRefs,
+      distance: 5,
+      direction: "normal",
+      operation: "newBody",
+    } satisfies Feature,
+    [5, 20],
+  ],
+  [
+    "revolve",
+    {
+      ...meta("tool"),
+      type: "revolve",
+      profiles: touchingRefs,
+      axis: { kind: "originAxis", axis: "Y" },
+      angle: 360,
+      operation: "newBody",
+    } satisfies Feature,
+    [-20, 20],
+  ],
+])("a %s of two drawn rectangles sharing an edge makes one new body", (_, tool, span) => {
+  expect(touchingRefs).toHaveLength(2);
+  expect(evaluate([touching, tool]).xSpans).toEqual({ "b:tool": span });
+});

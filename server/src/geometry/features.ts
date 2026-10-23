@@ -6,6 +6,7 @@
 import {
   detectProfiles,
   findProfile,
+  touchingProfileGroups,
   solveSketch,
   projectEdge,
   ANGULAR_TOL_DEG,
@@ -212,11 +213,16 @@ function resolveAxis(
 function resolveProfiles(
   state: EvalState,
   refs: ProfileRef[],
-): { faces: ProfileFace[]; sketch: EvaluatedSketch } {
+): {
+  faces: ProfileFace[];
+  sketch: EvaluatedSketch;
+  groups: number[][];
+} {
   if (refs.length === 0) throw new Error("no profiles selected");
   const sketch = state.sketches.get(refs[0]!.sketchId);
   if (!sketch) throw new Error(`sketch ${refs[0]!.sketchId} not found`);
   const out: ProfileFace[] = [];
+  const regions: { sketchId: string; profile: Profile }[] = [];
   for (const ref of refs) {
     const s = state.sketches.get(ref.sketchId);
     if (!s) throw new Error(`sketch ${ref.sketchId} not found`);
@@ -227,8 +233,9 @@ function resolveProfiles(
       );
     }
     out.push(buildProfileFace(profile, s.entities, s.frame));
+    regions.push({ sketchId: ref.sketchId, profile });
   }
-  return { faces: out, sketch };
+  return { faces: out, sketch, groups: touchingProfileGroups(regions) };
 }
 
 // ---------------------------------------------------------------------------
@@ -643,6 +650,47 @@ function buildPrism(
   });
 }
 
+function fuseTools(tools: ToolResult[], featureId: string): ToolResult {
+  const k = getKernel();
+  let tool = tools[0]!;
+  for (const next of tools.slice(1)) {
+    const op = new k.BRepAlgoAPI_Fuse_3(tool.shape, next.shape, progress());
+    op.Build(progress());
+    if (!op.IsDone()) {
+      op.delete();
+      throw new Error("failed to merge profile solids");
+    }
+    const merged = op.Shape();
+    const names = propagateNames(op, [tool, next], merged, featureId);
+    op.delete();
+    tool = { shape: merged, names };
+  }
+  return tool;
+}
+
+function registerNewBodies(
+  state: EvalState,
+  featureId: string,
+  tools: ToolResult[],
+  groups: number[][],
+): void {
+  groups.forEach((group, i) => {
+    const u = unifyTool(
+      fuseTools(
+        group.map((t) => tools[t]!),
+        featureId,
+      ),
+      featureId,
+    );
+    registerBodySolids(
+      state,
+      i === 0 ? `b:${featureId}` : `b:${featureId}:${i + 1}`,
+      u.shape,
+      u.names,
+    );
+  });
+}
+
 function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
   const dist = Math.abs(f.distance);
   if (dist <= 0) throw new Error("extrude distance must be non-zero");
@@ -653,12 +701,14 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
 
   // Each extrusion source: a face shape + the direction it extrudes along.
   const sources: { pf: ProfileFace; n: Vec3; copy: boolean }[] = [];
+  const groups: number[][] = [];
 
   if (f.profiles.length > 0) {
-    const { faces: profileFaces, sketch } = resolveProfiles(state, f.profiles);
-    for (const pf of profileFaces) {
-      sources.push({ pf, n: sketch.frame.normal, copy: false });
+    const resolved = resolveProfiles(state, f.profiles);
+    for (const pf of resolved.faces) {
+      sources.push({ pf, n: resolved.sketch.frame.normal, copy: false });
     }
+    groups.push(...resolved.groups);
   }
 
   // Planar body faces used directly as profiles (face extrude).
@@ -674,6 +724,7 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
     // also selected as profiles in this feature get their own prism and
     // fuse back in below.
     const cut = subtractSketchRegionsFromFace(face, state.sketches.values());
+    groups.push([sources.length]);
     sources.push({
       pf: {
         face: cut.face,
@@ -709,53 +760,20 @@ function evalExtrude(state: EvalState, f: ExtrudeFeature): void {
     }
   }
 
-  // "New body": every region is its own body — Join is what merges them.
   if (f.operation === "newBody") {
-    tools.forEach((t, i) => {
-      const u = unifyTool(t, f.id);
-      registerBodySolids(
-        state,
-        i === 0 ? `b:${f.id}` : `b:${f.id}:${i + 1}`,
-        u.shape,
-        u.names,
-      );
-    });
+    registerNewBodies(state, f.id, tools, groups);
     return;
   }
-
-  // merge multiple profile prisms into one tool
-  let tool = tools[0]!;
-  const k = getKernel();
-  for (let i = 1; i < tools.length; i++) {
-    const op = new k.BRepAlgoAPI_Fuse_3(
-      tool.shape,
-      tools[i]!.shape,
-      progress(),
-    );
-    op.Build(progress());
-    if (!op.IsDone()) {
-      op.delete();
-      throw new Error("failed to merge profile solids");
-    }
-    const merged = op.Shape();
-    const names = propagateNames(
-      op,
-      [
-        { shape: tool.shape, names: tool.names },
-        { shape: tools[i]!.shape, names: tools[i]!.names },
-      ],
-      merged,
-      f.id,
-    );
-    op.delete();
-    tool = { shape: merged, names };
-  }
-
-  applyToolOperation(state, f.id, unifyTool(tool, f.id), f.operation);
+  applyToolOperation(
+    state,
+    f.id,
+    unifyTool(fuseTools(tools, f.id), f.id),
+    f.operation,
+  );
 }
 
 function evalRevolve(state: EvalState, f: RevolveFeature): void {
-  const { faces: profileFaces } = resolveProfiles(state, f.profiles);
+  const { faces: profileFaces, groups } = resolveProfiles(state, f.profiles);
   const axis = resolveAxis(state, f.axis);
   const k = getKernel();
   const angleRad = (Math.min(Math.abs(f.angle), 360) * Math.PI) / 180;
@@ -812,42 +830,16 @@ function evalRevolve(state: EvalState, f: RevolveFeature): void {
     tools.push(tool);
   }
 
-  // "New body": every region is its own body — Join is what merges them.
   if (f.operation === "newBody") {
-    tools.forEach((t, i) => {
-      const u = unifyTool(t, f.id);
-      registerBodySolids(
-        state,
-        i === 0 ? `b:${f.id}` : `b:${f.id}:${i + 1}`,
-        u.shape,
-        u.names,
-      );
-    });
+    registerNewBodies(state, f.id, tools, groups);
     return;
   }
-
-  let tool = tools[0]!;
-  for (let i = 1; i < tools.length; i++) {
-    const op = new k.BRepAlgoAPI_Fuse_3(
-      tool.shape,
-      tools[i]!.shape,
-      progress(),
-    );
-    op.Build(progress());
-    const merged = op.Shape();
-    const names = propagateNames(
-      op,
-      [
-        { shape: tool.shape, names: tool.names },
-        { shape: tools[i]!.shape, names: tools[i]!.names },
-      ],
-      merged,
-      f.id,
-    );
-    op.delete();
-    tool = { shape: merged, names };
-  }
-  applyToolOperation(state, f.id, unifyTool(tool, f.id), f.operation);
+  applyToolOperation(
+    state,
+    f.id,
+    unifyTool(fuseTools(tools, f.id), f.id),
+    f.operation,
+  );
 }
 
 function evalSweep(state: EvalState, f: SweepFeature): void {

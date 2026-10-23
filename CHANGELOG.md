@@ -22,6 +22,13 @@ change gets a `Schema N` line in the section that ships it.
   shrunk to fit by default. DXF and SVG inserts inside a sketch use the same
   panel.
 
+### Changed
+
+- New body merges touching regions: sketch regions that share an edge
+  extrude or revolve as one body, and regions apart from each other stay
+  separate bodies. Saved projects that made touching pieces now get one body,
+  so a Combine of those pieces has nothing left to combine.
+
 ### Fixed
 
 - Editing an offset distance no longer fails because of an unrelated

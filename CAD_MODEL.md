@@ -109,10 +109,12 @@ document containing it, so nothing is lost.
 Bodies get stable ids derived from the feature that created them:
 
 - `b:{featureId}`: a `newBody` extrude/revolve/sweep/loft. A `newBody`
-  extrude/revolve of several sketch regions makes one body per region, in
-  selection order (`b:x`, `b:x:2`, …); `join` is what merges regions into a
-  single solid (with no existing body to join, the merged solid becomes the new
-  body).
+  extrude/revolve of several sketch regions merges regions that share a sketch
+  edge into one body and keeps the rest apart, numbered by each group's first
+  selected region (`b:x`, `b:x:2`, …). Regions that meet only at a point stay
+  separate, and each selected face extrudes as its own body. `join` merges every
+  region into one solid (with no existing body to join, the merged solid becomes
+  the new body).
 - Boolean join/cut keep the _target_ body's id.
 - An operation that leaves multiple solids appends ordinal suffixes ordered
   by volume (`b:x`, `b:x:2`, …); `splitBody` orders along the split-plane

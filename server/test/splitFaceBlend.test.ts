@@ -76,19 +76,22 @@ function combinedPlate(id: string, split: boolean) {
         return true;
     return false;
   });
-  doc.features.push({
-    id: "ex",
-    type: "extrude",
-    name: "E",
-    suppressed: false,
-    profiles: regions.map((p) => ({ sketchId: "sk", profileId: p.id })),
-    faces: [],
-    distance: 10,
-    direction: "normal",
-    operation: "newBody",
-  });
-  doc.timelinePosition = 2;
+  regions.forEach((p, i) =>
+    doc.features.push({
+      id: `ex${i}`,
+      type: "extrude",
+      name: `E${i}`,
+      suppressed: false,
+      profiles: [{ sketchId: "sk", profileId: p.id }],
+      faces: [],
+      distance: 10,
+      direction: "normal",
+      operation: "newBody",
+    }),
+  );
+  doc.timelinePosition = doc.features.length;
   const ids = engine.evaluate(doc).bodies.map((b) => b.bodyId);
+  expect(ids).toHaveLength(regions.length);
   doc.features.push({
     id: "cb",
     type: "combine",
@@ -99,7 +102,7 @@ function combinedPlate(id: string, split: boolean) {
     toolBodies: ids.slice(1),
     keepTools: false,
   });
-  doc.timelinePosition = 3;
+  doc.timelinePosition = doc.features.length;
   const body = engine.evaluate(doc).bodies[0]!;
   const corner = body.edges.find(
     (e) =>
@@ -145,9 +148,9 @@ it("fillets a corner of a combined body whose faces are split around a hole", ()
     edges: [corner],
     radius: 10,
   });
-  doc.timelinePosition = 4;
+  doc.timelinePosition = doc.features.length;
   const r = engine.evaluate(doc);
-  expect(r.featureStatuses[3]).toMatchObject({ status: "ok" });
+  expect(r.featureStatuses.at(-1)).toMatchObject({ status: "ok" });
   const shape = engine.stateAt(doc).bodies.get(bodyId)!.shape;
   expect(handles(shape)).toBe(1);
   expect(volumeOf(shape)).toBeCloseTo(volume - 100 * (1 - Math.PI / 4) * 10, 3);
@@ -163,9 +166,9 @@ it("chamfers that corner too, keeping the hole", () => {
     edges: [corner],
     distance: 6,
   });
-  doc.timelinePosition = 4;
+  doc.timelinePosition = doc.features.length;
   const r = engine.evaluate(doc);
-  expect(r.featureStatuses[3]).toMatchObject({ status: "ok" });
+  expect(r.featureStatuses.at(-1)).toMatchObject({ status: "ok" });
   const shape = engine.stateAt(doc).bodies.get(bodyId)!.shape;
   expect(handles(shape)).toBe(1);
   expect(volumeOf(shape)).toBeCloseTo(volume - 18 * 10, 3);
@@ -181,9 +184,9 @@ it("leaves a fillet on unsplit faces exactly as before", () => {
     edges: [corner],
     radius: 10,
   });
-  doc.timelinePosition = 4;
+  doc.timelinePosition = doc.features.length;
   const r = engine.evaluate(doc);
-  expect(r.featureStatuses[3]).toMatchObject({ status: "ok" });
+  expect(r.featureStatuses.at(-1)).toMatchObject({ status: "ok" });
   const body = r.bodies.find((b) => b.bodyId === bodyId)!;
   expect(body.faces.filter((f) => f.name.startsWith("f:fl:fe:"))).toHaveLength(1);
   const shape = engine.stateAt(doc).bodies.get(bodyId)!.shape;
