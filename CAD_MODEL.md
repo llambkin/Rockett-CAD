@@ -367,6 +367,10 @@ diameter); angles come from plane normals / line directions.
   as separate named objects. Vertices on a 1e-6 mm grid (`LINEAR_TOL`) are
   welded across faces and triangles that collapse are dropped, so each object
   is a closed mesh with every edge shared by two outward triangles.
+- **STEP**: AP214 written by `STEPCAFControl_Writer` from an XDE document
+  holding each chosen body as an exact B-Rep solid (`STEPControl_AsIs`, no
+  tessellation), named by its display name so CAD tools show one named part
+  per body. Units are mm. Colours and assembly structure wait for EXCH-002.
 
 ## Associative sketch projection (schema 2)
 

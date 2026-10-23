@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type {
   AxisRef,
   EdgeRef,
+  ExportRequest,
   FaceRef,
   Feature,
   PlaneRef,
@@ -1246,7 +1247,7 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
   const hiddenBodies = useStore((s) => s.view.hidden.bodies);
   const selection = useStore((s) => s.selection);
   const setError = useStore((s) => s.setError);
-  const [format, setFormat] = useState<"stl" | "3mf">("stl");
+  const [format, setFormat] = useState<ExportRequest["format"]>("stl");
   const [quality, setQuality] = useState(0.05);
   const [pending, setPending] = useState(false);
 
@@ -1296,19 +1297,22 @@ function ExportPanel({ onClose }: { onClose: () => void }) {
           >
             <option value="stl">STL (binary)</option>
             <option value="3mf">3MF (multi-body, named)</option>
+            <option value="step">STEP (exact solids, named)</option>
           </select>
         </label>
-        <label className="field">
-          <span>Quality (mm deviation)</span>
-          <select
-            value={quality}
-            onChange={(e) => setQuality(Number(e.target.value))}
-          >
-            <option value={0.1}>Draft (0.1)</option>
-            <option value={0.05}>Standard (0.05)</option>
-            <option value={0.01}>Fine (0.01)</option>
-          </select>
-        </label>
+        {format !== "step" && (
+          <label className="field">
+            <span>Quality (mm deviation)</span>
+            <select
+              value={quality}
+              onChange={(e) => setQuality(Number(e.target.value))}
+            >
+              <option value={0.1}>Draft (0.1)</option>
+              <option value={0.05}>Standard (0.05)</option>
+              <option value={0.01}>Fine (0.01)</option>
+            </select>
+          </label>
+        )}
       </div>
       <DialogFooter
         onOk={() => void doExport()}

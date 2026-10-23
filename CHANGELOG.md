@@ -8,6 +8,13 @@ A release moves `Unreleased` into a dated `## X.Y.Z` section and gets an
 annotated tag `vX.Y.Z` on that `origin/main` commit. Every `SCHEMA_VERSION`
 change gets a `Schema N` line in the section that ships it.
 
+## Unreleased
+
+### Added
+
+- Export to STEP: the export panel writes the chosen bodies as exact,
+  named solids in millimetres, for opening in other CAD tools.
+
 ## 0.2.0 (2026-09-23)
 
 ### Added

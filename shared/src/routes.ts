@@ -252,7 +252,7 @@ export const ROUTES = {
     "POST",
     "/projects/:id/export",
     Type.Object({
-      format: Type.Enum(["stl", "3mf"]),
+      format: Type.Enum(["stl", "3mf", "step"]),
       bodyIds: Type.Array(Type.String()),
       quality: Type.Optional(Type.Number()),
       retain: Type.Optional(Type.Boolean()),

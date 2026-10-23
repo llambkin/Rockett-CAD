@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {
   LINEAR_TOL,
   newId,
@@ -13,6 +12,7 @@ import {
   solids,
   progress,
   volumeOf,
+  withKernelFile,
   type Shape,
 } from "./kernel.js";
 import { read3mf } from "./read3mf.js";
@@ -75,14 +75,10 @@ function withFile<T>(
   extension: string,
   read: (file: string) => T,
 ): T {
-  const k = getKernel(),
-    file = `/rockett-import-${crypto.randomUUID()}.${extension}`;
-  try {
-    k.FS.writeFile(file, data);
+  return withKernelFile(extension, (file) => {
+    getKernel().FS.writeFile(file, data);
     return read(file);
-  } finally {
-    if (k.FS.analyzePath(file).exists) k.FS.unlink(file);
-  }
+  });
 }
 
 export function readImport(

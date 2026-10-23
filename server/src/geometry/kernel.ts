@@ -5,6 +5,7 @@
  * kernel instance via `getKernel()` after `initKernel()` resolves.
  */
 
+import crypto from "node:crypto";
 import type { Placement } from "@rockett/shared";
 
 // The opencascade.js typings are enormous; we treat the instance as `any`
@@ -93,6 +94,19 @@ export function scoped<T>(
     });
   } finally {
     release(owned);
+  }
+}
+
+export function withKernelFile<T>(
+  extension: string,
+  use: (file: string) => T,
+): T {
+  const k = getKernel(),
+    file = `/rockett-${crypto.randomUUID()}.${extension}`;
+  try {
+    return use(file);
+  } finally {
+    if (k.FS.analyzePath(file).exists) k.FS.unlink(file);
   }
 }
 

@@ -8,9 +8,15 @@ import type { Server } from "node:http";
 import { unzipSync, strFromU8 } from "fflate";
 import type { ExtrudeFeature } from "@rockett/shared";
 import { createEmptyDocument } from "@rockett/shared";
-import { initKernel } from "../src/geometry/kernel.js";
+import {
+  getKernel,
+  initKernel,
+  scoped,
+  volumeOf,
+  withKernelFile,
+} from "../src/geometry/kernel.js";
 import { engineFor, dropEngine } from "../src/geometry/engine.js";
-import { write3mf, writeStl } from "../src/geometry/exporters.js";
+import { write3mf, writeStep, writeStl } from "../src/geometry/exporters.js";
 import { ProjectStore } from "../src/store/projectStore.js";
 import { validateDocument } from "../src/api/validate.js";
 import { createApiRouter } from "../src/api/routes.js";
@@ -85,6 +91,49 @@ function meshOf3mf(data: Buffer) {
     ...model.matchAll(/<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"\/>/g),
   ].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])] as const);
   return { vertices, triangles };
+}
+
+function readStepParts(step: Buffer) {
+  const k = getKernel();
+  return withKernelFile("step", (file) =>
+    scoped((own) => {
+      k.FS.writeFile(file, step);
+      const app = own(k.XCAFApp_Application.GetApplication());
+      const doc = own(new k.Handle_TDocStd_Document_1());
+      app
+        .get()
+        .NewDocument_2(own(new k.TCollection_ExtendedString_2("MDTV-XCAF", true)), doc);
+      try {
+        const reader = own(new k.STEPCAFControl_Reader_1());
+        reader.SetNameMode(true);
+        expect(reader.ReadFile(file)).toBe(
+          k.IFSelect_ReturnStatus.IFSelect_RetDone,
+        );
+        expect(
+          reader.Transfer_1(doc, own(new k.Message_ProgressRange_1())),
+        ).toBe(true);
+        const shapes = own(
+          k.XCAFDoc_DocumentTool.ShapeTool(own(doc.get().Main())),
+        ).get();
+        const free = own(new k.TDF_LabelSequence_1());
+        shapes.GetFreeShapes(free);
+        return Array.from({ length: free.Length() }, (_, i) => {
+          const label = own(free.Value(i + 1));
+          const attr = own(new k.Handle_TDF_Attribute_1());
+          label.FindAttribute_1(own(k.TDataStd_Name.GetID()), attr);
+          const name = own(
+            new k.TCollection_AsciiString_13(own(attr.get().Get()), 63),
+          ).ToCString() as string;
+          return {
+            name,
+            volume: volumeOf(own(k.XCAFDoc_ShapeTool.GetShape_2(label))),
+          };
+        });
+      } finally {
+        app.get().Close(doc);
+      }
+    }),
+  );
 }
 
 function expectClosedOutward(mesh: ReturnType<typeof meshOf3mf>) {
@@ -191,6 +240,32 @@ describe("exporters", () => {
     expect(volume / exact).toBeLessThan(1);
   });
 
+  it("writes exact named solids to STEP in millimetres", () => {
+    dropEngine("e3");
+    const doc = boxDoc("e3");
+    const engine = engineFor("e3");
+    const result = engine.evaluate(doc, 1);
+    (doc.features[1] as ExtrudeFeature).profiles[0]!.profileId =
+      result.sketches[0]!.profiles[0]!.id;
+    engine.evaluate(doc);
+    const box = [...engine.stateAt(doc).bodies.values()][0]!;
+    const fillet = filletedCube(5, 1);
+    const step = writeStep([
+      { body: box, name: "Box" },
+      { body: fillet, name: "Fillet & 'Co'" },
+    ]);
+    const text = step.toString("latin1");
+    expect(text.startsWith("ISO-10303-21;")).toBe(true);
+    expect(text).toContain("SI_UNIT(.MILLI.,.METRE.)");
+    const parts = readStepParts(step);
+    expect(parts.map((p) => p.name)).toEqual(["Box", "Fillet & 'Co'"]);
+    const expected = [volumeOf(box.shape), volumeOf(fillet.shape)];
+    parts.forEach((p, i) =>
+      expect(Math.abs(p.volume / expected[i]! - 1)).toBeLessThan(1e-6),
+    );
+    expectEvidence("box.step", writeStep([{ body: box, name: "Box" }]));
+  });
+
   it("export request validation", async () => {
     const { id } = await store.create("Box");
     const doc = boxDoc(id);
@@ -233,5 +308,15 @@ describe("exporters", () => {
     expect(res.status).toBe(200);
     const stl = Buffer.from(await res.arrayBuffer());
     expect(stl.readUInt32LE(80)).toBeGreaterThanOrEqual(12);
+
+    const step = await post({ format: "step", bodyIds: ["b:ext1"] });
+    expect(step.status).toBe(200);
+    expect(step.headers.get("content-type")).toMatch(/^model\/step/);
+    expect(step.headers.get("content-disposition")).toBe(
+      'attachment; filename="Box.step"',
+    );
+    const parts = readStepParts(Buffer.from(await step.arrayBuffer()));
+    expect(parts.map((p) => p.name)).toEqual(["b:ext1"]);
+    expect(parts[0]!.volume).toBeCloseTo(4000, 6);
   });
 });

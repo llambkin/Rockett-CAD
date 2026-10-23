@@ -227,15 +227,16 @@ carries into the view.
 
 ## Inspection & output
 
-| Method & path                | Body                                                             | Returns                                                                                                                                                                   |
-| ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)               | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                                             |
-| `POST /projects/:id/export`  | `{ format: "stl"\|"3mf", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = every body the view does not hide. `retain: true` also stores a copy under the project's `exports/` dir |
+| Method & path                | Body                                                                     | Returns                                                                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /projects/:id/measure` | `{ refs: [FaceRef\|EdgeRef\|VertexRef, …] }` (1–2)                       | `MeasureResult` (distance, ΔXYZ, angle, per-item length/area/radius/position)                                                                                             |
+| `POST /projects/:id/export`  | `{ format: "stl"\|"3mf"\|"step", bodyIds: string[], quality?, retain? }` | Binary file (`Content-Disposition` attachment). Empty `bodyIds` = every body the view does not hide. `retain: true` also stores a copy under the project's `exports/` dir |
 
 Export returns 400 when an id in `bodyIds` is not a body of the evaluated
 model; the error names the offending ids. `format` is required, and `stl` is
 always binary. `quality` is the tessellation tolerance in mm: a number,
-default 0.05, clamped to 0.001 to 1.
+default 0.05, clamped to 0.001 to 1. `step` writes the exact solids, so it
+ignores `quality`.
 
 ## Assets (reference images)
 

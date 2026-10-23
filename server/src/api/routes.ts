@@ -39,7 +39,7 @@ import { computeEdgeNames } from "../geometry/naming.js";
 import { curveInfo } from "../geometry/tessellate.js";
 import { tangentEdges } from "../geometry/tangentEdges.js";
 import { importerFor, IMPORTERS } from "../geometry/importers.js";
-import { write3mf, writeStl } from "../geometry/exporters.js";
+import { write3mf, writeStep, writeStl } from "../geometry/exporters.js";
 import type { NamedBody } from "../geometry/naming.js";
 import {
   knownKeys,
@@ -125,6 +125,12 @@ const requireRevision = check((req, res) => {
   res.locals.revision = ifMatchRevision(req.get("If-Match"));
 });
 
+const named = (bodies: NamedBody[], doc: CadDocument) =>
+  bodies.map((b) => ({
+    body: b,
+    name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId,
+  }));
+
 const EXPORTERS: Record<
   ExportRequest["format"],
   {
@@ -138,14 +144,11 @@ const EXPORTERS: Record<
   },
   "3mf": {
     mime: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
-    write: (bodies, doc, quality) =>
-      write3mf(
-        bodies.map((b) => ({
-          body: b,
-          name: doc.bodyMeta[b.bodyId]?.name ?? b.bodyId,
-        })),
-        quality,
-      ),
+    write: (bodies, doc, quality) => write3mf(named(bodies, doc), quality),
+  },
+  step: {
+    mime: "model/step",
+    write: (bodies, doc) => writeStep(named(bodies, doc)),
   },
 };
 

@@ -1,7 +1,7 @@
 /**
- * Mesh exporters: binary STL and 3MF.
+ * Exporters: binary STL and 3MF from fresh meshes, STEP from the exact solids.
  *
- * Both operate on fresh tessellations of the B-Rep bodies at export quality
+ * STL and 3MF use fresh tessellations of the B-Rep bodies at export quality
  * (independent of the viewport tessellation).
  *
  * 3MF is written directly (OPC zip + 3D/3dmodel.model XML); each body is a
@@ -10,7 +10,7 @@
 
 import { zipSync, strToU8 } from "fflate";
 import { LINEAR_TOL } from "@rockett/shared";
-import { getKernel } from "./kernel.js";
+import { getKernel, scoped, withKernelFile } from "./kernel.js";
 import { meshShape } from "./mesh.js";
 import type { NamedBody } from "./naming.js";
 
@@ -176,4 +176,44 @@ export function write3mf(
     "3D/3dmodel.model": strToU8(model),
   });
   return Buffer.from(zipped);
+}
+
+export function writeStep(bodies: { body: NamedBody; name: string }[]): Buffer {
+  const k = getKernel();
+  return withKernelFile("step", (file) =>
+    scoped((own) => {
+      const text = (s: string) =>
+        own(new k.TCollection_ExtendedString_2(s, true));
+      const app = own(k.XCAFApp_Application.GetApplication());
+      const doc = own(new k.Handle_TDocStd_Document_1());
+      app.get().NewDocument_2(text("MDTV-XCAF"), doc);
+      try {
+        const shapes = own(
+          k.XCAFDoc_DocumentTool.ShapeTool(own(doc.get().Main())),
+        ).get();
+        for (const { body, name } of bodies)
+          own(
+            k.TDataStd_Name.Set_1(
+              own(shapes.AddShape(body.shape, false, true)),
+              text(name),
+            ),
+          );
+        const writer = own(new k.STEPCAFControl_Writer_1());
+        writer.SetNameMode(true);
+        if (
+          !writer.Transfer_1(
+            doc,
+            k.STEPControl_StepModelType.STEPControl_AsIs,
+            null,
+            own(new k.Message_ProgressRange_1()),
+          ) ||
+          writer.Write(file) !== k.IFSelect_ReturnStatus.IFSelect_RetDone
+        )
+          throw new Error("STEP export failed");
+        return Buffer.from(k.FS.readFile(file) as Uint8Array);
+      } finally {
+        app.get().Close(doc);
+      }
+    }),
+  );
 }

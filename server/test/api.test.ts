@@ -546,7 +546,7 @@ describe("REST API MVP workflow", () => {
     const { document: saved } = await api("GET", url);
     expect(saved.features.map((f: any) => f.type)).toEqual(["sketch"]);
     await expect(
-      api("POST", `${url}/export`, { format: "step", bodyIds: [] }),
+      api("POST", `${url}/export`, { format: "obj", bodyIds: [] }),
     ).rejects.toThrow(/400.*format must be equal to one of the allowed values/);
   });
 

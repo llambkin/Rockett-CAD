@@ -201,7 +201,7 @@ export interface MeasureResult {
 }
 
 export interface ExportRequest {
-  format: "stl" | "3mf";
+  format: "stl" | "3mf" | "step";
   bodyIds: string[]; // empty = all visible bodies
   /** Linear tessellation tolerance in mm (default 0.05). */
   quality?: number;
