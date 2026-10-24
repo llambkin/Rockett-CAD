@@ -305,8 +305,17 @@ export const api = {
     send(ROUTES.evaluate, { id }, { position }).then((evaluation) =>
       position === undefined ? keep(evaluation) : evaluation,
     ),
-  tangentEdges: (id: string, edge: EdgeRef, beforeFeatureId?: string) =>
-    send(ROUTES.tangentEdges, { id }, { body: { edge, beforeFeatureId } }),
+  tangentEdges: (
+    id: string,
+    edge: EdgeRef,
+    beforeFeatureId?: string,
+    chamfer?: boolean,
+  ) =>
+    send(
+      ROUTES.tangentEdges,
+      { id },
+      { body: { edge, beforeFeatureId, chamfer } },
+    ),
   projectEdge: (id: string, fid: string, edge: EdgeRef, entityId: string) =>
     send(ROUTES.projectEdge, { id, fid }, { body: { edge, entityId } }),
 

@@ -85,7 +85,8 @@ import {
   uvTo3d,
 } from "./frames.js";
 import { curveInfo } from "./tessellate.js";
-import { tangentEdges } from "./tangentEdges.js";
+import { collectEdges } from "./tangentEdges.js";
+import { chamferInnerCorners } from "./planarChamfer.js";
 import { readImport, readMesh, type Sources } from "./importers.js";
 import {
   arcEdge,
@@ -1045,27 +1046,6 @@ function sketchEntityToEdge(
   return null;
 }
 
-function collectEdges(
-  body: NamedBody,
-  byName: Map<string, Shape>,
-  refs: EdgeRef[],
-  tangentChain: boolean | undefined,
-  label: string,
-): { edge: Shape; name: string }[] {
-  const resolve = (ref: EdgeRef) => {
-    if (ref.bodyId !== body.bodyId) {
-      throw new Error(`all ${label} edges must belong to the same body`);
-    }
-    const edge = byName.get(ref.edgeName);
-    if (!edge) {
-      throw new Error(`referenced edge no longer exists: ${ref.edgeName}`);
-    }
-    return { edge, name: ref.edgeName };
-  };
-  const seeds = refs.map(resolve);
-  return tangentChain ? tangentEdges(body, refs).map(resolve) : seeds;
-}
-
 function blendNames(
   op: any,
   body: NamedBody,
@@ -1470,24 +1450,25 @@ function evalChamfer(state: EvalState, f: ChamferFeature): void {
         },
       );
       op = blend.op;
-      if (!op.IsDone()) {
-        // ChFi3d can't consume a face (e.g. chamfers from both caps meeting
-        // mid-wall); a boolean envelope can, for complete planar outlines
-        const viaEnvelope = chamferByEnvelope(
-          body,
-          sourceEdges,
-          f.distance,
-          f.id,
-        );
-        if (!viaEnvelope) {
+      result = op.IsDone() ? op.Shape() : undefined;
+      if (!result || !isValidShape(result)) {
+        const fallback =
+          chamferInnerCorners(body, sourceEdges, f.distance, f.id) ??
+          chamferByEnvelope(body, sourceEdges, f.distance, f.id);
+        if (!fallback) {
           throw new Error(
             `could not build a ${f.distance} mm chamfer — check for missing connecting edges or try a smaller distance`,
           );
         }
-        registerBodySolids(state, bodyId, viaEnvelope.shape, viaEnvelope.names);
+        try {
+          if (!isValidShape(fallback.shape))
+            throw new Error("invalid chamfer solid");
+          registerBodySolids(state, bodyId, fallback.shape, fallback.names);
+        } finally {
+          fallback.shape.delete();
+        }
         return;
       }
-      result = op.Shape();
       const names = blendNames(op, blend.source, blend.edges, result, f.id);
       registerBodySolids(state, bodyId, result, names);
     } finally {

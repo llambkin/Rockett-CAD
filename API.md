@@ -307,6 +307,8 @@ update endpoint, which also provides undo/redo integration in the client.
 
 ### POST /api/projects/:id/tangent-edges
 
-Read-only chain query: { edge: EdgeRef, beforeFeatureId?: string } returns
+Read-only chain query: { edge: EdgeRef, beforeFeatureId?: string, chamfer?: boolean } returns
 { edges: EdgeRef[] }. An edit supplies beforeFeatureId to resolve its inputs
-before the feature. Source errors return 400; no document changes are persisted.
+before the feature. Chamfer queries set `chamfer: true` to stop a planar inside
+corner from continuing onto an outside edge or a flat seam. Source errors return
+400; no document changes are persisted.

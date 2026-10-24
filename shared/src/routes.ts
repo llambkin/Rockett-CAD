@@ -210,7 +210,11 @@ export const ROUTES = {
     Type.Object({ position: Type.Integer({ minimum: 0 }) }),
   ),
   tangentEdges: route<
-    { edge: EdgeRef; beforeFeatureId?: string | undefined },
+    {
+      edge: EdgeRef;
+      beforeFeatureId?: string | undefined;
+      chamfer?: boolean | undefined;
+    },
     { edges: EdgeRef[] }
   >()(
     "POST",
@@ -218,6 +222,7 @@ export const ROUTES = {
     Type.Object({
       edge: edgeRef,
       beforeFeatureId: Type.Optional(Type.String()),
+      chamfer: Type.Optional(Type.Boolean()),
     }),
   ),
   updateBody: route<

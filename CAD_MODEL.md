@@ -199,8 +199,8 @@ merged with `ShapeUpgrade_UnifySameDomain`, carrying the selected edges through
 the merge history. A body joined from pieces keeps the pieces' boundaries as
 split faces, and the kernel's blend can drop a hole beside them or fail. The
 merged result is used only when it succeeds, is valid and keeps every hole;
-otherwise the first result stands exactly as before, so a blend that works
-today evaluates unchanged.
+otherwise the first result is retained. Chamfers also validate that result
+before accepting it.
 
 Chamfers go through the kernel's `BRepFilletAPI_MakeChamfer` first. That
 algorithm cannot remove a face the chamfer consumes entirely (two 3.5 mm
@@ -213,6 +213,16 @@ a generous prism beyond. Holes in the cap are left alone (only the outer
 outline is offset), so a through-hole survives untouched. The new faces are
 named `f:{featureId}:fe:{n}` per source edge, exactly as the kernel path names
 them.
+
+A straight concave chamfer between perpendicular rectangular faces can fail
+where it meets thinner fins. If the kernel fails or returns an invalid solid,
+the evaluator fuses an exact triangular prism along each selected edge. Both
+adjacent faces must accommodate the requested distance. The result must be
+valid, preserve the number of solids and through-holes, and add exactly the
+expected bevel volume. Other unsupported failures leave the prior body intact.
+The bevel keeps the usual `f:{featureId}:fe:{n}` name. Chamfer tangent chains
+stop where a planar inside corner becomes an outside edge or a flat seam, in
+both picking and regeneration; fillet chains retain their existing behaviour.
 
 Sketch-curve attribution deserves a note: wire construction can rebuild edge
 shapes (vertex merging), so after building a profile face we re-derive the

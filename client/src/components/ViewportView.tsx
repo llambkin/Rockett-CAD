@@ -2071,7 +2071,6 @@ export function ViewportView() {
     toolState.current.downUV = null;
     if (dragMoved) return;
 
-    // pick-depth cycling with Alt at the same position
     const samePos =
       Math.abs(e.clientX - toolState.current.lastPickPos.x) < 4 &&
       Math.abs(e.clientY - toolState.current.lastPickPos.y) < 4;
@@ -2136,6 +2135,7 @@ export function ViewportView() {
             s.projectId,
             sel,
             s.mode.editFeatureId,
+            s.mode.dialog === "chamfer",
           );
           const current = useStore.getState();
           if (

@@ -31,6 +31,10 @@ change gets a `Schema N` line in the section that ships it.
 
 ### Fixed
 
+- Inside chamfers can finish at thin fin junctions without producing malformed
+  solids. Chamfer chains stop before continuing onto outside edges, and invalid
+  results are refused while keeping the preceding body.
+
 - Editing an offset distance no longer fails because of an unrelated
   conflicting dimension elsewhere in the sketch. A distance is read as left of
   the first source line as it now runs, and a saved sign that a reversed line

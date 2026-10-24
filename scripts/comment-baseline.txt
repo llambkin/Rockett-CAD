@@ -7,7 +7,7 @@ client/src/components/ModelTree.tsx 4
 client/src/components/SketchOffsetIndicators.tsx 1
 client/src/components/Timeline.tsx 3
 client/src/components/Toolbar.tsx 7
-client/src/components/ViewportView.tsx 165
+client/src/components/ViewportView.tsx 164
 client/src/dialogPicks.ts 3
 client/src/dimensionLayout.ts 2
 client/src/panelPlacement.ts 1
@@ -33,13 +33,12 @@ client/vite.config.ts 1
 server/src/api/routes.ts 22
 server/src/geometry/engine.ts 22
 server/src/geometry/exporters.ts 12
-server/src/geometry/features.ts 104
+server/src/geometry/features.ts 102
 server/src/geometry/frames.ts 21
 server/src/geometry/kernel.ts 21
 server/src/geometry/measure.ts 4
 server/src/geometry/naming.ts 45
 server/src/geometry/sketchGeom.ts 42
-server/src/geometry/tangentEdges.ts 6
 server/src/geometry/tessellate.ts 10
 server/src/index.ts 8
 server/src/store/projectQueue.ts 1

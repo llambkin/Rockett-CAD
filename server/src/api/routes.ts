@@ -574,7 +574,7 @@ export function createApiRouter(
       if (!body)
         throw new ValidationError("Body not found before this feature");
       try {
-        res.json({ edges: tangentEdges(body, [edge]) });
+        res.json({ edges: tangentEdges(body, [edge], req.body.chamfer) });
       } catch (error) {
         throw new ValidationError((error as Error).message);
       }
