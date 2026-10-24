@@ -16,7 +16,6 @@ import {
   type ChamferFeature,
   type CombineFeature,
   type ConstructionPlaneFeature,
-  type EdgeRef,
   type EmbossFeature,
   type ExtrudeFeature,
   type Feature,
